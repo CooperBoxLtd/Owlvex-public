@@ -1,5 +1,5 @@
 {
-  "total": 80,
+  "total": 84,
   "issueAccuracy": 100,
   "familyAccuracy": 100,
   "falsePositives": 0,
@@ -13,9 +13,9 @@
       "familyAccuracy": 100
     },
     "Injection & Execution": {
-      "total": 37,
-      "issueCorrect": 37,
-      "familyCorrect": 37,
+      "total": 41,
+      "issueCorrect": 41,
+      "familyCorrect": 41,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
@@ -71,9 +71,9 @@
       "familyAccuracy": 100
     },
     "hard": {
-      "total": 42,
-      "issueCorrect": 42,
-      "familyCorrect": 42,
+      "total": 46,
+      "issueCorrect": 46,
+      "familyCorrect": 46,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
@@ -441,6 +441,75 @@
       "falsePositive": false
     },
     {
+      "file": "injection_execution/positive/interprocedural_unsafe_passthrough_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/interprocedural_mixed_return_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/interprocedural_unknown_external_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
       "file": "injection_execution/negative/parameterized_query_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "easy",
@@ -577,6 +646,21 @@
     },
     {
       "file": "injection_execution/negative/nested_all_safe_branches_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/interprocedural_safe_wrapper_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "hard",
       "expectedCanonical": [],
