@@ -124,6 +124,12 @@
       "difficulty": "easy"
     },
     {
+      "file": "secrets_exposure/positive/password_with_comment_positive.js",
+      "expectedCanonical": ["owlvex.issue.hardcoded_password.001"],
+      "expectedFamily": "family.secrets_exposure",
+      "difficulty": "hard"
+    },
+    {
       "file": "injection_execution/negative/sanitized_sql_hard_negative.js",
       "expectedCanonical": [],
       "expectedFamily": null,
@@ -163,6 +169,7 @@
       "file": "injection_execution/positive/multi_issue_exec_and_password_positive.js",
       "expectedCanonical": ["owlvex.issue.command_injection.001", "owlvex.issue.hardcoded_password.001"],
       "expectedFamily": "family.injection_execution",
+      "expectedFamilies": ["family.injection_execution", "family.secrets_exposure"],
       "difficulty": "hard"
     },
     {
@@ -191,6 +198,12 @@
     },
     {
       "file": "injection_execution/negative/commented_exec_noise_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "hard"
+    },
+    {
+      "file": "injection_execution/negative/dead_code_sql_negative.js",
       "expectedCanonical": [],
       "expectedFamily": null,
       "difficulty": "hard"
@@ -238,7 +251,19 @@
       "difficulty": "medium"
     },
     {
+      "file": "data_protection_privacy/positive/comment_noise_and_real_response_positive.js",
+      "expectedCanonical": ["owlvex.issue.verbose_error_disclosure.001"],
+      "expectedFamily": "family.data_protection_privacy",
+      "difficulty": "hard"
+    },
+    {
       "file": "access_control/positive/role_check_but_no_owner_positive.js",
+      "expectedCanonical": ["owlvex.issue.idor.001"],
+      "expectedFamily": "family.access_control",
+      "difficulty": "hard"
+    },
+    {
+      "file": "access_control/positive/admin_role_without_scope_positive.js",
       "expectedCanonical": ["owlvex.issue.idor.001"],
       "expectedFamily": "family.access_control",
       "difficulty": "hard"
@@ -256,6 +281,24 @@
       "difficulty": "hard"
     },
     {
+      "file": "injection_execution/positive/mixed_safe_and_unsafe_sql_positive.js",
+      "expectedCanonical": ["owlvex.issue.sql_injection.001"],
+      "expectedFamily": "family.injection_execution",
+      "difficulty": "hard"
+    },
+    {
+      "file": "injection_execution/positive/multiple_safe_one_unsafe_sql_positive.js",
+      "expectedCanonical": ["owlvex.issue.sql_injection.001"],
+      "expectedFamily": "family.injection_execution",
+      "difficulty": "hard"
+    },
+    {
+      "file": "injection_execution/positive/nested_mixed_sql_positive.js",
+      "expectedCanonical": ["owlvex.issue.sql_injection.001"],
+      "expectedFamily": "family.injection_execution",
+      "difficulty": "hard"
+    },
+    {
       "file": "injection_execution/positive/multi_family_command_error_password_positive.js",
       "expectedCanonical": [
         "owlvex.issue.command_injection.001",
@@ -267,6 +310,20 @@
         "family.injection_execution",
         "family.secrets_exposure",
         "family.data_protection_privacy"
+      ],
+      "difficulty": "hard"
+    },
+    {
+      "file": "data_protection_privacy/positive/multi_family_password_logging_and_response_positive.js",
+      "expectedCanonical": [
+        "owlvex.issue.hardcoded_password.001",
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy",
+        "family.secrets_exposure"
       ],
       "difficulty": "hard"
     },

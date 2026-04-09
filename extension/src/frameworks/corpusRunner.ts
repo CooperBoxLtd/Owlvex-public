@@ -24,6 +24,14 @@ type DetectedIssue = {
     score: number;
 };
 
+type DetectionContext = {
+    source: string;
+    withoutComments: string;
+    executableSource: string;
+    sanitizedVariables: string[];
+    interpolatedVariables: string[];
+};
+
 type CaseEvaluation = {
     file: string;
     familyBucket: string;
@@ -83,6 +91,45 @@ function guessFamilyIdFromPath(relativePath: string): string {
 
 function normalizeDifficulty(value?: string): 'easy' | 'medium' | 'hard' {
     return value === 'medium' || value === 'hard' ? value : 'easy';
+}
+
+function stripComments(source: string): string {
+    return source
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '');
+}
+
+function stripStringLiterals(source: string): string {
+    return source
+        .replace(/`(?:\\.|[^`\\])*`/g, '``')
+        .replace(/"(?:\\.|[^"\\])*"/g, '""')
+        .replace(/'(?:\\.|[^'\\])*'/g, "''");
+}
+
+function buildDetectionContext(source: string): DetectionContext {
+    const withoutComments = stripComments(source);
+    return {
+        source,
+        withoutComments,
+        executableSource: stripStringLiterals(withoutComments),
+        sanitizedVariables: extractSanitizedVariables(withoutComments),
+        interpolatedVariables: extractInterpolatedVariables(withoutComments),
+    };
+}
+
+function extractSanitizedVariables(source: string): string[] {
+    const matches = source.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*sanitize\s*\(/g);
+    return [...new Set([...matches].map(match => match[1]))];
+}
+
+function extractInterpolatedVariables(source: string): string[] {
+    const templateMatches = [...source.matchAll(/\$\{\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\}/g)].map(match => match[1]);
+    const concatMatches = [...source.matchAll(/['"]\s*\+\s*([A-Za-z_$][A-Za-z0-9_$]*)/g)].map(match => match[1]);
+    return [...new Set([...templateMatches, ...concatMatches])];
+}
+
+function hasErrorLikeMessage(source: string): boolean {
+    return /\b[A-Za-z_$][A-Za-z0-9_$]*\.(message|stack)\b/i.test(source);
 }
 
 function buildSourceSignals(source: string, issue: CanonicalIssue): { score: number; matchedSignals: string[] } {
@@ -145,6 +192,10 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
         case 'owlvex.issue.sql_injection.001':
             const hasSqlSink = /\b(select|update|insert|delete)\b/i.test(source) && /\bquery\s*\(/i.test(source);
             const hasQueryInterpolation = templateLiteralInterpolation || /'\s*\+\s*[A-Za-z0-9_$]+/.test(source);
+            const safeVariables = extractSanitizedVariables(source);
+            const interpolatedVariables = extractInterpolatedVariables(source);
+            const hasUnsafeInterpolation = interpolatedVariables.some(variable => !safeVariables.includes(variable));
+            const hasOnlySafeInterpolation = interpolatedVariables.length > 0 && !hasUnsafeInterpolation;
             if (hasSqlSink) {
                 score += 15;
                 matchedSignals.push('PATTERN:sql-sink');
@@ -161,11 +212,11 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
                 score -= 25;
                 matchedSignals.push('NEG:sql-placeholder');
             }
-            if (/\bsanitize\s*\(/i.test(source) || /\bsafe[A-Z][A-Za-z0-9_]*\b/.test(source)) {
+            if (hasOnlySafeInterpolation || (!hasUnsafeInterpolation && (/\bsanitize\s*\(/i.test(source) || /\bsafe[A-Z][A-Za-z0-9_]*\b/.test(source)))) {
                 score -= 45;
                 matchedSignals.push('NEG:sanitized-input');
             }
-            if (/const\s+safe[A-Z][A-Za-z0-9_]*\s*=\s*sanitize\s*\(/i.test(source)) {
+            if (hasOnlySafeInterpolation && /const\s+safe[A-Z][A-Za-z0-9_]*\s*=\s*sanitize\s*\(/i.test(source)) {
                 score -= 30;
                 matchedSignals.push('NEG:sanitized-assignment');
             }
@@ -229,6 +280,15 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
                 score += 50;
                 matchedSignals.push('PATTERN:authenticated-not-authorized');
             }
+            if (
+                /\breq\.user(\.role)?\b/i.test(source)
+                && /\bquery\s*\(/i.test(source)
+                && /\breq\.params\.(id|userId|accountId)\b/i.test(source)
+                && !/\b(req\.user\.(id|accountId)|owner_id|account_id|forbidden|policy\.enforce)\b/i.test(source)
+            ) {
+                score += 45;
+                matchedSignals.push('PATTERN:auth-present-no-ownership-check');
+            }
             break;
         case 'owlvex.issue.path_traversal.001':
             if (
@@ -240,7 +300,7 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
             break;
         case 'owlvex.issue.sensitive_logging.001':
             if (
-                (/(console\.log|logger\.(info|warn|error))/i.test(source) && /(authorization|token|password|secret|error\.message)/i.test(source))
+                (/(console\.log|logger\.(info|warn|error))/i.test(source) && (/(authorization|token|password|secret)/i.test(source) || hasErrorLikeMessage(source)))
                 || (/res\.send/i.test(source) && /(authorization|token|password|secret)/i.test(source))
             ) {
                 score += 40;
@@ -248,7 +308,7 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
             }
             break;
         case 'owlvex.issue.verbose_error_disclosure.001':
-            if (/(error\.message|stack)/i.test(source) && /(res\.status|res\.send|return)/i.test(source)) {
+            if (hasErrorLikeMessage(source) && /(res\.status|res\.send|return)/i.test(source)) {
                 score += 40;
                 matchedSignals.push('PATTERN:verbose-error');
             }
@@ -266,8 +326,8 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
     return { score, matchedSignals: [...new Set(matchedSignals)] };
 }
 
-export function detectIssuesFromSource(source: string): DetectedIssue[] {
-    let detected = ISSUE_CATALOG
+function buildRawDetectionsFromSource(source: string): DetectedIssue[] {
+    return ISSUE_CATALOG
         .map(issue => {
             const result = buildSourceSignals(source, issue);
             return {
@@ -278,15 +338,81 @@ export function detectIssuesFromSource(source: string): DetectedIssue[] {
         })
         .filter(result => result.score >= (result.issue.minimumScore ?? 25))
         .sort((left, right) => right.score - left.score);
+}
 
-    const hasVerboseError = detected.some(result => result.issue.id === 'owlvex.issue.verbose_error_disclosure.001');
-    const hasOnlyResponseErrorPattern = /res\.send\s*\(\s*error\.message\s*\)/i.test(source)
-        && !/(console\.log|logger\.(info|warn|error))/i.test(source);
+function hasExecutablePattern(context: DetectionContext, pattern: RegExp): boolean {
+    return pattern.test(context.executableSource);
+}
+
+function applyNoiseSuppression(detections: DetectedIssue[], context: DetectionContext): DetectedIssue[] {
+    return detections.filter(detection => {
+        switch (detection.issue.id) {
+            case 'owlvex.issue.hardcoded_token.001':
+                if (!detection.matchedSignals.includes('PATTERN:hardcoded-token')) {
+                    return false;
+                }
+                if (/authorization:\s*bearer\s*<token>/i.test(context.withoutComments)) {
+                    return false;
+                }
+                return true;
+            default:
+                return true;
+        }
+    });
+}
+
+function applyExecutionGuards(detections: DetectedIssue[], context: DetectionContext): DetectedIssue[] {
+    return detections.filter(detection => {
+        switch (detection.issue.id) {
+            case 'owlvex.issue.sql_injection.001':
+                if (!hasExecutablePattern(context, /\bquery\s*\(/i)) {
+                    return false;
+                }
+                if (/\bif\s*\(\s*false\s*\)\s*{[\s\S]*\bquery\s*\(/i.test(context.withoutComments)) {
+                    return false;
+                }
+                if (context.interpolatedVariables.length === 0) {
+                    return true;
+                }
+                const unsafeVariables = context.interpolatedVariables.filter(variable => !context.sanitizedVariables.includes(variable));
+                return unsafeVariables.length > 0;
+            case 'owlvex.issue.command_injection.001':
+                return hasExecutablePattern(context, /\b(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*\(/i);
+            case 'owlvex.issue.verbose_error_disclosure.001':
+                return hasExecutablePattern(context, /(res\.(status|send|json)|return)\s*\(?[^;\n]*\b[A-Za-z_$][A-Za-z0-9_$]*\.(message|stack)\b/i);
+            case 'owlvex.issue.sensitive_logging.001':
+                return hasExecutablePattern(context, /(console\.log|logger\.(info|warn|error)|res\.send)\s*\(/i)
+                    && (/(authorization|token|password|secret)/i.test(context.withoutComments) || hasErrorLikeMessage(context.withoutComments));
+            default:
+                return true;
+        }
+    });
+}
+
+function applyFamilyDisambiguation(detections: DetectedIssue[], context: DetectionContext): DetectedIssue[] {
+    const hasVerboseError = detections.some(result => result.issue.id === 'owlvex.issue.verbose_error_disclosure.001');
+    const hasOnlyResponseErrorPattern = /res\.send\s*\([^;\n]*[A-Za-z_$][A-Za-z0-9_$]*\.message/i.test(context.withoutComments)
+        && !/(console\.log|logger\.(info|warn|error))/i.test(context.withoutComments);
     if (hasVerboseError && hasOnlyResponseErrorPattern) {
-        detected = detected.filter(result => result.issue.id !== 'owlvex.issue.sensitive_logging.001');
+        return detections.filter(result => result.issue.id !== 'owlvex.issue.sensitive_logging.001');
     }
+    return detections;
+}
 
-    return detected;
+function resolveConflicts(detections: DetectedIssue[], source: string): DetectedIssue[] {
+    const context = buildDetectionContext(source);
+    let resolved = [...detections];
+
+    resolved = applyNoiseSuppression(resolved, context);
+    resolved = applyExecutionGuards(resolved, context);
+    resolved = applyFamilyDisambiguation(resolved, context);
+
+    return resolved.sort((left, right) => right.score - left.score);
+}
+
+export function detectIssuesFromSource(source: string): DetectedIssue[] {
+    const rawDetections = buildRawDetectionsFromSource(source);
+    return resolveConflicts(rawDetections, source);
 }
 
 export function loadCorpusManifest(repoRoot: string): CorpusManifest {

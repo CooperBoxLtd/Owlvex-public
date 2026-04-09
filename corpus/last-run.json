@@ -1,48 +1,48 @@
 {
-  "total": 45,
-  "issueAccuracy": 80,
-  "familyAccuracy": 82,
-  "falsePositives": 5,
+  "total": 53,
+  "issueAccuracy": 100,
+  "familyAccuracy": 100,
+  "falsePositives": 0,
   "byFamily": {
     "Secrets & Credential Exposure": {
-      "total": 7,
-      "issueCorrect": 7,
-      "familyCorrect": 7,
+      "total": 8,
+      "issueCorrect": 8,
+      "familyCorrect": 8,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
     },
     "Injection & Execution": {
-      "total": 13,
-      "issueCorrect": 9,
-      "familyCorrect": 10,
-      "falsePositives": 2,
-      "issueAccuracy": 69,
-      "familyAccuracy": 77
+      "total": 17,
+      "issueCorrect": 17,
+      "familyCorrect": 17,
+      "falsePositives": 0,
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
     },
     "Identity & Auth Failures": {
       "total": 5,
-      "issueCorrect": 4,
-      "familyCorrect": 4,
-      "falsePositives": 1,
-      "issueAccuracy": 80,
-      "familyAccuracy": 80
+      "issueCorrect": 5,
+      "familyCorrect": 5,
+      "falsePositives": 0,
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
     },
     "Access Control & Authorization": {
-      "total": 9,
-      "issueCorrect": 7,
-      "familyCorrect": 7,
+      "total": 10,
+      "issueCorrect": 10,
+      "familyCorrect": 10,
       "falsePositives": 0,
-      "issueAccuracy": 78,
-      "familyAccuracy": 78
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
     },
     "Data Protection & Privacy": {
-      "total": 10,
-      "issueCorrect": 8,
-      "familyCorrect": 8,
-      "falsePositives": 2,
-      "issueAccuracy": 80,
-      "familyAccuracy": 80
+      "total": 12,
+      "issueCorrect": 12,
+      "familyCorrect": 12,
+      "falsePositives": 0,
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
     },
     "Cryptography & Randomness": {
       "total": 1,
@@ -71,12 +71,12 @@
       "familyAccuracy": 100
     },
     "hard": {
-      "total": 19,
-      "issueCorrect": 10,
-      "familyCorrect": 11,
-      "falsePositives": 5,
-      "issueAccuracy": 53,
-      "familyAccuracy": 58
+      "total": 27,
+      "issueCorrect": 27,
+      "familyCorrect": 27,
+      "falsePositives": 0,
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
     }
   },
   "cases": [
@@ -493,6 +493,29 @@
       "falsePositive": false
     },
     {
+      "file": "secrets_exposure/positive/password_with_comment_positive.js",
+      "familyBucket": "family.secrets_exposure",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.hardcoded_password.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_password.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.secrets_exposure",
+      "expectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "detectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
       "file": "injection_execution/negative/sanitized_sql_hard_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "hard",
@@ -622,14 +645,15 @@
       "extraCanonical": [],
       "expectedFamily": "family.injection_execution",
       "expectedFamilies": [
-        "family.injection_execution"
+        "family.injection_execution",
+        "family.secrets_exposure"
       ],
       "detectedFamilies": [
         "family.injection_execution",
         "family.secrets_exposure"
       ],
       "issueCorrect": true,
-      "familyCorrect": false,
+      "familyCorrect": true,
       "falsePositive": false
     },
     {
@@ -702,86 +726,75 @@
       "familyBucket": "family.injection_execution",
       "difficulty": "hard",
       "expectedCanonical": [],
-      "detectedCanonical": [
-        "owlvex.issue.sql_injection.001"
-      ],
+      "detectedCanonical": [],
       "missedCanonical": [],
-      "extraCanonical": [
-        "owlvex.issue.sql_injection.001"
-      ],
+      "extraCanonical": [],
       "expectedFamily": null,
       "expectedFamilies": [],
-      "detectedFamilies": [
-        "family.injection_execution"
-      ],
-      "issueCorrect": false,
-      "familyCorrect": false,
-      "falsePositive": true
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
     },
     {
       "file": "injection_execution/negative/commented_exec_noise_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "hard",
       "expectedCanonical": [],
-      "detectedCanonical": [
-        "owlvex.issue.command_injection.001"
-      ],
+      "detectedCanonical": [],
       "missedCanonical": [],
-      "extraCanonical": [
-        "owlvex.issue.command_injection.001"
-      ],
+      "extraCanonical": [],
       "expectedFamily": null,
       "expectedFamilies": [],
-      "detectedFamilies": [
-        "family.injection_execution"
-      ],
-      "issueCorrect": false,
-      "familyCorrect": false,
-      "falsePositive": true
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/dead_code_sql_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
     },
     {
       "file": "data_protection_privacy/negative/commented_error_message_noise_negative.js",
       "familyBucket": "family.data_protection_privacy",
       "difficulty": "hard",
       "expectedCanonical": [],
-      "detectedCanonical": [
-        "owlvex.issue.verbose_error_disclosure.001"
-      ],
+      "detectedCanonical": [],
       "missedCanonical": [],
-      "extraCanonical": [
-        "owlvex.issue.verbose_error_disclosure.001"
-      ],
+      "extraCanonical": [],
       "expectedFamily": null,
       "expectedFamilies": [],
-      "detectedFamilies": [
-        "family.data_protection_privacy"
-      ],
-      "issueCorrect": false,
-      "familyCorrect": false,
-      "falsePositive": true
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
     },
     {
       "file": "data_protection_privacy/negative/logging_example_string_noise_negative.js",
       "familyBucket": "family.data_protection_privacy",
       "difficulty": "hard",
       "expectedCanonical": [],
-      "detectedCanonical": [
-        "owlvex.issue.sensitive_logging.001",
-        "owlvex.issue.verbose_error_disclosure.001"
-      ],
+      "detectedCanonical": [],
       "missedCanonical": [],
-      "extraCanonical": [
-        "owlvex.issue.sensitive_logging.001",
-        "owlvex.issue.verbose_error_disclosure.001"
-      ],
+      "extraCanonical": [],
       "expectedFamily": null,
       "expectedFamilies": [],
-      "detectedFamilies": [
-        "family.data_protection_privacy"
-      ],
-      "issueCorrect": false,
-      "familyCorrect": false,
-      "falsePositive": true
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
     },
     {
       "file": "secrets_exposure/negative/env_concat_noise_negative.js",
@@ -803,21 +816,15 @@
       "familyBucket": "family.identity_auth",
       "difficulty": "hard",
       "expectedCanonical": [],
-      "detectedCanonical": [
-        "owlvex.issue.hardcoded_token.001"
-      ],
+      "detectedCanonical": [],
       "missedCanonical": [],
-      "extraCanonical": [
-        "owlvex.issue.hardcoded_token.001"
-      ],
+      "extraCanonical": [],
       "expectedFamily": null,
       "expectedFamilies": [],
-      "detectedFamilies": [
-        "family.secrets_exposure"
-      ],
-      "issueCorrect": false,
-      "familyCorrect": false,
-      "falsePositive": true
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
     },
     {
       "file": "access_control/negative/owner_guard_with_noise_negative.js",
@@ -881,24 +888,72 @@
       "falsePositive": false
     },
     {
+      "file": "data_protection_privacy/positive/comment_noise_and_real_response_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
       "file": "access_control/positive/role_check_but_no_owner_positive.js",
       "familyBucket": "family.access_control",
       "difficulty": "hard",
       "expectedCanonical": [
         "owlvex.issue.idor.001"
       ],
-      "detectedCanonical": [],
-      "missedCanonical": [
+      "detectedCanonical": [
         "owlvex.issue.idor.001"
       ],
+      "missedCanonical": [],
       "extraCanonical": [],
       "expectedFamily": "family.access_control",
       "expectedFamilies": [
         "family.access_control"
       ],
-      "detectedFamilies": [],
-      "issueCorrect": false,
-      "familyCorrect": false,
+      "detectedFamilies": [
+        "family.access_control"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/positive/admin_role_without_scope_positive.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.access_control",
+      "expectedFamilies": [
+        "family.access_control"
+      ],
+      "detectedFamilies": [
+        "family.access_control"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
       "falsePositive": false
     },
     {
@@ -908,18 +963,20 @@
       "expectedCanonical": [
         "owlvex.issue.idor.001"
       ],
-      "detectedCanonical": [],
-      "missedCanonical": [
+      "detectedCanonical": [
         "owlvex.issue.idor.001"
       ],
+      "missedCanonical": [],
       "extraCanonical": [],
       "expectedFamily": "family.access_control",
       "expectedFamilies": [
         "family.access_control"
       ],
-      "detectedFamilies": [],
-      "issueCorrect": false,
-      "familyCorrect": false,
+      "detectedFamilies": [
+        "family.access_control"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
       "falsePositive": false
     },
     {
@@ -930,13 +987,10 @@
         "owlvex.issue.command_injection.001"
       ],
       "detectedCanonical": [
-        "owlvex.issue.command_injection.001",
-        "owlvex.issue.sql_injection.001"
+        "owlvex.issue.command_injection.001"
       ],
       "missedCanonical": [],
-      "extraCanonical": [
-        "owlvex.issue.sql_injection.001"
-      ],
+      "extraCanonical": [],
       "expectedFamily": "family.injection_execution",
       "expectedFamilies": [
         "family.injection_execution"
@@ -944,7 +998,76 @@
       "detectedFamilies": [
         "family.injection_execution"
       ],
-      "issueCorrect": false,
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/mixed_safe_and_unsafe_sql_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/multiple_safe_one_unsafe_sql_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/nested_mixed_sql_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
       "familyCorrect": true,
       "falsePositive": false
     },
@@ -960,13 +1083,10 @@
       "detectedCanonical": [
         "owlvex.issue.command_injection.001",
         "owlvex.issue.hardcoded_password.001",
-        "owlvex.issue.verbose_error_disclosure.001",
-        "owlvex.issue.sensitive_logging.001"
+        "owlvex.issue.verbose_error_disclosure.001"
       ],
       "missedCanonical": [],
-      "extraCanonical": [
-        "owlvex.issue.sensitive_logging.001"
-      ],
+      "extraCanonical": [],
       "expectedFamily": "family.injection_execution",
       "expectedFamilies": [
         "family.injection_execution",
@@ -978,7 +1098,36 @@
         "family.secrets_exposure",
         "family.data_protection_privacy"
       ],
-      "issueCorrect": false,
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/positive/multi_family_password_logging_and_response_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.hardcoded_password.001",
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_password.001",
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy",
+        "family.secrets_exposure"
+      ],
+      "detectedFamilies": [
+        "family.secrets_exposure",
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
       "familyCorrect": true,
       "falsePositive": false
     },
