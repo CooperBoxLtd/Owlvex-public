@@ -118,8 +118,23 @@ function buildDetectionContext(source: string): DetectionContext {
 }
 
 function extractSanitizedVariables(source: string): string[] {
-    const matches = source.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*sanitize\s*\(/g);
-    return [...new Set([...matches].map(match => match[1]))];
+    const directMatches = [...source.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*sanitize\s*\(/g)]
+        .map(match => match[1]);
+    const safeVariables = new Set(directMatches);
+    const aliasMatches = [...source.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*;/g)];
+
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const [, left, right] of aliasMatches) {
+            if (safeVariables.has(right) && !safeVariables.has(left)) {
+                safeVariables.add(left);
+                changed = true;
+            }
+        }
+    }
+
+    return [...safeVariables];
 }
 
 function extractInterpolatedVariables(source: string): string[] {

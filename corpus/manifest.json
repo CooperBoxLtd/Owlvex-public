@@ -58,6 +58,18 @@
       "difficulty": "easy"
     },
     {
+      "file": "injection_execution/negative/sanitized_alias_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "hard"
+    },
+    {
+      "file": "injection_execution/negative/chained_sanitized_alias_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "hard"
+    },
+    {
       "file": "injection_execution/negative/validated_spawn_negative.js",
       "expectedCanonical": [],
       "expectedFamily": null,
@@ -294,6 +306,12 @@
     },
     {
       "file": "injection_execution/positive/nested_mixed_sql_positive.js",
+      "expectedCanonical": ["owlvex.issue.sql_injection.001"],
+      "expectedFamily": "family.injection_execution",
+      "difficulty": "hard"
+    },
+    {
+      "file": "injection_execution/positive/unsafe_alias_positive.js",
       "expectedCanonical": ["owlvex.issue.sql_injection.001"],
       "expectedFamily": "family.injection_execution",
       "difficulty": "hard"

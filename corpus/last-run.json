@@ -1,5 +1,5 @@
 {
-  "total": 53,
+  "total": 56,
   "issueAccuracy": 100,
   "familyAccuracy": 100,
   "falsePositives": 0,
@@ -13,9 +13,9 @@
       "familyAccuracy": 100
     },
     "Injection & Execution": {
-      "total": 17,
-      "issueCorrect": 17,
-      "familyCorrect": 17,
+      "total": 20,
+      "issueCorrect": 20,
+      "familyCorrect": 20,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
@@ -71,9 +71,9 @@
       "familyAccuracy": 100
     },
     "hard": {
-      "total": 27,
-      "issueCorrect": 27,
-      "familyCorrect": 27,
+      "total": 30,
+      "issueCorrect": 30,
+      "familyCorrect": 30,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
@@ -260,6 +260,36 @@
       "file": "injection_execution/negative/parameterized_query_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "easy",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/sanitized_alias_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/chained_sanitized_alias_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
       "expectedCanonical": [],
       "detectedCanonical": [],
       "missedCanonical": [],
@@ -1050,6 +1080,29 @@
     },
     {
       "file": "injection_execution/positive/nested_mixed_sql_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/unsafe_alias_positive.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "hard",
       "expectedCanonical": [
