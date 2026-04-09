@@ -12,7 +12,7 @@ This roadmap defines the next expansion of the canonical issue catalog so the pr
 
 The live catalog currently contains:
 
-- `30` canonical issue definitions
+- `33` canonical issue definitions
 - `9` issue families
 
 That is enough for:
@@ -48,14 +48,14 @@ Recommended issue count targets by family:
 
 | Family | Current | Target | Priority |
 | --- | ---: | ---: | --- |
-| Injection & Execution | 8 | 20 | Highest |
-| Identity & Auth Failures | 2 | 12 | Highest |
-| Access Control & Authorization | 2 | 12 | Highest |
+| Injection & Execution | 12 | 20 | Highest |
+| Identity & Auth Failures | 3 | 12 | Highest |
+| Access Control & Authorization | 5 | 12 | Highest |
 | Secrets & Credential Exposure | 4 | 12 | Highest |
-| Data Protection & Privacy | 3 | 12 | High |
+| Data Protection & Privacy | 2 | 12 | High |
 | Security Misconfiguration & Platform Hardening | 3 | 12 | High |
 | Audit & Observability | 1 | 8 | Medium |
-| Availability & Resilience | 2 | 8 | Medium |
+| Availability & Resilience | 1 | 8 | Medium |
 | Cryptography & Randomness | 2 | 8 | Medium |
 
 This gives a practical v2 range of `104` issues without turning the ontology into an unmanageable dump.
@@ -126,7 +126,7 @@ Focus on the highest-value product coverage:
 
 Target outcome:
 
-- grow from `30` issues to roughly `55`
+- grow from `33` issues to roughly `55`
 - keep corpus and resolver quality stable
 - improve practical coverage for demos and early customer repos
 

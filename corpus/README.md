@@ -28,7 +28,7 @@ Difficulty tiers:
 
 The current corpus is intentionally compact but adversarial:
 
-- 56 files
+- 68 files
 - positive, negative, ambiguous, and multi-issue coverage
 - decision-conflict cases covering comment noise, dead code, partial safety, and multi-family overlap
 - suitable for local iteration before a larger benchmark harness exists

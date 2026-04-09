@@ -40,6 +40,18 @@
       "difficulty": "easy"
     },
     {
+      "file": "injection_execution/positive/eval_code_injection_positive.js",
+      "expectedCanonical": ["owlvex.issue.code_injection.eval.001"],
+      "expectedFamily": "family.injection_execution",
+      "difficulty": "easy"
+    },
+    {
+      "file": "injection_execution/positive/insecure_deserialization_positive.js",
+      "expectedCanonical": ["owlvex.issue.insecure_deserialization.001"],
+      "expectedFamily": "family.injection_execution",
+      "difficulty": "easy"
+    },
+    {
       "file": "injection_execution/positive/nosql_injection_positive.js",
       "expectedCanonical": ["owlvex.issue.nosql_injection.001"],
       "expectedFamily": "family.injection_execution",
@@ -53,6 +65,24 @@
     },
     {
       "file": "injection_execution/negative/parameterized_query_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "easy"
+    },
+    {
+      "file": "injection_execution/negative/static_eval_expression_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "easy"
+    },
+    {
+      "file": "injection_execution/negative/eval_like_string_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "easy"
+    },
+    {
+      "file": "injection_execution/negative/schema_validated_deserialization_negative.js",
       "expectedCanonical": [],
       "expectedFamily": null,
       "difficulty": "easy"
@@ -82,13 +112,43 @@
       "difficulty": "easy"
     },
     {
+      "file": "identity_auth/positive/missing_authentication_check_positive.js",
+      "expectedCanonical": ["owlvex.issue.missing_authentication_check.001"],
+      "expectedFamily": "family.identity_auth",
+      "difficulty": "easy"
+    },
+    {
       "file": "identity_auth/positive/weak_jwt_validation_positive.js",
       "expectedCanonical": ["owlvex.issue.weak_jwt_validation.001"],
       "expectedFamily": "family.identity_auth",
       "difficulty": "easy"
     },
     {
+      "file": "identity_auth/positive/jwt_decode_without_verify_positive.js",
+      "expectedCanonical": ["owlvex.issue.weak_jwt_validation.001"],
+      "expectedFamily": "family.identity_auth",
+      "difficulty": "easy"
+    },
+    {
       "file": "identity_auth/negative/strong_auth_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "easy"
+    },
+    {
+      "file": "identity_auth/negative/admin_route_with_auth_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "easy"
+    },
+    {
+      "file": "identity_auth/negative/jwt_verify_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "easy"
+    },
+    {
+      "file": "identity_auth/negative/indirect_auth_present_negative.js",
       "expectedCanonical": [],
       "expectedFamily": null,
       "difficulty": "easy"
@@ -106,7 +166,19 @@
       "difficulty": "easy"
     },
     {
+      "file": "access_control/positive/broken_function_level_authorization_positive.js",
+      "expectedCanonical": ["owlvex.issue.broken_function_level_authorization.001"],
+      "expectedFamily": "family.access_control",
+      "difficulty": "easy"
+    },
+    {
       "file": "access_control/negative/scoped_query_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "easy"
+    },
+    {
+      "file": "access_control/negative/admin_role_enforced_negative.js",
       "expectedCanonical": [],
       "expectedFamily": null,
       "difficulty": "easy"

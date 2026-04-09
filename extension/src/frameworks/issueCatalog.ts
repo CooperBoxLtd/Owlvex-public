@@ -7,6 +7,8 @@ export interface CanonicalMappings {
     nist: string[];
 }
 
+export type DetectionLevel = 'direct' | 'flow' | 'inferred' | 'partial';
+
 export interface CanonicalIssue {
     id: string;
     slug: string;
@@ -19,10 +21,15 @@ export interface CanonicalIssue {
     keywords: string[];
     remediationSummary: string;
     cheatSheetRefs: string[];
+    detectionLevel: DetectionLevel;
+    requiresTrustTracking: boolean;
     requiredAnyKeywords?: string[];
     negativeKeywords?: string[];
     minimumScore?: number;
 }
+
+type CanonicalIssueDefinition = Omit<CanonicalIssue, 'detectionLevel' | 'requiresTrustTracking'>
+& Partial<Pick<CanonicalIssue, 'detectionLevel' | 'requiresTrustTracking'>>;
 
 export interface IssueFamilyDefinition {
     id: string;
@@ -78,7 +85,15 @@ export const ISSUE_FAMILY_CATALOG: IssueFamilyDefinition[] = [
     },
 ];
 
-export const ISSUE_CATALOG: CanonicalIssue[] = [
+function defineIssue(issue: CanonicalIssueDefinition): CanonicalIssue {
+    return {
+        detectionLevel: 'direct',
+        requiresTrustTracking: false,
+        ...issue,
+    };
+}
+
+const ISSUE_DEFINITIONS: CanonicalIssueDefinition[] = [
     {
         id: 'owlvex.issue.sql_injection.001',
         slug: 'sql-injection-unsanitized-query-construction',
@@ -86,6 +101,8 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
         category: 'injection',
         family: 'family.injection_execution',
         severity: 'HIGH',
+        detectionLevel: 'flow',
+        requiresTrustTracking: true,
         stride: ['Tampering', 'Information Disclosure'],
         mappings: {
             cwe: ['CWE-89'],
@@ -107,6 +124,8 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
         category: 'injection',
         family: 'family.injection_execution',
         severity: 'CRITICAL',
+        detectionLevel: 'flow',
+        requiresTrustTracking: true,
         stride: ['Tampering', 'Elevation of Privilege', 'Denial of Service'],
         mappings: {
             cwe: ['CWE-78'],
@@ -241,6 +260,7 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
         category: 'authorization',
         family: 'family.access_control',
         severity: 'HIGH',
+        detectionLevel: 'inferred',
         stride: ['Elevation of Privilege', 'Information Disclosure', 'Tampering'],
         mappings: {
             cwe: ['CWE-639'],
@@ -254,6 +274,30 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
         negativeKeywords: ['account_id = ?', 'owner_id = ?', 'authorization check', 'policy.enforce'],
         remediationSummary: 'Enforce object-level authorization before read or write operations and scope queries to the authenticated actor.',
         cheatSheetRefs: ['OWASP Authorization Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.code_injection.eval.001',
+        slug: 'dynamic-code-evaluation-of-untrusted-input',
+        title: 'Dynamic code evaluation of untrusted input',
+        category: 'injection',
+        family: 'family.injection_execution',
+        severity: 'CRITICAL',
+        detectionLevel: 'direct',
+        requiresTrustTracking: true,
+        stride: ['Tampering', 'Elevation of Privilege', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-95'],
+            owasp: ['A03:2021'],
+            apiOwasp: [],
+            attack: ['T1059'],
+            capec: ['CAPEC-242'],
+            nist: ['SI-10', 'SA-11'],
+        },
+        keywords: ['eval', 'new function', 'dynamic code', 'execute user input', 'code injection'],
+        negativeKeywords: ['static expression', 'constant expression', 'trusted expression'],
+        minimumScore: 45,
+        remediationSummary: 'Do not evaluate user-controlled code; replace dynamic execution with fixed dispatch or validated allow-listed operations.',
+        cheatSheetRefs: ['OWASP Injection Prevention Cheat Sheet'],
     },
     {
         id: 'owlvex.issue.sensitive_logging.001',
@@ -325,6 +369,7 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
         category: 'deserialization',
         family: 'family.injection_execution',
         severity: 'HIGH',
+        detectionLevel: 'direct',
         stride: ['Tampering', 'Elevation of Privilege', 'Denial of Service'],
         mappings: {
             cwe: ['CWE-502'],
@@ -338,6 +383,29 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
         negativeKeywords: ['json.parse', 'schema validation', 'signed payload'],
         remediationSummary: 'Avoid unsafe deserializers, prefer safe data-only formats, and validate or sign serialized payloads.',
         cheatSheetRefs: ['OWASP Deserialization Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.missing_authentication_check.001',
+        slug: 'missing-authentication-check-on-protected-route',
+        title: 'Missing authentication check on protected route',
+        category: 'authentication',
+        family: 'family.identity_auth',
+        severity: 'HIGH',
+        detectionLevel: 'direct',
+        stride: ['Spoofing', 'Elevation of Privilege', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-306'],
+            owasp: ['A07:2021'],
+            apiOwasp: ['API2:2023'],
+            attack: ['T1078'],
+            capec: ['CAPEC-115'],
+            nist: ['AC-3', 'IA-2'],
+        },
+        keywords: ['missing authentication', 'protected route', 'admin route', 'unauthenticated access', 'no auth middleware'],
+        negativeKeywords: ['requireauth', 'authenticate', 'ensureauthenticated', 'authmiddleware', 'jwt.verify'],
+        minimumScore: 45,
+        remediationSummary: 'Require authentication middleware or equivalent identity checks before protected handlers execute.',
+        cheatSheetRefs: ['OWASP Authentication Cheat Sheet'],
     },
     {
         id: 'owlvex.issue.weak_auth_policy.001',
@@ -472,6 +540,7 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
         category: 'authentication',
         family: 'family.identity_auth',
         severity: 'HIGH',
+        detectionLevel: 'direct',
         stride: ['Spoofing', 'Elevation of Privilege'],
         mappings: {
             cwe: ['CWE-345'],
@@ -481,10 +550,33 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
             capec: [],
             nist: ['IA-5', 'AC-3'],
         },
-        keywords: ['jwt', 'verify=false', 'alg none', 'missing issuer validation', 'missing audience validation'],
-        negativeKeywords: ['issuer check', 'audience check', 'allowed algorithms'],
+        keywords: ['jwt', 'verify=false', 'alg none', 'missing issuer validation', 'missing audience validation', 'jwt.decode', 'decode without verify'],
+        negativeKeywords: ['issuer check', 'audience check', 'allowed algorithms', 'jwt.verify'],
         remediationSummary: 'Verify signature, issuer, audience, expiry, and accepted algorithms explicitly for every JWT.',
         cheatSheetRefs: ['OWASP JSON Web Token Cheat Sheet for Java'],
+    },
+    {
+        id: 'owlvex.issue.broken_function_level_authorization.001',
+        slug: 'broken-function-level-authorization',
+        title: 'Broken function-level authorization',
+        category: 'authorization',
+        family: 'family.access_control',
+        severity: 'HIGH',
+        detectionLevel: 'direct',
+        stride: ['Elevation of Privilege', 'Tampering', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-285'],
+            owasp: ['A01:2021'],
+            apiOwasp: ['API5:2023'],
+            attack: ['T1078'],
+            capec: ['CAPEC-233'],
+            nist: ['AC-3', 'AC-6'],
+        },
+        keywords: ['function level authorization', 'admin action', 'privileged action', 'role check missing', 'broken function level authorization'],
+        negativeKeywords: ['requireadmin', 'requirerole', 'policy.enforce', 'authorizeadmin'],
+        minimumScore: 45,
+        remediationSummary: 'Protect privileged routes and administrative actions with explicit role or policy checks, not just basic authentication.',
+        cheatSheetRefs: ['OWASP Authorization Cheat Sheet'],
     },
     {
         id: 'owlvex.issue.unrestricted_file_upload.001',
@@ -718,6 +810,8 @@ export const ISSUE_CATALOG: CanonicalIssue[] = [
         cheatSheetRefs: ['OWASP LDAP Injection Prevention Cheat Sheet'],
     },
 ];
+
+export const ISSUE_CATALOG: CanonicalIssue[] = ISSUE_DEFINITIONS.map(defineIssue);
 
 export function getIssueFamilyDefinition(id: string): IssueFamilyDefinition | undefined {
     return ISSUE_FAMILY_CATALOG.find(item => item.id === id);

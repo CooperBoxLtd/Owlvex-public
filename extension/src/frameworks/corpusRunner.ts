@@ -147,6 +147,19 @@ function hasErrorLikeMessage(source: string): boolean {
     return /\b[A-Za-z_$][A-Za-z0-9_$]*\.(message|stack)\b/i.test(source);
 }
 
+function hasAuthGuard(source: string): boolean {
+    return /\b(requireAuth|authenticate|ensureAuthenticated|authMiddleware|jwt\.verify|isAuthenticated|req\.user)\b/i.test(source);
+}
+
+function hasPrivilegeGuard(source: string): boolean {
+    return /\b(requireAdmin|requireRole|authorizeAdmin|policy\.enforce|req\.user\.role\s*===\s*['"]admin['"])\b/i.test(source);
+}
+
+function hasPrivilegedAction(source: string): boolean {
+    return /\b(delete|post|put|patch)\b/i.test(source)
+        || /\b(deleteUser|removeUser|grantRole|revokeRole|exportData|manageUsers)\b/i.test(source);
+}
+
 function buildSourceSignals(source: string, issue: CanonicalIssue): { score: number; matchedSignals: string[] } {
     const haystack = source.toLowerCase();
     let score = 0;
@@ -246,6 +259,20 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
                 matchedSignals.push('PATTERN:command-interpolation');
             }
             break;
+        case 'owlvex.issue.code_injection.eval.001':
+            if (/\b(eval\s*\(|new\s+Function\s*\()/i.test(source)) {
+                score += 45;
+                matchedSignals.push('PATTERN:dynamic-code-sink');
+            }
+            if (/\b(req\.(body|query|params)|userInput|input|payload|expression)\b/i.test(source)) {
+                score += 20;
+                matchedSignals.push('PATTERN:untrusted-code-input');
+            }
+            if (/\beval\s*\(\s*['"`][^'"`]+['"`]\s*\)/i.test(source)) {
+                score -= 40;
+                matchedSignals.push('NEG:static-expression');
+            }
+            break;
         case 'owlvex.issue.nosql_injection.001':
             if (
                 /\$(where|ne|regex)\b/i.test(source)
@@ -265,16 +292,50 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
                 matchedSignals.push('PATTERN:template-expression');
             }
             break;
+        case 'owlvex.issue.insecure_deserialization.001':
+            if (
+                /\b(yaml\.load|deserialize\s*\(|unserialize\s*\(|pickle\.loads|BinaryFormatter|ObjectInputStream)\b/i.test(source)
+                && /\b(req\.(body|query|params)|userInput|input|payload|body)\b/i.test(source)
+            ) {
+                score += 45;
+                matchedSignals.push('PATTERN:unsafe-deserializer');
+            }
+            break;
+        case 'owlvex.issue.missing_authentication_check.001':
+            if (
+                /\b(app|router)\.(get|post|put|patch|delete)\s*\(\s*['"`]\/(admin|internal|billing|account|settings|users)\b/i.test(source)
+                && !hasAuthGuard(source)
+                && !hasPrivilegeGuard(source)
+            ) {
+                score += 50;
+                matchedSignals.push('PATTERN:protected-route-without-auth');
+            }
+            break;
         case 'owlvex.issue.weak_jwt_validation.001':
             if (/ignoreExpiration\s*:\s*true/i.test(source)) {
                 score += 45;
                 matchedSignals.push('PATTERN:ignore-expiration');
+            }
+            if (/\bjwt\.decode\s*\(/i.test(source) && !/\bjwt\.verify\s*\(/i.test(source)) {
+                score += 45;
+                matchedSignals.push('PATTERN:decode-without-verify');
             }
             break;
         case 'owlvex.issue.weak_auth_policy.001':
             if (/(minLength\s*[:=]\s*[0-7]\b|password\.length\s*(<|>=|>)\s*[0-7]\b|requireSpecial\s*[:=]\s*false)/i.test(source)) {
                 score += 45;
                 matchedSignals.push('PATTERN:weak-password-policy');
+            }
+            break;
+        case 'owlvex.issue.broken_function_level_authorization.001':
+            if (
+                /\b(app|router)\.(get|post|put|patch|delete)\s*\(\s*['"`]\/(admin|delete|export|manage|users)\b/i.test(source)
+                && /\b(req\.user|isAuthenticated|authenticate)\b/i.test(source)
+                && hasPrivilegedAction(source)
+                && !hasPrivilegeGuard(source)
+            ) {
+                score += 50;
+                matchedSignals.push('PATTERN:privileged-route-without-authorization');
             }
             break;
         case 'owlvex.issue.idor.001':
@@ -393,6 +454,17 @@ function applyExecutionGuards(detections: DetectedIssue[], context: DetectionCon
                 return unsafeVariables.length > 0;
             case 'owlvex.issue.command_injection.001':
                 return hasExecutablePattern(context, /\b(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*\(/i);
+            case 'owlvex.issue.code_injection.eval.001':
+                return hasExecutablePattern(context, /\b(eval\s*\(|new\s+Function\s*\()/i)
+                    && /\b(req\.(body|query|params)|userInput|input|payload|expression)\b/i.test(context.withoutComments);
+            case 'owlvex.issue.insecure_deserialization.001':
+                return hasExecutablePattern(context, /\b(yaml\.load|deserialize\s*\(|unserialize\s*\(|pickle\.loads|BinaryFormatter|ObjectInputStream)\b/i);
+            case 'owlvex.issue.missing_authentication_check.001':
+                return !hasAuthGuard(context.withoutComments) && !hasPrivilegeGuard(context.withoutComments);
+            case 'owlvex.issue.broken_function_level_authorization.001':
+                return /\b(req\.user|isAuthenticated|authenticate)\b/i.test(context.withoutComments)
+                    && hasPrivilegedAction(context.withoutComments)
+                    && !hasPrivilegeGuard(context.withoutComments);
             case 'owlvex.issue.verbose_error_disclosure.001':
                 return hasExecutablePattern(context, /(res\.(status|send|json)|return)\s*\(?[^;\n]*\b[A-Za-z_$][A-Za-z0-9_$]*\.(message|stack)\b/i);
             case 'owlvex.issue.sensitive_logging.001':

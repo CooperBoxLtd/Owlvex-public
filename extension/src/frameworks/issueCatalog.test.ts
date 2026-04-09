@@ -2,7 +2,7 @@ import { ISSUE_CATALOG, ISSUE_FAMILY_CATALOG, getIssueFamilyDefinition } from '.
 
 describe('issueCatalog', () => {
     it('contains a materially expanded canonical issue set', () => {
-        expect(ISSUE_CATALOG.length).toBeGreaterThanOrEqual(25);
+        expect(ISSUE_CATALOG.length).toBeGreaterThanOrEqual(33);
     });
 
     it('includes secret subtypes for more precise hardcoded secret matching', () => {
@@ -22,6 +22,12 @@ describe('issueCatalog', () => {
         ]));
         expect(
             ISSUE_CATALOG.every(issue => issue.family && getIssueFamilyDefinition(issue.family)?.label),
+        ).toBe(true);
+    });
+
+    it('assigns detection metadata to every canonical issue', () => {
+        expect(
+            ISSUE_CATALOG.every(issue => issue.detectionLevel && typeof issue.requiresTrustTracking === 'boolean'),
         ).toBe(true);
     });
 });

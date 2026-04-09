@@ -49,6 +49,12 @@ describe('issueResolver', () => {
         expect(getCanonicalIssueById('owlvex.issue.hardcoded_secret.001')?.title).toBe('Hardcoded secret in source code');
     });
 
+    it('exposes detection metadata for new direct Phase A issues', () => {
+        const issue = getCanonicalIssueById('owlvex.issue.code_injection.eval.001');
+        expect(issue?.detectionLevel).toBe('direct');
+        expect(issue?.requiresTrustTracking).toBe(true);
+    });
+
     it('prefers specific secret subtypes over generic hardcoded secret matches', () => {
         const resolved = resolveIssue({
             title: 'Hardcoded API key',
