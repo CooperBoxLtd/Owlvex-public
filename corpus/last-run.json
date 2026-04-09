@@ -1,5 +1,5 @@
 {
-  "total": 74,
+  "total": 76,
   "issueAccuracy": 100,
   "familyAccuracy": 100,
   "falsePositives": 0,
@@ -13,9 +13,9 @@
       "familyAccuracy": 100
     },
     "Injection & Execution": {
-      "total": 31,
-      "issueCorrect": 31,
-      "familyCorrect": 31,
+      "total": 33,
+      "issueCorrect": 33,
+      "familyCorrect": 33,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
@@ -71,9 +71,9 @@
       "familyAccuracy": 100
     },
     "hard": {
-      "total": 36,
-      "issueCorrect": 36,
-      "familyCorrect": 36,
+      "total": 38,
+      "issueCorrect": 38,
+      "familyCorrect": 38,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
@@ -372,6 +372,29 @@
       "falsePositive": false
     },
     {
+      "file": "injection_execution/positive/mixed_unknown_branch_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
       "file": "injection_execution/negative/parameterized_query_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "easy",
@@ -463,6 +486,21 @@
     },
     {
       "file": "injection_execution/negative/safe_override_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/both_branches_sanitized_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "hard",
       "expectedCanonical": [],

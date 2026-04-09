@@ -28,9 +28,11 @@ type DetectionContext = {
     source: string;
     withoutComments: string;
     executableSource: string;
-    sanitizedVariables: string[];
+    variableTrustStates: Record<string, TrustState>;
     interpolatedVariables: string[];
 };
+
+type TrustState = 'SAFE' | 'UNSAFE' | 'MIXED' | 'UNKNOWN';
 
 type CaseEvaluation = {
     file: string;
@@ -112,22 +114,69 @@ function buildDetectionContext(source: string): DetectionContext {
         source,
         withoutComments,
         executableSource: stripStringLiterals(withoutComments),
-        sanitizedVariables: extractSanitizedVariables(withoutComments),
+        variableTrustStates: extractVariableTrustStates(withoutComments),
         interpolatedVariables: extractInterpolatedVariables(withoutComments),
     };
 }
 
-function extractSanitizedVariables(source: string): string[] {
-    const sanitizerFunctions = new Set([
+function extractSanitizerFunctions(source: string): Set<string> {
+    return new Set([
         'sanitize',
         ...[...source.matchAll(/\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*{\s*return\s+sanitize\s*\(\s*\2\s*\)\s*;?\s*}/g)]
             .map(match => match[1]),
         ...[...source.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*=>\s*sanitize\s*\(\s*\2\s*\)\s*;?/g)]
             .map(match => match[1]),
     ]);
+}
 
-    const safeVariables = new Set<string>();
+function mergeTrustStates(left: TrustState, right: TrustState): TrustState {
+    return left === right ? left : 'MIXED';
+}
+
+function evaluateTrustValue(
+    value: string,
+    states: Map<string, TrustState>,
+    sanitizerFunctions: Set<string>,
+): TrustState {
+    const trimmed = value.trim();
+
+    if (/^(req\.(body|query|params)|userInput|input|payload|body)(\.|$)/i.test(trimmed)) {
+        return 'UNSAFE';
+    }
+    if (/^['"`][\s\S]*['"`]$/.test(trimmed) || /^\d+$/.test(trimmed)) {
+        return 'SAFE';
+    }
+
+    const callMatch = trimmed.match(/^([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
+    if (callMatch) {
+        return sanitizerFunctions.has(callMatch[1]) ? 'SAFE' : 'UNKNOWN';
+    }
+
+    const identifierMatch = trimmed.match(/^([A-Za-z_$][A-Za-z0-9_$]*)$/);
+    if (identifierMatch) {
+        return states.get(identifierMatch[1]) ?? 'UNKNOWN';
+    }
+
+    if (/sanitize\s*\(/i.test(trimmed)) {
+        return 'SAFE';
+    }
+
+    return 'UNKNOWN';
+}
+
+function extractVariableTrustStates(source: string): Record<string, TrustState> {
+    const sanitizerFunctions = extractSanitizerFunctions(source);
+    const states = new Map<string, TrustState>();
     const assignmentPattern = /^\s*(?:(?:const|let|var)\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(.+?);?\s*$/;
+    const branchPattern = /if\s*\([^)]*\)\s*{\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([^;]+);?\s*}\s*else\s*{\s*\1\s*=\s*([^;]+);?\s*}/gs;
+
+    for (const match of source.matchAll(branchPattern)) {
+        const [, variable, leftValue, rightValue] = match;
+        const leftState = evaluateTrustValue(leftValue, states, sanitizerFunctions);
+        const rightState = evaluateTrustValue(rightValue, states, sanitizerFunctions);
+        states.set(variable, mergeTrustStates(leftState, rightState));
+    }
+
     const lines = source.split(/\r?\n/);
     let conditionalDepth = 0;
 
@@ -146,16 +195,7 @@ function extractSanitizedVariables(source: string): string[] {
         if (assignment && conditionalDepth === 0 && !startsConditional) {
             const [, variable, rawValue] = assignment;
             const value = rawValue.trim();
-            const sanitizeCall = value.match(/^([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
-            const aliasMatch = value.match(/^([A-Za-z_$][A-Za-z0-9_$]*)$/);
-
-            if (sanitizeCall && sanitizerFunctions.has(sanitizeCall[1])) {
-                safeVariables.add(variable);
-            } else if (aliasMatch && safeVariables.has(aliasMatch[1])) {
-                safeVariables.add(variable);
-            } else {
-                safeVariables.delete(variable);
-            }
+            states.set(variable, evaluateTrustValue(value, states, sanitizerFunctions));
         }
 
         if (startsConditional) {
@@ -170,7 +210,7 @@ function extractSanitizedVariables(source: string): string[] {
         conditionalDepth = Math.max(0, conditionalDepth);
     }
 
-    return [...safeVariables];
+    return Object.fromEntries(states);
 }
 
 function extractInterpolatedVariables(source: string): string[] {
@@ -194,6 +234,10 @@ function hasPrivilegeGuard(source: string): boolean {
 function hasPrivilegedAction(source: string): boolean {
     return /\b(delete|post|put|patch)\b/i.test(source)
         || /\b(deleteUser|removeUser|grantRole|revokeRole|exportData|manageUsers)\b/i.test(source);
+}
+
+function getInterpolatedTrustStates(context: DetectionContext): TrustState[] {
+    return context.interpolatedVariables.map(variable => context.variableTrustStates[variable] ?? 'UNKNOWN');
 }
 
 function buildSourceSignals(source: string, issue: CanonicalIssue): { score: number; matchedSignals: string[] } {
@@ -256,10 +300,13 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
         case 'owlvex.issue.sql_injection.001':
             const hasSqlSink = /\b(select|update|insert|delete)\b/i.test(source) && /\bquery\s*\(/i.test(source);
             const hasQueryInterpolation = templateLiteralInterpolation || /'\s*\+\s*[A-Za-z0-9_$]+/.test(source);
-            const safeVariables = extractSanitizedVariables(source);
             const interpolatedVariables = extractInterpolatedVariables(source);
-            const hasUnsafeInterpolation = interpolatedVariables.some(variable => !safeVariables.includes(variable));
-            const hasOnlySafeInterpolation = interpolatedVariables.length > 0 && !hasUnsafeInterpolation;
+            const variableTrustStates = extractVariableTrustStates(source);
+            const interpolationStates = interpolatedVariables.map(variable => variableTrustStates[variable] ?? 'UNKNOWN');
+            const hasUnsafeInterpolation = interpolationStates.includes('UNSAFE');
+            const hasMixedInterpolation = interpolationStates.includes('MIXED');
+            const hasUnknownInterpolation = interpolationStates.includes('UNKNOWN');
+            const hasOnlySafeInterpolation = interpolationStates.length > 0 && interpolationStates.every(state => state === 'SAFE');
             if (hasSqlSink) {
                 score += 15;
                 matchedSignals.push('PATTERN:sql-sink');
@@ -267,6 +314,14 @@ function buildSourceSignals(source: string, issue: CanonicalIssue): { score: num
             if (hasQueryInterpolation) {
                 score += 20;
                 matchedSignals.push('PATTERN:query-interpolation');
+            }
+            if (hasMixedInterpolation) {
+                score += 20;
+                matchedSignals.push('PATTERN:mixed-trust-flow');
+            }
+            if (hasUnknownInterpolation) {
+                score += 10;
+                matchedSignals.push('PATTERN:unknown-trust-flow');
             }
             if (/\?\s*['"`]?\s*,\s*\[[^\]]+\]/.test(source) || /query\s*\([^)]*\[[^\]]+\]\)/i.test(source)) {
                 score -= 35;
@@ -486,8 +541,7 @@ function applyExecutionGuards(detections: DetectedIssue[], context: DetectionCon
                 if (context.interpolatedVariables.length === 0) {
                     return true;
                 }
-                const unsafeVariables = context.interpolatedVariables.filter(variable => !context.sanitizedVariables.includes(variable));
-                return unsafeVariables.length > 0;
+                return getInterpolatedTrustStates(context).some(state => state !== 'SAFE');
             case 'owlvex.issue.command_injection.001':
                 return hasExecutablePattern(context, /\b(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*\(/i);
             case 'owlvex.issue.code_injection.eval.001':
