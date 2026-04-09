@@ -118,20 +118,56 @@ function buildDetectionContext(source: string): DetectionContext {
 }
 
 function extractSanitizedVariables(source: string): string[] {
-    const directMatches = [...source.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*sanitize\s*\(/g)]
-        .map(match => match[1]);
-    const safeVariables = new Set(directMatches);
-    const aliasMatches = [...source.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*;/g)];
+    const sanitizerFunctions = new Set([
+        'sanitize',
+        ...[...source.matchAll(/\bfunction\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*{\s*return\s+sanitize\s*\(\s*\2\s*\)\s*;?\s*}/g)]
+            .map(match => match[1]),
+        ...[...source.matchAll(/\bconst\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*=>\s*sanitize\s*\(\s*\2\s*\)\s*;?/g)]
+            .map(match => match[1]),
+    ]);
 
-    let changed = true;
-    while (changed) {
-        changed = false;
-        for (const [, left, right] of aliasMatches) {
-            if (safeVariables.has(right) && !safeVariables.has(left)) {
-                safeVariables.add(left);
-                changed = true;
+    const safeVariables = new Set<string>();
+    const assignmentPattern = /^\s*(?:(?:const|let|var)\s+)?([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(.+?);?\s*$/;
+    const lines = source.split(/\r?\n/);
+    let conditionalDepth = 0;
+
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) {
+            continue;
+        }
+
+        const normalized = trimmed.replace(/^}+\s*/, '');
+        const startsConditional = /^(if|else\s+if|else|switch|case)\b/.test(normalized);
+        const opens = (normalized.match(/{/g) ?? []).length;
+        const closes = (normalized.match(/}/g) ?? []).length;
+
+        const assignment = trimmed.match(assignmentPattern);
+        if (assignment && conditionalDepth === 0 && !startsConditional) {
+            const [, variable, rawValue] = assignment;
+            const value = rawValue.trim();
+            const sanitizeCall = value.match(/^([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/);
+            const aliasMatch = value.match(/^([A-Za-z_$][A-Za-z0-9_$]*)$/);
+
+            if (sanitizeCall && sanitizerFunctions.has(sanitizeCall[1])) {
+                safeVariables.add(variable);
+            } else if (aliasMatch && safeVariables.has(aliasMatch[1])) {
+                safeVariables.add(variable);
+            } else {
+                safeVariables.delete(variable);
             }
         }
+
+        if (startsConditional) {
+            conditionalDepth += Math.max(1, opens);
+        } else if (conditionalDepth > 0) {
+            conditionalDepth += opens;
+        }
+
+        if (conditionalDepth > 0) {
+            conditionalDepth -= closes;
+        }
+        conditionalDepth = Math.max(0, conditionalDepth);
     }
 
     return [...safeVariables];
