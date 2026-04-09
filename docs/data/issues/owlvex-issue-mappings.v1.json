@@ -1,0 +1,1421 @@
+{
+  "schema_version": "owlvex.issue-mapping-pack.v1",
+  "pack_id": "owlvex.core-security.2026.1",
+  "mappings": [
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.sql_injection.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-89",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A03:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "APIOWASP",
+          "external_id": "API8:2023",
+          "mapping_type": "primary",
+          "confidence": 0.92
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-66",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1190",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SA-11",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Information Disclosure"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.command_injection.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-78",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A03:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-88",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1059",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "CM-7",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Elevation of Privilege",
+          "Denial of Service"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.hardcoded_api_key.001",
+      "family": "family.secrets_exposure",
+      "family_label": "Secrets & Credential Exposure",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-798",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A02:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-640",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1552",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-28",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "IA-5",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Spoofing"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.hardcoded_password.001",
+      "family": "family.secrets_exposure",
+      "family_label": "Secrets & Credential Exposure",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-798",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A02:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-640",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1552",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-28",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "IA-5",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Spoofing"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.hardcoded_token.001",
+      "family": "family.secrets_exposure",
+      "family_label": "Secrets & Credential Exposure",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-798",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A02:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-640",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1552",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-28",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "IA-5",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Spoofing"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.hardcoded_secret.001",
+      "family": "family.secrets_exposure",
+      "family_label": "Secrets & Credential Exposure",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-798",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A02:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-640",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1552",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-28",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "IA-5",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Spoofing"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.path_traversal.001",
+      "family": "family.access_control",
+      "family_label": "Access Control & Authorization",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-22",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A01:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-126",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1005",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AC-6",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Information Disclosure",
+          "Elevation of Privilege"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.idor.001",
+      "family": "family.access_control",
+      "family_label": "Access Control & Authorization",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-639",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A01:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "APIOWASP",
+          "external_id": "API1:2023",
+          "mapping_type": "primary",
+          "confidence": 0.92
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-233",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1078",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AC-3",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AC-6",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Elevation of Privilege",
+          "Information Disclosure",
+          "Tampering"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.sensitive_logging.001",
+      "family": "family.data_protection_privacy",
+      "family_label": "Data Protection & Privacy",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-532",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A09:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1005",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AU-9",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-28",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Repudiation"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.audit_gap.001",
+      "family": "family.audit_observability",
+      "family_label": "Audit & Observability Gaps",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-778",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A09:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AU-2",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AU-12",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Repudiation"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.ssrf.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-918",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A10:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "APIOWASP",
+          "external_id": "API7:2023",
+          "mapping_type": "primary",
+          "confidence": 0.92
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-664",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1190",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-7",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Tampering",
+          "Denial of Service"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.insecure_deserialization.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-502",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A08:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-586",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1059",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SA-11",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Elevation of Privilege",
+          "Denial of Service"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.weak_auth_policy.001",
+      "family": "family.identity_auth",
+      "family_label": "Identity & Auth Failures",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-521",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A07:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "APIOWASP",
+          "external_id": "API2:2023",
+          "mapping_type": "primary",
+          "confidence": 0.92
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-49",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1110",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "IA-5",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AC-7",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Spoofing",
+          "Elevation of Privilege"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.xss_reflected.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-79",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A03:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-63",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1059",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-34",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Information Disclosure"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.xss_stored.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-79",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A03:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-592",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1059",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-34",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Information Disclosure"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.open_redirect.001",
+      "family": "family.security_misconfiguration",
+      "family_label": "Security Misconfiguration & Platform Hardening",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-601",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A01:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-178",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1185",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Spoofing",
+          "Information Disclosure"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.csrf_missing_token.001",
+      "family": "family.access_control",
+      "family_label": "Access Control & Authorization",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-352",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A01:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-62",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1539",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AC-3",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Spoofing"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.insecure_cors.001",
+      "family": "family.security_misconfiguration",
+      "family_label": "Security Misconfiguration & Platform Hardening",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-942",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A05:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-7",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Tampering"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.weak_jwt_validation.001",
+      "family": "family.identity_auth",
+      "family_label": "Identity & Auth Failures",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-345",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A07:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "APIOWASP",
+          "external_id": "API2:2023",
+          "mapping_type": "primary",
+          "confidence": 0.92
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1606",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "IA-5",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AC-3",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Spoofing",
+          "Elevation of Privilege"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.unrestricted_file_upload.001",
+      "family": "family.security_misconfiguration",
+      "family_label": "Security Misconfiguration & Platform Hardening",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-434",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A05:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-650",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1105",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "CM-7",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Denial of Service",
+          "Elevation of Privilege"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.mass_assignment.001",
+      "family": "family.access_control",
+      "family_label": "Access Control & Authorization",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-915",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A01:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "APIOWASP",
+          "external_id": "API6:2023",
+          "mapping_type": "primary",
+          "confidence": 0.92
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "AC-6",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Elevation of Privilege"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.xxe.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-611",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A05:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-201",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1005",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Denial of Service"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.weak_crypto.001",
+      "family": "family.crypto_randomness",
+      "family_label": "Cryptography & Randomness",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-327",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A02:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-12",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-13",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure",
+          "Spoofing"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.insecure_randomness.001",
+      "family": "family.crypto_randomness",
+      "family_label": "Cryptography & Randomness",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-330",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A02:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SC-12",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Spoofing",
+          "Elevation of Privilege"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.verbose_error_disclosure.001",
+      "family": "family.data_protection_privacy",
+      "family_label": "Data Protection & Privacy",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-209",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A05:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1082",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-11",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Information Disclosure"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.prototype_pollution.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-1321",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A08:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Elevation of Privilege",
+          "Denial of Service"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.regex_dos.001",
+      "family": "family.availability_resilience",
+      "family_label": "Availability & Resilience",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-1333",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A05:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-492",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Denial of Service"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.template_injection.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-94",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A03:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-242",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1059",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SA-11",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Elevation of Privilege",
+          "Information Disclosure"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.nosql_injection.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-943",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A03:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "APIOWASP",
+          "external_id": "API8:2023",
+          "mapping_type": "primary",
+          "confidence": 0.92
+        },
+        {
+          "framework_code": "ATTACK",
+          "external_id": "T1190",
+          "mapping_type": "contextual",
+          "confidence": 0.82
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SA-11",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Information Disclosure"
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.issue-mapping.v1",
+      "issue_id": "owlvex.issue.ldap_injection.001",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "framework_mappings": [
+        {
+          "framework_code": "CWE",
+          "external_id": "CWE-90",
+          "mapping_type": "primary",
+          "confidence": 1
+        },
+        {
+          "framework_code": "OWASP",
+          "external_id": "A03:2021",
+          "mapping_type": "primary",
+          "confidence": 0.95
+        },
+        {
+          "framework_code": "CAPEC",
+          "external_id": "CAPEC-136",
+          "mapping_type": "secondary",
+          "confidence": 0.86
+        },
+        {
+          "framework_code": "NIST",
+          "external_id": "SI-10",
+          "mapping_type": "derived",
+          "confidence": 0.84
+        }
+      ],
+      "reasoning_profiles": {
+        "stride_profile": "owlvex.stride.2026.1",
+        "stride_categories": [
+          "Tampering",
+          "Information Disclosure"
+        ]
+      }
+    }
+  ]
+}

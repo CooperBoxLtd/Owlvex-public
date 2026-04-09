@@ -1,0 +1,2147 @@
+{
+  "schema_version": "owlvex.issue-pack.v1",
+  "pack_id": "owlvex.core-security.2026.1",
+  "title": "Owlvex Core Security Rule Pack 2026.1",
+  "description": "Expanded curated canonical issue pack covering common application security weaknesses for AI-assisted code review.",
+  "issues": [
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.sql_injection.001",
+      "slug": "sql-injection-unsanitized-query-construction",
+      "title": "Unsanitized SQL query construction",
+      "summary": "Unsanitized SQL query construction",
+      "description": "Unsanitized SQL query construction",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Information Disclosure"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-89"
+        ],
+        "owasp": [
+          "A03:2021"
+        ],
+        "api_owasp": [
+          "API8:2023"
+        ],
+        "attack": [
+          "T1190"
+        ],
+        "capec": [
+          "CAPEC-66"
+        ],
+        "nist": [
+          "SI-10",
+          "SA-11"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "sql injection",
+          "query",
+          "parameterized",
+          "database",
+          "select * from",
+          "raw sql"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to unsanitized sql query construction.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: prepared statement, parameter array, bound parameter."
+        ]
+      },
+      "remediation": {
+        "summary": "Use parameterized queries or prepared statements and validate input at trust boundaries.",
+        "cheat_sheet_refs": [
+          "OWASP SQL Injection Prevention Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "sql injection",
+          "query",
+          "parameterized"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates unsanitized sql query construction."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "sql injection",
+        "query"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.command_injection.001",
+      "slug": "command-injection-unsafe-shell-execution",
+      "title": "Unsafe shell command execution",
+      "summary": "Unsafe shell command execution",
+      "description": "Unsafe shell command execution",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "critical",
+      "likelihood": "high",
+      "impact": "very-high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Elevation of Privilege",
+        "Denial of Service"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-78"
+        ],
+        "owasp": [
+          "A03:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1059"
+        ],
+        "capec": [
+          "CAPEC-88"
+        ],
+        "nist": [
+          "SI-10",
+          "CM-7"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "command injection",
+          "shell",
+          "exec(",
+          "exec ",
+          "spawn",
+          "child_process",
+          "arbitrary commands"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to unsafe shell command execution.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: execfile, shell: false, fixed arguments, validated host."
+        ]
+      },
+      "remediation": {
+        "summary": "Avoid shell invocation where possible; otherwise use non-shell APIs with fixed arguments and strict validation.",
+        "cheat_sheet_refs": [
+          "OWASP OS Command Injection Defense Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "command injection",
+          "shell",
+          "exec("
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates unsafe shell command execution."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "command injection",
+        "shell"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.hardcoded_api_key.001",
+      "slug": "hardcoded-api-key-in-source",
+      "title": "Hardcoded API key in source code",
+      "summary": "Hardcoded API key in source code",
+      "description": "Hardcoded API key in source code",
+      "family": "family.secrets_exposure",
+      "family_label": "Secrets & Credential Exposure",
+      "category": "secrets",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Spoofing"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-798"
+        ],
+        "owasp": [
+          "A02:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1552"
+        ],
+        "capec": [
+          "CAPEC-640"
+        ],
+        "nist": [
+          "SC-28",
+          "IA-5"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "api key",
+          "apikey",
+          "api_key",
+          "client secret",
+          "secret key",
+          "access key"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to hardcoded api key in source code.",
+        "confidence_rules": [
+          "Increase confidence when one of these required signals appears: api key, apikey, api_key, client secret, secret key, access key.",
+          "Decrease confidence when mitigating or contradictory signals appear: username, user name, admin user."
+        ]
+      },
+      "remediation": {
+        "summary": "Move API keys to a secret manager or environment injection and fail closed if they are missing.",
+        "cheat_sheet_refs": [
+          "OWASP Secrets Management Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "api key",
+          "apikey",
+          "api_key",
+          "client secret",
+          "secret key",
+          "access key"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates hardcoded api key in source code."
+      },
+      "tags": [
+        "Secrets & Credential Exposure",
+        "secrets",
+        "api key",
+        "apikey"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.hardcoded_password.001",
+      "slug": "hardcoded-password-in-source",
+      "title": "Hardcoded password in source code",
+      "summary": "Hardcoded password in source code",
+      "description": "Hardcoded password in source code",
+      "family": "family.secrets_exposure",
+      "family_label": "Secrets & Credential Exposure",
+      "category": "secrets",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Spoofing"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-798"
+        ],
+        "owasp": [
+          "A02:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1552"
+        ],
+        "capec": [
+          "CAPEC-640"
+        ],
+        "nist": [
+          "SC-28",
+          "IA-5"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "password",
+          "dbpassword",
+          "db password",
+          "passwd",
+          "pwd"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to hardcoded password in source code.",
+        "confidence_rules": [
+          "Increase confidence when one of these required signals appears: password, dbpassword, db password, passwd.",
+          "Decrease confidence when mitigating or contradictory signals appear: username, user name, admin user."
+        ]
+      },
+      "remediation": {
+        "summary": "Move passwords to a secret manager or environment injection and fail closed if they are missing.",
+        "cheat_sheet_refs": [
+          "OWASP Secrets Management Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "password",
+          "dbpassword",
+          "db password",
+          "passwd"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates hardcoded password in source code."
+      },
+      "tags": [
+        "Secrets & Credential Exposure",
+        "secrets",
+        "password",
+        "dbpassword"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.hardcoded_token.001",
+      "slug": "hardcoded-token-in-source",
+      "title": "Hardcoded token in source code",
+      "summary": "Hardcoded token in source code",
+      "description": "Hardcoded token in source code",
+      "family": "family.secrets_exposure",
+      "family_label": "Secrets & Credential Exposure",
+      "category": "secrets",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Spoofing"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-798"
+        ],
+        "owasp": [
+          "A02:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1552"
+        ],
+        "capec": [
+          "CAPEC-640"
+        ],
+        "nist": [
+          "SC-28",
+          "IA-5"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "token",
+          "bearer token",
+          "auth token",
+          "jwt secret",
+          "refresh token"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to hardcoded token in source code.",
+        "confidence_rules": [
+          "Increase confidence when one of these required signals appears: token, bearer token, auth token, jwt secret, refresh token.",
+          "Decrease confidence when mitigating or contradictory signals appear: csrf token generated per request."
+        ]
+      },
+      "remediation": {
+        "summary": "Move static tokens to a secret manager and rotate them out of source control immediately.",
+        "cheat_sheet_refs": [
+          "OWASP Secrets Management Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "token",
+          "bearer token",
+          "auth token",
+          "jwt secret",
+          "refresh token"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates hardcoded token in source code."
+      },
+      "tags": [
+        "Secrets & Credential Exposure",
+        "secrets",
+        "token",
+        "bearer token"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.hardcoded_secret.001",
+      "slug": "hardcoded-secret-in-source-code",
+      "title": "Hardcoded secret in source code",
+      "summary": "Hardcoded secret in source code",
+      "description": "Hardcoded secret in source code",
+      "family": "family.secrets_exposure",
+      "family_label": "Secrets & Credential Exposure",
+      "category": "secrets",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Spoofing"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-798"
+        ],
+        "owasp": [
+          "A02:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1552"
+        ],
+        "capec": [
+          "CAPEC-640"
+        ],
+        "nist": [
+          "SC-28",
+          "IA-5"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "hardcoded secret",
+          "signing key",
+          "private key",
+          "embedded secret",
+          "credential"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to hardcoded secret in source code.",
+        "confidence_rules": [
+          "Increase confidence when one of these required signals appears: hardcoded secret, signing key, private key, embedded secret, secret.",
+          "Decrease confidence when mitigating or contradictory signals appear: username, user name, admin user, display name, ops-admin."
+        ]
+      },
+      "remediation": {
+        "summary": "Move secrets to a secret manager or environment injection and fail closed if they are missing.",
+        "cheat_sheet_refs": [
+          "OWASP Secrets Management Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "hardcoded secret",
+          "signing key",
+          "private key",
+          "embedded secret",
+          "secret"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates hardcoded secret in source code."
+      },
+      "tags": [
+        "Secrets & Credential Exposure",
+        "secrets",
+        "hardcoded secret",
+        "signing key"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.path_traversal.001",
+      "slug": "path-traversal-untrusted-filesystem-access",
+      "title": "Untrusted filesystem path traversal",
+      "summary": "Untrusted filesystem path traversal",
+      "description": "Untrusted filesystem path traversal",
+      "family": "family.access_control",
+      "family_label": "Access Control & Authorization",
+      "category": "access-control",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Information Disclosure",
+        "Elevation of Privilege"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-22"
+        ],
+        "owasp": [
+          "A01:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1005"
+        ],
+        "capec": [
+          "CAPEC-126"
+        ],
+        "nist": [
+          "AC-6",
+          "SI-10"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "path traversal",
+          "../",
+          "file path",
+          "path.join",
+          "filesystem",
+          "directory boundary"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to untrusted filesystem path traversal.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: path.resolve(base, startswith(basedir), allow-list."
+        ]
+      },
+      "remediation": {
+        "summary": "Resolve paths safely, enforce a fixed base directory, and reject traversal attempts.",
+        "cheat_sheet_refs": [
+          "OWASP Path Traversal Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "path traversal",
+          "../",
+          "file path"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates untrusted filesystem path traversal."
+      },
+      "tags": [
+        "Access Control & Authorization",
+        "access-control",
+        "path traversal",
+        "../"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.idor.001",
+      "slug": "idor-missing-object-level-authorization",
+      "title": "Missing object-level authorization",
+      "summary": "Missing object-level authorization",
+      "description": "Missing object-level authorization",
+      "family": "family.access_control",
+      "family_label": "Access Control & Authorization",
+      "category": "authorization",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Elevation of Privilege",
+        "Information Disclosure",
+        "Tampering"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-639"
+        ],
+        "owasp": [
+          "A01:2021"
+        ],
+        "api_owasp": [
+          "API1:2023"
+        ],
+        "attack": [
+          "T1078"
+        ],
+        "capec": [
+          "CAPEC-233"
+        ],
+        "nist": [
+          "AC-3",
+          "AC-6"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "idor",
+          "object level authorization",
+          "ownership",
+          "unauthorized access",
+          "resource id"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to missing object-level authorization.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: account_id = ?, owner_id = ?, authorization check, policy.enforce."
+        ]
+      },
+      "remediation": {
+        "summary": "Enforce object-level authorization before read or write operations and scope queries to the authenticated actor.",
+        "cheat_sheet_refs": [
+          "OWASP Authorization Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "idor",
+          "object level authorization",
+          "ownership"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates missing object-level authorization."
+      },
+      "tags": [
+        "Access Control & Authorization",
+        "authorization",
+        "idor",
+        "object level authorization"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.sensitive_logging.001",
+      "slug": "sensitive-data-exposed-in-logs",
+      "title": "Sensitive data exposed in logs",
+      "summary": "Sensitive data exposed in logs",
+      "description": "Sensitive data exposed in logs",
+      "family": "family.data_protection_privacy",
+      "family_label": "Data Protection & Privacy",
+      "category": "logging",
+      "severity": "medium",
+      "likelihood": "medium",
+      "impact": "medium",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Repudiation"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-532"
+        ],
+        "owasp": [
+          "A09:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1005"
+        ],
+        "capec": [],
+        "nist": [
+          "AU-9",
+          "SC-28"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "log",
+          "logging",
+          "sensitive data",
+          "password in logs",
+          "token in logs",
+          "console.log"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to sensitive data exposed in logs.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: redacted, masked, [redacted]."
+        ]
+      },
+      "remediation": {
+        "summary": "Redact sensitive fields before logging and restrict log content to operationally necessary metadata.",
+        "cheat_sheet_refs": [
+          "OWASP Logging Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "log",
+          "logging",
+          "sensitive data"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates sensitive data exposed in logs."
+      },
+      "tags": [
+        "Data Protection & Privacy",
+        "logging",
+        "log"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.audit_gap.001",
+      "slug": "missing-audit-trail-for-privileged-action",
+      "title": "Missing audit trail for privileged action",
+      "summary": "Missing audit trail for privileged action",
+      "description": "Missing audit trail for privileged action",
+      "family": "family.audit_observability",
+      "family_label": "Audit & Observability Gaps",
+      "category": "audit",
+      "severity": "medium",
+      "likelihood": "medium",
+      "impact": "medium",
+      "confidence": 0.9,
+      "stride": [
+        "Repudiation"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-778"
+        ],
+        "owasp": [
+          "A09:2021"
+        ],
+        "api_owasp": [],
+        "attack": [],
+        "capec": [],
+        "nist": [
+          "AU-2",
+          "AU-12"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "audit",
+          "audit log",
+          "privileged action",
+          "traceability",
+          "no audit",
+          "missing audit"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to missing audit trail for privileged action.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: audit.log, security event, immutable audit."
+        ]
+      },
+      "remediation": {
+        "summary": "Record immutable audit events for privileged actions with actor, action, target, and timestamp metadata.",
+        "cheat_sheet_refs": [
+          "OWASP Logging Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "audit",
+          "audit log",
+          "privileged action"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates missing audit trail for privileged action."
+      },
+      "tags": [
+        "Audit & Observability Gaps",
+        "audit",
+        "audit log"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.ssrf.001",
+      "slug": "server-side-request-forgery-untrusted-destination",
+      "title": "Server-side request forgery through untrusted destination",
+      "summary": "Server-side request forgery through untrusted destination",
+      "description": "Server-side request forgery through untrusted destination",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "request-forgery",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Tampering",
+        "Denial of Service"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-918"
+        ],
+        "owasp": [
+          "A10:2021"
+        ],
+        "api_owasp": [
+          "API7:2023"
+        ],
+        "attack": [
+          "T1190"
+        ],
+        "capec": [
+          "CAPEC-664"
+        ],
+        "nist": [
+          "SC-7",
+          "SI-10"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "ssrf",
+          "server side request forgery",
+          "metadata endpoint",
+          "internal service",
+          "untrusted url"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to server-side request forgery through untrusted destination.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: allowed_hosts, allow-list, parsed.hostname."
+        ]
+      },
+      "remediation": {
+        "summary": "Restrict outbound destinations with allow-lists, block internal address ranges, and normalize parsed URLs before use.",
+        "cheat_sheet_refs": [
+          "OWASP Server Side Request Forgery Prevention Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "ssrf",
+          "server side request forgery",
+          "metadata endpoint"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates server-side request forgery through untrusted destination."
+      },
+      "tags": [
+        "Injection & Execution",
+        "request-forgery",
+        "ssrf",
+        "server side request forgery"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.insecure_deserialization.001",
+      "slug": "insecure-deserialization-of-untrusted-data",
+      "title": "Insecure deserialization of untrusted data",
+      "summary": "Insecure deserialization of untrusted data",
+      "description": "Insecure deserialization of untrusted data",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "deserialization",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Elevation of Privilege",
+        "Denial of Service"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-502"
+        ],
+        "owasp": [
+          "A08:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1059"
+        ],
+        "capec": [
+          "CAPEC-586"
+        ],
+        "nist": [
+          "SI-10",
+          "SA-11"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "deserialization",
+          "deserialize",
+          "pickle",
+          "untrusted payload",
+          "binary formatter"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to insecure deserialization of untrusted data.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: json.parse, schema validation, signed payload."
+        ]
+      },
+      "remediation": {
+        "summary": "Avoid unsafe deserializers, prefer safe data-only formats, and validate or sign serialized payloads.",
+        "cheat_sheet_refs": [
+          "OWASP Deserialization Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "deserialization",
+          "deserialize",
+          "pickle"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates insecure deserialization of untrusted data."
+      },
+      "tags": [
+        "Injection & Execution",
+        "deserialization",
+        "deserialize"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.weak_auth_policy.001",
+      "slug": "weak-authentication-or-password-policy",
+      "title": "Weak authentication or password policy",
+      "summary": "Weak authentication or password policy",
+      "description": "Weak authentication or password policy",
+      "family": "family.identity_auth",
+      "family_label": "Identity & Auth Failures",
+      "category": "authentication",
+      "severity": "medium",
+      "likelihood": "medium",
+      "impact": "medium",
+      "confidence": 0.9,
+      "stride": [
+        "Spoofing",
+        "Elevation of Privilege"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-521"
+        ],
+        "owasp": [
+          "A07:2021"
+        ],
+        "api_owasp": [
+          "API2:2023"
+        ],
+        "attack": [
+          "T1110"
+        ],
+        "capec": [
+          "CAPEC-49"
+        ],
+        "nist": [
+          "IA-5",
+          "AC-7"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "weak password",
+          "authentication",
+          "password policy",
+          "brute force",
+          "rate limit",
+          "mfa"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to weak authentication or password policy.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: argon2, rate limiter, mfa enforced, identity provider."
+        ]
+      },
+      "remediation": {
+        "summary": "Enforce strong password rules, add login throttling or MFA where appropriate, and rely on hardened auth providers when possible.",
+        "cheat_sheet_refs": [
+          "OWASP Authentication Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "weak password",
+          "authentication",
+          "password policy"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates weak authentication or password policy."
+      },
+      "tags": [
+        "Identity & Auth Failures",
+        "authentication",
+        "weak password"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.xss_reflected.001",
+      "slug": "reflected-cross-site-scripting",
+      "title": "Reflected cross-site scripting",
+      "summary": "Reflected cross-site scripting",
+      "description": "Reflected cross-site scripting",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Information Disclosure"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-79"
+        ],
+        "owasp": [
+          "A03:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1059"
+        ],
+        "capec": [
+          "CAPEC-63"
+        ],
+        "nist": [
+          "SI-10",
+          "SC-34"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "reflected xss",
+          "cross site scripting",
+          "innerhtml",
+          "document.write",
+          "unsanitized html"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to reflected cross-site scripting.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: dompurify, escapehtml, sanitized, textcontent."
+        ]
+      },
+      "remediation": {
+        "summary": "Encode untrusted output for the target context and sanitize HTML when rich rendering is unavoidable.",
+        "cheat_sheet_refs": [
+          "OWASP Cross Site Scripting Prevention Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "reflected xss",
+          "cross site scripting",
+          "innerhtml"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates reflected cross-site scripting."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "reflected xss",
+        "cross site scripting"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.xss_stored.001",
+      "slug": "stored-cross-site-scripting",
+      "title": "Stored cross-site scripting",
+      "summary": "Stored cross-site scripting",
+      "description": "Stored cross-site scripting",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Information Disclosure"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-79"
+        ],
+        "owasp": [
+          "A03:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1059"
+        ],
+        "capec": [
+          "CAPEC-592"
+        ],
+        "nist": [
+          "SI-10",
+          "SC-34"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "stored xss",
+          "persisted xss",
+          "saved html",
+          "render user content"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to stored cross-site scripting.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: dompurify, escapehtml, sanitized, textcontent."
+        ]
+      },
+      "remediation": {
+        "summary": "Sanitize stored content before persistence or render, and apply output encoding at every display boundary.",
+        "cheat_sheet_refs": [
+          "OWASP Cross Site Scripting Prevention Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "stored xss",
+          "persisted xss",
+          "saved html"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates stored cross-site scripting."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "stored xss",
+        "persisted xss"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.open_redirect.001",
+      "slug": "open-redirect-untrusted-destination",
+      "title": "Open redirect through untrusted destination",
+      "summary": "Open redirect through untrusted destination",
+      "description": "Open redirect through untrusted destination",
+      "family": "family.security_misconfiguration",
+      "family_label": "Security Misconfiguration & Platform Hardening",
+      "category": "request-forgery",
+      "severity": "medium",
+      "likelihood": "medium",
+      "impact": "medium",
+      "confidence": 0.9,
+      "stride": [
+        "Spoofing",
+        "Information Disclosure"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-601"
+        ],
+        "owasp": [
+          "A01:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1185"
+        ],
+        "capec": [
+          "CAPEC-178"
+        ],
+        "nist": [
+          "SI-10"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "open redirect",
+          "redirect url",
+          "returnurl",
+          "next=",
+          "untrusted redirect"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to open redirect through untrusted destination.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: allow-list, same-origin, validated redirect."
+        ]
+      },
+      "remediation": {
+        "summary": "Restrict redirects to allow-listed destinations or resolve them through server-side route names rather than raw URLs.",
+        "cheat_sheet_refs": [
+          "OWASP Unvalidated Redirects and Forwards Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "open redirect",
+          "redirect url",
+          "returnurl"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates open redirect through untrusted destination."
+      },
+      "tags": [
+        "Security Misconfiguration & Platform Hardening",
+        "request-forgery",
+        "open redirect",
+        "redirect url"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.csrf_missing_token.001",
+      "slug": "missing-csrf-protection-on-state-changing-request",
+      "title": "Missing CSRF protection on state-changing request",
+      "summary": "Missing CSRF protection on state-changing request",
+      "description": "Missing CSRF protection on state-changing request",
+      "family": "family.access_control",
+      "family_label": "Access Control & Authorization",
+      "category": "request-forgery",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Spoofing"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-352"
+        ],
+        "owasp": [
+          "A01:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1539"
+        ],
+        "capec": [
+          "CAPEC-62"
+        ],
+        "nist": [
+          "SI-10",
+          "AC-3"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "csrf",
+          "cross site request forgery",
+          "state changing post",
+          "missing csrf token"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to missing csrf protection on state-changing request.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: samesite=strict, csrf token, double submit cookie."
+        ]
+      },
+      "remediation": {
+        "summary": "Require anti-CSRF tokens or same-site protections for state-changing browser requests.",
+        "cheat_sheet_refs": [
+          "OWASP Cross-Site Request Forgery Prevention Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "csrf",
+          "cross site request forgery",
+          "state changing post"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates missing csrf protection on state-changing request."
+      },
+      "tags": [
+        "Access Control & Authorization",
+        "request-forgery",
+        "csrf",
+        "cross site request forgery"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.insecure_cors.001",
+      "slug": "overly-permissive-cors-policy",
+      "title": "Overly permissive CORS policy",
+      "summary": "Overly permissive CORS policy",
+      "description": "Overly permissive CORS policy",
+      "family": "family.security_misconfiguration",
+      "family_label": "Security Misconfiguration & Platform Hardening",
+      "category": "security-misconfiguration",
+      "severity": "medium",
+      "likelihood": "medium",
+      "impact": "medium",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Tampering"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-942"
+        ],
+        "owasp": [
+          "A05:2021"
+        ],
+        "api_owasp": [],
+        "attack": [],
+        "capec": [],
+        "nist": [
+          "SC-7"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "cors",
+          "access-control-allow-origin",
+          "*",
+          "allowcredentials",
+          "permissive origin"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to overly permissive cors policy.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: trusted origins, specific origin allow-list."
+        ]
+      },
+      "remediation": {
+        "summary": "Restrict CORS origins, methods, and credential use to explicit trusted callers only.",
+        "cheat_sheet_refs": [
+          "OWASP Cross Origin Resource Sharing Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "cors",
+          "access-control-allow-origin",
+          "*"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates overly permissive cors policy."
+      },
+      "tags": [
+        "Security Misconfiguration & Platform Hardening",
+        "security-misconfiguration",
+        "cors",
+        "access-control-allow-origin"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.weak_jwt_validation.001",
+      "slug": "weak-jwt-validation-or-algorithm-trust",
+      "title": "Weak JWT validation",
+      "summary": "Weak JWT validation",
+      "description": "Weak JWT validation",
+      "family": "family.identity_auth",
+      "family_label": "Identity & Auth Failures",
+      "category": "authentication",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Spoofing",
+        "Elevation of Privilege"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-345"
+        ],
+        "owasp": [
+          "A07:2021"
+        ],
+        "api_owasp": [
+          "API2:2023"
+        ],
+        "attack": [
+          "T1606"
+        ],
+        "capec": [],
+        "nist": [
+          "IA-5",
+          "AC-3"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "jwt",
+          "verify=false",
+          "alg none",
+          "missing issuer validation",
+          "missing audience validation"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to weak jwt validation.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: issuer check, audience check, allowed algorithms."
+        ]
+      },
+      "remediation": {
+        "summary": "Verify signature, issuer, audience, expiry, and accepted algorithms explicitly for every JWT.",
+        "cheat_sheet_refs": [
+          "OWASP JSON Web Token Cheat Sheet for Java"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "jwt",
+          "verify=false",
+          "alg none"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates weak jwt validation."
+      },
+      "tags": [
+        "Identity & Auth Failures",
+        "authentication",
+        "jwt",
+        "verify=false"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.unrestricted_file_upload.001",
+      "slug": "unrestricted-file-upload",
+      "title": "Unrestricted file upload",
+      "summary": "Unrestricted file upload",
+      "description": "Unrestricted file upload",
+      "family": "family.security_misconfiguration",
+      "family_label": "Security Misconfiguration & Platform Hardening",
+      "category": "upload",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Denial of Service",
+        "Elevation of Privilege"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-434"
+        ],
+        "owasp": [
+          "A05:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1105"
+        ],
+        "capec": [
+          "CAPEC-650"
+        ],
+        "nist": [
+          "SI-10",
+          "CM-7"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "file upload",
+          "multipart",
+          "no file type validation",
+          "arbitrary file"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to unrestricted file upload.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: mime allow-list, extension allow-list, virus scan."
+        ]
+      },
+      "remediation": {
+        "summary": "Restrict file types and sizes, store uploads outside executable paths, and scan content before processing.",
+        "cheat_sheet_refs": [
+          "OWASP File Upload Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "file upload",
+          "multipart",
+          "no file type validation"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates unrestricted file upload."
+      },
+      "tags": [
+        "Security Misconfiguration & Platform Hardening",
+        "upload",
+        "file upload",
+        "multipart"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.mass_assignment.001",
+      "slug": "mass-assignment-of-client-supplied-fields",
+      "title": "Mass assignment of client-supplied fields",
+      "summary": "Mass assignment of client-supplied fields",
+      "description": "Mass assignment of client-supplied fields",
+      "family": "family.access_control",
+      "family_label": "Access Control & Authorization",
+      "category": "authorization",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Elevation of Privilege"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-915"
+        ],
+        "owasp": [
+          "A01:2021"
+        ],
+        "api_owasp": [
+          "API6:2023"
+        ],
+        "attack": [],
+        "capec": [],
+        "nist": [
+          "AC-6"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "mass assignment",
+          "bind request body",
+          "spread request body",
+          "assign req.body"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to mass assignment of client-supplied fields.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: pick(, allow-list fields, dto validation."
+        ]
+      },
+      "remediation": {
+        "summary": "Use explicit field allow-lists or DTOs when binding client input into domain models.",
+        "cheat_sheet_refs": [
+          "OWASP Mass Assignment Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "mass assignment",
+          "bind request body",
+          "spread request body"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates mass assignment of client-supplied fields."
+      },
+      "tags": [
+        "Access Control & Authorization",
+        "authorization",
+        "mass assignment",
+        "bind request body"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.xxe.001",
+      "slug": "xml-external-entity-processing",
+      "title": "Unsafe XML external entity processing",
+      "summary": "Unsafe XML external entity processing",
+      "description": "Unsafe XML external entity processing",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Denial of Service"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-611"
+        ],
+        "owasp": [
+          "A05:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1005"
+        ],
+        "capec": [
+          "CAPEC-201"
+        ],
+        "nist": [
+          "SI-10"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "xxe",
+          "xml external entity",
+          "doctype",
+          "xml parser"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to unsafe xml external entity processing.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: disallow-doctype-decl, external entities disabled."
+        ]
+      },
+      "remediation": {
+        "summary": "Disable external entity resolution and DTD processing in XML parsers handling untrusted input.",
+        "cheat_sheet_refs": [
+          "OWASP XML External Entity Prevention Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "xxe",
+          "xml external entity",
+          "doctype"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates unsafe xml external entity processing."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "xxe",
+        "xml external entity"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.weak_crypto.001",
+      "slug": "weak-or-deprecated-cryptographic-primitive",
+      "title": "Weak or deprecated cryptographic primitive",
+      "summary": "Weak or deprecated cryptographic primitive",
+      "description": "Weak or deprecated cryptographic primitive",
+      "family": "family.crypto_randomness",
+      "family_label": "Cryptography & Randomness",
+      "category": "cryptography",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure",
+        "Spoofing"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-327"
+        ],
+        "owasp": [
+          "A02:2021"
+        ],
+        "api_owasp": [],
+        "attack": [],
+        "capec": [],
+        "nist": [
+          "SC-12",
+          "SC-13"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "md5",
+          "sha1",
+          "des",
+          "rc4",
+          "weak crypto",
+          "deprecated cipher"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to weak or deprecated cryptographic primitive.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: argon2, aes-256-gcm, sha-256, bcrypt."
+        ]
+      },
+      "remediation": {
+        "summary": "Replace deprecated cryptographic algorithms with modern, approved primitives and secure modes.",
+        "cheat_sheet_refs": [
+          "OWASP Cryptographic Storage Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "md5",
+          "sha1",
+          "des"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates weak or deprecated cryptographic primitive."
+      },
+      "tags": [
+        "Cryptography & Randomness",
+        "cryptography",
+        "md5",
+        "sha1"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.insecure_randomness.001",
+      "slug": "insecure-randomness-for-security-sensitive-values",
+      "title": "Insecure randomness for security-sensitive values",
+      "summary": "Insecure randomness for security-sensitive values",
+      "description": "Insecure randomness for security-sensitive values",
+      "family": "family.crypto_randomness",
+      "family_label": "Cryptography & Randomness",
+      "category": "cryptography",
+      "severity": "medium",
+      "likelihood": "medium",
+      "impact": "medium",
+      "confidence": 0.9,
+      "stride": [
+        "Spoofing",
+        "Elevation of Privilege"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-330"
+        ],
+        "owasp": [
+          "A02:2021"
+        ],
+        "api_owasp": [],
+        "attack": [],
+        "capec": [],
+        "nist": [
+          "SC-12"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "math.random",
+          "predictable random",
+          "random token generation"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to insecure randomness for security-sensitive values.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: crypto.randombytes, secrets.token, secure random."
+        ]
+      },
+      "remediation": {
+        "summary": "Use a cryptographically secure random source for tokens, keys, and reset links.",
+        "cheat_sheet_refs": [
+          "OWASP Cryptographic Storage Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "math.random",
+          "predictable random",
+          "random token generation"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates insecure randomness for security-sensitive values."
+      },
+      "tags": [
+        "Cryptography & Randomness",
+        "cryptography",
+        "math.random",
+        "predictable random"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.verbose_error_disclosure.001",
+      "slug": "verbose-error-disclosure-to-clients",
+      "title": "Verbose error disclosure to clients",
+      "summary": "Verbose error disclosure to clients",
+      "description": "Verbose error disclosure to clients",
+      "family": "family.data_protection_privacy",
+      "family_label": "Data Protection & Privacy",
+      "category": "error-handling",
+      "severity": "medium",
+      "likelihood": "medium",
+      "impact": "medium",
+      "confidence": 0.9,
+      "stride": [
+        "Information Disclosure"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-209"
+        ],
+        "owasp": [
+          "A05:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1082"
+        ],
+        "capec": [],
+        "nist": [
+          "SI-11"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "error.message",
+          "stack trace",
+          "internal server error details",
+          "verbose error"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to verbose error disclosure to clients.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: generic error response, safe error message."
+        ]
+      },
+      "remediation": {
+        "summary": "Return generic client-facing errors and log diagnostic detail only to protected internal telemetry.",
+        "cheat_sheet_refs": [
+          "OWASP Error Handling Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "error.message",
+          "stack trace",
+          "internal server error details"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates verbose error disclosure to clients."
+      },
+      "tags": [
+        "Data Protection & Privacy",
+        "error-handling",
+        "error.message",
+        "stack trace"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.prototype_pollution.001",
+      "slug": "prototype-pollution-through-untrusted-object-merge",
+      "title": "Prototype pollution through untrusted object merge",
+      "summary": "Prototype pollution through untrusted object merge",
+      "description": "Prototype pollution through untrusted object merge",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Elevation of Privilege",
+        "Denial of Service"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-1321"
+        ],
+        "owasp": [
+          "A08:2021"
+        ],
+        "api_owasp": [],
+        "attack": [],
+        "capec": [],
+        "nist": [
+          "SI-10"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "prototype pollution",
+          "__proto__",
+          "constructor.prototype",
+          "merge user object"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to prototype pollution through untrusted object merge.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: hasownproperty, safe merge, schema validation."
+        ]
+      },
+      "remediation": {
+        "summary": "Reject dangerous object keys like __proto__ and use safe merge utilities with schema validation.",
+        "cheat_sheet_refs": [
+          "OWASP Prototype Pollution Prevention Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "prototype pollution",
+          "__proto__",
+          "constructor.prototype"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates prototype pollution through untrusted object merge."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "prototype pollution",
+        "__proto__"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.regex_dos.001",
+      "slug": "regular-expression-denial-of-service",
+      "title": "Regular expression denial of service",
+      "summary": "Regular expression denial of service",
+      "description": "Regular expression denial of service",
+      "family": "family.availability_resilience",
+      "family_label": "Availability & Resilience",
+      "category": "availability",
+      "severity": "medium",
+      "likelihood": "medium",
+      "impact": "medium",
+      "confidence": 0.9,
+      "stride": [
+        "Denial of Service"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-1333"
+        ],
+        "owasp": [
+          "A05:2021"
+        ],
+        "api_owasp": [],
+        "attack": [],
+        "capec": [
+          "CAPEC-492"
+        ],
+        "nist": [
+          "SI-10"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "redos",
+          "catastrophic backtracking",
+          "unsafe regex",
+          "regular expression denial of service"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to regular expression denial of service.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: bounded input, safe-regex, timeout."
+        ]
+      },
+      "remediation": {
+        "summary": "Avoid catastrophic regex patterns or enforce bounded input sizes and regex timeouts.",
+        "cheat_sheet_refs": [
+          "OWASP Input Validation Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "redos",
+          "catastrophic backtracking",
+          "unsafe regex"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates regular expression denial of service."
+      },
+      "tags": [
+        "Availability & Resilience",
+        "availability",
+        "redos",
+        "catastrophic backtracking"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.template_injection.001",
+      "slug": "server-side-template-injection",
+      "title": "Server-side template injection",
+      "summary": "Server-side template injection",
+      "description": "Server-side template injection",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "critical",
+      "likelihood": "high",
+      "impact": "very-high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Elevation of Privilege",
+        "Information Disclosure"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-94"
+        ],
+        "owasp": [
+          "A03:2021"
+        ],
+        "api_owasp": [],
+        "attack": [
+          "T1059"
+        ],
+        "capec": [
+          "CAPEC-242"
+        ],
+        "nist": [
+          "SI-10",
+          "SA-11"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "template injection",
+          "render template from user input",
+          "ssti",
+          "{{7*7}}"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to server-side template injection.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: trusted template names, strict allow-list."
+        ]
+      },
+      "remediation": {
+        "summary": "Do not evaluate user-controlled template expressions; restrict rendering to trusted templates and escaped data bindings.",
+        "cheat_sheet_refs": [
+          "OWASP Server Side Template Injection Prevention guidance"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "template injection",
+          "render template from user input",
+          "ssti"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates server-side template injection."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "template injection",
+        "render template from user input"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.nosql_injection.001",
+      "slug": "nosql-injection-through-untrusted-query-object",
+      "title": "NoSQL injection through untrusted query object",
+      "summary": "NoSQL injection through untrusted query object",
+      "description": "NoSQL injection through untrusted query object",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Information Disclosure"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-943"
+        ],
+        "owasp": [
+          "A03:2021"
+        ],
+        "api_owasp": [
+          "API8:2023"
+        ],
+        "attack": [
+          "T1190"
+        ],
+        "capec": [],
+        "nist": [
+          "SI-10",
+          "SA-11"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "nosql injection",
+          "$where",
+          "$ne",
+          "mongo query object",
+          "untrusted filter"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to nosql injection through untrusted query object.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: schema validation, allow-list operators."
+        ]
+      },
+      "remediation": {
+        "summary": "Validate query objects strictly and avoid passing client-controlled operators directly into NoSQL filters.",
+        "cheat_sheet_refs": [
+          "OWASP NoSQL Security Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "nosql injection",
+          "$where",
+          "$ne"
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates nosql injection through untrusted query object."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "nosql injection",
+        "$where"
+      ]
+    },
+    {
+      "schema_version": "owlvex.issue.v1",
+      "id": "owlvex.issue.ldap_injection.001",
+      "slug": "ldap-injection-through-unsanitized-filter",
+      "title": "LDAP injection through unsanitized filter",
+      "summary": "LDAP injection through unsanitized filter",
+      "description": "LDAP injection through unsanitized filter",
+      "family": "family.injection_execution",
+      "family_label": "Injection & Execution",
+      "category": "injection",
+      "severity": "high",
+      "likelihood": "high",
+      "impact": "high",
+      "confidence": 0.9,
+      "stride": [
+        "Tampering",
+        "Information Disclosure"
+      ],
+      "mappings": {
+        "cwe": [
+          "CWE-90"
+        ],
+        "owasp": [
+          "A03:2021"
+        ],
+        "api_owasp": [],
+        "attack": [],
+        "capec": [
+          "CAPEC-136"
+        ],
+        "nist": [
+          "SI-10"
+        ]
+      },
+      "detection": {
+        "patterns": [
+          "ldap injection",
+          "ldap filter",
+          "(&(uid=",
+          "directory search"
+        ],
+        "llm_prompt_hint": "Look for code patterns related to ldap injection through unsanitized filter.",
+        "confidence_rules": [
+          "Decrease confidence when mitigating or contradictory signals appear: ldapescape, escaped filter value."
+        ]
+      },
+      "remediation": {
+        "summary": "Escape LDAP filter input and use safe directory query APIs that separate data from filter syntax.",
+        "cheat_sheet_refs": [
+          "OWASP LDAP Injection Prevention Cheat Sheet"
+        ],
+        "code_examples": []
+      },
+      "evidence_requirements": {
+        "required_signals": [
+          "ldap injection",
+          "ldap filter",
+          "(&(uid="
+        ],
+        "preferred_snippet_focus": "Show the line or small code region that most directly demonstrates ldap injection through unsanitized filter."
+      },
+      "tags": [
+        "Injection & Execution",
+        "injection",
+        "ldap injection",
+        "ldap filter"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,134 @@
+{
+  "schema_version": "owlvex.framework-catalog.v1",
+  "frameworks": [
+    {
+      "code": "STRIDE",
+      "name": "STRIDE Threat Model",
+      "version": "2026.1",
+      "kind": "threat-model",
+      "category": "threat-model",
+      "source_type": "curated",
+      "description": "Owlvex-native STRIDE reasoning profile for code scanning, evidence capture, and reporting.",
+      "selectable": true,
+      "maturity": "beta",
+      "owlvex_profile_id": "owlvex.stride.2026.1"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "owlvex.stride.2026.1",
+      "title": "Owlvex STRIDE Profile 2026.1",
+      "description": "Formalized STRIDE profile for code-centric security analysis in AI-assisted developer workflows.",
+      "categories": [
+        {
+          "code": "S",
+          "name": "Spoofing",
+          "question": "Can an attacker pretend to be another user, service, or device?",
+          "code_signals": [
+            "missing or weak authentication",
+            "token validation bypass",
+            "insecure session handling",
+            "trust of caller-controlled identity headers"
+          ],
+          "report_focus": [
+            "authentication boundary",
+            "identity source",
+            "privilege assumptions"
+          ]
+        },
+        {
+          "code": "T",
+          "name": "Tampering",
+          "question": "Can an attacker modify data, commands, state, or workflows improperly?",
+          "code_signals": [
+            "injection into interpreters or queries",
+            "unsafe command execution",
+            "path traversal",
+            "client-controlled state transition"
+          ],
+          "report_focus": [
+            "tainted input path",
+            "dangerous sink",
+            "integrity impact"
+          ]
+        },
+        {
+          "code": "R",
+          "name": "Repudiation",
+          "question": "Can a user perform a sensitive action without reliable traceability?",
+          "code_signals": [
+            "missing audit log for privileged action",
+            "mutable or absent security events",
+            "no actor attribution",
+            "no correlation identifier"
+          ],
+          "report_focus": [
+            "auditable event",
+            "actor identity",
+            "timestamp and trace context"
+          ]
+        },
+        {
+          "code": "I",
+          "name": "Information Disclosure",
+          "question": "Can secrets or sensitive data be exposed to unauthorized parties?",
+          "code_signals": [
+            "hardcoded secrets",
+            "sensitive data in logs",
+            "excessive error details",
+            "insecure data serialization"
+          ],
+          "report_focus": [
+            "data class exposed",
+            "exposure channel",
+            "blast radius"
+          ]
+        },
+        {
+          "code": "D",
+          "name": "Denial of Service",
+          "question": "Can the code be abused to exhaust resources or degrade service?",
+          "code_signals": [
+            "unbounded input or recursion",
+            "expensive operations on attacker input",
+            "missing rate limits or timeouts",
+            "resource leaks"
+          ],
+          "report_focus": [
+            "resource at risk",
+            "abuse preconditions",
+            "availability impact"
+          ]
+        },
+        {
+          "code": "E",
+          "name": "Elevation of Privilege",
+          "question": "Can an attacker gain capabilities beyond their intended authorization?",
+          "code_signals": [
+            "broken authorization checks",
+            "IDOR or horizontal privilege escalation",
+            "admin-only path reachable by normal users",
+            "policy decisions made on untrusted data"
+          ],
+          "report_focus": [
+            "authorization boundary",
+            "gained capability",
+            "affected roles or assets"
+          ]
+        }
+      ],
+      "severity_guidance": {
+        "critical": "Remote code execution, full compromise, or high-confidence compromise of privileged assets.",
+        "high": "Unauthorized access, sensitive data exposure, or reliable exploit path with significant impact.",
+        "medium": "Meaningful weakness with constrained preconditions or partial impact.",
+        "low": "Limited exploitability or defense-in-depth issue.",
+        "info": "Advisory improvement or contextual risk note."
+      },
+      "prompt_guidance": [
+        "Classify each finding into one or more STRIDE categories.",
+        "Explain the attacker path and affected trust boundary.",
+        "Prefer code-grounded evidence over generic framework summaries."
+      ]
+    }
+  ]
+}

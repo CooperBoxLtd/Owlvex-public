@@ -1,0 +1,208 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owlvex.io/schemas/issue.schema.v1.json",
+  "title": "Owlvex Canonical Issue v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "id",
+    "slug",
+    "title",
+    "summary",
+    "description",
+    "category",
+    "severity",
+    "likelihood",
+    "impact",
+    "confidence",
+    "stride",
+    "mappings",
+    "detection",
+    "remediation",
+    "evidence_requirements",
+    "tags"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "owlvex.issue.v1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^owlvex\\.issue\\.[a-z0-9_]+\\.[0-9]{3}$"
+    },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 8
+    },
+    "description": {
+      "type": "string",
+      "minLength": 16
+    },
+    "category": {
+      "type": "string"
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["critical", "high", "medium", "low", "info"]
+    },
+    "likelihood": {
+      "type": "string",
+      "enum": ["very-high", "high", "medium", "low", "very-low"]
+    },
+    "impact": {
+      "type": "string",
+      "enum": ["very-high", "high", "medium", "low", "very-low"]
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "stride": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "Spoofing",
+          "Tampering",
+          "Repudiation",
+          "Information Disclosure",
+          "Denial of Service",
+          "Elevation of Privilege"
+        ]
+      }
+    },
+    "mappings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cwe": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "owasp": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "api_owasp": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "attack": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "capec": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        },
+        "nist": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "detection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patterns",
+        "languages",
+        "sources",
+        "sinks",
+        "llm_prompt_hint",
+        "confidence_rules"
+      ],
+      "properties": {
+        "patterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "languages": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sources": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "sinks": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "llm_prompt_hint": {
+          "type": "string"
+        },
+        "confidence_rules": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "remediation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "summary",
+        "cheat_sheet_refs",
+        "code_examples"
+      ],
+      "properties": {
+        "summary": {
+          "type": "string"
+        },
+        "cheat_sheet_refs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "code_examples": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["language", "pattern"],
+            "properties": {
+              "language": { "type": "string" },
+              "pattern": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "evidence_requirements": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "must_identify_source",
+        "must_identify_sink",
+        "must_include_code_snippet"
+      ],
+      "properties": {
+        "must_identify_source": { "type": "boolean" },
+        "must_identify_sink": { "type": "boolean" },
+        "must_include_code_snippet": { "type": "boolean" }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

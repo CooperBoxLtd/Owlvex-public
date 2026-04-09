@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owlvex.io/schemas/issue-mapping.schema.v1.json",
+  "title": "Owlvex Issue Mapping v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "issue_id",
+    "framework_mappings",
+    "reasoning_profiles"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "owlvex.issue-mapping.v1"
+    },
+    "issue_id": {
+      "type": "string"
+    },
+    "framework_mappings": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "framework_code",
+          "external_id",
+          "mapping_type",
+          "confidence"
+        ],
+        "properties": {
+          "framework_code": { "type": "string" },
+          "external_id": { "type": "string" },
+          "mapping_type": {
+            "type": "string",
+            "enum": ["primary", "secondary", "derived", "contextual"]
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "reasoning_profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stride_profile"],
+      "properties": {
+        "stride_profile": {
+          "type": "string",
+          "pattern": "^owlvex\\.stride\\.[0-9]{4}\\.[0-9]+$"
+        },
+        "stride_categories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Spoofing",
+              "Tampering",
+              "Repudiation",
+              "Information Disclosure",
+              "Denial of Service",
+              "Elevation of Privilege"
+            ]
+          }
+        }
+      }
+    }
+  }
+}

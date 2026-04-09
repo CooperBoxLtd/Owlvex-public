@@ -1,0 +1,96 @@
+# ============================================================
+# Owlvex — ml30 deployment
+# Routing via Traefik (already running on ml30, owns 80/443)
+# Internal network: owlvex_net (postgres ↔ backend)
+# External network: proxy (Traefik → backend)
+# Access at: http://owlvex.local
+# ============================================================
+
+services:
+
+  # ----------------------------------------------------------
+  # PostgreSQL 16 — internal only, not Traefik-routed
+  # ----------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: owlvex_postgres
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - owlvex_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  # ----------------------------------------------------------
+  # FastAPI backend — routed via Traefik on owlvex.local
+  # ----------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: owlvex_backend
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      SECRET_KEY: ${SECRET_KEY}
+      ADMIN_KEY: ${ADMIN_KEY}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET}
+      STRIPE_PRICE_DEVELOPER_MONTHLY: ${STRIPE_PRICE_DEVELOPER_MONTHLY}
+      STRIPE_PRICE_DEVELOPER_ANNUAL: ${STRIPE_PRICE_DEVELOPER_ANNUAL}
+      STRIPE_PRICE_TEAM_MONTHLY: ${STRIPE_PRICE_TEAM_MONTHLY}
+      STRIPE_PRICE_TEAM_ANNUAL: ${STRIPE_PRICE_TEAM_ANNUAL}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      FROM_EMAIL: ${FROM_EMAIL:-noreply@owlvex.io}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+    expose:
+      - "8000"
+    networks:
+      - owlvex_net
+      - proxy
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.owlvex.rule=Host(`owlvex.local`)"
+      - "traefik.http.routers.owlvex.entrypoints=web"
+      - "traefik.http.services.owlvex.loadbalancer.server.port=8000"
+      - "traefik.docker.network=proxy"
+
+  # ----------------------------------------------------------
+  # Ollama — bound to ml30 loopback for SSH tunneling only
+  # ----------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: owlvex_ollama
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama:/root/.ollama
+
+networks:
+  owlvex_net:
+    driver: bridge
+
+  proxy:
+    external: true
+
+volumes:
+  pgdata:
+    driver: local
+  ollama:
+    driver: local

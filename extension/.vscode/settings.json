@@ -1,0 +1,6 @@
+{
+  "owlvex.apiUrl": "http://owlvex.local",
+  "owlvex.provider": "ollama",
+  "owlvex.ollama.host": "http://localhost:11434",
+  "owlvex.ollama.model": "qwen2.5:7b"
+}

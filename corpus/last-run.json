@@ -1,0 +1,1040 @@
+{
+  "total": 45,
+  "issueAccuracy": 80,
+  "familyAccuracy": 82,
+  "falsePositives": 5,
+  "byFamily": {
+    "Secrets & Credential Exposure": {
+      "total": 7,
+      "issueCorrect": 7,
+      "familyCorrect": 7,
+      "falsePositives": 0,
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
+    },
+    "Injection & Execution": {
+      "total": 13,
+      "issueCorrect": 9,
+      "familyCorrect": 10,
+      "falsePositives": 2,
+      "issueAccuracy": 69,
+      "familyAccuracy": 77
+    },
+    "Identity & Auth Failures": {
+      "total": 5,
+      "issueCorrect": 4,
+      "familyCorrect": 4,
+      "falsePositives": 1,
+      "issueAccuracy": 80,
+      "familyAccuracy": 80
+    },
+    "Access Control & Authorization": {
+      "total": 9,
+      "issueCorrect": 7,
+      "familyCorrect": 7,
+      "falsePositives": 0,
+      "issueAccuracy": 78,
+      "familyAccuracy": 78
+    },
+    "Data Protection & Privacy": {
+      "total": 10,
+      "issueCorrect": 8,
+      "familyCorrect": 8,
+      "falsePositives": 2,
+      "issueAccuracy": 80,
+      "familyAccuracy": 80
+    },
+    "Cryptography & Randomness": {
+      "total": 1,
+      "issueCorrect": 1,
+      "familyCorrect": 1,
+      "falsePositives": 0,
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
+    }
+  },
+  "byDifficulty": {
+    "easy": {
+      "total": 20,
+      "issueCorrect": 20,
+      "familyCorrect": 20,
+      "falsePositives": 0,
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
+    },
+    "medium": {
+      "total": 6,
+      "issueCorrect": 6,
+      "familyCorrect": 6,
+      "falsePositives": 0,
+      "issueAccuracy": 100,
+      "familyAccuracy": 100
+    },
+    "hard": {
+      "total": 19,
+      "issueCorrect": 10,
+      "familyCorrect": 11,
+      "falsePositives": 5,
+      "issueAccuracy": 53,
+      "familyAccuracy": 58
+    }
+  },
+  "cases": [
+    {
+      "file": "secrets_exposure/positive/hardcoded_api_key_positive.js",
+      "familyBucket": "family.secrets_exposure",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.hardcoded_api_key.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_api_key.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.secrets_exposure",
+      "expectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "detectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "secrets_exposure/positive/hardcoded_password_positive.js",
+      "familyBucket": "family.secrets_exposure",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.hardcoded_password.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_password.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.secrets_exposure",
+      "expectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "detectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "secrets_exposure/positive/hardcoded_token_positive.js",
+      "familyBucket": "family.secrets_exposure",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.hardcoded_token.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_token.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.secrets_exposure",
+      "expectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "detectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "secrets_exposure/negative/admin_username_negative.js",
+      "familyBucket": "family.secrets_exposure",
+      "difficulty": "easy",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/sql_injection_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/command_injection_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.command_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.command_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/nosql_injection_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.nosql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.nosql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/template_injection_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.template_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.template_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/parameterized_query_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "easy",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/validated_spawn_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "easy",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "identity_auth/positive/weak_password_policy_positive.js",
+      "familyBucket": "family.identity_auth",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.weak_auth_policy.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.weak_auth_policy.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.identity_auth",
+      "expectedFamilies": [
+        "family.identity_auth"
+      ],
+      "detectedFamilies": [
+        "family.identity_auth"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "identity_auth/positive/weak_jwt_validation_positive.js",
+      "familyBucket": "family.identity_auth",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.weak_jwt_validation.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.weak_jwt_validation.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.identity_auth",
+      "expectedFamilies": [
+        "family.identity_auth"
+      ],
+      "detectedFamilies": [
+        "family.identity_auth"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "identity_auth/negative/strong_auth_negative.js",
+      "familyBucket": "family.identity_auth",
+      "difficulty": "easy",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/positive/idor_positive.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.access_control",
+      "expectedFamilies": [
+        "family.access_control"
+      ],
+      "detectedFamilies": [
+        "family.access_control"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/positive/path_traversal_positive.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.path_traversal.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.path_traversal.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.access_control",
+      "expectedFamilies": [
+        "family.access_control"
+      ],
+      "detectedFamilies": [
+        "family.access_control"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/negative/scoped_query_negative.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "easy",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/positive/sensitive_logging_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.sensitive_logging.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sensitive_logging.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/positive/verbose_error_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/negative/redacted_logging_negative.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "easy",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "crypto_randomness/positive/weak_crypto_positive.js",
+      "familyBucket": "family.crypto_randomness",
+      "difficulty": "easy",
+      "expectedCanonical": [
+        "owlvex.issue.weak_crypto.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.weak_crypto.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.crypto_randomness",
+      "expectedFamilies": [
+        "family.crypto_randomness"
+      ],
+      "detectedFamilies": [
+        "family.crypto_randomness"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/sanitized_sql_hard_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "secrets_exposure/negative/env_literal_hard_negative.js",
+      "familyBucket": "family.secrets_exposure",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/positive/authenticated_not_authorized_hard_positive.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.access_control",
+      "expectedFamilies": [
+        "family.access_control"
+      ],
+      "detectedFamilies": [
+        "family.access_control"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/negative/explicit_owner_check_hard_negative.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/positive/error_message_ambiguous_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "medium",
+      "expectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/exec_curl_ambiguous_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "medium",
+      "expectedCanonical": [
+        "owlvex.issue.command_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.command_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/multi_issue_exec_and_password_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.command_injection.001",
+        "owlvex.issue.hardcoded_password.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.command_injection.001",
+        "owlvex.issue.hardcoded_password.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution",
+        "family.secrets_exposure"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": false,
+      "falsePositive": false
+    },
+    {
+      "file": "secrets_exposure/positive/multi_issue_api_key_and_token_positive.js",
+      "familyBucket": "family.secrets_exposure",
+      "difficulty": "medium",
+      "expectedCanonical": [
+        "owlvex.issue.hardcoded_api_key.001",
+        "owlvex.issue.hardcoded_token.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_api_key.001",
+        "owlvex.issue.hardcoded_token.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.secrets_exposure",
+      "expectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "detectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/positive/multi_issue_error_and_logging_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "identity_auth/negative/placeholder_token_comment_hard_negative.js",
+      "familyBucket": "family.identity_auth",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/debug_sql_string_noise_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": false,
+      "familyCorrect": false,
+      "falsePositive": true
+    },
+    {
+      "file": "injection_execution/negative/commented_exec_noise_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [
+        "owlvex.issue.command_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [
+        "owlvex.issue.command_injection.001"
+      ],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": false,
+      "familyCorrect": false,
+      "falsePositive": true
+    },
+    {
+      "file": "data_protection_privacy/negative/commented_error_message_noise_negative.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": false,
+      "familyCorrect": false,
+      "falsePositive": true
+    },
+    {
+      "file": "data_protection_privacy/negative/logging_example_string_noise_negative.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": false,
+      "familyCorrect": false,
+      "falsePositive": true
+    },
+    {
+      "file": "secrets_exposure/negative/env_concat_noise_negative.js",
+      "familyBucket": "family.secrets_exposure",
+      "difficulty": "medium",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "identity_auth/negative/auth_header_placeholder_noise_negative.js",
+      "familyBucket": "family.identity_auth",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_token.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [
+        "owlvex.issue.hardcoded_token.001"
+      ],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [
+        "family.secrets_exposure"
+      ],
+      "issueCorrect": false,
+      "familyCorrect": false,
+      "falsePositive": true
+    },
+    {
+      "file": "access_control/negative/owner_guard_with_noise_negative.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/positive/logging_only_overlap_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "medium",
+      "expectedCanonical": [
+        "owlvex.issue.sensitive_logging.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sensitive_logging.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/positive/response_only_overlap_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "medium",
+      "expectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "detectedFamilies": [
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/positive/role_check_but_no_owner_positive.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "detectedCanonical": [],
+      "missedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "extraCanonical": [],
+      "expectedFamily": "family.access_control",
+      "expectedFamilies": [
+        "family.access_control"
+      ],
+      "detectedFamilies": [],
+      "issueCorrect": false,
+      "familyCorrect": false,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/positive/auth_present_authz_missing_overlap_positive.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "detectedCanonical": [],
+      "missedCanonical": [
+        "owlvex.issue.idor.001"
+      ],
+      "extraCanonical": [],
+      "expectedFamily": "family.access_control",
+      "expectedFamilies": [
+        "family.access_control"
+      ],
+      "detectedFamilies": [],
+      "issueCorrect": false,
+      "familyCorrect": false,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/non_executed_sql_and_real_command_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.command_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.command_injection.001",
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": false,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/multi_family_command_error_password_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.command_injection.001",
+        "owlvex.issue.hardcoded_password.001",
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.command_injection.001",
+        "owlvex.issue.hardcoded_password.001",
+        "owlvex.issue.verbose_error_disclosure.001",
+        "owlvex.issue.sensitive_logging.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [
+        "owlvex.issue.sensitive_logging.001"
+      ],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution",
+        "family.secrets_exposure",
+        "family.data_protection_privacy"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution",
+        "family.secrets_exposure",
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": false,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "data_protection_privacy/positive/multi_family_logging_and_token_positive.js",
+      "familyBucket": "family.data_protection_privacy",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.hardcoded_token.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_token.001",
+        "owlvex.issue.sensitive_logging.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.data_protection_privacy",
+      "expectedFamilies": [
+        "family.data_protection_privacy",
+        "family.secrets_exposure"
+      ],
+      "detectedFamilies": [
+        "family.secrets_exposure",
+        "family.data_protection_privacy"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "access_control/positive/multi_family_path_and_api_key_positive.js",
+      "familyBucket": "family.access_control",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.path_traversal.001",
+        "owlvex.issue.hardcoded_api_key.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.hardcoded_api_key.001",
+        "owlvex.issue.path_traversal.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.access_control",
+      "expectedFamilies": [
+        "family.access_control",
+        "family.secrets_exposure"
+      ],
+      "detectedFamilies": [
+        "family.secrets_exposure",
+        "family.access_control"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    }
+  ]
+}

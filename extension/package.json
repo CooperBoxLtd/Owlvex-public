@@ -1,0 +1,142 @@
+{
+  "name": "owlvex",
+  "displayName": "Owlvex — AI Code Security Scanner",
+  "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
+  "version": "0.1.0",
+  "publisher": "owlvex",
+  "repository": { "type": "git", "url": "https://github.com/owlvex/owlvex.git" },
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Linters", "Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "owlvex.scanFile",       "title": "Owlvex: Scan Current File" },
+      { "command": "owlvex.scanWorkspace",  "title": "Owlvex: Scan Workspace" },
+      { "command": "owlvex.scanWorkspaceReport", "title": "Owlvex: Create Report" },
+      { "command": "owlvex.selectFrameworks", "title": "Owlvex: Select Frameworks" },
+      { "command": "owlvex.openPromptEditor","title": "Owlvex: Open AI Chat" },
+      { "command": "owlvex.switchModel",    "title": "Owlvex: Switch AI Model" },
+      { "command": "owlvex.setupAI",        "title": "Owlvex: Setup AI Connection" },
+      { "command": "owlvex.enterLicence",   "title": "Owlvex: Enter Licence Key" },
+      { "command": "owlvex.compareScans",   "title": "Owlvex: Compare Scans" }
+    ],
+    "configuration": {
+      "title": "Owlvex",
+      "properties": {
+        "owlvex.apiUrl": {
+          "type": "string",
+          "default": "http://owlvex.local",
+          "description": "Owlvex backend API URL"
+        },
+        "owlvex.provider": {
+          "type": "string",
+          "enum": ["azure-foundry","anthropic","openai","mistral","gemini","groq","ollama","custom"],
+          "default": "openai",
+          "description": "AI provider to use for scanning"
+        },
+        "owlvex.foundry.endpoint": {
+          "type": "string",
+          "default": "",
+          "description": "Azure AI Foundry endpoint URL"
+        },
+        "owlvex.ollama.host": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama host URL"
+        },
+        "owlvex.ollama.model": {
+          "type": "string",
+          "default": "qwen2.5:7b",
+          "description": "Default Ollama model"
+        },
+        "owlvex.custom.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "Custom OpenAI-compatible endpoint base URL"
+        },
+        "owlvex.custom.model": {
+          "type": "string",
+          "default": "",
+          "description": "Model name for custom endpoint"
+        },
+        "owlvex.frameworks": {
+          "type": "array",
+          "default": ["OWASP", "STRIDE"],
+          "description": "Security frameworks to scan against"
+        },
+        "owlvex.scanOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically scan file on save"
+        },
+        "owlvex.severityThreshold": {
+          "type": "string",
+          "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+          "default": "MEDIUM",
+          "description": "Minimum severity to display"
+        },
+        "owlvex.teamContext": {
+          "type": "string",
+          "default": "",
+          "description": "Optional project/team context appended to every prompt"
+        },
+        "owlvex.customPrompt": {
+          "type": "string",
+          "default": null,
+          "description": "Custom system prompt (overrides template when set)"
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "owlvex",
+          "title": "Owlvex",
+          "icon": "$(shield)"
+        }
+      ]
+    },
+    "views": {
+      "owlvex": [
+        { "id": "owlvex.findings", "name": "Security Findings" },
+        { "id": "owlvex.chat", "name": "AI Chat", "type": "webview" }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "lint": "eslint src --ext ts",
+    "test": "jest --coverage",
+    "corpus:test": "npm run compile && node ./out/frameworks/corpusRunner.js"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.0",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.0",
+    "typescript": "^5.3.0",
+    "@vscode/vsce": "^2.22.0"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^vscode$": "<rootDir>/src/__mocks__/vscode.ts"
+    },
+    "modulePathIgnorePatterns": ["<rootDir>/out/"],
+    "testMatch": ["**/src/**/*.test.ts"],
+    "collectCoverageFrom": ["src/**/*.ts", "!src/__mocks__/**"]
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.0",
+    "openai": "^4.70.0"
+  }
+}

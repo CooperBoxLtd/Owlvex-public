@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://owlvex.io/schemas/framework-catalog.schema.v1.json",
+  "title": "Owlvex Framework Catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "frameworks"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "owlvex.framework-catalog.v1"
+    },
+    "frameworks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "name",
+          "version",
+          "kind",
+          "category",
+          "source_type",
+          "description",
+          "selectable",
+          "maturity"
+        ],
+        "properties": {
+          "code": { "type": "string" },
+          "name": { "type": "string" },
+          "version": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["dataset", "profile", "control-set", "threat-model"]
+          },
+          "category": {
+            "type": "string",
+            "enum": ["security", "quality", "compliance", "threat-model"]
+          },
+          "source_type": {
+            "type": "string",
+            "enum": ["official", "curated", "hybrid"]
+          },
+          "description": { "type": "string" },
+          "selectable": { "type": "boolean" },
+          "maturity": {
+            "type": "string",
+            "enum": ["experimental", "beta", "ga"]
+          },
+          "docs_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "license_notes": {
+            "type": "string"
+          },
+          "upstream_dataset_version": {
+            "type": "string"
+          },
+          "owlvex_profile_id": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
