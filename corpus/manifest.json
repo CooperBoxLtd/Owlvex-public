@@ -88,6 +88,18 @@
       "difficulty": "hard"
     },
     {
+      "file": "injection_execution/positive/unknown_helper_sink_positive.js",
+      "expectedCanonical": ["owlvex.issue.sql_injection.001"],
+      "expectedFamily": "family.injection_execution",
+      "difficulty": "hard"
+    },
+    {
+      "file": "injection_execution/positive/nested_mixed_branch_positive.js",
+      "expectedCanonical": ["owlvex.issue.sql_injection.001"],
+      "expectedFamily": "family.injection_execution",
+      "difficulty": "hard"
+    },
+    {
       "file": "injection_execution/negative/parameterized_query_negative.js",
       "expectedCanonical": [],
       "expectedFamily": null,
@@ -131,6 +143,18 @@
     },
     {
       "file": "injection_execution/negative/both_branches_sanitized_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "hard"
+    },
+    {
+      "file": "injection_execution/negative/unknown_helper_no_sink_negative.js",
+      "expectedCanonical": [],
+      "expectedFamily": null,
+      "difficulty": "hard"
+    },
+    {
+      "file": "injection_execution/negative/nested_all_safe_branches_negative.js",
       "expectedCanonical": [],
       "expectedFamily": null,
       "difficulty": "hard"

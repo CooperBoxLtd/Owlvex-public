@@ -1,5 +1,5 @@
 {
-  "total": 76,
+  "total": 80,
   "issueAccuracy": 100,
   "familyAccuracy": 100,
   "falsePositives": 0,
@@ -13,9 +13,9 @@
       "familyAccuracy": 100
     },
     "Injection & Execution": {
-      "total": 33,
-      "issueCorrect": 33,
-      "familyCorrect": 33,
+      "total": 37,
+      "issueCorrect": 37,
+      "familyCorrect": 37,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
@@ -71,9 +71,9 @@
       "familyAccuracy": 100
     },
     "hard": {
-      "total": 38,
-      "issueCorrect": 38,
-      "familyCorrect": 38,
+      "total": 42,
+      "issueCorrect": 42,
+      "familyCorrect": 42,
       "falsePositives": 0,
       "issueAccuracy": 100,
       "familyAccuracy": 100
@@ -395,6 +395,52 @@
       "falsePositive": false
     },
     {
+      "file": "injection_execution/positive/unknown_helper_sink_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/positive/nested_mixed_branch_positive.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "detectedCanonical": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": "family.injection_execution",
+      "expectedFamilies": [
+        "family.injection_execution"
+      ],
+      "detectedFamilies": [
+        "family.injection_execution"
+      ],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
       "file": "injection_execution/negative/parameterized_query_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "easy",
@@ -501,6 +547,36 @@
     },
     {
       "file": "injection_execution/negative/both_branches_sanitized_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/unknown_helper_no_sink_negative.js",
+      "familyBucket": "family.injection_execution",
+      "difficulty": "hard",
+      "expectedCanonical": [],
+      "detectedCanonical": [],
+      "missedCanonical": [],
+      "extraCanonical": [],
+      "expectedFamily": null,
+      "expectedFamilies": [],
+      "detectedFamilies": [],
+      "issueCorrect": true,
+      "familyCorrect": true,
+      "falsePositive": false
+    },
+    {
+      "file": "injection_execution/negative/nested_all_safe_branches_negative.js",
       "familyBucket": "family.injection_execution",
       "difficulty": "hard",
       "expectedCanonical": [],
