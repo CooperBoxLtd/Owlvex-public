@@ -68,6 +68,11 @@ This gives Owlvex a practical starting point for:
 - CAPEC and ATT&CK attacker context
 - NIST control mappings
 
+The next planned growth step is documented in:
+
+- `docs/ISSUE_EXPANSION_ROADMAP.md`
+  v2 catalog expansion targets, priorities, and first-wave issue clusters
+
 ## Family-Aware Golden Corpus
 
 Owlvex also includes a family-aware golden corpus in:

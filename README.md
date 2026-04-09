@@ -12,6 +12,7 @@ In one line:
 
 For fuller product documentation, see [docs/PRODUCT.md](docs/PRODUCT.md).
 For the canonical security knowledge model, see [docs/KNOWLEDGE_MODEL.md](docs/KNOWLEDGE_MODEL.md).
+For the issue catalog growth plan, see [docs/ISSUE_EXPANSION_ROADMAP.md](docs/ISSUE_EXPANSION_ROADMAP.md).
 For the first curated rule pack, see [docs/data/issues/owlvex-issue-pack.v1.json](docs/data/issues/owlvex-issue-pack.v1.json).
 For the first family-aware benchmark set, see [corpus/README.md](corpus/README.md) and [corpus/manifest.json](corpus/manifest.json).
 

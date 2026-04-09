@@ -182,6 +182,7 @@ Owlvex should evolve from “framework selection” toward a canonical security 
 Reference material:
 
 - [docs/KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)
+- [docs/ISSUE_EXPANSION_ROADMAP.md](ISSUE_EXPANSION_ROADMAP.md)
 - [docs/schemas/issue.schema.v1.json](schemas/issue.schema.v1.json)
 - [docs/schemas/framework-catalog.schema.v1.json](schemas/framework-catalog.schema.v1.json)
 - [docs/schemas/issue-mapping.schema.v1.json](schemas/issue-mapping.schema.v1.json)
@@ -427,6 +428,8 @@ This gives Owlvex a practical baseline for:
 - prompt tuning
 - family-level quality measurement
 - future provider comparison work
+
+The next planned catalog growth is documented in [docs/ISSUE_EXPANSION_ROADMAP.md](ISSUE_EXPANSION_ROADMAP.md).
 
 ## Security Model Summary
 
