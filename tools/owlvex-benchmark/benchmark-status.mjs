@@ -10,6 +10,8 @@ const latestPath = path.resolve(
 const AXIS_SUITES = {
   'execution-risk': ['gr002', 'gr003', 'gr004', 'gr005', 'gr001', 'integration'],
   'sql-query': ['sq002', 'sq003', 'sq004', 'sq005', 'sq001', 'sql-integration'],
+  'access-control': ['ac002', 'ac004', 'ac003', 'ac005', 'ac001', 'ac-integration'],
+  'conditional-rules': ['sm002'],
 };
 
 function buildAxisStatus(axisName, suiteNames, results) {

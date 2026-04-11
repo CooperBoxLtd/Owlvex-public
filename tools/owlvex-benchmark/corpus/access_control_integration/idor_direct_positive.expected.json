@@ -1,0 +1,6 @@
+{
+  "finding": true,
+  "finding_type": "direct-idor",
+  "resource_shape": "ARBITRARY",
+  "policy_check": "MISSING"
+}

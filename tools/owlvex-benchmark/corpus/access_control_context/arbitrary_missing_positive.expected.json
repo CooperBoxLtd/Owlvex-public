@@ -1,0 +1,5 @@
+{
+  "context_valid": false,
+  "effective_risk": "IDOR",
+  "finding": true
+}

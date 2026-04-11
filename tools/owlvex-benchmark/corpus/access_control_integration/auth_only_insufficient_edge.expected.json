@@ -1,0 +1,6 @@
+{
+  "finding": true,
+  "finding_type": "auth-only-insufficient",
+  "resource_shape": "ARBITRARY",
+  "policy_check": "AUTH_ONLY"
+}

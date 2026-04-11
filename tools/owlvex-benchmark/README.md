@@ -1,197 +1,118 @@
 # Owlvex Benchmark Tool
 
-This tool is the dedicated home for model benchmarking and evaluation inside the CodeScanner repo.
+Dedicated home for deterministic engine evaluation inside the CodeScanner repo.
 
-Its purpose is to answer a focused question:
+The benchmark tool answers one question:
 
-`How reliable is a model for Owlvex-style security reasoning?`
+> **Is this axis's structural reasoning correct across all covered cases?**
 
-This is intentionally separate from the probe corpus itself. The benchmark tool owns:
+It is not a model benchmark. It is a deterministic correctness gate.
 
-- benchmark definitions
-- scoring rules
-- import and run automation
-- repeatable result formats
-- confidence and release guidance
-
-The benchmark corpus lives in CodeScanner-owned paths only.
+---
 
 ## Layout
 
-- `manifest.json`: canonical benchmark case list and expected outcomes
-- `results.template.json`: standard result format for any model run
-- `score.mjs`: weighted scorer
-- `import-report.mjs`: imports Owlvex markdown reports into benchmark results
-- `run-ollama-ssh.mjs`: runs the benchmark against a remote Ollama host over SSH
-- `run-deterministic.mjs`: aggregate deterministic gate for the execution-risk axis
-- `guardrails-v1.md`: deterministic post-LLM guardrail specification
-- `guardrail-coverage-plan.md`: corpus coverage plan for each v1 guardrail rule
-- `execution-risk-axis.md`: architecture contract for the deterministic execution-risk pipeline
-- `sql-query-axis.md`: architecture contract for the planned SQL and contextual query axis
-- `deterministic-finding-schema.md`: canonical output contract for deterministic benchmark-backed findings
-- `release-confidence.md`: guidance for interpreting deterministic benchmark artifacts as release evidence
-- `sql-query-coverage-plan.md`: initial coverage plan for the SQL and contextual query axis
-- `roadmap.md`: phased development plan for stabilizing and extending the benchmark tool
-- `runs/`: recommended place for model result files
-
-## Current Scope
-
-Right now the tool evaluates reliability across:
-
-- command injection detection
-- non-shell remediation recognition
-- user-controlled command execution
-- SQL injection
-- hardcoded secrets
-- safe baseline handling
-- benign security-shaped false-positive resistance
-
-## Corpus
-
-Benchmark fixtures currently come from two places:
-
-- `corpus/`: CodeScanner's main golden corpus for family-aware benchmark cases
-- `tools/owlvex-benchmark/corpus`: rule-focused deterministic benchmark expansions
-  - `trust_propagation/`: GR-002 trust-state cases
-  - `injection_execution/`: GR-001 execution-risk cases built on top of GR-002 output
-  - `sanitization_validation/`: GR-003 explicit sanitizer and validator cases
-  - `sink_execution/`: GR-004 sink-shape and dangerous-context cases
-  - `context_mismatch/`: GR-005 validation of transformation context against sink context
-  - `execution_risk_integration/`: end-to-end execution-risk composition cases
-  - `sql_query/`: seed corpus for the SQL and contextual query execution axis
-
-## Current Dimensions
-
-- recall
-- false-positive control
-- sink classification
-- taxonomy precision
-
-## Usage
-
-Import an Owlvex markdown report:
-
-```bash
-npm run benchmark:import -- <report.md> <results.json> <model-tag>
+```
+tools/owlvex-benchmark/
+├── engine/                     Deterministic evaluators (one per suite)
+│   ├── gr001/–gr005/           Execution-risk axis layers
+│   ├── ac001/–ac005/           Access-control axis layers
+│   ├── access-control-integration/
+│   ├── sm002/                  Conditional rule: debug mode
+│   └── sq001/–sq005/           SQL query axis layers
+├── corpus/                     Fixture files (.js + .expected.json pairs)
+│   ├── access_control_*/       AC axis corpus (subject, resource, policy, context, integration)
+│   ├── debug_mode/             SM-002 conditional rule corpus
+│   ├── injection_execution/    GR axis corpus
+│   ├── sql_query/              SQ axis corpus
+│   └── ...
+├── runs/deterministic/         Gate run artifacts (latest.json, timestamped)
+├── benchmark-status.mjs        Per-axis confidence report
+├── run-deterministic.mjs       Aggregate gate (19 suites)
+├── product-map.md              Authoritative product state and milestone tracking
+├── access-control-axis.md      AC axis contract (invariants, layer ownership)
+└── README.md                   This file
 ```
 
-Run the benchmark directly against a remote Ollama host:
+---
 
+## Architecture
+
+Three deterministic reasoning axes, each following the same 5-layer pipeline:
+
+| Layer | GR (execution-risk) | SQ (SQL) | AC (access-control) |
+| --- | --- | --- | --- |
+| 1 Trust/Subject | GR-002 | SQ-002 | AC-002 |
+| 2 Transform/Resource | GR-003 | SQ-003/SQ-004 | AC-004 |
+| 3 Policy/Sink | GR-004 | SQ-004 | AC-003 |
+| 4 Context Validation | GR-005 | SQ-005 | AC-005 |
+| 5 Final Decision | GR-001 | SQ-001 | AC-001 |
+
+Plus a **Conditional Rules layer** for context-sensitive invariants:
+
+| Suite | Rule | Gate condition |
+| --- | --- | --- |
+| sm002 | SM-002: debug mode without production guard | env signals in source |
+
+---
+
+## Running the gate
+
+**Full gate (19 suites):**
 ```bash
-npm run benchmark:run:ssh -- <ssh-host> <model-tag> <results.json>
+npm run benchmark:deterministic    # from extension/
 ```
 
-Score a completed result file:
-
-```bash
-npm run benchmark:score -- <results.json>
-```
-
-Run the full deterministic execution-risk gate:
-
-```bash
-npm run benchmark:deterministic
-```
-
-Summarize the current deterministic release status:
-
+**Per-axis confidence report:**
 ```bash
 npm run benchmark:status
 ```
 
-This command also writes a persistent summary to:
-
-- `tools/owlvex-benchmark/runs/deterministic/latest.json`
-- `tools/owlvex-benchmark/runs/deterministic/<timestamp>.json`
-
-It also writes detailed artifacts for debugging:
-
-- `tools/owlvex-benchmark/runs/deterministic/latest.full.json`
-- `tools/owlvex-benchmark/runs/deterministic/<timestamp>.full.json`
-
-Run the deterministic GR-002 corpus:
-
+**Individual suites:**
 ```bash
-npm run benchmark:gr002
+npm run benchmark:gr001            # execution-risk final decision
+npm run benchmark:sq001            # SQL injection final decision
+npm run benchmark:ac001            # access-control IDOR final decision
+npm run benchmark:ac-integration   # AC end-to-end
+npm run benchmark:sm002            # debug mode conditional rule
 ```
 
-Run the deterministic GR-001 corpus:
+All `benchmark:*` scripts are defined in `extension/package.json`.
 
-```bash
-npm run benchmark:gr001
+---
+
+## Corpus structure
+
+Each corpus case is a `.js` fixture paired with a `.expected.json` file:
+
+```
+corpus/access_control_integration/
+├── idor_direct_positive.js
+├── idor_direct_positive.expected.json
+├── owned_resource_safe_negative.js
+├── owned_resource_safe_negative.expected.json
+└── ...
 ```
 
-Run the deterministic GR-003 corpus:
+The expected JSON declares what the evaluator should return (`finding`, `resourceShape`, `policyCheck`, etc.). The runner compares actual vs. expected field by field.
 
-```bash
-npm run benchmark:gr003
-```
+---
 
-Run the deterministic GR-004 corpus:
+## Gate status
 
-```bash
-npm run benchmark:gr004
-```
+19 suites, all passing:
 
-Run the deterministic GR-005 corpus:
+| Group | Suites | Cases |
+| --- | --- | --- |
+| execution-risk | gr002, gr003, gr004, gr005, gr001, integration | 35 |
+| sql-query | sq002, sq003, sq004, sq005, sq001, sql-integration | 22 |
+| access-control | ac002, ac004, ac003, ac005, ac001, ac-integration | 21 |
+| conditional-rules | sm002 | 4 |
 
-```bash
-npm run benchmark:gr005
-```
+---
 
-Run the execution-risk integration corpus:
+## Release confidence
 
-```bash
-npm run benchmark:integration
-```
+`benchmark:status` writes JSON artifacts to `runs/deterministic/`. When all suites in an axis pass, the axis is `high-for-covered-axis`. This is the gate for releasing deterministic findings in that category.
 
-Run the first SQL sink-shape slice:
-
-```bash
-npm run benchmark:sq004
-```
-
-Run the first SQL trust-propagation slice:
-
-```bash
-npm run benchmark:sq002
-```
-
-Run the first SQL decision slice:
-
-```bash
-npm run benchmark:sq001
-```
-
-## Evolution Plan
-
-This tool should evolve according to `roadmap.md`.
-
-The current priorities are:
-
-- canonical deterministic finding output
-- better run history and confidence reporting
-- SQL and contextual query execution as the next deterministic axis
-
-The canonical deterministic finding schema is now emitted by:
-
-- `npm run benchmark:gr001`
-- `npm run benchmark:integration`
-
-## Release Confidence
-
-Use `release-confidence.md` as the interpretation guide for deterministic run artifacts.
-
-Operational release status for the covered execution-risk axis is available through:
-
-- `npm run benchmark:status`
-
-In general, confidence depends on:
-
-- number of benchmark cases
-- breadth of vulnerability families
-- repeatability across multiple runs
-- stability of the scoring rubric
-- agreement that case expectations are correct
-
-At the moment this is a strong starting benchmark, but not yet a final release-certification suite.
+For authoritative product state and milestone tracking, see `product-map.md`.

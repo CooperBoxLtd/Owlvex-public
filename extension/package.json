@@ -128,7 +128,14 @@
     "benchmark:sq003": "node ../tools/owlvex-benchmark/engine/sq003/run-sq003-corpus.mjs",
     "benchmark:sq004": "node ../tools/owlvex-benchmark/engine/sq004/run-sq004-corpus.mjs",
     "benchmark:sq005": "node ../tools/owlvex-benchmark/engine/sq005/run-sq005-corpus.mjs",
-    "benchmark:sql-integration": "node ../tools/owlvex-benchmark/engine/sql-query-integration/run-sql-integration.mjs"
+    "benchmark:sql-integration": "node ../tools/owlvex-benchmark/engine/sql-query-integration/run-sql-integration.mjs",
+    "benchmark:ac001": "node ../tools/owlvex-benchmark/engine/ac001/run-ac001-corpus.mjs",
+    "benchmark:ac002": "node ../tools/owlvex-benchmark/engine/ac002/run-ac002-corpus.mjs",
+    "benchmark:ac003": "node ../tools/owlvex-benchmark/engine/ac003/run-ac003-corpus.mjs",
+    "benchmark:ac004": "node ../tools/owlvex-benchmark/engine/ac004/run-ac004-corpus.mjs",
+    "benchmark:ac005": "node ../tools/owlvex-benchmark/engine/ac005/run-ac005-corpus.mjs",
+    "benchmark:ac-integration": "node ../tools/owlvex-benchmark/engine/access-control-integration/run-access-control-integration.mjs",
+    "benchmark:sm002": "node ../tools/owlvex-benchmark/engine/sm002/run-sm002-corpus.mjs"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

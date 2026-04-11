@@ -99,6 +99,104 @@ function getCanonicalRemediation(finding: ScanResult['findings'][number]): {
     };
 }
 
+// ---------------------------------------------------------------------------
+// Report composition helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Generates an analyst-facing attack surface assessment paragraph.
+ * Derived entirely from finding data — deterministic, no inference.
+ */
+function buildAttackSurfaceAssessment(
+    totalFindings: number,
+    deterministicCount: number,
+    metrics: { critical: number; high: number; medium: number; low: number },
+    topFamilies: string[],
+    filesScanned: number,
+    filesWithFindings: number,
+): string[] {
+    const out: string[] = ['## Attack Surface Assessment', ''];
+
+    if (totalFindings === 0) {
+        out.push(
+            'No vulnerabilities were identified in this scan. ' +
+            'This does not guarantee the codebase is free of security issues — ' +
+            'the scan covers the patterns and frameworks active during this run.',
+        );
+        out.push('');
+        return out;
+    }
+
+    const criticalHigh = metrics.critical + metrics.high;
+    const urgencyPhrase = metrics.critical > 0
+        ? `including **${metrics.critical} critical-severity** exposure${metrics.critical > 1 ? 's' : ''} requiring immediate remediation`
+        : criticalHigh > 0
+        ? `**${criticalHigh} requiring immediate attention**`
+        : 'all classified medium or lower severity';
+
+    out.push(
+        `Owlvex identified **${totalFindings} security ${totalFindings === 1 ? 'vulnerability' : 'vulnerabilities'}** ` +
+        `across ${filesWithFindings} of ${filesScanned} scanned ${filesScanned === 1 ? 'file' : 'files'}, ` +
+        `${urgencyPhrase}.`,
+    );
+    out.push('');
+
+    if (deterministicCount > 0) {
+        out.push(
+            `**${deterministicCount} ${deterministicCount === 1 ? 'finding was' : 'findings were'} confirmed ` +
+            `by deterministic structural analysis** — these are invariant violations in the code structure, ` +
+            `not probabilistic inferences. Each carries 100% confidence and requires no additional validation ` +
+            `before escalation.`,
+        );
+        out.push('');
+    }
+
+    if (topFamilies.length > 0) {
+        const last = topFamilies[topFamilies.length - 1];
+        const familyText = topFamilies.length === 1
+            ? topFamilies[0]
+            : `${topFamilies.slice(0, -1).join(', ')} and ${last}`;
+        out.push(`The dominant exposure categories are **${familyText}**.`);
+        out.push('');
+    }
+
+    return out;
+}
+
+/**
+ * Builds a compact table of all deterministic findings for prominent display.
+ */
+function buildDeterministicPanel(
+    items: Array<{ file: string; finding: ScanResult['findings'][number] }>,
+): string[] {
+    if (items.length === 0) { return []; }
+
+    const sorted = [...items].sort(
+        (a, b) => severityRank(b.finding.severity) - severityRank(a.finding.severity),
+    );
+
+    const out: string[] = [
+        '## Deterministic Detections',
+        '',
+        'These findings were produced by rule-based structural analysis. ' +
+        'Each represents a confirmed code-level invariant violation — not a heuristic match.',
+        '',
+        '| Rule | Issue | File | Line | Severity |',
+        '| :--- | :--- | :--- | ---: | :--- |',
+    ];
+
+    for (const item of sorted) {
+        const rule = item.finding.ruleCode || '—';
+        const title = escapeMarkdown(item.finding.canonicalTitle || item.finding.title);
+        out.push(
+            `| ⚡ \`${rule}\` | ${title} | \`${item.file}\` | ${item.finding.line} | **${item.finding.severity}** |`,
+        );
+    }
+
+    out.push('');
+    return out;
+}
+
 export async function generateWorkspaceScanReport(root: vscode.Uri, summary: FolderScanSummary): Promise<vscode.Uri> {
     return generateReportFromSnapshot(root, {
         targetLabel: root.fsPath,
@@ -181,6 +279,25 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             return acc;
         }, new Map<string, Array<{ file: string; finding: ScanResult['findings'][number] }>>());
 
+    const allFindingItems = snapshot.results.flatMap(item =>
+        item.result.findings.map(finding => ({
+            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
+            finding,
+        })),
+    );
+    const deterministicItems = allFindingItems.filter(
+        item => item.finding.provenance === 'deterministic',
+    );
+    const topFamilies = [...findingsByFamily.entries()]
+        .sort((a, b) => b[1].length - a[1].length)
+        .slice(0, 3)
+        .map(([label]) => label)
+        .filter(l => l !== 'Unclassified');
+
+    const totalFindings = snapshot.results.reduce(
+        (total, item) => total + item.result.findings.length, 0,
+    );
+
     const lines: string[] = [
         '# Owlvex Vulnerability Scan Report',
         '',
@@ -194,9 +311,19 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Files with findings: ${snapshot.results.filter(item => item.result.findings.length > 0).length}`,
         `- Total findings: ${snapshot.results.reduce((total, item) => total + item.result.findings.length, 0)}`,
         `- Average score: ${averageScore.toFixed(1)}/10`,
+        `- Deterministic findings: ${deterministicItems.length}`,
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         '',
+        ...buildAttackSurfaceAssessment(
+            totalFindings,
+            deterministicItems.length,
+            aggregateMetrics,
+            topFamilies,
+            snapshot.results.length,
+            snapshot.results.filter(item => item.result.findings.length > 0).length,
+        ),
+        ...buildDeterministicPanel(deterministicItems),
         '## Risk Scoring',
         '',
         '- Score meaning: `10` is strongest, `0` is weakest.',
@@ -256,15 +383,23 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             .slice(0, 25)) {
             const sample = items[0].finding;
             const remediation = getCanonicalRemediation(sample);
+            const isDeterministic = sample.provenance === 'deterministic';
+            const provenanceLabel = isDeterministic
+                ? `⚡ Deterministic (rule: \`${sample.ruleCode || '—'}\`) — structural invariant, confidence 100%`
+                : `🤖 AI-assisted — confidence ${Math.round((sample.resolverConfidence ?? sample.confidence) * 100)}%`;
+
             lines.push(`### ${sample.severity}: ${sample.canonicalTitle || sample.title}`);
             lines.push(`- Owlvex issue: \`${sample.canonicalId || issueKey}\``);
+            lines.push(`- Detection: ${provenanceLabel}`);
             if (sample.canonicalFamilyLabel || sample.canonicalFamily) {
                 lines.push(`- Issue family: ${sample.canonicalFamilyLabel || sample.canonicalFamily}`);
             }
             lines.push(`- Category: ${sample.canonicalCategory || 'unresolved'}`);
             lines.push(`- Occurrences: ${items.length}`);
             lines.push(`- Files affected: ${new Set(items.map(item => item.file)).size}`);
-            lines.push(`- Confidence: ${Math.round((sample.resolverConfidence ?? sample.confidence) * 100)}%`);
+            if (!isDeterministic) {
+                lines.push(`- Confidence: ${Math.round((sample.resolverConfidence ?? sample.confidence) * 100)}%`);
+            }
             const sampleStride = getFindingStride(sample);
             if (sampleStride.length) {
                 lines.push(`- STRIDE: ${sampleStride.join(', ')}`);

@@ -16,6 +16,13 @@ const suites = [
   { name: 'sq005', command: ['run', 'benchmark:sq005'] },
   { name: 'sq001', command: ['run', 'benchmark:sq001'] },
   { name: 'sql-integration', command: ['run', 'benchmark:sql-integration'] },
+  { name: 'ac002', command: ['run', 'benchmark:ac002'] },
+  { name: 'ac004', command: ['run', 'benchmark:ac004'] },
+  { name: 'ac003', command: ['run', 'benchmark:ac003'] },
+  { name: 'ac005', command: ['run', 'benchmark:ac005'] },
+  { name: 'ac001', command: ['run', 'benchmark:ac001'] },
+  { name: 'ac-integration', command: ['run', 'benchmark:ac-integration'] },
+  { name: 'sm002', command: ['run', 'benchmark:sm002'] },
 ];
 
 const runsDir = path.resolve(repoRoot, 'tools/owlvex-benchmark/runs/deterministic');

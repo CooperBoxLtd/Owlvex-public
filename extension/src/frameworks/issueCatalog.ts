@@ -9,6 +9,15 @@ export interface CanonicalMappings {
 
 export type DetectionLevel = 'direct' | 'flow' | 'inferred' | 'partial';
 
+/**
+ * Applicability context for a canonical issue.
+ *
+ * global      — applies to every codebase unconditionally.
+ * conditional — only applies when the required architectural context is detected.
+ *               The scanner gates activation on the `requires` signals.
+ */
+export type IssueApplicability = 'global' | 'conditional';
+
 export interface CanonicalIssue {
     id: string;
     slug: string;
@@ -23,13 +32,17 @@ export interface CanonicalIssue {
     cheatSheetRefs: string[];
     detectionLevel: DetectionLevel;
     requiresTrustTracking: boolean;
+    /** Defaults to 'global'. Conditional issues are only surfaced when architectural context is present. */
+    applicability: IssueApplicability;
+    /** For conditional issues: the architectural context signals required to activate this issue. */
+    requires?: string[];
     requiredAnyKeywords?: string[];
     negativeKeywords?: string[];
     minimumScore?: number;
 }
 
-type CanonicalIssueDefinition = Omit<CanonicalIssue, 'detectionLevel' | 'requiresTrustTracking'>
-& Partial<Pick<CanonicalIssue, 'detectionLevel' | 'requiresTrustTracking'>>;
+type CanonicalIssueDefinition = Omit<CanonicalIssue, 'detectionLevel' | 'requiresTrustTracking' | 'applicability'>
+& Partial<Pick<CanonicalIssue, 'detectionLevel' | 'requiresTrustTracking' | 'applicability'>>;
 
 export interface IssueFamilyDefinition {
     id: string;
@@ -89,6 +102,7 @@ function defineIssue(issue: CanonicalIssueDefinition): CanonicalIssue {
     return {
         detectionLevel: 'direct',
         requiresTrustTracking: false,
+        applicability: 'global',
         ...issue,
     };
 }
@@ -306,6 +320,10 @@ const ISSUE_DEFINITIONS: CanonicalIssueDefinition[] = [
         category: 'logging',
         family: 'family.data_protection_privacy',
         severity: 'MEDIUM',
+        // Conditional: only relevant when the source handles identifiable sensitive fields.
+        // The scanner gates on presence of known PII/credential field names in the source.
+        applicability: 'conditional',
+        requires: ['pii_fields_present'],
         stride: ['Information Disclosure', 'Repudiation'],
         mappings: {
             cwe: ['CWE-532'],
@@ -808,6 +826,503 @@ const ISSUE_DEFINITIONS: CanonicalIssueDefinition[] = [
         negativeKeywords: ['ldapescape', 'escaped filter value'],
         remediationSummary: 'Escape LDAP filter input and use safe directory query APIs that separate data from filter syntax.',
         cheatSheetRefs: ['OWASP LDAP Injection Prevention Cheat Sheet'],
+    },
+
+    // ── Identity & Auth ───────────────────────────────────────────────────────
+
+    {
+        id: 'owlvex.issue.session_fixation.001',
+        slug: 'session-fixation-pre-authentication-token-reuse',
+        title: 'Session fixation — pre-authentication token reused after login',
+        category: 'session-management',
+        family: 'family.identity_auth',
+        severity: 'HIGH',
+        stride: ['Spoofing', 'Elevation of Privilege'],
+        mappings: {
+            cwe: ['CWE-384'],
+            owasp: ['A07:2021'],
+            apiOwasp: ['API2:2023'],
+            attack: ['T1550'],
+            capec: ['CAPEC-60'],
+            nist: ['IA-8', 'SC-23'],
+        },
+        keywords: ['session fixation', 'session id', 'pre-login session', 'regenerate session', 'session reuse'],
+        negativeKeywords: ['session.regenerate', 'rotatesession', 'newsessionid', 'regenerateid'],
+        remediationSummary: 'Regenerate the session identifier immediately after a successful login to invalidate any pre-authentication session.',
+        cheatSheetRefs: ['OWASP Session Management Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.missing_session_expiry.001',
+        slug: 'missing-or-excessive-session-token-expiry',
+        title: 'Missing or excessive session token expiry',
+        category: 'session-management',
+        family: 'family.identity_auth',
+        severity: 'MEDIUM',
+        stride: ['Spoofing', 'Elevation of Privilege'],
+        mappings: {
+            cwe: ['CWE-613'],
+            owasp: ['A07:2021'],
+            apiOwasp: ['API2:2023'],
+            attack: ['T1550'],
+            capec: ['CAPEC-60'],
+            nist: ['AC-12', 'SC-23'],
+        },
+        keywords: ['session expiry', 'session timeout', 'no expiry', 'long-lived token', 'maxage', 'never expires', 'session ttl'],
+        negativeKeywords: ['expiresinseconds', 'maxage: 900', 'session timeout configured'],
+        remediationSummary: 'Set an absolute session expiry appropriate to the sensitivity of the resource and enforce idle timeout on sensitive flows.',
+        cheatSheetRefs: ['OWASP Session Management Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.oauth_state_missing.001',
+        slug: 'oauth-csrf-missing-state-parameter',
+        title: 'OAuth flow missing state parameter (CSRF in OAuth)',
+        category: 'authentication',
+        family: 'family.identity_auth',
+        severity: 'HIGH',
+        stride: ['Spoofing', 'Tampering'],
+        mappings: {
+            cwe: ['CWE-352'],
+            owasp: ['A07:2021'],
+            apiOwasp: [],
+            attack: ['T1539'],
+            capec: ['CAPEC-62'],
+            nist: ['IA-8', 'SC-23'],
+        },
+        keywords: ['oauth state', 'missing state parameter', 'oauth csrf', 'authorization code flow', 'oauth callback'],
+        negativeKeywords: ['state parameter verified', 'pkce', 'state validated'],
+        remediationSummary: 'Generate an unpredictable state parameter, bind it to the user session, and verify it on the OAuth callback before processing the authorization code.',
+        cheatSheetRefs: ['OWASP OAuth Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.insecure_cookie.001',
+        slug: 'missing-secure-httponly-samesite-cookie-flags',
+        title: 'Missing Secure, HttpOnly, or SameSite flags on session cookie',
+        category: 'session-management',
+        family: 'family.identity_auth',
+        severity: 'MEDIUM',
+        // Conditional: only relevant when the source sets HTTP cookies directly.
+        // The scanner gates on the presence of cookie-setting calls in the source.
+        applicability: 'conditional',
+        requires: ['cookie_handling_context'],
+        stride: ['Spoofing', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-614'],
+            owasp: ['A02:2021'],
+            apiOwasp: [],
+            attack: ['T1539'],
+            capec: ['CAPEC-61'],
+            nist: ['SC-23', 'AC-17'],
+        },
+        keywords: ['cookie', 'httponly', 'secure flag', 'samesite', 'session cookie', 'missing cookie flags', 'set-cookie'],
+        negativeKeywords: ['httponly: true', 'secure: true', 'samesite: strict', 'samesite: lax'],
+        remediationSummary: 'Set Secure, HttpOnly, and SameSite=Strict (or Lax) on all session and authentication cookies.',
+        cheatSheetRefs: ['OWASP Session Management Cheat Sheet', 'OWASP Cookie Security Guide'],
+    },
+    {
+        id: 'owlvex.issue.token_exposure_url.001',
+        slug: 'sensitive-token-or-credential-in-url-or-query-string',
+        title: 'Sensitive token or credential in URL or query string',
+        category: 'secrets',
+        family: 'family.secrets_exposure',
+        severity: 'MEDIUM',
+        stride: ['Information Disclosure', 'Spoofing'],
+        mappings: {
+            cwe: ['CWE-598'],
+            owasp: ['A02:2021'],
+            apiOwasp: ['API3:2023'],
+            attack: ['T1552'],
+            capec: [],
+            nist: ['SC-28', 'IA-5'],
+        },
+        keywords: ['token in url', 'api key in query string', 'credential in url', 'access_token=', 'apikey=', 'key= in url', 'secret= in url'],
+        negativeKeywords: ['authorization header', 'bearer token in header'],
+        remediationSummary: 'Pass authentication credentials and tokens in request headers, not URLs, to prevent leakage through logs, browser history, and referrer headers.',
+        cheatSheetRefs: ['OWASP REST Security Cheat Sheet'],
+    },
+
+    // ── Data Protection & Privacy ─────────────────────────────────────────────
+
+    {
+        id: 'owlvex.issue.pii_overexposure.001',
+        slug: 'pii-overexposure-in-api-response',
+        title: 'PII or sensitive fields over-exposed in API response',
+        category: 'data-protection',
+        family: 'family.data_protection_privacy',
+        severity: 'HIGH',
+        stride: ['Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-213'],
+            owasp: ['A02:2021'],
+            apiOwasp: ['API3:2023'],
+            attack: ['T1005'],
+            capec: [],
+            nist: ['SC-28', 'AC-3'],
+        },
+        keywords: ['pii', 'personal data', 'full user object', 'returning all fields', 'password hash in response', 'ssn', 'date of birth', 'sensitive fields', 'user details'],
+        negativeKeywords: ['dto', 'pick(', 'response projection', 'field allow-list'],
+        remediationSummary: 'Return only the minimum fields required for the client. Use response DTOs or projection to exclude sensitive internal fields.',
+        cheatSheetRefs: ['OWASP REST Security Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.http_over_https.001',
+        slug: 'cleartext-transmission-of-sensitive-data',
+        title: 'Cleartext transmission of sensitive data over HTTP',
+        category: 'transport-security',
+        family: 'family.data_protection_privacy',
+        severity: 'HIGH',
+        stride: ['Information Disclosure', 'Tampering'],
+        mappings: {
+            cwe: ['CWE-319'],
+            owasp: ['A02:2021'],
+            apiOwasp: [],
+            attack: ['T1040'],
+            capec: ['CAPEC-157'],
+            nist: ['SC-8', 'SC-28'],
+        },
+        keywords: ['http://', 'cleartext', 'no tls', 'unencrypted connection', 'http endpoint'],
+        negativeKeywords: ['https://', 'tls', 'ssl', 'hsts'],
+        remediationSummary: 'Require HTTPS with HSTS for all sensitive endpoints and redirect HTTP to HTTPS at the infrastructure layer.',
+        cheatSheetRefs: ['OWASP Transport Layer Security Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.sensitive_data_cache.001',
+        slug: 'sensitive-data-cached-without-expiry-or-protection',
+        title: 'Sensitive data cached without expiry or access protection',
+        category: 'data-protection',
+        family: 'family.data_protection_privacy',
+        severity: 'MEDIUM',
+        stride: ['Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-524'],
+            owasp: ['A02:2021'],
+            apiOwasp: [],
+            attack: ['T1005'],
+            capec: [],
+            nist: ['SC-28', 'AU-9'],
+        },
+        keywords: ['cache sensitive data', 'no cache expiry', 'cache-control: public', 'store credentials in cache', 'redis without ttl', 'session in cache'],
+        negativeKeywords: ['cache-control: no-store', 'ttl configured', 'pragma: no-cache'],
+        remediationSummary: 'Set appropriate cache TTLs, mark sensitive responses with Cache-Control: no-store, and ensure cached items are scoped to the individual user.',
+        cheatSheetRefs: ['OWASP Secure Headers Project'],
+    },
+
+    // ── Security Misconfiguration ─────────────────────────────────────────────
+
+    {
+        id: 'owlvex.issue.missing_security_headers.001',
+        slug: 'missing-http-security-response-headers',
+        title: 'Missing HTTP security response headers',
+        category: 'security-misconfiguration',
+        family: 'family.security_misconfiguration',
+        severity: 'MEDIUM',
+        stride: ['Tampering', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-693'],
+            owasp: ['A05:2021'],
+            apiOwasp: [],
+            attack: [],
+            capec: [],
+            nist: ['SC-8', 'CM-6'],
+        },
+        keywords: ['missing csp', 'no content security policy', 'no hsts', 'x-frame-options missing', 'security headers absent', 'no x-content-type'],
+        negativeKeywords: ['strict-transport-security', 'content-security-policy', 'x-frame-options', 'x-content-type-options'],
+        remediationSummary: 'Apply Content-Security-Policy, Strict-Transport-Security, X-Frame-Options, and X-Content-Type-Options as a security header baseline.',
+        cheatSheetRefs: ['OWASP Secure Headers Project'],
+    },
+    {
+        id: 'owlvex.issue.debug_mode_production.001',
+        slug: 'debug-mode-or-detailed-errors-in-production',
+        title: 'Debug mode or framework error detail enabled in production',
+        category: 'security-misconfiguration',
+        family: 'family.security_misconfiguration',
+        severity: 'MEDIUM',
+        stride: ['Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-215'],
+            owasp: ['A05:2021'],
+            apiOwasp: [],
+            attack: ['T1082'],
+            capec: [],
+            nist: ['CM-6', 'SI-11'],
+        },
+        keywords: ['debug: true', 'debug mode', 'development mode', 'stack trace enabled', 'show errors in production', 'app.debug = true', 'django debug'],
+        negativeKeywords: ['debug: false', 'production mode', 'NODE_ENV === production'],
+        remediationSummary: 'Disable debug mode in production environments, suppress framework error detail in responses, and log diagnostics only to protected internal sinks.',
+        cheatSheetRefs: ['OWASP Error Handling Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.graphql_introspection.001',
+        slug: 'graphql-introspection-enabled-in-production',
+        title: 'GraphQL introspection enabled in production',
+        category: 'security-misconfiguration',
+        family: 'family.security_misconfiguration',
+        severity: 'MEDIUM',
+        stride: ['Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-200'],
+            owasp: ['A05:2021'],
+            apiOwasp: ['API9:2023'],
+            attack: ['T1083'],
+            capec: [],
+            nist: ['CM-6', 'SC-7'],
+        },
+        keywords: ['graphql introspection', 'introspection query', 'schema exposed', '__schema', 'disable introspection'],
+        negativeKeywords: ['introspection disabled', 'introspection: false', 'blockfieldsuggestions'],
+        remediationSummary: 'Disable GraphQL introspection in production to prevent schema enumeration. Restrict query depth and complexity to limit data extraction.',
+        cheatSheetRefs: ['OWASP GraphQL Cheat Sheet'],
+    },
+
+    // ── Crypto & Randomness ───────────────────────────────────────────────────
+
+    {
+        id: 'owlvex.issue.hardcoded_iv.001',
+        slug: 'hardcoded-or-static-initialization-vector',
+        title: 'Hardcoded or static IV/nonce in encryption',
+        category: 'cryptography',
+        family: 'family.crypto_randomness',
+        severity: 'HIGH',
+        stride: ['Information Disclosure', 'Tampering'],
+        mappings: {
+            cwe: ['CWE-330'],
+            owasp: ['A02:2021'],
+            apiOwasp: [],
+            attack: [],
+            capec: [],
+            nist: ['SC-12', 'SC-13'],
+        },
+        keywords: ['iv = ', 'static iv', 'hardcoded iv', 'static nonce', 'initialization vector', 'fixed nonce'],
+        negativeKeywords: ['crypto.randombytes', 'random iv', 'random nonce', 'generateiv'],
+        remediationSummary: 'Generate a random IV/nonce using a cryptographically secure source for every encryption operation and store it alongside the ciphertext.',
+        cheatSheetRefs: ['OWASP Cryptographic Storage Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.ecb_mode.001',
+        slug: 'ecb-cipher-mode-exposes-block-patterns',
+        title: 'ECB cipher mode used — blocks identical plaintext identically',
+        category: 'cryptography',
+        family: 'family.crypto_randomness',
+        severity: 'HIGH',
+        stride: ['Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-327'],
+            owasp: ['A02:2021'],
+            apiOwasp: [],
+            attack: [],
+            capec: [],
+            nist: ['SC-12', 'SC-13'],
+        },
+        keywords: ['aes/ecb', 'ecb mode', 'ecb padding', 'cipher ecb', 'des/ecb'],
+        negativeKeywords: ['aes/gcm', 'aes/cbc', 'aes-256-gcm', 'aes-128-cbc'],
+        remediationSummary: 'Replace ECB mode with an authenticated encryption mode such as AES-GCM, which also provides integrity protection.',
+        cheatSheetRefs: ['OWASP Cryptographic Storage Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.weak_password_hash.001',
+        slug: 'weak-password-hashing-algorithm-or-cost-factor',
+        title: 'Weak password hashing algorithm or insufficient cost factor',
+        category: 'cryptography',
+        family: 'family.crypto_randomness',
+        severity: 'HIGH',
+        stride: ['Spoofing', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-916'],
+            owasp: ['A02:2021'],
+            apiOwasp: [],
+            attack: ['T1110'],
+            capec: [],
+            nist: ['IA-5', 'SC-13'],
+        },
+        keywords: ['md5 password', 'sha1 password', 'unsalted hash', 'weak hash', 'password.hash', 'crypto.createhash for password', 'sha256 password'],
+        negativeKeywords: ['bcrypt', 'argon2', 'scrypt', 'pbkdf2 with iterations'],
+        remediationSummary: 'Use an adaptive password hashing function (bcrypt, Argon2id, or scrypt) with an appropriate cost factor tuned to your hardware.',
+        cheatSheetRefs: ['OWASP Password Storage Cheat Sheet'],
+    },
+
+    // ── Injection completeness ────────────────────────────────────────────────
+
+    {
+        id: 'owlvex.issue.crlf_injection.001',
+        slug: 'crlf-injection-http-response-splitting',
+        title: 'CRLF injection / HTTP response splitting',
+        category: 'injection',
+        family: 'family.injection_execution',
+        severity: 'HIGH',
+        stride: ['Tampering', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-93'],
+            owasp: ['A03:2021'],
+            apiOwasp: [],
+            attack: [],
+            capec: ['CAPEC-34'],
+            nist: ['SI-10'],
+        },
+        keywords: ['crlf injection', 'response splitting', 'header injection', '\\r\\n', 'carriage return in header', 'newline in header value'],
+        negativeKeywords: ['sanitized header', 'strip crlf', 'encode header value'],
+        remediationSummary: 'Strip or reject carriage return and newline characters from any user-controlled value before placing it in an HTTP response header.',
+        cheatSheetRefs: ['OWASP HTTP Response Splitting Prevention Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.log_injection.001',
+        slug: 'log-injection-through-user-controlled-input',
+        title: 'Log injection through user-controlled input',
+        category: 'logging',
+        family: 'family.audit_observability',
+        severity: 'MEDIUM',
+        stride: ['Repudiation', 'Tampering'],
+        mappings: {
+            cwe: ['CWE-117'],
+            owasp: ['A09:2021'],
+            apiOwasp: [],
+            attack: [],
+            capec: [],
+            nist: ['AU-9', 'SI-10'],
+        },
+        keywords: ['log injection', 'user input in log', 'unescaped log entry', 'newline in log', 'forge log entry', 'log unsanitized request'],
+        negativeKeywords: ['sanitized log', 'escaped log value', 'structured logging'],
+        remediationSummary: 'Sanitize user-controlled values before logging by stripping control characters, or use structured logging that separates data from log format.',
+        cheatSheetRefs: ['OWASP Logging Cheat Sheet'],
+    },
+
+    // ── Availability & Resilience ─────────────────────────────────────────────
+
+    {
+        id: 'owlvex.issue.rate_limit_missing.001',
+        slug: 'missing-rate-limiting-on-sensitive-endpoint',
+        title: 'Missing rate limiting on authentication or sensitive endpoint',
+        category: 'availability',
+        family: 'family.availability_resilience',
+        severity: 'MEDIUM',
+        stride: ['Denial of Service', 'Spoofing'],
+        mappings: {
+            cwe: ['CWE-307'],
+            owasp: ['A07:2021'],
+            apiOwasp: ['API4:2023'],
+            attack: ['T1110'],
+            capec: ['CAPEC-49'],
+            nist: ['SC-5', 'AC-7'],
+        },
+        keywords: ['no rate limit', 'missing rate limit', 'brute force', 'login endpoint', 'unlimited retries', 'no throttling'],
+        negativeKeywords: ['rate limiter', 'throttle', 'ratelimit', 'expressratelimit', 'account lockout'],
+        remediationSummary: 'Apply rate limiting and account lockout on authentication and other sensitive endpoints; return 429 and use exponential backoff.',
+        cheatSheetRefs: ['OWASP Authentication Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.missing_timeout.001',
+        slug: 'missing-timeout-on-external-call',
+        title: 'Missing timeout on external HTTP, database, or queue call',
+        category: 'availability',
+        family: 'family.availability_resilience',
+        severity: 'MEDIUM',
+        stride: ['Denial of Service'],
+        mappings: {
+            cwe: ['CWE-400'],
+            owasp: ['A05:2021'],
+            apiOwasp: ['API4:2023'],
+            attack: [],
+            capec: ['CAPEC-469'],
+            nist: ['SC-5', 'SI-17'],
+        },
+        keywords: ['no timeout', 'missing timeout', 'indefinite wait', 'axios without timeout', 'fetch without abort', 'db query no timeout', 'queue consumer no timeout'],
+        negativeKeywords: ['timeout: ', 'abortsignal', 'connection timeout', 'request timeout'],
+        remediationSummary: 'Set an explicit timeout on all outbound HTTP, database, and queue calls, and handle the resulting error with an appropriate fallback.',
+        cheatSheetRefs: ['OWASP REST Security Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.unbounded_query.001',
+        slug: 'unbounded-database-query-without-pagination',
+        title: 'Unbounded database query without pagination or result limit',
+        category: 'availability',
+        family: 'family.availability_resilience',
+        severity: 'MEDIUM',
+        stride: ['Denial of Service', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-400'],
+            owasp: ['A05:2021'],
+            apiOwasp: ['API4:2023'],
+            attack: [],
+            capec: [],
+            nist: ['SC-5'],
+        },
+        keywords: ['no limit', 'no pagination', 'select * without limit', 'fetch all records', 'missing limit clause', 'unbounded result set'],
+        negativeKeywords: ['limit ?', 'take(', 'paginate(', 'offset/limit', 'page size'],
+        remediationSummary: 'Enforce a maximum page size on list queries, require callers to supply pagination parameters, and reject or cap unbounded requests.',
+        cheatSheetRefs: ['OWASP REST Security Cheat Sheet'],
+    },
+
+    // ── Access Control depth ──────────────────────────────────────────────────
+
+    {
+        id: 'owlvex.issue.unprotected_admin_route.001',
+        slug: 'administrative-route-without-access-controls',
+        title: 'Administrative or internal route without access controls',
+        category: 'authorization',
+        family: 'family.access_control',
+        severity: 'CRITICAL',
+        stride: ['Elevation of Privilege', 'Tampering', 'Information Disclosure'],
+        mappings: {
+            cwe: ['CWE-285'],
+            owasp: ['A01:2021'],
+            apiOwasp: ['API5:2023'],
+            attack: ['T1078'],
+            capec: ['CAPEC-115'],
+            nist: ['AC-3', 'AC-6'],
+        },
+        keywords: ['admin route', 'admin endpoint', 'management api', 'internal route', 'no auth on admin', 'debug endpoint exposed', 'admin panel unprotected'],
+        negativeKeywords: ['requireadmin', 'isadmin', 'admin middleware', 'admin role check'],
+        minimumScore: 45,
+        remediationSummary: 'Protect all administrative and internal management routes with explicit role checks and never expose debug or admin endpoints to unauthenticated callers.',
+        cheatSheetRefs: ['OWASP Authorization Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.privilege_escalation.001',
+        slug: 'privilege-escalation-via-unvalidated-role-assignment',
+        title: 'Privilege escalation via unvalidated role or permission assignment',
+        category: 'authorization',
+        family: 'family.access_control',
+        severity: 'HIGH',
+        detectionLevel: 'inferred',
+        stride: ['Elevation of Privilege', 'Tampering'],
+        mappings: {
+            cwe: ['CWE-269'],
+            owasp: ['A01:2021'],
+            apiOwasp: ['API5:2023'],
+            attack: ['T1078'],
+            capec: ['CAPEC-122'],
+            nist: ['AC-6', 'AC-3'],
+        },
+        keywords: ['role assignment', 'assign role', 'grant permission', 'update role', 'privilege escalation', 'elevate role', 'change user role'],
+        negativeKeywords: ['requires admin to assign', 'only admin can assign', 'role change audited'],
+        minimumScore: 45,
+        remediationSummary: 'Require explicit authorization before assigning roles or permissions, audit every privilege change, and prevent users from self-elevating via API.',
+        cheatSheetRefs: ['OWASP Authorization Cheat Sheet'],
+    },
+    {
+        id: 'owlvex.issue.tenant_isolation_missing.001',
+        slug: 'multi-tenant-data-isolation-failure',
+        title: 'Multi-tenant data isolation failure — cross-tenant data access',
+        category: 'authorization',
+        family: 'family.access_control',
+        severity: 'CRITICAL',
+        detectionLevel: 'inferred',
+        // Conditional: only relevant when the codebase operates a multi-tenant model.
+        // The scanner gates activation on the presence of tenant context signals
+        // (tenantId, organizationId, workspaceId, accountId) in the source.
+        applicability: 'conditional',
+        requires: ['multi_tenant_context'],
+        stride: ['Information Disclosure', 'Tampering', 'Elevation of Privilege'],
+        mappings: {
+            cwe: ['CWE-284'],
+            owasp: ['A01:2021'],
+            apiOwasp: ['API1:2023'],
+            attack: ['T1078'],
+            capec: ['CAPEC-122'],
+            nist: ['AC-3', 'AC-4', 'SC-2'],
+        },
+        keywords: ['tenant isolation', 'cross tenant', 'organisation id', 'tenant id missing', 'multi-tenant', 'missing tenant filter', 'data leakage between tenants', 'tenant context'],
+        negativeKeywords: ['tenantId in query', 'tenant_id = ?', 'tenant filter applied', 'row level security'],
+        minimumScore: 45,
+        remediationSummary: 'Scope every data operation to the authenticated tenant context. Enforce tenant_id in all queries and use row-level security or tenant-scoped repositories at the persistence layer.',
+        cheatSheetRefs: ['OWASP Authorization Cheat Sheet'],
     },
 ];
 

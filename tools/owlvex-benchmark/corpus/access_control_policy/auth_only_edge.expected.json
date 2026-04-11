@@ -1,0 +1,4 @@
+{
+  "policy_check": "AUTH_ONLY",
+  "finding": true
+}
