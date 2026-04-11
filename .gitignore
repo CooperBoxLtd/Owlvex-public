@@ -34,3 +34,7 @@ Thumbs.db
 # Unrelated temporary web/php artefacts
 tmp/*.html
 tmp/*.php
+
+# Owlvex benchmark run artifacts
+tools/owlvex-benchmark/runs/deterministic/*.json
+tools/owlvex-benchmark/runs/*.results.json

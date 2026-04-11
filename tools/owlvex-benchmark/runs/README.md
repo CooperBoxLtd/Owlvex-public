@@ -2,10 +2,14 @@
 
 This directory stores persistent benchmark artifacts.
 
+Generated run outputs are local working artifacts and should not be committed by default.
+
 ## Layout
 
 - `deterministic/`: timestamped and latest summaries for the deterministic execution-risk gate
 - model-specific result files can also live here when imported or generated from model runs
+
+Tracked files in this directory should generally be documentation only, such as this README.
 
 ## Deterministic Gate Artifacts
 
