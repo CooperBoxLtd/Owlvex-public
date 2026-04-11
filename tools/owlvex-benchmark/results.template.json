@@ -1,0 +1,70 @@
+{
+  "suite": "owlvex-model-reliability",
+  "manifestVersion": 1,
+  "run": {
+    "provider": "ollama",
+    "model": "replace-with-model-tag",
+    "date": "2026-04-10",
+    "frameworks": ["OWASP", "STRIDE", "CWE", "MITRE", "CLEANCODE"],
+    "scope": "corpus and tools/owlvex-benchmark/corpus",
+    "notes": ""
+  },
+  "cases": [
+    {
+      "id": "cmdi-vuln-exec",
+      "verdict": "replace-with-vulnerable-clean-advisory",
+      "labels": [],
+      "cwes": [],
+      "findings": [],
+      "notes": ""
+    },
+    {
+      "id": "cmdi-fixed-spawn",
+      "verdict": "replace-with-fixed_or_advisory-clean-vulnerable",
+      "labels": [],
+      "cwes": [],
+      "findings": [],
+      "notes": ""
+    },
+    {
+      "id": "cmdi-command-name",
+      "verdict": "replace-with-vulnerable-clean-advisory",
+      "labels": [],
+      "cwes": [],
+      "findings": [],
+      "notes": ""
+    },
+    {
+      "id": "sqli-string-query",
+      "verdict": "replace-with-vulnerable-clean-advisory",
+      "labels": [],
+      "cwes": [],
+      "findings": [],
+      "notes": ""
+    },
+    {
+      "id": "secret-hardcoded",
+      "verdict": "replace-with-vulnerable-clean-advisory",
+      "labels": [],
+      "cwes": [],
+      "findings": [],
+      "notes": ""
+    },
+    {
+      "id": "safe-baseline-db",
+      "verdict": "replace-with-clean-vulnerable-advisory",
+      "labels": [],
+      "cwes": [],
+      "findings": [],
+      "notes": ""
+    },
+    {
+      "id": "benign-security-shaped",
+      "verdict": "replace-with-clean-vulnerable-advisory",
+      "labels": [],
+      "cwes": [],
+      "findings": [],
+      "notes": ""
+    }
+  ]
+}

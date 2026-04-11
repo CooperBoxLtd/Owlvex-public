@@ -1,0 +1,8 @@
+{
+  "rule": "GR-002",
+  "variable": "cmd",
+  "trust_state": "MIXED",
+  "finding": true,
+  "severity": "HIGH",
+  "notes": "Branch merge creates a mixed trust state that must be treated as unsafe at the sink."
+}

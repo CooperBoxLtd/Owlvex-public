@@ -1,0 +1,11 @@
+export const TRUST_STATES = {
+  SAFE: 'SAFE',
+  UNSAFE: 'UNSAFE',
+  MIXED: 'MIXED',
+  UNKNOWN: 'UNKNOWN',
+};
+
+export const EXECUTION_UNSAFE_STATES = new Set([
+  TRUST_STATES.UNSAFE,
+  TRUST_STATES.MIXED,
+]);

@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "suite": "owlvex-model-reliability",
+  "description": "Weighted benchmark cases for evaluating model reliability on security reasoning.",
+  "dimensions": {
+    "recall": 40,
+    "false_positive_control": 25,
+    "sink_classification": 20,
+    "taxonomy_precision": 15
+  },
+  "cases": [
+    {
+      "id": "cmdi-vuln-exec",
+      "file": "corpus/injection_execution/positive/command_injection_positive.js",
+      "expected": {
+        "verdict": "vulnerable",
+        "must_include": ["command injection"],
+        "preferred_cwe": ["CWE-78"],
+        "max_findings": 2
+      },
+      "dimensions": ["recall", "sink_classification", "taxonomy_precision"]
+    },
+    {
+      "id": "cmdi-fixed-spawn",
+      "file": "corpus/injection_execution/negative/validated_spawn_negative.js",
+      "expected": {
+        "verdict": "fixed_or_advisory",
+        "must_not_include": ["command injection", "broken access control"],
+        "allowed_labels": ["advisory", "informational", "none"]
+      },
+      "dimensions": ["false_positive_control", "sink_classification", "taxonomy_precision"]
+    },
+    {
+      "id": "cmdi-command-name",
+      "file": "tools/owlvex-benchmark/corpus/sink_execution/spawn_dynamic_command_edge.js",
+      "expected": {
+        "verdict": "vulnerable",
+        "must_include": ["user-influenced command", "dangerous process execution"],
+        "max_findings": 2
+      },
+      "dimensions": ["recall", "sink_classification"]
+    },
+    {
+      "id": "sqli-string-query",
+      "file": "corpus/injection_execution/positive/sql_injection_positive.js",
+      "expected": {
+        "verdict": "vulnerable",
+        "must_include": ["sql injection"],
+        "preferred_cwe": ["CWE-89"],
+        "max_findings": 2
+      },
+      "dimensions": ["recall", "taxonomy_precision"]
+    },
+    {
+      "id": "secret-hardcoded",
+      "file": "corpus/secrets_exposure/positive/hardcoded_api_key_positive.js",
+      "expected": {
+        "verdict": "vulnerable",
+        "must_include": ["hardcoded secret", "credential"],
+        "max_findings": 2
+      },
+      "dimensions": ["recall", "taxonomy_precision"]
+    },
+    {
+      "id": "safe-baseline-db",
+      "file": "corpus/injection_execution/negative/parameterized_query_negative.js",
+      "expected": {
+        "verdict": "clean",
+        "must_not_include": ["sql injection", "hardcoded secret", "command injection"]
+      },
+      "dimensions": ["false_positive_control"]
+    },
+    {
+      "id": "benign-security-shaped",
+      "file": "corpus/identity_auth/negative/auth_header_placeholder_noise_negative.js",
+      "expected": {
+        "verdict": "clean",
+        "must_not_include": ["command injection", "cwe-78", "sql injection", "hardcoded secret"]
+      },
+      "dimensions": ["false_positive_control"]
+    }
+  ]
+}

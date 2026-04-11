@@ -1,0 +1,8 @@
+{
+  "rule": "GR-002",
+  "variable": "cmd",
+  "trust_state": "UNSAFE",
+  "finding": true,
+  "severity": "HIGH",
+  "notes": "Last-write overwrite with unsafe input must dominate prior safe assignment."
+}

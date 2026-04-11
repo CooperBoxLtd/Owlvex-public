@@ -1,0 +1,12 @@
+{
+  "rule": "GR-005",
+  "sink": "spawn",
+  "trust_state": "SAFE",
+  "transformation": "sanitized",
+  "sanitizer": "escapeHtml",
+  "transformation_context": "html",
+  "sink_context": "generic",
+  "context_valid": false,
+  "effective_trust_state": "UNSAFE",
+  "finding": true
+}

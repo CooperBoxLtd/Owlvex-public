@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "rule": "SQ-002",
+  "finding": true,
+  "type": "mixed-query-trust",
+  "notes": "Branch merge still reaches interpolated SQL query text."
+}

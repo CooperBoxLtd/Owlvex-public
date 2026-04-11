@@ -1,0 +1,9 @@
+{
+  "rule": "GR-003",
+  "variable": "final",
+  "trust_state": "SAFE",
+  "transformation": "sanitized",
+  "finding": false,
+  "severity": "NONE",
+  "notes": "Safe state created by sanitization must propagate through later assignments."
+}

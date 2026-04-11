@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "rule": "SQ-005",
+  "finding": true,
+  "type": "context-mismatch-query",
+  "notes": "HTML-oriented transformation is not sufficient for SQL context."
+}

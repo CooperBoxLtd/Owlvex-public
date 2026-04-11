@@ -1,0 +1,8 @@
+{
+  "rule": "GR-002",
+  "variable": "cmd",
+  "trust_state": "SAFE",
+  "finding": false,
+  "severity": "NONE",
+  "notes": "Last-write overwrite with a constant-safe value must clear prior unsafe state."
+}

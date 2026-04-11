@@ -1,0 +1,8 @@
+{
+  "rule": "GR-002",
+  "variable": "cleaned",
+  "trust_state": "SAFE",
+  "finding": false,
+  "severity": "NONE",
+  "notes": "Trusted sanitizer is expected to transition the variable from unsafe to safe before the sink."
+}

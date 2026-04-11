@@ -1,0 +1,9 @@
+{
+  "rule": "GR-003",
+  "variable": "cmd",
+  "trust_state": "UNSAFE",
+  "transformation": "none",
+  "finding": true,
+  "severity": "HIGH",
+  "notes": "Missing sanitization leaves the value unsafe at the sink."
+}

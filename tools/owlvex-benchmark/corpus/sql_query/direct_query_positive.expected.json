@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "rule": "SQ-001",
+  "finding": true,
+  "type": "sql-injection",
+  "notes": "Direct string interpolation into SQL query text."
+}

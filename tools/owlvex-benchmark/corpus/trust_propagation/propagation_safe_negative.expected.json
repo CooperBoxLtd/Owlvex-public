@@ -1,0 +1,8 @@
+{
+  "rule": "GR-002",
+  "variable": "final",
+  "trust_state": "SAFE",
+  "finding": false,
+  "severity": "NONE",
+  "notes": "Constant-safe value remains safe through propagation."
+}

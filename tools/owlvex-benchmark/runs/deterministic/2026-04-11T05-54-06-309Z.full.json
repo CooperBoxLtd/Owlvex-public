@@ -1,0 +1,14 @@
+{
+  "suite": "deterministic-axis",
+  "generatedAt": "2026-04-11T05:54:06.309Z",
+  "passed": false,
+  "failedSuite": "gr002",
+  "results": [
+    {
+      "name": "gr002",
+      "exitCode": 4294963238,
+      "passed": false,
+      "summary": null
+    }
+  ]
+}

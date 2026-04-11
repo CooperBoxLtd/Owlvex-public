@@ -1,0 +1,8 @@
+{
+  "rule": "GR-004",
+  "sink": "execSync",
+  "sink_kind": "shell",
+  "argument_index": 0,
+  "dangerous_in_context": true,
+  "expression": "req.query.cmd"
+}

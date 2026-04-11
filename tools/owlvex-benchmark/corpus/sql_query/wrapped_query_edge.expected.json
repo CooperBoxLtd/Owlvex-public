@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "rule": "SQ-004",
+  "finding": true,
+  "type": "wrapped-sql-sink",
+  "notes": "Wrapped query helper should still be recognized as a SQL sink."
+}

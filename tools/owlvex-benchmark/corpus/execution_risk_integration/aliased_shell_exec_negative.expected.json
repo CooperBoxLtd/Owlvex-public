@@ -1,0 +1,12 @@
+{
+  "sink": "exec",
+  "sink_kind": "shell",
+  "trust_state": "SAFE",
+  "transformation": "sanitized",
+  "sanitizer": "escapeShellArg",
+  "transformation_context": "shell",
+  "sink_context": "shell",
+  "context_valid": true,
+  "effective_trust_state": "SAFE",
+  "finding": false
+}

@@ -1,0 +1,60 @@
+{
+  "suite": "deterministic-axis",
+  "generatedAt": "2026-04-10T22:05:43.994Z",
+  "passed": true,
+  "totalSuites": 6,
+  "passedSuites": 6,
+  "totalCases": 35,
+  "passedCases": 35,
+  "failedSuite": null,
+  "results": [
+    {
+      "name": "gr002",
+      "passed": true,
+      "exitCode": 0,
+      "suite": "gr002-trust-propagation",
+      "casesPassed": 7,
+      "casesTotal": 7
+    },
+    {
+      "name": "gr003",
+      "passed": true,
+      "exitCode": 0,
+      "suite": "gr003-sanitization-validation",
+      "casesPassed": 5,
+      "casesTotal": 5
+    },
+    {
+      "name": "gr004",
+      "passed": true,
+      "exitCode": 0,
+      "suite": "gr004-sink-execution",
+      "casesPassed": 8,
+      "casesTotal": 8
+    },
+    {
+      "name": "gr005",
+      "passed": true,
+      "exitCode": 0,
+      "suite": "gr005-context-mismatch",
+      "casesPassed": 5,
+      "casesTotal": 5
+    },
+    {
+      "name": "gr001",
+      "passed": true,
+      "exitCode": 0,
+      "suite": "gr001-injection-execution",
+      "casesPassed": 5,
+      "casesTotal": 5
+    },
+    {
+      "name": "integration",
+      "passed": true,
+      "exitCode": 0,
+      "suite": "execution-risk-integration",
+      "casesPassed": 5,
+      "casesTotal": 5
+    }
+  ]
+}

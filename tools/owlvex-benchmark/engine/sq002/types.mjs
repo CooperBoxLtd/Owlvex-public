@@ -1,0 +1,6 @@
+export const TRUST_STATES = {
+  SAFE: 'SAFE',
+  UNSAFE: 'UNSAFE',
+  MIXED: 'MIXED',
+  UNKNOWN: 'UNKNOWN',
+};

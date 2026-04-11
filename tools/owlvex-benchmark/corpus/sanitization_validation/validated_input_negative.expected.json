@@ -1,0 +1,9 @@
+{
+  "rule": "GR-003",
+  "variable": "cleaned",
+  "trust_state": "SAFE",
+  "transformation": "sanitized",
+  "finding": false,
+  "severity": "NONE",
+  "notes": "Registered validator transitions the value to safe."
+}

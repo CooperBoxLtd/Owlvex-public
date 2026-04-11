@@ -1,0 +1,9 @@
+{
+  "rule": "GR-003",
+  "variable": "cleaned",
+  "trust_state": "SAFE",
+  "transformation": "sanitized",
+  "finding": false,
+  "severity": "NONE",
+  "notes": "GR-003 records the transformation; GR-005 later rejects it when the sink context does not match."
+}

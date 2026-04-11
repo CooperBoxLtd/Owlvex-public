@@ -1,0 +1,9 @@
+{
+  "rule": "GR-001",
+  "sink": "exec",
+  "trust_state": "SAFE",
+  "unsafe_at_sink": false,
+  "finding": false,
+  "severity": "NONE",
+  "notes": "Safe overwrite dominates before the sink, so no injection finding should remain."
+}

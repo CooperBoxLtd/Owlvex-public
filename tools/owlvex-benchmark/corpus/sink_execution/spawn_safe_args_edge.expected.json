@@ -1,0 +1,8 @@
+{
+  "rule": "GR-004",
+  "sink": "spawn",
+  "sink_kind": "process",
+  "argument_index": 0,
+  "dangerous_in_context": false,
+  "expression": "'ls'"
+}

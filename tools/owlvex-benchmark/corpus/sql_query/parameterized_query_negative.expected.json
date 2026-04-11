@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "rule": "SQ-001",
+  "finding": false,
+  "type": "parameterized-query",
+  "notes": "Query text is constant and user input is bound through parameters."
+}

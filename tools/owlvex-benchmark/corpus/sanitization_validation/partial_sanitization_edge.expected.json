@@ -1,0 +1,9 @@
+{
+  "rule": "GR-003",
+  "variable": "cleaned",
+  "trust_state": "UNKNOWN",
+  "transformation": "none",
+  "finding": false,
+  "severity": "NONE",
+  "notes": "Unregistered partial sanitization does not change trust state in v1."
+}

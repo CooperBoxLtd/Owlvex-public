@@ -1,0 +1,9 @@
+{
+  "rule": "GR-001",
+  "sink": "exec",
+  "trust_state": "UNSAFE",
+  "unsafe_at_sink": true,
+  "finding": true,
+  "severity": "HIGH",
+  "notes": "Unsafe overwrite dominates before the sink and must trigger an execution finding."
+}

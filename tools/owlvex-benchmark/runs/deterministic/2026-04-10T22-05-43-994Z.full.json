@@ -1,0 +1,999 @@
+{
+  "suite": "deterministic-axis",
+  "generatedAt": "2026-04-10T22:05:43.994Z",
+  "passed": true,
+  "total": 6,
+  "results": [
+    {
+      "name": "gr002",
+      "exitCode": 0,
+      "passed": true,
+      "summary": {
+        "suite": "gr002-trust-propagation",
+        "passed": 7,
+        "total": 7,
+        "results": [
+          {
+            "file": "propagation_mixed_edge.js",
+            "variable": "cmd",
+            "sink": "exec",
+            "expectedTrustState": "MIXED",
+            "actualTrustState": "MIXED",
+            "unsafeAtSink": true,
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "propagation_partial_branch_edge.js",
+            "variable": "cmd",
+            "sink": "exec",
+            "expectedTrustState": "MIXED",
+            "actualTrustState": "MIXED",
+            "unsafeAtSink": true,
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "propagation_reassign_safe_edge.js",
+            "variable": "cmd",
+            "sink": "exec",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "unsafeAtSink": false,
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "propagation_reassign_unsafe_edge.js",
+            "variable": "cmd",
+            "sink": "exec",
+            "expectedTrustState": "UNSAFE",
+            "actualTrustState": "UNSAFE",
+            "unsafeAtSink": true,
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "propagation_safe_negative.js",
+            "variable": "final",
+            "sink": "exec",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "unsafeAtSink": false,
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "propagation_sanitized_edge.js",
+            "variable": "cleaned",
+            "sink": "exec",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "unsafeAtSink": false,
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "propagation_unsafe_positive.js",
+            "variable": "final",
+            "sink": "exec",
+            "expectedTrustState": "UNSAFE",
+            "actualTrustState": "UNSAFE",
+            "unsafeAtSink": true,
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "gr003",
+      "exitCode": 0,
+      "passed": true,
+      "summary": {
+        "suite": "gr003-sanitization-validation",
+        "passed": 5,
+        "total": 5,
+        "results": [
+          {
+            "file": "context_mismatch_sanitization_edge.js",
+            "variable": "cleaned",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "double_transformation_edge.js",
+            "variable": "final",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "no_sanitization_positive.js",
+            "variable": "cmd",
+            "expectedTrustState": "UNSAFE",
+            "actualTrustState": "UNSAFE",
+            "expectedTransformation": "none",
+            "actualTransformation": "none",
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "partial_sanitization_edge.js",
+            "variable": "cleaned",
+            "expectedTrustState": "UNKNOWN",
+            "actualTrustState": "UNKNOWN",
+            "expectedTransformation": "none",
+            "actualTransformation": "none",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "validated_input_negative.js",
+            "variable": "cleaned",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "gr004",
+      "exitCode": 0,
+      "passed": true,
+      "summary": {
+        "suite": "gr004-sink-execution",
+        "passed": 8,
+        "total": 8,
+        "results": [
+          {
+            "file": "dangerous_execsync_positive.js",
+            "expectedSink": "execSync",
+            "actualSink": "execSync",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedArgumentIndex": 0,
+            "actualArgumentIndex": 0,
+            "expectedDangerousInContext": true,
+            "actualDangerousInContext": true,
+            "expectedExpression": "req.query.cmd",
+            "actualExpression": "req.query.cmd",
+            "passed": true
+          },
+          {
+            "file": "indirect_sink_edge.js",
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedArgumentIndex": 0,
+            "actualArgumentIndex": 0,
+            "expectedDangerousInContext": true,
+            "actualDangerousInContext": true,
+            "expectedExpression": "req.query.cmd",
+            "actualExpression": "req.query.cmd",
+            "passed": true
+          },
+          {
+            "file": "safe_exec_constant_negative.js",
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedArgumentIndex": 0,
+            "actualArgumentIndex": 0,
+            "expectedDangerousInContext": false,
+            "actualDangerousInContext": false,
+            "expectedExpression": "'ls -la'",
+            "actualExpression": "'ls -la'",
+            "passed": true
+          },
+          {
+            "file": "safe_spawn_negative.js",
+            "expectedSink": "spawn",
+            "actualSink": "spawn",
+            "expectedSinkKind": "process",
+            "actualSinkKind": "process",
+            "expectedArgumentIndex": 0,
+            "actualArgumentIndex": 0,
+            "expectedDangerousInContext": false,
+            "actualDangerousInContext": false,
+            "expectedExpression": "'ls'",
+            "actualExpression": "'ls'",
+            "passed": true
+          },
+          {
+            "file": "spawn_dynamic_command_edge.js",
+            "expectedSink": "spawn",
+            "actualSink": "spawn",
+            "expectedSinkKind": "process",
+            "actualSinkKind": "process",
+            "expectedArgumentIndex": 0,
+            "actualArgumentIndex": 0,
+            "expectedDangerousInContext": true,
+            "actualDangerousInContext": true,
+            "expectedExpression": "cmd",
+            "actualExpression": "cmd",
+            "passed": true
+          },
+          {
+            "file": "spawn_safe_args_edge.js",
+            "expectedSink": "spawn",
+            "actualSink": "spawn",
+            "expectedSinkKind": "process",
+            "actualSinkKind": "process",
+            "expectedArgumentIndex": 0,
+            "actualArgumentIndex": 0,
+            "expectedDangerousInContext": false,
+            "actualDangerousInContext": false,
+            "expectedExpression": "'ls'",
+            "actualExpression": "'ls'",
+            "passed": true
+          },
+          {
+            "file": "spawn_shell_true_positive.js",
+            "expectedSink": "spawn",
+            "actualSink": "spawn",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedArgumentIndex": 0,
+            "actualArgumentIndex": 0,
+            "expectedDangerousInContext": true,
+            "actualDangerousInContext": true,
+            "expectedExpression": "req.query.cmd",
+            "actualExpression": "req.query.cmd",
+            "passed": true
+          },
+          {
+            "file": "wrapped_sink_edge.js",
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedArgumentIndex": 0,
+            "actualArgumentIndex": 0,
+            "expectedDangerousInContext": true,
+            "actualDangerousInContext": true,
+            "expectedExpression": "req.query.cmd",
+            "actualExpression": "req.query.cmd",
+            "passed": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "gr005",
+      "exitCode": 0,
+      "passed": true,
+      "summary": {
+        "suite": "gr005-context-mismatch",
+        "passed": 5,
+        "total": 5,
+        "results": [
+          {
+            "file": "generic_to_shell_edge.js",
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "sanitize",
+            "actualSanitizer": "sanitize",
+            "expectedTransformationContext": "generic",
+            "actualTransformationContext": "generic",
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": true,
+            "actualContextValid": true,
+            "expectedEffectiveTrustState": "SAFE",
+            "actualEffectiveTrustState": "SAFE",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "html_to_process_positive.js",
+            "expectedSink": "spawn",
+            "actualSink": "spawn",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "escapeHtml",
+            "actualSanitizer": "escapeHtml",
+            "expectedTransformationContext": "html",
+            "actualTransformationContext": "html",
+            "expectedSinkContext": "generic",
+            "actualSinkContext": "generic",
+            "expectedContextValid": false,
+            "actualContextValid": false,
+            "expectedEffectiveTrustState": "UNSAFE",
+            "actualEffectiveTrustState": "UNSAFE",
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "html_to_shell_positive.js",
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "escapeHtml",
+            "actualSanitizer": "escapeHtml",
+            "expectedTransformationContext": "html",
+            "actualTransformationContext": "html",
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": false,
+            "actualContextValid": false,
+            "expectedEffectiveTrustState": "UNSAFE",
+            "actualEffectiveTrustState": "UNSAFE",
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "no_sanitization_edge.js",
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedTrustState": "UNSAFE",
+            "actualTrustState": "UNSAFE",
+            "expectedTransformation": "none",
+            "actualTransformation": "none",
+            "expectedSanitizer": null,
+            "actualSanitizer": null,
+            "expectedTransformationContext": null,
+            "actualTransformationContext": null,
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": true,
+            "actualContextValid": true,
+            "expectedEffectiveTrustState": "UNSAFE",
+            "actualEffectiveTrustState": "UNSAFE",
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "shell_to_shell_negative.js",
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "escapeShellArg",
+            "actualSanitizer": "escapeShellArg",
+            "expectedTransformationContext": "shell",
+            "actualTransformationContext": "shell",
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": true,
+            "actualContextValid": true,
+            "expectedEffectiveTrustState": "SAFE",
+            "actualEffectiveTrustState": "SAFE",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "gr001",
+      "exitCode": 0,
+      "passed": true,
+      "summary": {
+        "suite": "gr001-injection-execution",
+        "passed": 5,
+        "total": 5,
+        "results": [
+          {
+            "file": "conditional_exec_edge.js",
+            "normalizedFinding": {
+              "id": "execution-risk:conditional_exec_edge:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "unsafe-shell-execution",
+              "severity": "high",
+              "confidence": 1,
+              "finding": true,
+              "explanation": "An unsafe value reaches a shell execution sink in a dangerous usage context.",
+              "evidence": {
+                "file": "conditional_exec_edge.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "cmd"
+              },
+              "state": {
+                "trustState": "MIXED",
+                "transformation": "none",
+                "sanitizer": null,
+                "transformationContext": null,
+                "contextValid": true,
+                "effectiveTrustState": "MIXED",
+                "dangerousInContext": true,
+                "unsafeAtSink": true
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "sink": "exec",
+            "expectedTrustState": "MIXED",
+            "actualTrustState": "MIXED",
+            "expectedUnsafeAtSink": true,
+            "actualUnsafeAtSink": true,
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "direct_exec_positive.js",
+            "normalizedFinding": {
+              "id": "execution-risk:direct_exec_positive:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "unsafe-shell-execution",
+              "severity": "high",
+              "confidence": 1,
+              "finding": true,
+              "explanation": "An unsafe value reaches a shell execution sink in a dangerous usage context.",
+              "evidence": {
+                "file": "direct_exec_positive.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": null
+              },
+              "state": {
+                "trustState": "UNSAFE",
+                "transformation": "none",
+                "sanitizer": null,
+                "transformationContext": null,
+                "contextValid": true,
+                "effectiveTrustState": "UNSAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": true
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "sink": "exec",
+            "expectedTrustState": "UNSAFE",
+            "actualTrustState": "UNSAFE",
+            "expectedUnsafeAtSink": true,
+            "actualUnsafeAtSink": true,
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "safe_override_negative.js",
+            "normalizedFinding": {
+              "id": "execution-risk:safe_override_negative:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "safe-execution-path",
+              "severity": "none",
+              "confidence": 1,
+              "finding": false,
+              "explanation": "Execution path remains safe under deterministic trust and sink analysis.",
+              "evidence": {
+                "file": "safe_override_negative.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "cmd"
+              },
+              "state": {
+                "trustState": "SAFE",
+                "transformation": "none",
+                "sanitizer": null,
+                "transformationContext": null,
+                "contextValid": true,
+                "effectiveTrustState": "SAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": false
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "sink": "exec",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedUnsafeAtSink": false,
+            "actualUnsafeAtSink": false,
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "sanitized_exec_negative.js",
+            "normalizedFinding": {
+              "id": "execution-risk:sanitized_exec_negative:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "safe-execution-path",
+              "severity": "none",
+              "confidence": 1,
+              "finding": false,
+              "explanation": "Input reaches an execution sink through a valid transformation for the sink context.",
+              "evidence": {
+                "file": "sanitized_exec_negative.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "cleaned"
+              },
+              "state": {
+                "trustState": "SAFE",
+                "transformation": "sanitized",
+                "sanitizer": "sanitize",
+                "transformationContext": "generic",
+                "contextValid": true,
+                "effectiveTrustState": "SAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": false
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "sink": "exec",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedUnsafeAtSink": false,
+            "actualUnsafeAtSink": false,
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "unsafe_override_positive.js",
+            "normalizedFinding": {
+              "id": "execution-risk:unsafe_override_positive:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "unsafe-shell-execution",
+              "severity": "high",
+              "confidence": 1,
+              "finding": true,
+              "explanation": "An unsafe value reaches a shell execution sink in a dangerous usage context.",
+              "evidence": {
+                "file": "unsafe_override_positive.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "cmd"
+              },
+              "state": {
+                "trustState": "UNSAFE",
+                "transformation": "none",
+                "sanitizer": null,
+                "transformationContext": null,
+                "contextValid": true,
+                "effectiveTrustState": "UNSAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": true
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "sink": "exec",
+            "expectedTrustState": "UNSAFE",
+            "actualTrustState": "UNSAFE",
+            "expectedUnsafeAtSink": true,
+            "actualUnsafeAtSink": true,
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "integration",
+      "exitCode": 0,
+      "passed": true,
+      "summary": {
+        "suite": "execution-risk-integration",
+        "passed": 5,
+        "total": 5,
+        "results": [
+          {
+            "file": "aliased_shell_exec_negative.js",
+            "normalizedFinding": {
+              "id": "execution-risk:aliased_shell_exec_negative:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "safe-execution-path",
+              "severity": "none",
+              "confidence": 1,
+              "finding": false,
+              "explanation": "Input reaches an execution sink through a valid transformation for the sink context.",
+              "evidence": {
+                "file": "aliased_shell_exec_negative.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "clean"
+              },
+              "state": {
+                "trustState": "SAFE",
+                "transformation": "sanitized",
+                "sanitizer": "escapeShellArg",
+                "transformationContext": "shell",
+                "contextValid": true,
+                "effectiveTrustState": "SAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": false
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "escapeShellArg",
+            "actualSanitizer": "escapeShellArg",
+            "expectedTransformationContext": "shell",
+            "actualTransformationContext": "shell",
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": true,
+            "actualContextValid": true,
+            "expectedEffectiveTrustState": "SAFE",
+            "actualEffectiveTrustState": "SAFE",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "html_exec_mismatch_positive.js",
+            "normalizedFinding": {
+              "id": "execution-risk:html_exec_mismatch_positive:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "context-mismatch-execution",
+              "severity": "high",
+              "confidence": 1,
+              "finding": true,
+              "explanation": "A transformed value reaches an execution sink, but the transformation context does not match the sink context.",
+              "evidence": {
+                "file": "html_exec_mismatch_positive.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "clean"
+              },
+              "state": {
+                "trustState": "SAFE",
+                "transformation": "sanitized",
+                "sanitizer": "escapeHtml",
+                "transformationContext": "html",
+                "contextValid": false,
+                "effectiveTrustState": "UNSAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": true
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "escapeHtml",
+            "actualSanitizer": "escapeHtml",
+            "expectedTransformationContext": "html",
+            "actualTransformationContext": "html",
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": false,
+            "actualContextValid": false,
+            "expectedEffectiveTrustState": "UNSAFE",
+            "actualEffectiveTrustState": "UNSAFE",
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          },
+          {
+            "file": "mixed_generic_exec_edge.js",
+            "normalizedFinding": {
+              "id": "execution-risk:mixed_generic_exec_edge:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "safe-execution-path",
+              "severity": "none",
+              "confidence": 1,
+              "finding": false,
+              "explanation": "Input reaches an execution sink through a valid transformation for the sink context.",
+              "evidence": {
+                "file": "mixed_generic_exec_edge.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "clean"
+              },
+              "state": {
+                "trustState": "SAFE",
+                "transformation": "sanitized",
+                "sanitizer": "sanitize",
+                "transformationContext": "generic",
+                "contextValid": true,
+                "effectiveTrustState": "SAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": false
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "sanitize",
+            "actualSanitizer": "sanitize",
+            "expectedTransformationContext": "generic",
+            "actualTransformationContext": "generic",
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": true,
+            "actualContextValid": true,
+            "expectedEffectiveTrustState": "SAFE",
+            "actualEffectiveTrustState": "SAFE",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "shell_exec_safe_negative.js",
+            "normalizedFinding": {
+              "id": "execution-risk:shell_exec_safe_negative:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "safe-execution-path",
+              "severity": "none",
+              "confidence": 1,
+              "finding": false,
+              "explanation": "Input reaches an execution sink through a valid transformation for the sink context.",
+              "evidence": {
+                "file": "shell_exec_safe_negative.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "clean"
+              },
+              "state": {
+                "trustState": "SAFE",
+                "transformation": "sanitized",
+                "sanitizer": "escapeShellArg",
+                "transformationContext": "shell",
+                "contextValid": true,
+                "effectiveTrustState": "SAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": false
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "escapeShellArg",
+            "actualSanitizer": "escapeShellArg",
+            "expectedTransformationContext": "shell",
+            "actualTransformationContext": "shell",
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": true,
+            "actualContextValid": true,
+            "expectedEffectiveTrustState": "SAFE",
+            "actualEffectiveTrustState": "SAFE",
+            "expectedFinding": false,
+            "actualFinding": false,
+            "passed": true
+          },
+          {
+            "file": "wrapped_html_exec_positive.js",
+            "normalizedFinding": {
+              "id": "execution-risk:wrapped_html_exec_positive:GR-001",
+              "axis": "execution-risk",
+              "rule": "GR-001",
+              "family": "injection-execution",
+              "type": "context-mismatch-execution",
+              "severity": "high",
+              "confidence": 1,
+              "finding": true,
+              "explanation": "A transformed value reaches an execution sink, but the transformation context does not match the sink context.",
+              "evidence": {
+                "file": "wrapped_html_exec_positive.js",
+                "sink": "exec",
+                "sinkKind": "shell",
+                "sinkContext": "shell",
+                "expression": null,
+                "variable": "clean"
+              },
+              "state": {
+                "trustState": "SAFE",
+                "transformation": "sanitized",
+                "sanitizer": "escapeHtml",
+                "transformationContext": "html",
+                "contextValid": false,
+                "effectiveTrustState": "UNSAFE",
+                "dangerousInContext": true,
+                "unsafeAtSink": true
+              },
+              "provenance": {
+                "source": "deterministic-benchmark",
+                "pipeline": [
+                  "GR-002",
+                  "GR-003",
+                  "GR-004",
+                  "GR-005",
+                  "GR-001"
+                ]
+              }
+            },
+            "expectedSink": "exec",
+            "actualSink": "exec",
+            "expectedSinkKind": "shell",
+            "actualSinkKind": "shell",
+            "expectedTrustState": "SAFE",
+            "actualTrustState": "SAFE",
+            "expectedTransformation": "sanitized",
+            "actualTransformation": "sanitized",
+            "expectedSanitizer": "escapeHtml",
+            "actualSanitizer": "escapeHtml",
+            "expectedTransformationContext": "html",
+            "actualTransformationContext": "html",
+            "expectedSinkContext": "shell",
+            "actualSinkContext": "shell",
+            "expectedContextValid": false,
+            "actualContextValid": false,
+            "expectedEffectiveTrustState": "UNSAFE",
+            "actualEffectiveTrustState": "UNSAFE",
+            "expectedFinding": true,
+            "actualFinding": true,
+            "passed": true
+          }
+        ]
+      }
+    }
+  ]
+}

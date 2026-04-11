@@ -1,0 +1,6 @@
+{
+  "axis": "sql-query",
+  "rule": "SQ-002",
+  "trust_state": "SAFE",
+  "finding": false
+}

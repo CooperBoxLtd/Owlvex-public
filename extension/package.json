@@ -111,7 +111,21 @@
     "package": "vsce package",
     "lint": "eslint src --ext ts",
     "test": "jest --coverage",
-    "corpus:test": "npm run compile && node ./out/frameworks/corpusRunner.js"
+    "corpus:test": "npm run compile && node ./out/frameworks/corpusRunner.js",
+    "benchmark:import": "node ../tools/owlvex-benchmark/import-report.mjs",
+    "benchmark:run:ssh": "node ../tools/owlvex-benchmark/run-ollama-ssh.mjs",
+    "benchmark:score": "node ../tools/owlvex-benchmark/score.mjs",
+    "benchmark:gr001": "node ../tools/owlvex-benchmark/engine/gr001/run-gr001-corpus.mjs",
+    "benchmark:gr002": "node ../tools/owlvex-benchmark/engine/gr002/run-gr002-corpus.mjs",
+    "benchmark:gr003": "node ../tools/owlvex-benchmark/engine/gr003/run-gr003-corpus.mjs",
+    "benchmark:gr004": "node ../tools/owlvex-benchmark/engine/gr004/run-gr004-corpus.mjs",
+    "benchmark:gr005": "node ../tools/owlvex-benchmark/engine/gr005/run-gr005-corpus.mjs",
+    "benchmark:integration": "node ../tools/owlvex-benchmark/engine/execution-risk-integration/run-execution-risk-integration.mjs",
+    "benchmark:deterministic": "node ../tools/owlvex-benchmark/run-deterministic.mjs",
+    "benchmark:status": "node ../tools/owlvex-benchmark/benchmark-status.mjs",
+    "benchmark:sq001": "node ../tools/owlvex-benchmark/engine/sq001/run-sq001-corpus.mjs",
+    "benchmark:sq002": "node ../tools/owlvex-benchmark/engine/sq002/run-sq002-corpus.mjs",
+    "benchmark:sq004": "node ../tools/owlvex-benchmark/engine/sq004/run-sq004-corpus.mjs"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",

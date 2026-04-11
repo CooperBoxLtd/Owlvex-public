@@ -1,0 +1,12 @@
+{
+  "rule": "GR-005",
+  "sink": "exec",
+  "trust_state": "UNSAFE",
+  "transformation": "none",
+  "sanitizer": null,
+  "transformation_context": null,
+  "sink_context": "shell",
+  "context_valid": true,
+  "effective_trust_state": "UNSAFE",
+  "finding": true
+}

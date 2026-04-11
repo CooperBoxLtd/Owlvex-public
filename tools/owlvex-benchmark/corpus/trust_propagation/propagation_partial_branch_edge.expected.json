@@ -1,0 +1,8 @@
+{
+  "rule": "GR-002",
+  "variable": "cmd",
+  "trust_state": "MIXED",
+  "finding": true,
+  "severity": "HIGH",
+  "notes": "Partial overwrite in only one branch leaves the final value mixed and unsafe at the sink."
+}
