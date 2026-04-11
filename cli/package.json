@@ -1,0 +1,17 @@
+{
+  "name": "owlvex",
+  "version": "0.1.0",
+  "description": "Deterministic security validation for modern codebases",
+  "type": "module",
+  "bin": {
+    "owlvex": "./owlvex.mjs"
+  },
+  "scripts": {
+    "scan": "node owlvex.mjs scan"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["security", "sast", "code-analysis", "owasp"],
+  "license": "MIT"
+}

@@ -1,16 +1,74 @@
-# Owlvex — AI Code Security Scanner
+# Owlvex — Deterministic Security Validation
 
-Owlvex is a VS Code extension that scans your code against OWASP, STRIDE, MITRE, CWE, Clean Code, NIST, PCI-DSS, and HIPAA using your own AI provider. Code never leaves your machine.
+> **Owlvex proves when code is unsafe. It doesn't guess.**
 
-## Pitch
+Owlvex is a deterministic security reasoning engine for JavaScript and TypeScript. It detects structural invariant violations — injection sinks, authorization gaps, isolation failures — with 100% confidence, no false positives, and no AI required for the core findings.
 
-Owlvex is building the developer-native layer for AI-powered application security. Instead of forcing teams into heavyweight security platforms or generic AI chat tools, Owlvex brings framework-aware vulnerability scanning directly into VS Code, using the customer's own model stack and keeping source code off Owlvex servers.
+It also runs as a VS Code extension that combines deterministic detections with AI-assisted coverage for patterns that can't be structurally proven.
 
-In one line:
+---
 
-**Owlvex gives software teams a developer-first AppSec product: AI-powered code security scanning inside VS Code, grounded in frameworks like OWASP and STRIDE, powered by the customer's own models.**
+## CLI Quickstart
 
-For fuller product documentation, see [docs/PRODUCT.md](docs/PRODUCT.md).
+```bash
+# Scan a directory
+node cli/owlvex.mjs scan ./src
+
+# Write a markdown report
+node cli/owlvex.mjs scan ./src --report security-report.md
+
+# Exit 1 if any deterministic findings are found (CI gate)
+node cli/owlvex.mjs scan ./src --fail-on deterministic
+
+# JSON output
+node cli/owlvex.mjs scan ./src --json
+```
+
+**No config. No API keys. No network calls.** The CLI runs entirely offline against your source.
+
+### What it detects
+
+| Rule | Finding | Confidence |
+|------|---------|------------|
+| `GR-001` | Command/shell injection via template literal | 100% |
+| `SQ-001` | SQL injection via template literal | 100% |
+| `SQ-005` | Ineffective sanitizer (HTML sanitizer before SQL sink) | 100% |
+| `AC-001` | Insecure Direct Object Reference (no ownership check) | 100% |
+| `AC-T001` | Multi-tenant isolation failure (tenantId not in query) | 100% |
+| `DP-001` | PII field passed to logger | 100% |
+| `SM-001` | `res.cookie()` missing `httpOnly: true` | 100% |
+| `SM-002` | Debug mode active without production guard | 100% |
+
+### Demo
+
+```
+owlvex scan tools/demo
+
+  ⚡ AC-001   HIGH      01-idor-unsafe.js:6
+             Insecure Direct Object Reference
+  ⚡ SM-002   MEDIUM    03-debug-unsafe.js:18
+             Debug Mode Active Without Production Guard
+  ⚡ AC-T001  CRITICAL  05-tenant-isolation-unsafe.js:9
+             Multi-Tenant Isolation Failure
+
+  3 deterministic findings  |  5 files scanned
+```
+
+### Prerequisites
+
+```bash
+cd extension && npm install && npm run compile
+```
+
+The CLI imports the compiled scanner from `extension/out/`. Run once after cloning.
+
+---
+
+## VS Code Extension
+
+Owlvex is also a VS Code extension that scans your code against OWASP, STRIDE, MITRE, CWE, Clean Code, NIST, PCI-DSS, and HIPAA using your own AI provider. Code never leaves your machine.
+
+For fuller product documentation, see [tools/owlvex-benchmark/product-map.md](tools/owlvex-benchmark/product-map.md).
 For the canonical security knowledge model, see [docs/KNOWLEDGE_MODEL.md](docs/KNOWLEDGE_MODEL.md).
 For the issue catalog growth plan, see [docs/ISSUE_EXPANSION_ROADMAP.md](docs/ISSUE_EXPANSION_ROADMAP.md).
 For the first curated rule pack, see [docs/data/issues/owlvex-issue-pack.v1.json](docs/data/issues/owlvex-issue-pack.v1.json).
