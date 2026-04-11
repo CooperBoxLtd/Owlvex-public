@@ -54,13 +54,26 @@ owlvex scan tools/demo
   3 deterministic findings  |  5 files scanned
 ```
 
-### Prerequisites
+### Install (global command)
 
 ```bash
-cd extension && npm install && npm run compile
+cd cli && npm install && npm run build && npm link
+owlvex scan .
 ```
 
-The CLI imports the compiled scanner from `extension/out/`. Run once after cloning.
+`npm run build` produces `cli/dist/owlvex.mjs` — a self-contained 38KB bundle with no runtime dependencies.
+
+### CI integration
+
+```yaml
+- name: Install Owlvex
+  run: npm install -g owlvex
+
+- name: Scan — fail on deterministic findings
+  run: owlvex scan . --fail-on deterministic
+```
+
+See [`.github/workflows/owlvex-example.yml`](.github/workflows/owlvex-example.yml) for the full workflow to copy into your repo.
 
 ---
 

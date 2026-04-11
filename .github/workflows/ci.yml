@@ -32,6 +32,34 @@ jobs:
         run: npm test
         working-directory: extension
 
+  owlvex-scan:
+    name: Owlvex security gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Build extension
+        run: npm ci && npm run compile
+        working-directory: extension
+
+      - name: Build Owlvex CLI
+        run: npm install && npm run build
+        working-directory: cli
+
+      - name: Scan — report deterministic findings
+        # Scans extension/src as an integration smoke test.
+        # Note: the scanner's own source contains pattern definitions that resemble
+        # the patterns it detects (meta-findings). In a real application codebase,
+        # add --fail-on deterministic to gate PRs on proven vulnerabilities.
+        run: node cli/dist/owlvex.mjs scan extension/src
+
   deterministic-gate:
     name: Deterministic benchmark gate
     runs-on: ubuntu-latest

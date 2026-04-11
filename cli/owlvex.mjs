@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * owlvex — deterministic security validation for modern codebases
  *
@@ -10,31 +9,20 @@
  *   owlvex scan <dir> --report report.md --fail-on deterministic
  */
 
-import { createRequire } from 'module';
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'fs';
-import { resolve, join, extname, relative, basename } from 'path';
-import { fileURLToPath } from 'url';
+import { resolve, join, extname, relative } from 'path';
 import { buildMarkdownReport } from './report.mjs';
 
-const require = createRequire(import.meta.url);
-
-// ── Locate compiled scanner ────────────────────────────────────────────────
-
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const SCANNER_PATH = resolve(__dirname, '../extension/out/scanner/deterministicScanner.js');
-
-let DeterministicScanner;
-try {
-    ({ DeterministicScanner } = require(SCANNER_PATH));
-} catch (err) {
-    console.error(`\nowlvex: cannot load scanner from ${SCANNER_PATH}`);
-    console.error(`  Run: cd extension && npm run compile\n`);
-    process.exit(2);
-}
+// ── Load scanner ───────────────────────────────────────────────────────────
+// Static default import so esbuild can follow the dependency chain and
+// inline DeterministicScanner into the bundle. The CJS module's exports
+// land on the default export object in ESM.
+import _scanner from './scanner.cjs';
+const { DeterministicScanner } = _scanner;
 
 // ── File walking ───────────────────────────────────────────────────────────
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', '.next', '.nuxt']);
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', '.next', '.nuxt', 'owlvex-dist']);
 const SCAN_EXTS = new Set(['.js', '.mjs', '.cjs', '.ts', '.tsx', '.jsx']);
 const TEST_RE = /\.(test|spec)\.[jt]sx?$|__tests__/;
 

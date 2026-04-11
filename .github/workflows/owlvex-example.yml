@@ -1,0 +1,36 @@
+# owlvex-example.yml — copy this into your own repo to gate PRs on
+# deterministic security findings.
+#
+# Usage:
+#   1. Copy this file to your repo's .github/workflows/
+#   2. Adjust the scan path (default: .)
+#   3. PRs will fail if Owlvex finds a proven vulnerability
+#
+# Owlvex only reports findings it can prove structurally — 100% confidence,
+# zero false positives for the covered rules.
+
+name: Owlvex security gate
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+jobs:
+  owlvex:
+    name: Deterministic security scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Owlvex
+        run: npm install -g owlvex   # or: npx owlvex@latest
+
+      - name: Scan — fail on deterministic findings
+        run: owlvex scan . --fail-on deterministic

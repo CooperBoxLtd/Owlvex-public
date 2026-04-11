@@ -4,14 +4,21 @@
   "description": "Deterministic security validation for modern codebases",
   "type": "module",
   "bin": {
-    "owlvex": "./owlvex.mjs"
+    "owlvex": "./dist/owlvex.mjs"
   },
+  "files": [
+    "dist/owlvex.mjs"
+  ],
   "scripts": {
-    "scan": "node owlvex.mjs scan"
+    "build": "node build.mjs",
+    "prepublishOnly": "npm run build"
   },
   "engines": {
     "node": ">=18.0.0"
   },
   "keywords": ["security", "sast", "code-analysis", "owasp"],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "esbuild": "^0.28.0"
+  }
 }
