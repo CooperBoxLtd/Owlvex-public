@@ -88,13 +88,24 @@ class FindingItem extends vscode.TreeItem {
         this.description = kind === 'finding' ? finding?.ruleCode : undefined;
 
         if (kind === 'finding' && finding) {
+            const isDeterministic = finding.provenance === 'deterministic';
             this.iconPath = new vscode.ThemeIcon(
-                finding.severity === 'CRITICAL' || finding.severity === 'HIGH'
+                isDeterministic
+                    ? 'shield'
+                    : finding.severity === 'CRITICAL' || finding.severity === 'HIGH'
                     ? 'error'
                     : finding.severity === 'MEDIUM'
                     ? 'warning'
                     : 'info',
             );
+            // Description: provenance badge + rule code
+            this.description = isDeterministic
+                ? `⚡ ${finding.ruleCode}`
+                : finding.ruleCode;
+            // Tooltip: include provenance context
+            this.tooltip = isDeterministic
+                ? `[Deterministic] ${finding.explanation}`
+                : finding.explanation;
             // Navigate to line on click
             this.command = {
                 command: 'owlvex.revealLine',

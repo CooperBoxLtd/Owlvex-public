@@ -18,6 +18,8 @@ export interface Finding {
     threat: string;
     fix: string;
     confidence: number;
+    /** How this finding was produced. Deterministic findings have confidence = 1. */
+    provenance?: 'deterministic' | 'ai';
     canonicalId?: string;
     canonicalTitle?: string;
     canonicalCategory?: string;
@@ -125,7 +127,7 @@ export class ScanEngine {
         // Run deterministic scanner first — high-confidence, zero-cost findings.
         const deterministicFindings = this.deterministicScanner
             .scan(code, document.languageId)
-            .map(f => this._resolveCanonicalFinding(f as Finding));
+            .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding));
 
         const start = Date.now();
 
@@ -276,6 +278,7 @@ export class ScanEngine {
                     threat: f.threat ?? '',
                     fix: f.fix ?? '',
                     confidence: f.confidence ?? 0.8,
+                    provenance: 'ai' as const,
                     canonicalId: f.issue_id,
                     stride: normalizeStringList(f.stride),
                     mappings: normalizeMappings(f.mappings),
