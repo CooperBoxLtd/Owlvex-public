@@ -119,6 +119,8 @@ tools/
 
 The current architecture and implementation contract are defined in [docs/IMPLEMENTATION_DESIGN.md](docs/IMPLEMENTATION_DESIGN.md).
 
+The concrete implementation backlog derived from that design lives in [docs/IMPLEMENTATION_BACKLOG.md](docs/IMPLEMENTATION_BACKLOG.md).
+
 That document is the source of truth for:
 
 - local-vs-backend execution boundaries

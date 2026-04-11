@@ -2,499 +2,184 @@
 
 ## Overview
 
-Owlvex is a developer-first, AI-powered code security scanner built around a simple idea:
+Owlvex is a developer-first security product that combines:
 
-- keep developers inside their editor
-- keep source code on the developer side
-- use structured security frameworks to guide model reasoning
-- turn findings into practical remediation and reports
+- local deterministic code analysis (structural invariant detection, 100% confidence, no false positives)
+- optional AI-assisted reasoning for patterns that can't be proven structurally
+- backend-served grounded data and rule intelligence
+- structured reporting with explicit provenance per finding
 
-Owlvex consists of two main parts:
+The product preserves two properties simultaneously:
 
-- a VS Code extension that handles scanning, chat, diagnostics, comparisons, and reporting
-- a backend service that validates licences, assembles framework-aware prompts, and records scan metadata without receiving source code
+1. customer source code stays under customer control
+2. Owlvex retains meaningful control over detection intelligence and product behavior
 
-Owlvex also includes a benchmark-backed deterministic engine and evaluation toolchain under `tools/owlvex-benchmark/`.
+The implementation design and architectural source of truth live in [IMPLEMENTATION_DESIGN.md](IMPLEMENTATION_DESIGN.md).
 
-The implementation design and architectural source of truth live in [docs/IMPLEMENTATION_DESIGN.md](IMPLEMENTATION_DESIGN.md).
+The delivery backlog for that design lives in [IMPLEMENTATION_BACKLOG.md](IMPLEMENTATION_BACKLOG.md).
+
+---
 
 ## Product Pitch
 
-Owlvex is building the developer-native layer for AI-powered application security. The wedge is simple: developers already live in the editor, security reviews still arrive too late, and most existing options sit at one of two extremes:
+Owlvex gives software teams a developer-first AppSec product: deterministic security validation plus AI-assisted review, inside VS Code, using the customer's own models, keeping source code off Owlvex servers.
 
-- heavy enterprise security tooling that developers tolerate rather than love
-- generic AI coding tools that are not structured enough for serious security workflows
+The positioning in one line:
 
-Owlvex sits between those worlds. It gives teams framework-aware security scanning directly inside VS Code, powered by the model provider they already trust, while keeping source code off Owlvex backend services.
-
-Short version:
-
-**Owlvex is a developer-first AppSec product that uses AI to find, explain, and report vulnerabilities inside VS Code, using the customer's own models and framework-aware security guidance.**
+> **Owlvex proves when code is unsafe. It doesn't guess.**
 
 Investor-style framing:
 
 - The problem: code ships faster than traditional security review can keep up.
 - The wedge: a security scanner embedded directly in the developer workflow.
-- The differentiation: bring-your-own-model architecture plus framework-aware reporting.
-- The expansion path: scan comparison, team policy, CI/CD, compliance packs, and multi-provider security review.
+- The differentiation: deterministic-first reasoning, bring-your-own-model, framework-aware reporting.
+- The expansion path: scan comparison, team policy, CI/CD, compliance packs, multi-provider review.
+
+---
 
 ## Core Value Proposition
 
-Owlvex is designed around four promises:
+1. **Deterministic-first findings** — Owlvex runs structural invariant checks locally before AI is involved. Findings marked `⚡` are proven violations, 100% confidence, no validation required before escalation.
 
-1. Framework-aware scanning  
-Owlvex does not run as a generic "ask an LLM about code" experience. It grounds scans in selected security frameworks and severity thresholds.
+2. **AI-assisted coverage** — For patterns that can't be structurally proven, Owlvex uses the customer-selected AI provider. AI findings carry explicit confidence scores and are surfaced separately from deterministic findings.
 
-2. Bring your own model  
-Teams can use Ollama, OpenAI, Anthropic, Azure AI Foundry, Gemini, Groq, Mistral, or compatible custom endpoints.
+3. **Bring your own model** — OpenAI, Anthropic, Azure AI Foundry, Gemini, Groq, Mistral, Ollama, or any compatible custom endpoint.
 
-3. Source code stays on the client side  
-The backend builds prompts and records metadata, but scanned code is sent only to the selected AI provider, not to Owlvex backend services.
+4. **Source code stays on the client** — The backend builds prompts and records metadata. Code is sent only to the customer-selected AI provider, never to Owlvex backend services.
 
-4. Developer-friendly workflows  
-Owlvex supports file scanning, folder scanning, comparison, in-editor findings, chat assistance, and report generation from the same VS Code experience.
-
-## Why Now
-
-Several trends make this category timely:
-
-- AI models are now good enough to reason about code security in a useful way
-- teams increasingly want model flexibility instead of hard vendor lock-in
-- developer tooling is moving earlier in the software lifecycle
-- security buyers still need structured outputs, not just conversational suggestions
-
-Owlvex is positioned to benefit from all four. It does not ask teams to choose between AI convenience and security structure.
+---
 
 ## Who It Is For
 
-Owlvex is intended for:
+- Individual developers who want faster security feedback while coding
+- Engineering teams that want framework-guided review without a heavy platform
+- Security-minded teams that want local or customer-controlled model execution
+- Organisations evaluating AI-assisted AppSec workflows before adopting full SAST programs
 
-- individual developers who want faster security feedback while coding
-- engineering teams that want framework-guided review without introducing a heavy platform
-- security-minded teams that want local or customer-controlled model execution
-- organisations evaluating AI-assisted AppSec workflows before adopting larger SAST programs
+---
 
 ## Product Components
 
 ### VS Code Extension
 
-The extension is the primary user experience. It provides:
+The execution plane. Provides:
 
-- local deterministic scanning for covered structural invariants
-- file scanning
-- folder scanning
-- findings sidebar
-- diagnostics in the editor
+- local deterministic scanning (8 rules, 3 reasoning axes, 4 conditional rules)
+- file and folder scanning
+- findings sidebar with `⚡` / `🤖` provenance distinction
+- in-editor diagnostics
 - AI chat for advisory guidance
-- report creation
+- report creation with Attack Surface Assessment
 - scan comparison
-- provider/model switching
+- provider and model switching
 
-The extension lives in `extension/`.
+Lives in `extension/`.
 
 ### Backend API
 
-The backend handles:
+The control plane. Handles:
 
-- licence validation
-- prompt assembly
-- framework and template enforcement
-- metadata recording
+- licence validation and plan enforcement
+- prompt assembly and framework template delivery
+- issue catalog and rule metadata
+- scan metadata recording (no source code)
 - comparison support
-- billing and plan enforcement
+- billing
 
-The backend is a control plane, not a scan-execution plane. It should not require raw source code in order to perform its role.
-
-The backend lives in `backend/`.
-
-### Database
-
-The database stores:
-
-- framework definitions
-- prompt templates
-- rule metadata
-- licence records
-- scan history metadata
-- comparison metadata
-
-The schema and seed data live under `postgres/init/`.
+Must not require raw source code in order to perform its role. Lives in `backend/`.
 
 ### Deterministic Benchmark Tool
 
-The benchmark tool lives under `tools/owlvex-benchmark/` and provides:
+Lives under `tools/owlvex-benchmark/`. Provides:
 
-- deterministic corpus suites
-- multi-axis release gates
-- normalized finding schemas
+- corpus fixtures with expected outputs for every covered rule
+- per-layer and integration evaluators for three reasoning axes
+- conditional rules axis (SM-002 covered; AC-T001, DP-001, SM-001 pending — see backlog)
+- aggregate gate: 19 suites, 82 cases, all passing
 - confidence and status reporting
 
-It is the mechanism that defines what Owlvex can claim with confidence for covered deterministic behaviors.
+This is the mechanism that defines what Owlvex can claim with certainty. No deterministic rule ships without benchmark coverage.
+
+---
 
 ## How Owlvex Works
 
 ### Scan Flow
 
-At a high level, the scan flow works like this:
-
-1. The extension reads local settings such as provider, model, frameworks, and severity threshold.
-2. The extension validates the current licence with the Owlvex backend.
-3. The extension requests an assembled system prompt from the backend.
-4. The extension sends the source code plus the assembled prompt to the selected AI provider.
-5. The extension parses the provider's structured JSON findings.
-6. The extension merges AI findings with local deterministic findings where applicable.
-7. The extension applies diagnostics, updates the sidebar, and records scan metadata with the backend.
+1. Extension reads local settings (provider, model, frameworks, severity threshold).
+2. Extension validates licence with the Owlvex backend.
+3. Extension runs the deterministic scanner locally — findings are produced before any AI call.
+4. Extension requests an assembled system prompt from the backend.
+5. Extension sends source code plus prompt directly to the selected AI provider.
+6. Extension merges AI findings with deterministic findings.
+7. Extension applies diagnostics, updates the sidebar, records scan metadata with the backend.
 
 ### Privacy Model
 
-Owlvex is intentionally split so that:
+- Source code is processed on the client side and sent directly to the customer-selected AI provider.
+- The Owlvex backend sees metadata only: file hash, language, provider, model, frameworks, score, finding counts, duration.
+- Deterministic analysis runs locally in the extension, with no backend involvement.
 
-- source code is processed on the client/provider side
-- the backend sees metadata, not the code body
-
-For covered deterministic rules, source code is analyzed locally in the extension before any AI-backed result is merged in.
-
-Recorded metadata typically includes:
-
-- file hash
-- filename
-- language
-- provider
-- model
-- frameworks
-- score
-- finding counts
-- duration
+---
 
 ## Framework-Aware Scanning
 
-Owlvex uses frameworks as first-class scan inputs, not as branding labels only.
+Framework selection influences prompt construction, severity filtering, and report structure. Supported frameworks: OWASP, STRIDE, MITRE ATT&CK, CWE, Clean Code, NIST, PCI-DSS, HIPAA.
 
-Examples include:
+The longer-term direction is a canonical security knowledge model — one internal issue schema with one mapping layer to all external frameworks. Reference: [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md) and [ISSUE_EXPANSION_ROADMAP.md](ISSUE_EXPANSION_ROADMAP.md).
 
-- OWASP
-- STRIDE
-- MITRE ATT&CK
-- CWE
-- Clean Code
-- NIST
-- PCI-DSS
-- HIPAA
+---
 
-The framework selection influences:
+## Supported AI Providers
 
-- prompt construction
-- rule hints loaded by the backend
-- severity filtering
-- report structure
-- final interpretation of findings
+OpenAI, Anthropic, Azure AI Foundry, Ollama, Mistral, Google Gemini, Groq, and custom OpenAI-compatible endpoints. One active provider per scan. Multi-provider concurrent scanning is a future capability.
 
-Owlvex currently defaults to:
-
-- `OWASP`
-- `STRIDE`
-
-Owlvex should evolve from “framework selection” toward a canonical security knowledge model:
-
-- one internal issue schema
-- one curated framework catalog
-- one mapping layer from canonical issues to OWASP, CWE, STRIDE, ATT&CK, CAPEC, and NIST
-
-Reference material:
-
-- [docs/KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md)
-- [docs/ISSUE_EXPANSION_ROADMAP.md](ISSUE_EXPANSION_ROADMAP.md)
-- [docs/schemas/issue.schema.v1.json](schemas/issue.schema.v1.json)
-- [docs/schemas/framework-catalog.schema.v1.json](schemas/framework-catalog.schema.v1.json)
-- [docs/schemas/issue-mapping.schema.v1.json](schemas/issue-mapping.schema.v1.json)
-- [docs/data/stride/owlvex.stride.2026.1.json](data/stride/owlvex.stride.2026.1.json)
-- [docs/data/issues/owlvex-issue-pack.v1.json](data/issues/owlvex-issue-pack.v1.json)
-- [docs/data/issues/owlvex-issue-mappings.v1.json](data/issues/owlvex-issue-mappings.v1.json)
-
-## Supported Providers
-
-Owlvex currently supports one active provider at a time, chosen in the extension UI or settings.
-
-Supported providers:
-
-- OpenAI
-- Anthropic
-- Azure AI Foundry
-- Ollama
-- Mistral
-- Google Gemini
-- Groq
-- Custom OpenAI-compatible endpoints
-
-This means Owlvex is multi-provider capable, but not yet multi-provider concurrent in a single scan.
+---
 
 ## Main User Workflows
 
-### 1. Scan a File
+**Scan a file** — structured scan with deterministic + AI findings, score, and remediation.
 
-The user selects a file explicitly and runs a scan. Owlvex:
+**Scan a folder** — recursive scan across supported file types, aggregated results.
 
-- opens the file
-- sends it through the framework-guided scan path
-- returns findings, score, and remediation
+**Create a report** — Attack Surface Assessment paragraph, Deterministic Detections panel, per-finding narratives with provenance labels.
 
-### 2. Scan a Folder
+**Compare scans** — new findings, resolved findings, score delta between two stored scans.
 
-The user selects a folder to scan recursively. Owlvex:
+**Advisory chat** — exploratory guidance; clearly distinguished from formal scan output.
 
-- finds supported source files
-- skips common excluded directories
-- scans each supported file
-- aggregates results
+---
 
-### 3. Create a Report
+## Demo Assets
 
-The user can create a report from:
+The simplest demo path uses `tools/demo/`:
 
-- the last scan
-- a newly selected file
-- a newly selected folder
+- `01-idor-unsafe.js` → `⚡ AC-001 HIGH` Insecure Direct Object Reference
+- `02-idor-safe.js` → no findings
+- `03-debug-unsafe.js` → `⚡ SM-002 MEDIUM` Debug Mode Without Production Guard
+- `04-debug-safe.js` → no findings
+- `05-tenant-isolation-unsafe.js` → `⚡ AC-T001 CRITICAL` Multi-Tenant Isolation Failure
 
-Reports include:
+Demo script: [tools/demo/DEMO-SCRIPT.md](../tools/demo/DEMO-SCRIPT.md)
 
-- summary
-- severity breakdown
-- framework coverage
-- riskiest files
-- top findings
-- detailed findings grouped by framework
-- code snippets involved in the reasoning
+---
 
-### 4. Compare Scans
+## Positioning
 
-The user can compare two stored scans to see:
-
-- new findings
-- resolved findings
-- score change
-
-### 5. Advisory Chat
-
-Owlvex also provides an assistant-style chat view. Chat is meant for:
-
-- guidance
-- triage
-- explanation
-
-## Demo And Manual Test Assets
-
-Owlvex includes a small set of test assets to make the product loop easy to demonstrate without needing a large customer repository.
-
-### Local single-file demo assets
-
-The `tmp/` directory in this repo contains a fast before/after path:
-
-- `tmp/owlvex-manual-test.js`
-- `tmp/owlvex-manual-test.safe.js`
-- `tmp/owlvex-manual-test.current.js`
-- `tmp/use-risky-test.ps1`
-- `tmp/use-safe-test.ps1`
-
-This path is best for:
-
-- scanner smoke testing
-- report generation checks
-- canonical comparison demos using one file before and after a change
-
-### Probe folder assets
-
-For benchmarked repo-style scans, Owlvex now uses assets inside this repository:
-
-- `corpus/` for the family-aware golden corpus
-- `tools/owlvex-benchmark/corpus/` for deterministic rule and axis coverage
-- `tools/demo/` for focused product demos when present
-
-This path is best for:
-
-- deterministic gate verification
-- canonical-first reports
-- comparison screens with measurable improvement output
-
-### Recommended Demo Loop
-
-The simplest Owlvex demo loop is:
-
-1. Scan a risky file or probe folder.
-2. Create a report.
-3. Fix or swap to a safer version.
-4. Scan again.
-5. Compare scans.
-
-That flow shows the full Owlvex product loop:
-
-`detect -> normalize -> report -> compare -> explain`
-- remediation help
-
-Chat is advisory by default. Scan-backed actions remain separate so users can distinguish:
-
-- assistant advice
-- formal scan output
-
-## User Experience Principles
-
-Owlvex should feel:
-
-- clear about what is being scanned
-- clear about whether output is advisory or scan-backed
-- persistent enough to support follow-up actions
-- fast enough to test on small probe sets
-- safe enough not to overstate certainty
-
-Important UX distinctions:
-
-- scanning is a structured workflow
-- chat is exploratory and advisory
-- reports should reuse existing scan memory where possible instead of forcing rescans
-
-## Report Philosophy
-
-Owlvex reports are intended to be more than generic summaries.
-
-A useful Owlvex report should include:
-
-- severity
-- score and score impact
-- framework mapping
-- line references
-- reasoning
-- threat
-- remediation
-- code snippets involved in the finding
-
-This makes reports usable for:
-
-- engineering follow-up
-- security review
-- demonstrations
-- evaluation against framework-aligned expectations
-
-## Product Positioning
-
-Owlvex sits between:
-
-- generic "chat with your code" experiences
-- heavyweight enterprise SAST platforms
-
-It is best positioned as:
-
-- lightweight to adopt
-- strong on developer workflow
-- flexible on model/provider choice
-- privacy-conscious in architecture
-- structured enough to support security use cases beyond casual prompting
-
-More explicitly:
+Owlvex sits between generic "chat with your code" experiences and heavyweight enterprise SAST platforms.
 
 - Not just an IDE chatbot
-- Not just another rules-only scanner
+- Not just a pattern-matching rules scanner
 - Not a full legacy AppSec suite on day one
-- A developer-native security product with room to expand upward into platform features
+- A developer-native security product with a clear expansion path into team reporting, policy, and compliance
 
-## Market Narrative
+The deterministic engine is the differentiation. It turns the product from "a scanner that finds things" into "a scanner that proves things" — a fundamentally different claim.
 
-Owlvex can be explained as a modern AppSec wedge:
-
-1. Start with the individual developer workflow.
-2. Win on speed, clarity, and low-friction adoption.
-3. Expand into team reporting, comparison, policy, and compliance.
-4. Become the intelligence layer between code, security standards, and model infrastructure.
-
-That is what makes the product more interesting than a single VS Code feature. The extension is the entry point; the broader product is security orchestration around model-assisted review.
-
-## Strengths
-
-- Works inside VS Code
-- Uses customer-selected AI providers
-- Keeps code off the Owlvex backend
-- Uses framework-aware prompt assembly
-- Produces findings, reports, and comparisons
-- Can run against local models like Ollama
+---
 
 ## Current Limitations
 
-- Only one active provider/model is used for a scan at a time
-- Performance depends heavily on the chosen model
-- AI scan quality is probabilistic outside the covered deterministic rules
-- Some orchestration and UI flows still need deeper test coverage
+- One active AI provider per scan (multi-provider concurrent scanning not yet implemented)
+- AI scan quality is probabilistic; only deterministic findings carry 100% confidence
+- Conditional rules AC-T001, DP-001, SM-001 are live in the scanner but lack benchmark coverage (see backlog Workstream 4)
 - Large folder scans can be slow on smaller local models
-
-## Golden Corpus And Benchmarking
-
-Owlvex now includes a small but meaningful family-aware benchmark set in `corpus/`.
-
-This is not just a test fixture. It is the first internal benchmark for the Owlvex security knowledge layer:
-
-- positive cases verify canonical issue resolution
-- negative cases verify false-positive resistance
-- family labels verify that Owlvex understands the correct risk domain even when issue wording varies
-
-The first corpus version contains 20 files across:
-
-- Secrets & Credential Exposure
-- Injection & Execution
-- Identity & Auth Failures
-- Access Control & Authorization
-- Data Protection & Privacy
-- Cryptography & Randomness
-
-This gives Owlvex a practical baseline for:
-
-- resolver tuning
-- prompt tuning
-- family-level quality measurement
-- future provider comparison work
-
-In addition, `tools/owlvex-benchmark/` now provides deterministic multi-axis benchmark gates for:
-
-- execution risk
-- SQL query safety
-- access control
-- selected conditional rules
-
-The next planned catalog growth is documented in [docs/ISSUE_EXPANSION_ROADMAP.md](ISSUE_EXPANSION_ROADMAP.md).
-
-## Security Model Summary
-
-From a product perspective:
-
-- Owlvex reduces backend code exposure by keeping source code off Owlvex servers
-- deterministic structural analysis can run locally in the extension
-- Owlvex still depends on the trust model of the chosen AI provider
-- malformed model output should fail scans rather than quietly passing
-- reports and comparisons should present scan-backed output clearly
-
-## Recommended Messaging
-
-### Homepage / README Short Copy
-
-Owlvex is a developer-first AppSec product that brings AI-powered, framework-aware code security scanning into VS Code using your own model stack.
-
-### Slightly Longer Copy
-
-Owlvex helps software teams catch vulnerabilities earlier by embedding AI-powered security review directly into the developer workflow. It combines framework-aware prompt assembly, bring-your-own-model flexibility, and structured reporting so teams can generate findings, comparisons, and reports without routing source code through Owlvex servers.
-
-### Internal Positioning
-
-Owlvex is not just "chat with an LLM about code." It is a developer-native security product designed to become the intelligent layer between code review, security frameworks, and model infrastructure.
-
-## Suggested Next Product Improvements
-
-1. Add orchestration tests for the extension command layer and chat action flows.
-2. Add explicit pre-flight checks for provider availability before starting scans.
-3. Add multi-provider comparison mode for the same file or folder.
-4. Add stronger report templates for engineering, AppSec, and executive audiences.
-5. Add clearer latency/progress feedback for slow local models.
-
-## Repository Map
-
-- `README.md`: setup and operational documentation
-- `docs/PRODUCT.md`: product positioning and product documentation
-- `extension/`: VS Code extension
-- `backend/`: FastAPI backend
-- `postgres/`: schema and seed data
-- `tmp/`: local test/probe assets used during development

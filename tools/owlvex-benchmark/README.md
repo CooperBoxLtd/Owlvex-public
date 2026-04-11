@@ -2,6 +2,11 @@
 
 Dedicated home for deterministic engine evaluation inside the CodeScanner repo.
 
+For the broader build contract this benchmark supports, see:
+
+- [IMPLEMENTATION_DESIGN.md](D:/Dev/repos/CodeScanner/docs/IMPLEMENTATION_DESIGN.md)
+- [IMPLEMENTATION_BACKLOG.md](D:/Dev/repos/CodeScanner/docs/IMPLEMENTATION_BACKLOG.md)
+
 The benchmark tool answers one question:
 
 > **Is this axis's structural reasoning correct across all covered cases?**

@@ -1,5 +1,7 @@
 # Guardrail Coverage Plan (v1)
 
+> **Historical design document.** Coverage targets defined here were for the guardrail architecture, which was superseded by the conditional rules approach. Active benchmark coverage is tracked in `run-deterministic.mjs` and `benchmark-status.mjs`. This document is retained for design history, not as active guidance.
+
 This document defines the required corpus coverage for each Guardrails v1 rule.
 
 Purpose:

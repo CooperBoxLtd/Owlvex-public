@@ -1,5 +1,7 @@
 # Owlvex Guardrails v1 Specification
 
+> **Historical design document.** This describes an early architecture for a post-processing guardrail layer. The active implementation uses the conditional rules approach instead (see `extension/src/scanner/conditionalRule.ts` and `deterministicScanner.ts`). This document is retained for design history, not as active guidance.
+
 ## Purpose
 
 Owlvex Guardrails v1 defines a deterministic post-processing layer that evaluates normalized LLM findings against code context and known execution semantics before findings are reported.
