@@ -2,7 +2,7 @@
 
 This document explains how to interpret benchmark artifacts as release evidence for Owlvex.
 
-It focuses on the deterministic execution-risk axis first, because that is the most complete subsystem in the benchmark tool today.
+It now applies to the full deterministic benchmark gate, not only the original execution-risk axis.
 
 ## Purpose
 
@@ -15,12 +15,13 @@ Release confidence asks a second question:
 
 ## Current Sources Of Confidence
 
-For the execution-risk axis, confidence currently comes from:
+Confidence currently comes from:
 
 - per-layer deterministic suites
-- cross-layer integration suite
+- per-axis integration suites
 - aggregate deterministic gate
 - persistent run history under `tools/owlvex-benchmark/runs/deterministic/`
+- live extension integration of deterministic findings
 
 ## Primary Artifact
 
@@ -68,37 +69,37 @@ Example fields in `latest.json`:
 
 Recommended interpretation:
 
-- `passed: true` means the deterministic execution-risk gate is green
+- `passed: true` means the full deterministic benchmark gate is green
 - `passedSuites === totalSuites` means no deterministic layer or integration suite regressed
 - `passedCases === totalCases` means no covered case regressed
 - `failedSuite !== null` means the implementation is not release-ready for the benchmarked contract
 
 ## Current Confidence Level
 
-Current confidence for the execution-risk axis should be treated as:
+Current confidence should be treated as:
 
-- `High` for the covered execution-risk contract
-- `Not yet sufficient` for the overall product
+- `High` for the covered deterministic axes
+- `Meaningful but not exhaustive` for the overall product
 
 Why:
 
-- the axis is layered and benchmark-backed
-- integration coverage exists
+- three deterministic axes are benchmarked and green
+- integration coverage exists per axis
 - persistent run history now exists
-- but only one reasoning axis is complete
-- and overall product coverage still extends beyond execution risk
+- deterministic findings are integrated into the live extension path
+- but overall product coverage still extends beyond the currently benchmarked deterministic behaviors
 
 ## Suggested Release Language
 
 When `latest.json` is fully green, the appropriate claim is:
 
-`The deterministic execution-risk benchmark is passing for all covered suites and cases.`
+`The deterministic benchmark is passing for all covered suites and cases.`
 
 Avoid claiming:
 
 - full product security coverage
 - complete scanner correctness
-- release certification across non-benchmarked axes
+- release certification across non-benchmarked behaviors
 
 ## When Confidence Should Increase
 
@@ -108,6 +109,7 @@ Confidence should be increased only when one or more of these happen:
 - more reasoning axes reach the same level of deterministic maturity
 - run history shows stability over time
 - deterministic outputs and report outputs fully align
+- conditional rules implemented in the live scanner also gain benchmark coverage
 
 ## When Confidence Should Decrease
 
@@ -116,17 +118,17 @@ Confidence should be reduced when:
 - benchmark semantics change without corresponding corpus updates
 - passing suites drop in count
 - total covered cases shrink
-- invariants in `execution-risk-axis.md` are violated
+- invariants in axis contracts are violated
 - new unbenchmarked logic is introduced into a deterministic layer
 
 ## Practical Release Rule
 
-For the current execution-risk axis, treat release confidence as acceptable only when:
+For the currently covered deterministic product surface, treat release confidence as acceptable only when:
 
 - `npm run benchmark:deterministic` passes
 - `latest.json` shows all suites passing
 - `latest.json` shows all cases passing
-- no unreviewed changes violate the execution-risk contract
+- no unreviewed changes violate the relevant axis or conditional-rule contracts
 
 You can operationalize this check with:
 
@@ -136,6 +138,6 @@ npm run benchmark:status
 
 ## Bottom Line
 
-The benchmark is now strong enough to support disciplined release decisions for the covered execution-risk axis.
+The benchmark is now strong enough to support disciplined release decisions for the covered deterministic behaviors in Owlvex.
 
-It is not yet the final confidence story for all of Owlvex, but it is already a real and usable one.
+It is not the final confidence story for every product behavior, but it is already a real release signal, not just a test harness.

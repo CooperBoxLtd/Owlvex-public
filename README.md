@@ -115,6 +115,17 @@ tools/
   demo/               Demo fixtures and script
 ```
 
+## Build Direction
+
+The current architecture and implementation contract are defined in [docs/IMPLEMENTATION_DESIGN.md](docs/IMPLEMENTATION_DESIGN.md).
+
+That document is the source of truth for:
+
+- local-vs-backend execution boundaries
+- what Owlvex backend is allowed to do
+- how deterministic and AI findings must coexist
+- how future work should be implemented without breaking the product model
+
 ---
 
 ## Development

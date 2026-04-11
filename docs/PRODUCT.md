@@ -14,6 +14,10 @@ Owlvex consists of two main parts:
 - a VS Code extension that handles scanning, chat, diagnostics, comparisons, and reporting
 - a backend service that validates licences, assembles framework-aware prompts, and records scan metadata without receiving source code
 
+Owlvex also includes a benchmark-backed deterministic engine and evaluation toolchain under `tools/owlvex-benchmark/`.
+
+The implementation design and architectural source of truth live in [docs/IMPLEMENTATION_DESIGN.md](IMPLEMENTATION_DESIGN.md).
+
 ## Product Pitch
 
 Owlvex is building the developer-native layer for AI-powered application security. The wedge is simple: developers already live in the editor, security reviews still arrive too late, and most existing options sit at one of two extremes:
@@ -76,6 +80,7 @@ Owlvex is intended for:
 
 The extension is the primary user experience. It provides:
 
+- local deterministic scanning for covered structural invariants
 - file scanning
 - folder scanning
 - findings sidebar
@@ -98,6 +103,8 @@ The backend handles:
 - comparison support
 - billing and plan enforcement
 
+The backend is a control plane, not a scan-execution plane. It should not require raw source code in order to perform its role.
+
 The backend lives in `backend/`.
 
 ### Database
@@ -113,6 +120,17 @@ The database stores:
 
 The schema and seed data live under `postgres/init/`.
 
+### Deterministic Benchmark Tool
+
+The benchmark tool lives under `tools/owlvex-benchmark/` and provides:
+
+- deterministic corpus suites
+- multi-axis release gates
+- normalized finding schemas
+- confidence and status reporting
+
+It is the mechanism that defines what Owlvex can claim with confidence for covered deterministic behaviors.
+
 ## How Owlvex Works
 
 ### Scan Flow
@@ -124,7 +142,8 @@ At a high level, the scan flow works like this:
 3. The extension requests an assembled system prompt from the backend.
 4. The extension sends the source code plus the assembled prompt to the selected AI provider.
 5. The extension parses the provider's structured JSON findings.
-6. The extension applies diagnostics, updates the sidebar, and records scan metadata with the backend.
+6. The extension merges AI findings with local deterministic findings where applicable.
+7. The extension applies diagnostics, updates the sidebar, and records scan metadata with the backend.
 
 ### Privacy Model
 
@@ -132,6 +151,8 @@ Owlvex is intentionally split so that:
 
 - source code is processed on the client/provider side
 - the backend sees metadata, not the code body
+
+For covered deterministic rules, source code is analyzed locally in the extension before any AI-backed result is merged in.
 
 Recorded metadata typically includes:
 
@@ -282,16 +303,15 @@ This path is best for:
 
 ### Probe folder assets
 
-For a small repo-style scan, Owlvex also uses the probe folder in the sample app:
+For benchmarked repo-style scans, Owlvex now uses assets inside this repository:
 
-- `D:\Dev\repos\Morse App\src\probes\owlvex-probe-hardcoded-secret.js`
-- `D:\Dev\repos\Morse App\src\probes\owlvex-probe-command-injection.js`
-- `D:\Dev\repos\Morse App\src\probes\owlvex-probe-sql-injection.js`
-- `D:\Dev\repos\Morse App\src\probes\owlvex-probe-safe-baseline.js`
+- `corpus/` for the family-aware golden corpus
+- `tools/owlvex-benchmark/corpus/` for deterministic rule and axis coverage
+- `tools/demo/` for focused product demos when present
 
 This path is best for:
 
-- folder scans
+- deterministic gate verification
 - canonical-first reports
 - comparison screens with measurable improvement output
 
@@ -399,7 +419,7 @@ That is what makes the product more interesting than a single VS Code feature. T
 
 - Only one active provider/model is used for a scan at a time
 - Performance depends heavily on the chosen model
-- AI scan quality is probabilistic, not perfectly deterministic
+- AI scan quality is probabilistic outside the covered deterministic rules
 - Some orchestration and UI flows still need deeper test coverage
 - Large folder scans can be slow on smaller local models
 
@@ -429,6 +449,13 @@ This gives Owlvex a practical baseline for:
 - family-level quality measurement
 - future provider comparison work
 
+In addition, `tools/owlvex-benchmark/` now provides deterministic multi-axis benchmark gates for:
+
+- execution risk
+- SQL query safety
+- access control
+- selected conditional rules
+
 The next planned catalog growth is documented in [docs/ISSUE_EXPANSION_ROADMAP.md](ISSUE_EXPANSION_ROADMAP.md).
 
 ## Security Model Summary
@@ -436,6 +463,7 @@ The next planned catalog growth is documented in [docs/ISSUE_EXPANSION_ROADMAP.m
 From a product perspective:
 
 - Owlvex reduces backend code exposure by keeping source code off Owlvex servers
+- deterministic structural analysis can run locally in the extension
 - Owlvex still depends on the trust model of the chosen AI provider
 - malformed model output should fail scans rather than quietly passing
 - reports and comparisons should present scan-backed output clearly

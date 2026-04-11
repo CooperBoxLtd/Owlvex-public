@@ -54,6 +54,15 @@ Plus a **Conditional Rules layer** for context-sensitive invariants:
 | --- | --- | --- |
 | sm002 | SM-002: debug mode without production guard | env signals in source |
 
+The live extension scanner currently implements additional conditional rules as well:
+
+- `AC-T001` multi-tenant isolation failure
+- `DP-001` PII in logger
+- `SM-001` insecure cookie
+- `SM-002` debug mode without production guard
+
+Benchmark coverage for the conditional-rules group is currently partial, with `sm002` already gated and the others still to be lifted into the benchmark tool.
+
 ---
 
 ## Running the gate
@@ -100,7 +109,12 @@ The expected JSON declares what the evaluator should return (`finding`, `resourc
 
 ## Gate status
 
-19 suites, all passing:
+Verified via `npm run benchmark:status`:
+
+- `19` suites passing
+- `82` cases passing
+
+Breakdown:
 
 | Group | Suites | Cases |
 | --- | --- | --- |

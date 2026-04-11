@@ -1,22 +1,22 @@
 # SQL Query Coverage Plan
 
-This document defines the initial benchmark coverage plan for the SQL and contextual query execution axis.
+This document defines the benchmark coverage plan for the SQL and contextual query execution axis.
 
-The aim is to establish deterministic ground truth before implementing the SQL axis engine.
+The SQL axis engine now exists, and this document records the coverage model it is expected to maintain.
 
 ## Coverage Goals
 
-Each planned SQL rule should have:
+Each SQL rule should have:
 
 - at least 1 positive case
 - at least 1 negative case
 - at least 1 edge case
 
-## Initial Rule Matrix
+## Rule Matrix
 
 ## SQ-001 - Query Injection Decision
 
-Status: `Planned`
+Status: `Complete`
 
 Required coverage:
 
@@ -28,7 +28,7 @@ Required coverage:
 
 ## SQ-002 - Trust Propagation
 
-Status: `Planned`
+Status: `Complete`
 
 Required coverage:
 
@@ -40,7 +40,7 @@ Required coverage:
 
 ## SQ-003 - Query Transformation
 
-Status: `Planned`
+Status: `Complete`
 
 Required coverage:
 
@@ -52,19 +52,19 @@ Required coverage:
 
 ## SQ-004 - Query Sink Shape
 
-Status: `Planned`
+Status: `Complete`
 
 Required coverage:
 
 | Type | Description | File |
 | --- | --- | --- |
-| Positive | `db.query` with interpolated string | `db_query_interpolated_positive.js` |
-| Negative | `db.query` with text and params array | `db_query_parameterized_negative.js` |
+| Positive | `db.query` with interpolated string | `direct_query_positive.js` |
+| Negative | `db.query` with text and params array | `parameterized_query_negative.js` |
 | Edge | Wrapped query helper | `wrapped_query_edge.js` |
 
 ## SQ-005 - Query Context Mismatch
 
-Status: `Planned`
+Status: `Complete`
 
 Required coverage:
 
@@ -74,16 +74,17 @@ Required coverage:
 | Negative | SQL-safe parameter binding context | `sql_context_safe_negative.js` |
 | Edge | Generic validation reused in SQL | `generic_to_sql_edge.js` |
 
-## Initial Target
+## Current Target
 
-The first SQL corpus pack should prioritize:
+The current SQL deterministic gate covers:
 
-1. direct interpolated positive case
-2. parameterized negative case
-3. propagation edge case
-4. wrapped query edge case
-5. context mismatch positive case
+1. propagation
+2. transformation
+3. sink shape
+4. context mismatch
+5. final decision
+6. SQL integration
 
 ## Release Rule
 
-No SQL deterministic layer should be implemented without corpus coverage for the specific behavior it claims to enforce.
+No SQL deterministic layer should exist without corpus coverage for the specific behavior it claims to enforce.
