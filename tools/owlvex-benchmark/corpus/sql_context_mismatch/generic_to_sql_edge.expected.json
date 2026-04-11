@@ -1,0 +1,9 @@
+{
+  "rule": "SQ-005",
+  "sink": "db.query",
+  "transformation": "generic",
+  "sink_context": "sql",
+  "context_valid": false,
+  "effective_trust_state": "UNSAFE",
+  "finding": true
+}

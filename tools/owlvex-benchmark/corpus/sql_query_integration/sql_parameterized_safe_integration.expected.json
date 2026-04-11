@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "pipeline": ["SQ-002", "SQ-003", "SQ-004", "SQ-005", "SQ-001"],
+  "finding": false,
+  "type": "parameterized-query",
+  "notes": "User input is bound via parameterized query. No SQL injection risk."
+}

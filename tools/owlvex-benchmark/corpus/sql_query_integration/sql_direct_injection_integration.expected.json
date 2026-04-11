@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "pipeline": ["SQ-002", "SQ-003", "SQ-004", "SQ-005", "SQ-001"],
+  "finding": true,
+  "type": "sql-injection",
+  "notes": "Unsafe user input reaches interpolated SQL query text with no SQL-safe transformation."
+}

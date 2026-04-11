@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "pipeline": ["SQ-002", "SQ-003", "SQ-004", "SQ-005", "SQ-001"],
+  "finding": true,
+  "type": "context-mismatch-query",
+  "notes": "HTML-oriented transformation is applied but provides no SQL injection protection."
+}

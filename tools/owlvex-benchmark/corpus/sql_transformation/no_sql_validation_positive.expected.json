@@ -1,0 +1,7 @@
+{
+  "rule": "SQ-003",
+  "transformation": "none",
+  "sqlSafe": false,
+  "finding": true,
+  "type": "no-sql-validation"
+}

@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 
 import { evaluateFile as evaluateSinkFile } from '../sq004/evaluator.mjs';
 import { evaluateFile as evaluateTrustFile } from '../sq002/evaluator.mjs';
+import { evaluateFile as evaluateContextFile } from '../sq005/evaluator.mjs';
+import { TRUST_STATES } from '../sq002/types.mjs';
 
 function stripInlineComment(line) {
   const index = line.indexOf('//');
@@ -50,34 +52,11 @@ function findQueryDefinition(handlerLines, name) {
   return null;
 }
 
-function classifyQuerySource(queryExpression, queryDefinition, source, viaWrapper) {
+function classifyInjectionType(queryExpression, queryDefinition, trustResult) {
   const expression = queryDefinition ?? queryExpression ?? '';
+  const isMixedTrust = trustResult.trustStateAtSink === TRUST_STATES.MIXED;
 
-  if (!expression) {
-    return {
-      finding: false,
-      type: 'unknown-query-shape',
-      explanation: 'No SQL query shape was detected.',
-    };
-  }
-
-  if (viaWrapper) {
-    return {
-      finding: true,
-      type: 'wrapped-sql-sink',
-      explanation: 'A wrapped SQL sink still receives interpolated query text.',
-    };
-  }
-
-  if (/escapeHtml\s*\(/.test(source) && /SELECT|INSERT|UPDATE|DELETE/i.test(expression)) {
-    return {
-      finding: true,
-      type: 'context-mismatch-query',
-      explanation: 'A non-SQL transformation is reused in SQL query construction.',
-    };
-  }
-
-  if (/if\s*\(/.test(source) && /`[^`]*\$\{[^}]+\}[^`]*`/.test(expression)) {
+  if (isMixedTrust && /`[^`]*\$\{[^}]+\}[^`]*`/.test(expression)) {
     return {
       finding: true,
       type: 'mixed-query-trust',
@@ -101,10 +80,11 @@ function classifyQuerySource(queryExpression, queryDefinition, source, viaWrappe
 }
 
 export async function evaluateFile(filePath) {
-  const [source, sinkResult, trustResult] = await Promise.all([
+  const [source, sinkResult, trustResult, contextResult] = await Promise.all([
     fs.readFile(filePath, 'utf8'),
     evaluateSinkFile(filePath),
     evaluateTrustFile(filePath),
+    evaluateContextFile(filePath),
   ]);
 
   if (!sinkResult.sink) {
@@ -125,6 +105,7 @@ export async function evaluateFile(filePath) {
     ? findQueryDefinition(handlerLines, sinkResult.queryExpression)
     : sinkResult.queryExpression;
 
+  // Parameterized queries are always safe.
   if (sinkResult.parameterized) {
     return {
       ...sinkResult,
@@ -136,17 +117,41 @@ export async function evaluateFile(filePath) {
     };
   }
 
-  const classification = classifyQuerySource(
-    sinkResult.queryExpression,
-    queryDefinition,
-    source,
-    sinkResult.viaWrapper,
-  );
+  // Wrapped SQL sink: a helper function obscures the direct db.query call.
+  if (sinkResult.viaWrapper) {
+    return {
+      ...sinkResult,
+      queryDefinition,
+      trustStateAtSink: trustResult.trustStateAtSink,
+      finding: true,
+      type: 'wrapped-sql-sink',
+      explanation: 'A wrapped SQL sink still receives interpolated query text.',
+    };
+  }
+
+  // Context mismatch: a transformation was applied but is not valid for SQL.
+  // Delegate to SQ-005 for context validation.
+  if (!contextResult.contextValid) {
+    return {
+      ...sinkResult,
+      queryDefinition,
+      trustStateAtSink: trustResult.trustStateAtSink,
+      effectiveTrustState: contextResult.effectiveTrustState,
+      transformation: contextResult.transformation,
+      contextValid: contextResult.contextValid,
+      finding: true,
+      type: 'context-mismatch-query',
+      explanation: contextResult.explanation,
+    };
+  }
+
+  // Direct or mixed injection: classify based on trust state and template literal shape.
+  const injection = classifyInjectionType(sinkResult.queryExpression, queryDefinition, trustResult);
 
   return {
     ...sinkResult,
     queryDefinition,
     trustStateAtSink: trustResult.trustStateAtSink,
-    ...classification,
+    ...injection,
   };
 }

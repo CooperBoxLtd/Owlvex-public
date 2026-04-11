@@ -1,0 +1,7 @@
+{
+  "rule": "SQ-003",
+  "transformation": "parameterized",
+  "sqlSafe": true,
+  "finding": false,
+  "type": "parameterized-query"
+}

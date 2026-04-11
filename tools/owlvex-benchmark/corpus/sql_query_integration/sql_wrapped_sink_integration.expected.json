@@ -1,0 +1,7 @@
+{
+  "axis": "sql-query",
+  "pipeline": ["SQ-002", "SQ-003", "SQ-004", "SQ-005", "SQ-001"],
+  "finding": true,
+  "type": "wrapped-sql-sink",
+  "notes": "A wrapped SQL sink receives interpolated query text containing unsafe user input."
+}
