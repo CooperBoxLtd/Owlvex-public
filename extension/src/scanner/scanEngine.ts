@@ -4,6 +4,7 @@ import { LicenceManager } from '../licence/licenceManager';
 import { ProviderRegistry } from '../providers/registry';
 import { CanonicalMappings, resolveIssue } from '../frameworks/issueResolver';
 import { getIssueFamilyDefinition } from '../frameworks/issueCatalog';
+import { DeterministicScanner } from './deterministicScanner';
 
 export interface Finding {
     id: string;
@@ -74,6 +75,8 @@ function normalizeMappings(value: any): CanonicalMappings | undefined {
 }
 
 export class ScanEngine {
+    private readonly deterministicScanner = new DeterministicScanner();
+
     constructor(
         private readonly licenceMgr: LicenceManager,
         private readonly registry: ProviderRegistry,
@@ -118,6 +121,12 @@ export class ScanEngine {
         const code = document.getText();
         const language = this._detectLanguage(document);
         const provider = this.registry.getActive();
+
+        // Run deterministic scanner first — high-confidence, zero-cost findings.
+        const deterministicFindings = this.deterministicScanner
+            .scan(code, document.languageId)
+            .map(f => this._resolveCanonicalFinding(f as Finding));
+
         const start = Date.now();
 
         const aiResponse = await provider.complete({
@@ -170,13 +179,30 @@ export class ScanEngine {
             warnings.push(`Failed to record scan: ${error.message}`);
         }
 
+        // Merge deterministic findings with AI findings.
+        // Deterministic findings lead — they are high-confidence and zero-cost.
+        // Deduplicate by canonicalId + line to avoid doubling up when the AI
+        // also found the same issue at the same location.
+        const aiOnlyFindings = parsed.findings.filter(ai =>
+            !deterministicFindings.some(det =>
+                det.canonicalId === ai.canonicalId && det.line === ai.line,
+            ),
+        );
+        const allFindings = [...deterministicFindings, ...aiOnlyFindings];
+        const mergedMetrics = {
+            critical: allFindings.filter(f => f.severity === 'CRITICAL').length,
+            high: allFindings.filter(f => f.severity === 'HIGH').length,
+            medium: allFindings.filter(f => f.severity === 'MEDIUM').length,
+            low: allFindings.filter(f => f.severity === 'LOW').length,
+        };
+
         return {
             scanId,
             score: parsed.score,
             summary: parsed.summary,
-            findings: parsed.findings,
+            findings: allFindings,
             positives: parsed.positives,
-            metrics: parsed.metrics,
+            metrics: mergedMetrics,
             durationMs,
             model: provider.selectedModel,
             provider: provider.id,
