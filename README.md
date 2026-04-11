@@ -121,6 +121,8 @@ The current architecture and implementation contract are defined in [docs/IMPLEM
 
 The concrete implementation backlog derived from that design lives in [docs/IMPLEMENTATION_BACKLOG.md](docs/IMPLEMENTATION_BACKLOG.md).
 
+The supported dev/prod deployment model lives in [docs/DEPLOYMENT_ENVIRONMENTS.md](docs/DEPLOYMENT_ENVIRONMENTS.md).
+
 That document is the source of truth for:
 
 - local-vs-backend execution boundaries

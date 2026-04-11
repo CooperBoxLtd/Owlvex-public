@@ -10,6 +10,8 @@ It is written to be executable as an engineering contract:
 
 If another document conflicts with this one, treat this document as the source of truth for product architecture and system boundaries.
 
+For the operational dev/prod deployment model that implements this boundary, see [DEPLOYMENT_ENVIRONMENTS.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_ENVIRONMENTS.md).
+
 ## 1. Product Goal
 
 Owlvex is a developer-first security product that combines:
