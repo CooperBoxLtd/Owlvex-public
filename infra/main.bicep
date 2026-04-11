@@ -7,11 +7,13 @@
 //   - Azure Database for PostgreSQL Flexible Server
 //   - Azure Key Vault
 //   - Log Analytics workspace
-//   - Azure Container Apps environment + app
+//   - Application Insights
+//   - Azure App Service Plan
+//   - Azure Web App for Containers
 //
 // Principles:
-//   - Backend only (licence, billing, prompt delivery)
-//   - No source code ever reaches these resources
+//   - Backend only (licence, billing, prompt delivery, metadata)
+//   - No source code ever reaches these resources for scanning
 //   - Deterministic engine runs locally in the extension/CLI
 // ============================================================
 
@@ -27,8 +29,6 @@ param prefix string = 'owlvex'
 @description('Container image tag to deploy')
 param imageTag string = 'latest'
 
-// ── Postgres ──────────────────────────────────────────────────────────────
-
 @description('PostgreSQL admin username')
 param postgresAdminUser string = 'owlvex'
 
@@ -38,8 +38,6 @@ param postgresAdminPassword string
 
 @description('PostgreSQL database name')
 param postgresDbName string = 'owlvex'
-
-// ── App secrets (stored in Key Vault, injected at runtime) ────────────────
 
 @secure()
 param secretKey string
@@ -57,15 +55,22 @@ param stripeWebhookSecret string = ''
 param sendgridApiKey string = ''
 
 param stripePriceDeveloperMonthly string = ''
-param stripePriceDeveloperAnnual string  = ''
-param stripePriceTeamMonthly string      = ''
-param stripePriceTeamAnnual string       = ''
-param fromEmail string                   = 'noreply@owlvex.io'
+param stripePriceDeveloperAnnual string = ''
+param stripePriceTeamMonthly string = ''
+param stripePriceTeamAnnual string = ''
+param fromEmail string = 'noreply@owlvex.io'
 
-// ── Container Registry ────────────────────────────────────────────────────
+var acrName = '${prefix}registry'
+var appServicePlanName = '${prefix}-plan'
+var webAppName = '${prefix}-api'
+var appInsightsName = '${prefix}-appi'
+var appInsightsConnectionStringSetting = 'APPLICATIONINSIGHTS_CONNECTION_STRING'
+var acrLoginServer = acr.properties.loginServer
+var dbHost = postgres.properties.fullyQualifiedDomainName
+var dbUrl = 'postgresql+asyncpg://${postgresAdminUser}:${postgresAdminPassword}@${dbHost}:5432/${postgresDbName}?ssl=require'
 
 resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
-  name: '${prefix}registry'
+  name: acrName
   location: location
   sku: { name: 'Basic' }
   properties: {
@@ -73,8 +78,6 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-07-01' = {
   }
   tags: { environment: environment }
 }
-
-// ── Log Analytics ─────────────────────────────────────────────────────────
 
 resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   name: '${prefix}-logs'
@@ -86,7 +89,16 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   tags: { environment: environment }
 }
 
-// ── Key Vault ─────────────────────────────────────────────────────────────
+resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: appInsightsName
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    WorkspaceResourceId: logAnalytics.id
+  }
+  tags: { environment: environment }
+}
 
 resource keyVault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: '${prefix}-kv'
@@ -131,13 +143,11 @@ resource kvSendgridApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   properties: { value: sendgridApiKey }
 }
 
-// ── PostgreSQL Flexible Server ─────────────────────────────────────────────
-
 resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
   name: '${prefix}-db'
   location: location
   sku: {
-    name: 'Standard_B1ms'   // 1 vCore, 2GB — sufficient for Phase 1
+    name: 'Standard_B1ms'
     tier: 'Burstable'
   }
   properties: {
@@ -163,8 +173,6 @@ resource postgresDb 'Microsoft.DBforPostgreSQL/flexibleServers/databases@2023-06
   }
 }
 
-// Allow Azure Container Apps egress to reach Postgres
-// (Container Apps uses managed VNet; allow Azure services is sufficient for Phase 1)
 resource postgresFirewallAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallRules@2023-06-01-preview' = {
   parent: postgres
   name: 'AllowAzureServices'
@@ -174,131 +182,122 @@ resource postgresFirewallAzureServices 'Microsoft.DBforPostgreSQL/flexibleServer
   }
 }
 
-// ── Container Apps Environment ────────────────────────────────────────────
-
-resource containerAppsEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: '${prefix}-env'
+resource appServicePlan 'Microsoft.Web/serverfarms@2023-12-01' = {
+  name: appServicePlanName
   location: location
+  sku: {
+    name: 'B1'
+    tier: 'Basic'
+    size: 'B1'
+    family: 'B'
+    capacity: 1
+  }
+  kind: 'linux'
   properties: {
-    appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: logAnalytics.properties.customerId
-        sharedKey: logAnalytics.listKeys().primarySharedKey
-      }
-    }
+    reserved: true
   }
   tags: { environment: environment }
 }
 
-// ── Container App ─────────────────────────────────────────────────────────
-
-var acrLoginServer = acr.properties.loginServer
-var dbUrl = 'postgresql+asyncpg://${postgresAdminUser}:${postgresAdminPassword}@${postgres.properties.fullyQualifiedDomainName}:5432/${postgresDbName}?ssl=require'
-
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
-  name: '${prefix}-api'
+resource webApp 'Microsoft.Web/sites@2023-12-01' = {
+  name: webAppName
   location: location
+  kind: 'app,linux,container'
   identity: {
     type: 'SystemAssigned'
   }
   properties: {
-    managedEnvironmentId: containerAppsEnv.id
-    configuration: {
-      ingress: {
-        external: true
-        targetPort: 8000
-        transport: 'http'
-        allowInsecure: false
-      }
-      registries: [
+    serverFarmId: appServicePlan.id
+    httpsOnly: true
+    siteConfig: {
+      linuxFxVersion: 'DOCKER|${acrLoginServer}/owlvex-api:${imageTag}'
+      appSettings: [
         {
-          server: acrLoginServer
-          username: acr.listCredentials().username
-          passwordSecretRef: 'acr-password'
+          name: 'DOCKER_REGISTRY_SERVER_URL'
+          value: 'https://${acrLoginServer}'
         }
-      ]
-      secrets: [
         {
-          name: 'acr-password'
+          name: 'DOCKER_REGISTRY_SERVER_USERNAME'
+          value: acr.listCredentials().username
+        }
+        {
+          name: 'DOCKER_REGISTRY_SERVER_PASSWORD'
           value: acr.listCredentials().passwords[0].value
         }
-        { name: 'database-url',             value: dbUrl }
-        { name: 'secret-key',               value: secretKey }
-        { name: 'admin-key',                value: adminKey }
-        { name: 'stripe-secret-key',        value: stripeSecretKey }
-        { name: 'stripe-webhook-secret',    value: stripeWebhookSecret }
-        { name: 'sendgrid-api-key',         value: sendgridApiKey }
-      ]
-    }
-    template: {
-      containers: [
         {
-          name: 'api'
-          image: '${acrLoginServer}/owlvex-api:${imageTag}'
-          resources: {
-            cpu: json('0.5')
-            memory: '1Gi'
-          }
-          env: [
-            { name: 'DATABASE_URL',                    secretRef: 'database-url' }
-            { name: 'SECRET_KEY',                      secretRef: 'secret-key' }
-            { name: 'ADMIN_KEY',                       secretRef: 'admin-key' }
-            { name: 'STRIPE_SECRET_KEY',               secretRef: 'stripe-secret-key' }
-            { name: 'STRIPE_WEBHOOK_SECRET',           secretRef: 'stripe-webhook-secret' }
-            { name: 'SENDGRID_API_KEY',                secretRef: 'sendgrid-api-key' }
-            { name: 'STRIPE_PRICE_DEVELOPER_MONTHLY',  value: stripePriceDeveloperMonthly }
-            { name: 'STRIPE_PRICE_DEVELOPER_ANNUAL',   value: stripePriceDeveloperAnnual }
-            { name: 'STRIPE_PRICE_TEAM_MONTHLY',       value: stripePriceTeamMonthly }
-            { name: 'STRIPE_PRICE_TEAM_ANNUAL',        value: stripePriceTeamAnnual }
-            { name: 'FROM_EMAIL',                      value: fromEmail }
-            { name: 'ENVIRONMENT',                     value: 'production' }
-          ]
-          probes: [
-            {
-              type: 'Liveness'
-              httpGet: {
-                path: '/health'
-                port: 8000
-              }
-              initialDelaySeconds: 15
-              periodSeconds: 20
-            }
-            {
-              type: 'Readiness'
-              httpGet: {
-                path: '/health'
-                port: 8000
-              }
-              initialDelaySeconds: 10
-              periodSeconds: 10
-            }
-          ]
+          name: 'WEBSITES_PORT'
+          value: '8000'
+        }
+        {
+          name: 'WEBSITES_ENABLE_APP_SERVICE_STORAGE'
+          value: 'false'
+        }
+        {
+          name: 'DATABASE_URL'
+          value: dbUrl
+        }
+        {
+          name: 'SECRET_KEY'
+          value: secretKey
+        }
+        {
+          name: 'ADMIN_KEY'
+          value: adminKey
+        }
+        {
+          name: 'STRIPE_SECRET_KEY'
+          value: stripeSecretKey
+        }
+        {
+          name: 'STRIPE_WEBHOOK_SECRET'
+          value: stripeWebhookSecret
+        }
+        {
+          name: 'SENDGRID_API_KEY'
+          value: sendgridApiKey
+        }
+        {
+          name: 'STRIPE_PRICE_DEVELOPER_MONTHLY'
+          value: stripePriceDeveloperMonthly
+        }
+        {
+          name: 'STRIPE_PRICE_DEVELOPER_ANNUAL'
+          value: stripePriceDeveloperAnnual
+        }
+        {
+          name: 'STRIPE_PRICE_TEAM_MONTHLY'
+          value: stripePriceTeamMonthly
+        }
+        {
+          name: 'STRIPE_PRICE_TEAM_ANNUAL'
+          value: stripePriceTeamAnnual
+        }
+        {
+          name: 'FROM_EMAIL'
+          value: fromEmail
+        }
+        {
+          name: 'ENVIRONMENT'
+          value: 'production'
+        }
+        {
+          name: appInsightsConnectionStringSetting
+          value: appInsights.properties.ConnectionString
         }
       ]
-      scale: {
-        minReplicas: 1
-        maxReplicas: 3
-        rules: [
-          {
-            name: 'http-scaling'
-            http: {
-              metadata: {
-                concurrentRequests: '20'
-              }
-            }
-          }
-        ]
-      }
+      healthCheckPath: '/health'
+      alwaysOn: true
+      acrUseManagedIdentityCreds: false
+      ftpsState: 'Disabled'
+      minTlsVersion: '1.2'
+      http20Enabled: true
     }
   }
   tags: { environment: environment }
 }
 
-// ── Outputs ───────────────────────────────────────────────────────────────
-
-output apiUrl string = 'https://${containerApp.properties.configuration.ingress.fqdn}'
+output apiUrl string = 'https://${webApp.properties.defaultHostName}'
 output acrLoginServer string = acrLoginServer
-output postgresHost string = postgres.properties.fullyQualifiedDomainName
+output postgresHost string = dbHost
 output keyVaultName string = keyVault.name
-output containerAppName string = containerApp.name
+output webAppName string = webApp.name

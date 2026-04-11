@@ -20,7 +20,7 @@ Owlvex has two environments:
    - used for iteration, debugging, local QA, and development testing
 
 2. `prod`
-   - backend runs in Azure
+   - backend runs in Azure App Service for Containers
    - used for production licences, billing, prompt delivery, and metadata storage
 
 The extension and CLI remain the execution plane in both environments.
@@ -66,7 +66,7 @@ Production hosts only the Owlvex control plane:
 
 Expected backend URL shape:
 
-- `https://<container-app-fqdn>`
+- `https://<app-service-hostname>`
 
 ## Azure Subscription
 
@@ -132,54 +132,37 @@ This keeps the dev backend on `ml30` or local Docker without touching Azure.
 
 ### Prod Bootstrap Path
 
-Use this when creating or updating Azure infrastructure:
+The target production bootstrap path is now:
 
-```bash
-az login
-az account set --subscription c0b31fc1-52d0-4339-96ee-9915e4dfe3c4
-cp infra/.env.prod.example infra/.env.prod
-# edit infra/.env.prod
-source infra/.env.prod
-bash infra/deploy.sh
-```
+1. provision Azure infrastructure for:
+   - Azure Container Registry
+   - Azure Database for PostgreSQL
+   - Azure Key Vault
+   - Azure App Service Plan
+   - Azure Web App for Containers
+2. build and push the backend image to ACR
+3. configure the Web App to run that image
+4. initialize the PostgreSQL schema
+5. verify `/health`
 
-This path:
+The exact App Service deployment scripts are not yet implemented in the repo.
 
-- creates the resource group if needed
-- deploys infrastructure with Bicep
-- builds and pushes the backend image
-- updates the Container App
-- runs DB initialization
+### Current Repo Status
 
-### Prod Image-Only Path
+The production infrastructure is implemented and deployed. The files under `infra/` target Azure App Service for Containers:
 
-Use this for normal application-only releases after infrastructure exists:
-
-```bash
-source infra/.env.prod
-IMAGE_ONLY=1 bash infra/deploy.sh
-```
+- [main.bicep](D:/Dev/repos/CodeScanner/infra/main.bicep) — provisions ACR, PostgreSQL Flexible Server, Key Vault, Log Analytics, Application Insights, App Service Plan, Web App for Containers
+- [deploy.sh](D:/Dev/repos/CodeScanner/infra/deploy.sh) — full bootstrap: provisions infra via Bicep, builds and pushes image, updates Web App, applies schema, health checks
+- [deploy-prod.yml](D:/Dev/repos/CodeScanner/.github/workflows/deploy-prod.yml) — CI gate: runs tests and benchmark, then builds/pushes image and updates Web App on push to `main`
 
 ### CI Production Path
 
-GitHub Actions is the normal production release path after bootstrap:
+The CI production path:
 
 - tests and benchmark gate run first
-- backend image is built and pushed
-- Container App is updated to the new image
-
-Current workflow:
-
-- [deploy-prod.yml](D:/Dev/repos/CodeScanner/.github/workflows/deploy-prod.yml)
-
-Important note:
-
-The current CI workflow is an image deployment pipeline, not a full infrastructure apply pipeline.
-
-That is intentional for now:
-
-- infrastructure bootstrap and major infra changes are done explicitly
-- normal prod releases are image deploys
+- backend image is built and pushed to ACR
+- `az webapp config container set` updates the production Web App to the new image tag
+- health check confirms the deployment succeeded
 
 ## Extension Configuration
 
@@ -192,7 +175,7 @@ Current key:
 Expected usage:
 
 - dev -> `http://owlvex.ml30.local`
-- prod -> Azure Container App URL
+- prod -> Azure App Service URL
 
 This keeps the environment switch operationally simple.
 
@@ -218,9 +201,9 @@ These must remain true after Azure production is added:
 
 ## Near-Term Improvements
 
-The current Azure setup is a good Phase 1 production path, but we should tighten it over time:
+The production infrastructure is live. Hardening priorities:
 
-- move from raw secret injection toward stronger Key Vault integration
+- move from raw secret injection toward Key Vault references in App Settings
 - replace ACR admin credentials with managed identity where practical
 - formalize environment selection in extension settings if needed
 - document backend request shapes that are allowed to carry metadata only
@@ -235,3 +218,5 @@ The supported operating model is:
 - backend control plane only
 
 That lets us ship production without changing the core privacy and execution boundary of Owlvex.
+
+For the shortest Stripe-free bootstrap sequence, see [FIRST_PRODUCTION_DEPLOY.md](D:/Dev/repos/CodeScanner/docs/FIRST_PRODUCTION_DEPLOY.md).

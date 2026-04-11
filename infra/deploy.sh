@@ -4,21 +4,21 @@
 #
 # What this does (in order):
 #   1. Creates resource group
-#   2. Deploys all Azure resources via Bicep (idempotent)
+#   2. Deploys Azure resources via Bicep
 #   3. Builds and pushes the Docker image to ACR
-#   4. Updates the Container App to the new image
+#   4. Updates the Azure Web App for Containers to the new image
 #   5. Runs the Postgres schema (first deploy only — idempotent SQL)
 #   6. Prints the live API URL
 #
 # Prerequisites:
-#   - az CLI installed and logged in (az login)
+#   - az CLI installed and logged in
 #   - Docker running
-#   - All required env vars set (see .env.azure.example)
+#   - psql installed locally, or Docker available for the fallback schema step
+#   - All required env vars set (see .env.prod.example or .env.azure.example)
 #
 # Usage:
-#   cp infra/.env.azure.example infra/.env.azure
-#   # edit infra/.env.azure — fill in all secrets
-#   source infra/.env.azure
+#   cp infra/.env.prod.example infra/.env.prod
+#   source infra/.env.prod
 #   bash infra/deploy.sh
 #
 # To deploy only a new image (no infra changes):
@@ -27,20 +27,16 @@
 
 set -euo pipefail
 
-# ── Config ────────────────────────────────────────────────────────────────
-
 RESOURCE_GROUP="${RESOURCE_GROUP:-owlvex-prod}"
 LOCATION="${LOCATION:-westeurope}"
 PREFIX="${PREFIX:-owlvex}"
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD 2>/dev/null || echo 'latest')}"
 IMAGE_ONLY="${IMAGE_ONLY:-0}"
 
-# Required secrets — must be set in environment before running
 : "${POSTGRES_ADMIN_PASSWORD:?POSTGRES_ADMIN_PASSWORD is required}"
 : "${SECRET_KEY:?SECRET_KEY is required}"
 : "${ADMIN_KEY:?ADMIN_KEY is required}"
 
-# Optional secrets — default to empty (Stripe/SendGrid added when ready)
 STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY:-}"
 STRIPE_WEBHOOK_SECRET="${STRIPE_WEBHOOK_SECRET:-}"
 STRIPE_PRICE_DEVELOPER_MONTHLY="${STRIPE_PRICE_DEVELOPER_MONTHLY:-}"
@@ -53,10 +49,37 @@ FROM_EMAIL="${FROM_EMAIL:-noreply@owlvex.io}"
 ACR_NAME="${PREFIX}registry"
 APP_NAME="${PREFIX}-api"
 
-# ── Derived ───────────────────────────────────────────────────────────────
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+run_schema_file() {
+  local sql_file="$1"
+  local pg_host="$2"
+
+  if command -v psql >/dev/null 2>&1; then
+    PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" psql \
+      --host="${pg_host}" \
+      --port=5432 \
+      --username="owlvex" \
+      --dbname="owlvex" \
+      --file="${sql_file}" \
+      --no-password \
+      --output /dev/null
+  else
+    docker run --rm \
+      -e PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" \
+      -v "${REPO_ROOT}/postgres/init:/sql:ro" \
+      postgres:16 \
+      psql \
+        --host="${pg_host}" \
+        --port=5432 \
+        --username="owlvex" \
+        --dbname="owlvex" \
+        --file="/sql/$(basename "${sql_file}")" \
+        --no-password \
+        --output /dev/null
+  fi
+}
 
 echo ""
 echo "=================================================="
@@ -68,8 +91,6 @@ echo "  Image only     : ${IMAGE_ONLY}"
 echo "=================================================="
 echo ""
 
-# ── Step 1: Resource group ────────────────────────────────────────────────
-
 if [[ "${IMAGE_ONLY}" != "1" ]]; then
   echo "→ Creating resource group (idempotent)..."
   az group create \
@@ -79,8 +100,6 @@ if [[ "${IMAGE_ONLY}" != "1" ]]; then
   echo "  ✓ Resource group: ${RESOURCE_GROUP}"
 fi
 
-# ── Step 2: Bicep deployment ──────────────────────────────────────────────
-
 if [[ "${IMAGE_ONLY}" != "1" ]]; then
   echo ""
   echo "→ Deploying Azure resources via Bicep..."
@@ -88,19 +107,19 @@ if [[ "${IMAGE_ONLY}" != "1" ]]; then
     --resource-group "${RESOURCE_GROUP}" \
     --template-file "${SCRIPT_DIR}/main.bicep" \
     --parameters \
-        prefix="${PREFIX}" \
-        postgresAdminPassword="${POSTGRES_ADMIN_PASSWORD}" \
-        secretKey="${SECRET_KEY}" \
-        adminKey="${ADMIN_KEY}" \
-        stripeSecretKey="${STRIPE_SECRET_KEY}" \
-        stripeWebhookSecret="${STRIPE_WEBHOOK_SECRET}" \
-        stripePriceDeveloperMonthly="${STRIPE_PRICE_DEVELOPER_MONTHLY}" \
-        stripePriceDeveloperAnnual="${STRIPE_PRICE_DEVELOPER_ANNUAL}" \
-        stripePriceTeamMonthly="${STRIPE_PRICE_TEAM_MONTHLY}" \
-        stripePriceTeamAnnual="${STRIPE_PRICE_TEAM_ANNUAL}" \
-        sendgridApiKey="${SENDGRID_API_KEY}" \
-        fromEmail="${FROM_EMAIL}" \
-        imageTag="${IMAGE_TAG}" \
+      prefix="${PREFIX}" \
+      postgresAdminPassword="${POSTGRES_ADMIN_PASSWORD}" \
+      secretKey="${SECRET_KEY}" \
+      adminKey="${ADMIN_KEY}" \
+      stripeSecretKey="${STRIPE_SECRET_KEY}" \
+      stripeWebhookSecret="${STRIPE_WEBHOOK_SECRET}" \
+      stripePriceDeveloperMonthly="${STRIPE_PRICE_DEVELOPER_MONTHLY}" \
+      stripePriceDeveloperAnnual="${STRIPE_PRICE_DEVELOPER_ANNUAL}" \
+      stripePriceTeamMonthly="${STRIPE_PRICE_TEAM_MONTHLY}" \
+      stripePriceTeamAnnual="${STRIPE_PRICE_TEAM_ANNUAL}" \
+      sendgridApiKey="${SENDGRID_API_KEY}" \
+      fromEmail="${FROM_EMAIL}" \
+      imageTag="${IMAGE_TAG}" \
     --output json)
 
   ACR_LOGIN_SERVER=$(echo "${DEPLOY_OUTPUT}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['properties']['outputs']['acrLoginServer']['value'])")
@@ -110,13 +129,10 @@ if [[ "${IMAGE_ONLY}" != "1" ]]; then
   echo "  ✓ Postgres     : ${PG_HOST}"
   echo "  ✓ API URL      : ${API_URL}"
 else
-  # IMAGE_ONLY — derive ACR login server without re-deploying
   ACR_LOGIN_SERVER=$(az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --query loginServer -o tsv)
-  API_URL=$(az containerapp show --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query properties.configuration.ingress.fqdn -o tsv)
-  API_URL="https://${API_URL}"
+  API_HOST=$(az webapp show --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query defaultHostName -o tsv)
+  API_URL="https://${API_HOST}"
 fi
-
-# ── Step 3: Build and push Docker image ──────────────────────────────────
 
 echo ""
 echo "→ Building and pushing Docker image..."
@@ -132,57 +148,43 @@ docker push "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}"
 docker push "${ACR_LOGIN_SERVER}/owlvex-api:latest"
 echo "  ✓ Image pushed: ${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}"
 
-# ── Step 4: Update Container App image ───────────────────────────────────
-
 echo ""
-echo "→ Updating Container App to image ${IMAGE_TAG}..."
-az containerapp update \
+echo "→ Updating Web App for Containers to image ${IMAGE_TAG}..."
+az webapp config container set \
   --name "${APP_NAME}" \
   --resource-group "${RESOURCE_GROUP}" \
-  --image "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}" \
+  --docker-custom-image-name "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}" \
+  --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
+  --docker-registry-server-user "$(az acr credential show --name "${ACR_NAME}" --query username -o tsv)" \
+  --docker-registry-server-password "$(az acr credential show --name "${ACR_NAME}" --query passwords[0].value -o tsv)" \
   --output none
-echo "  ✓ Container App updated"
-
-# ── Step 5: Apply database schema (idempotent) ────────────────────────────
+echo "  ✓ Web App updated"
 
 if [[ "${IMAGE_ONLY}" != "1" ]]; then
   echo ""
   echo "→ Applying Postgres schema..."
-  # Run schema files in order. CREATE TABLE IF NOT EXISTS / INSERT OR IGNORE — safe to re-run.
   for SQL_FILE in "${REPO_ROOT}/postgres/init/01_schema.sql" \
                   "${REPO_ROOT}/postgres/init/02_seed.sql" \
                   "${REPO_ROOT}/postgres/init/03_rules_extended.sql"; do
     if [[ -f "${SQL_FILE}" ]]; then
-      PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" psql \
-        --host="${PG_HOST}" \
-        --port=5432 \
-        --username="owlvex" \
-        --dbname="owlvex" \
-        --file="${SQL_FILE}" \
-        --no-password \
-        --output /dev/null \
-        2>&1 | grep -v "^$" || true
+      run_schema_file "${SQL_FILE}" "${PG_HOST}" || true
       echo "  ✓ Applied: $(basename "${SQL_FILE}")"
     fi
   done
 fi
 
-# ── Step 6: Health check ──────────────────────────────────────────────────
-
 echo ""
 echo "→ Waiting for health check..."
-sleep 10
+sleep 15
 
 HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${API_URL}/health" || echo "000")
 if [[ "${HTTP_STATUS}" == "200" ]]; then
   echo "  ✓ Health check passed (HTTP ${HTTP_STATUS})"
 else
   echo "  ✗ Health check returned HTTP ${HTTP_STATUS} — check logs:"
-  echo "    az containerapp logs show --name ${APP_NAME} --resource-group ${RESOURCE_GROUP} --follow"
+  echo "    az webapp log tail --name ${APP_NAME} --resource-group ${RESOURCE_GROUP}"
   exit 1
 fi
-
-# ── Done ──────────────────────────────────────────────────────────────────
 
 echo ""
 echo "=================================================="

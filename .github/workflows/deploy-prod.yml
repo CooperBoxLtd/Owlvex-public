@@ -1,26 +1,16 @@
-# deploy-prod.yml — deploy to Azure on push to main
+# deploy-prod.yml — deploy to Azure App Service for Containers on push to main
 #
 # What it does:
 #   1. Runs tests and benchmark gate
 #   2. Builds and pushes Docker image to ACR
-#   3. Updates the Container App
+#   3. Updates the Azure Web App for Containers
 #
-# Required GitHub secrets (Settings → Secrets → Actions):
-#   AZURE_CREDENTIALS          — output of: az ad sp create-for-rbac --sdk-auth
-#   RESOURCE_GROUP             — owlvex-prod
-#   ACR_LOGIN_SERVER           — owlvexregistry.azurecr.io
-#   CONTAINER_APP_NAME         — owlvex-api
-#   POSTGRES_ADMIN_PASSWORD    — production DB password
-#   SECRET_KEY                 — production secret key
-#   ADMIN_KEY                  — production admin key
-#   STRIPE_SECRET_KEY          — (optional)
-#   STRIPE_WEBHOOK_SECRET      — (optional)
-#   SENDGRID_API_KEY            — (optional)
-#   STRIPE_PRICE_DEVELOPER_MONTHLY
-#   STRIPE_PRICE_DEVELOPER_ANNUAL
-#   STRIPE_PRICE_TEAM_MONTHLY
-#   STRIPE_PRICE_TEAM_ANNUAL
-#   FROM_EMAIL
+# Required GitHub secrets:
+#   AZURE_CREDENTIALS       — output of: az ad sp create-for-rbac --sdk-auth
+#   RESOURCE_GROUP          — owlvex-prod
+#   ACR_NAME                — owlvexregistry
+#   ACR_LOGIN_SERVER        — owlvexregistry.azurecr.io
+#   WEBAPP_NAME             — owlvex-api
 
 name: Deploy to production
 
@@ -72,7 +62,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: ACR login
-        run: az acr login --name ${{ secrets.ACR_LOGIN_SERVER }}
+        run: az acr login --name ${{ secrets.ACR_NAME }}
 
       - name: Build and push image
         run: |
@@ -85,20 +75,25 @@ jobs:
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/owlvex-api:latest
           echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV
 
-      - name: Deploy to Container App
+      - name: Update Web App container image
         run: |
-          az containerapp update \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
+          ACR_USERNAME=$(az acr credential show --name ${{ secrets.ACR_NAME }} --query username -o tsv)
+          ACR_PASSWORD=$(az acr credential show --name ${{ secrets.ACR_NAME }} --query passwords[0].value -o tsv)
+          az webapp config container set \
+            --name ${{ secrets.WEBAPP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --image ${{ secrets.ACR_LOGIN_SERVER }}/owlvex-api:${{ env.IMAGE_TAG }}
+            --docker-custom-image-name ${{ secrets.ACR_LOGIN_SERVER }}/owlvex-api:${{ env.IMAGE_TAG }} \
+            --docker-registry-server-url https://${{ secrets.ACR_LOGIN_SERVER }} \
+            --docker-registry-server-user "${ACR_USERNAME}" \
+            --docker-registry-server-password "${ACR_PASSWORD}"
 
       - name: Health check
         run: |
-          API_URL=$(az containerapp show \
-            --name ${{ secrets.CONTAINER_APP_NAME }} \
+          API_URL=$(az webapp show \
+            --name ${{ secrets.WEBAPP_NAME }} \
             --resource-group ${{ secrets.RESOURCE_GROUP }} \
-            --query properties.configuration.ingress.fqdn -o tsv)
-          sleep 15
+            --query defaultHostName -o tsv)
+          sleep 20
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://${API_URL}/health")
           echo "Health check: HTTP ${HTTP_STATUS} at https://${API_URL}/health"
           [[ "${HTTP_STATUS}" == "200" ]] || (echo "Health check failed" && exit 1)

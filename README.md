@@ -123,6 +123,10 @@ The concrete implementation backlog derived from that design lives in [docs/IMPL
 
 The supported dev/prod deployment model lives in [docs/DEPLOYMENT_ENVIRONMENTS.md](docs/DEPLOYMENT_ENVIRONMENTS.md).
 
+The fastest first-production bootstrap checklist lives in [docs/FIRST_PRODUCTION_DEPLOY.md](docs/FIRST_PRODUCTION_DEPLOY.md).
+
+Current note: Azure production is now planned around App Service for Containers. Existing Container Apps deployment files in `infra/` are deprecated and need to be rewritten before first prod bootstrap.
+
 That document is the source of truth for:
 
 - local-vs-backend execution boundaries
