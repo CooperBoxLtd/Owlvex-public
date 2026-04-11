@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  extension-test:
+    name: Extension tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: extension
+
+      - name: Compile TypeScript
+        run: npm run compile
+        working-directory: extension
+
+      - name: Run unit tests
+        run: npm test
+        working-directory: extension
+
+  deterministic-gate:
+    name: Deterministic benchmark gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: extension
+
+      - name: Run deterministic gate (execution-risk + sql-query axes)
+        run: npm run benchmark:deterministic
+        working-directory: extension
+
+      - name: Print benchmark status
+        run: npm run benchmark:status
+        working-directory: extension
