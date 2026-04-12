@@ -3,6 +3,8 @@
   "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
   "publisher": "owlvex",
+  "statusBarLabel": "Owlvex Prod",
+  "activityBarIcon": "media/owlvex-prod.svg",
   "configSection": "owlvex",
   "storagePrefix": "owlvex",
   "secretPrefix": "owlvex",

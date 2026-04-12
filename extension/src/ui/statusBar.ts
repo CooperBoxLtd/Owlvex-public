@@ -12,13 +12,13 @@ export class StatusBar {
     }
 
     showIdle(): void {
-        this.item.text = `$(shield) ${PROFILE.displayLabel}`;
+        this.item.text = `$(shield) ${PROFILE.statusBarLabel}`;
         this.item.tooltip = 'Click to scan current file';
         this.item.backgroundColor = undefined;
     }
 
     showScanning(): void {
-        this.item.text = `$(sync~spin) ${PROFILE.displayLabel}: Scanning...`;
+        this.item.text = `$(sync~spin) ${PROFILE.statusBarLabel}: Scanning...`;
         this.item.tooltip = 'Scan in progress';
     }
 
@@ -37,13 +37,13 @@ export class StatusBar {
     }
 
     showError(message: string): void {
-        this.item.text = `$(shield-x) ${PROFILE.displayLabel}: Error`;
+        this.item.text = `$(shield-x) ${PROFILE.statusBarLabel}: Error`;
         this.item.tooltip = message;
         this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     }
 
     showUnlicensed(): void {
-        this.item.text = `$(shield-x) ${PROFILE.displayLabel}: No Licence`;
+        this.item.text = `$(shield-x) ${PROFILE.statusBarLabel}: No Licence`;
         this.item.command = PROFILE.commands.enterLicence;
         this.item.tooltip = 'Click to enter your licence key';
         this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');

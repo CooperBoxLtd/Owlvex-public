@@ -177,7 +177,7 @@ cd extension && npm run package:dev
 This produces two `.vsix` packages from the same codebase:
 
 - `prod` -> default backend `https://owlvex-api.azurewebsites.net`
-- `dev` -> default backend `http://owlvex.ml30.local`
+- `dev` -> default backend `http://192.168.50.35:8000`
 
 ### Start the backend (Docker)
 

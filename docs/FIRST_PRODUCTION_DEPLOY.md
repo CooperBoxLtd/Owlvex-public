@@ -179,7 +179,7 @@ The current live production endpoint is:
 
 Development can continue using:
 
-- `http://owlvex.ml30.local`
+- `http://192.168.50.35:8000`
 
 ## Step 10: Verify Production Health
 

@@ -3,6 +3,8 @@ export const PROFILE = {
     extensionId: 'owlvex.owlvex',
     configSection: 'owlvex',
     displayLabel: 'Owlvex',
+    statusBarLabel: 'Owlvex Prod',
+    activityBarIcon: '$(shield)',
     defaultApiUrl: 'https://owlvex-api.azurewebsites.net',
     storagePrefix: 'owlvex',
     secretPrefix: 'owlvex',

@@ -65,6 +65,7 @@ manifest.contributes.commands = manifest.contributes.commands.map((command) => (
 if (manifest.contributes.viewsContainers?.activitybar?.[0]) {
   manifest.contributes.viewsContainers.activitybar[0].id = profile.viewContainerId;
   manifest.contributes.viewsContainers.activitybar[0].title = profile.displayName;
+  manifest.contributes.viewsContainers.activitybar[0].icon = profile.activityBarIcon;
 }
 
 const existingViews = manifest.contributes.views?.owlvex ?? [];
@@ -79,6 +80,8 @@ const generatedProfileSource = `export const PROFILE = ${JSON.stringify({
   extensionId: `${profile.publisher}.${profile.name}`,
   configSection: profile.configSection,
   displayLabel: profile.displayName,
+  statusBarLabel: profile.statusBarLabel,
+  activityBarIcon: profile.activityBarIcon,
   defaultApiUrl: profile.apiUrl,
   storagePrefix: profile.storagePrefix,
   secretPrefix: profile.secretPrefix,

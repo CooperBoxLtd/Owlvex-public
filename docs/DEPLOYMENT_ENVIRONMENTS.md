@@ -52,7 +52,7 @@ Use it for:
 
 Expected backend URL shape:
 
-- `http://owlvex.ml30.local`
+- `http://192.168.50.35:8000`
 
 ### Production (Azure)
 
@@ -174,7 +174,7 @@ Current key:
 
 Expected usage:
 
-- dev -> `http://owlvex.ml30.local`
+- dev -> `http://192.168.50.35:8000`
 - prod default -> `https://owlvex-api.azurewebsites.net`
 - prod -> Azure App Service URL
 
