@@ -10,13 +10,14 @@ import { ChatViewProvider } from './panels/chatViewProvider';
 import { pickScanFile, pickScanRoot, scanFolder } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
+import { PROFILE } from './profile';
 
 export let secrets: vscode.SecretStorage;
 
 const MAX_STORED_SCANS = 20;
 const scanStore = new Map<string, ScanResult>();
-const SCAN_STORE_KEY = 'owlvex.scanStore';
-const LAST_REPORT_SNAPSHOT_KEY = 'owlvex.lastReportSnapshot';
+const SCAN_STORE_KEY = `${PROFILE.storagePrefix}.scanStore`;
+const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
 
 interface ScanFileCommandResult {
     status: 'completed' | 'cancelled';
@@ -98,8 +99,8 @@ async function readJsonResponse(res: Response, prefix: string): Promise<any> {
 export function activate(context: vscode.ExtensionContext) {
     secrets = context.secrets;
 
-    const config = vscode.workspace.getConfiguration('owlvex');
-    const apiUrl = config.get<string>('apiUrl') ?? 'https://owlvex-api.azurewebsites.net';
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
 
     const licenceMgr = new LicenceManager(context.secrets);
     const registry = new ProviderRegistry();
@@ -161,7 +162,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         statusBar.showResult(averageScore, modelNames, totalFindings);
         vscode.window.showInformationMessage(
-            `Owlvex: Report created for ${safeSnapshot.results.length} file(s) with ${totalFindings} finding(s) using ${providerNames}/${modelNames}.${warningCount ? ` ${warningCount} warning(s) were captured.` : ''}`
+            `${PROFILE.displayLabel}: Report created for ${safeSnapshot.results.length} file(s) with ${totalFindings} finding(s) using ${providerNames}/${modelNames}.${warningCount ? ` ${warningCount} warning(s) were captured.` : ''}`
         );
 
         return {
@@ -203,7 +204,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     const chatView = new ChatViewProvider(registry, context.workspaceState);
 
-    vscode.window.registerTreeDataProvider('owlvex.findings', sidebar);
+    vscode.window.registerTreeDataProvider(PROFILE.findingsViewId, sidebar);
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatView)
     );
@@ -215,7 +216,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.enterLicence', async () => {
+        vscode.commands.registerCommand(PROFILE.commands.enterLicence, async () => {
             const key = await vscode.window.showInputBox({
                 prompt: 'Enter your Owlvex licence key',
                 placeHolder: 'owlvex_lic_...',
@@ -228,7 +229,7 @@ export function activate(context: vscode.ExtensionContext) {
             try {
                 const info = await licenceMgr.validate(apiUrl);
                 vscode.window.showInformationMessage(
-                    `Owlvex activated - ${info.plan} plan (${info.teamName})`
+                    `${PROFILE.displayLabel} activated - ${info.plan} plan (${info.teamName})`
                 );
                 statusBar.showIdle();
             } catch (error: any) {
@@ -239,7 +240,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.selectFrameworks', async () => {
+        vscode.commands.registerCommand(PROFILE.commands.selectFrameworks, async () => {
             const currentSelection = config.get<string[]>('frameworks', ['OWASP', 'STRIDE']);
             let allowedFrameworks = licenceMgr.getCachedInfo()?.features.frameworks;
             if (!allowedFrameworks?.length) {
@@ -253,7 +254,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             const availableFrameworks = FRAMEWORK_CATALOG.filter(item => allowedFrameworks?.includes(item.code));
             if (!availableFrameworks.length) {
-                vscode.window.showWarningMessage('Owlvex: No frameworks are available for this licence.');
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: No frameworks are available for this licence.`);
                 return;
             }
 
@@ -273,23 +274,23 @@ export function activate(context: vscode.ExtensionContext) {
 
             if (!picked) return;
             if (!picked.length) {
-                vscode.window.showWarningMessage('Owlvex: Select at least one framework.');
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Select at least one framework.`);
                 return;
             }
 
             const selectedCodes = picked.map(item => item.label);
             await vscode.workspace
-                .getConfiguration('owlvex')
+                .getConfiguration(PROFILE.configSection)
                 .update('frameworks', selectedCodes, getFrameworkConfigurationTarget());
 
             vscode.window.showInformationMessage(
-                `Owlvex: Frameworks set to ${formatFrameworkSummary(selectedCodes)}`
+                `${PROFILE.displayLabel}: Frameworks set to ${formatFrameworkSummary(selectedCodes)}`
             );
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.scanFile', async (requestedUri?: vscode.Uri): Promise<ScanFileCommandResult> => {
+        vscode.commands.registerCommand(PROFILE.commands.scanFile, async (requestedUri?: vscode.Uri): Promise<ScanFileCommandResult> => {
             const fileUri = requestedUri ?? await pickScanFile();
             if (!fileUri) {
                 return { status: 'cancelled' };
@@ -318,13 +319,13 @@ export function activate(context: vscode.ExtensionContext) {
                 chatView.setLastScanTarget(`File: ${vscode.workspace.asRelativePath(editor.document.uri, false)}`);
 
                 vscode.window.showInformationMessage(
-                    `Owlvex: Score ${result.score.toFixed(1)}/10 - ${result.findings.length} finding(s)${(result.warnings ?? []).length ? ` (${(result.warnings ?? []).length} warning(s))` : ''}`
+                    `${PROFILE.displayLabel}: Score ${result.score.toFixed(1)}/10 - ${result.findings.length} finding(s)${(result.warnings ?? []).length ? ` (${(result.warnings ?? []).length} warning(s))` : ''}`
                 );
 
                 return { status: 'completed', uri: editor.document.uri, result };
             } catch (error: any) {
                 statusBar.showError(error.message);
-                vscode.window.showErrorMessage(`Owlvex scan failed: ${error.message}`);
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel} scan failed: ${error.message}`);
                 throw error;
             }
         })
@@ -332,7 +333,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.workspace.onDidSaveTextDocument(async (doc: vscode.TextDocument) => {
-            const cfg = vscode.workspace.getConfiguration('owlvex');
+            const cfg = vscode.workspace.getConfiguration(PROFILE.configSection);
             if (!cfg.get<boolean>('scanOnSave', false)) return;
 
             statusBar.showScanning();
@@ -357,7 +358,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.switchModel', async () => {
+        vscode.commands.registerCommand(PROFILE.commands.switchModel, async () => {
             const provider = registry.getActive();
             const models = await provider.listModels();
             const picked = await vscode.window.showQuickPick(models, {
@@ -366,13 +367,13 @@ export function activate(context: vscode.ExtensionContext) {
 
             if (picked) {
                 provider.selectedModel = picked;
-                vscode.window.showInformationMessage(`Owlvex: Model switched to ${picked}`);
+                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: Model switched to ${picked}`);
             }
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.setupAI', async () => {
+        vscode.commands.registerCommand(PROFILE.commands.setupAI, async () => {
             const provider = registry.getActive();
             if (provider.id === 'ollama') {
                 vscode.window.showInformationMessage('Ollama uses no API key - ensure it is reachable from the configured host.');
@@ -386,7 +387,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
             if (!key) return;
 
-            await context.secrets.store(`owlvex.${provider.id}.apiKey`, key);
+            await context.secrets.store(`${PROFILE.secretPrefix}.${provider.id}.apiKey`, key);
             const { success, latencyMs } = await provider.testConnection();
             if (success) {
                 vscode.window.showInformationMessage(`${provider.name} connected (${latencyMs}ms)`);
@@ -397,7 +398,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.scanWorkspace', async (requestedRoot?: vscode.Uri): Promise<ScanWorkspaceCommandResult> => {
+        vscode.commands.registerCommand(PROFILE.commands.scanWorkspace, async (requestedRoot?: vscode.Uri): Promise<ScanWorkspaceCommandResult> => {
             const root = requestedRoot ?? await pickScanRoot();
             if (!root) {
                 return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
@@ -421,7 +422,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
             chatView.setLastScanTarget(`Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`);
 
-            const msg = `Owlvex: Scanned ${summary.completed} file(s) in ${root.fsPath} - ${summary.totalFindings} finding(s)`;
+            const msg = `${PROFILE.displayLabel}: Scanned ${summary.completed} file(s) in ${root.fsPath} - ${summary.totalFindings} finding(s)`;
             if (summary.errors.length) {
                 vscode.window.showWarningMessage(`${msg} (${summary.errors.length} error(s) - see output)`);
             } else if (summary.completed > 0) {
@@ -433,7 +434,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.scanWorkspaceReport', async (): Promise<ReportCommandResult> => {
+        vscode.commands.registerCommand(PROFILE.commands.scanWorkspaceReport, async (): Promise<ReportCommandResult> => {
             try {
                 const lastSnapshot = restoreLastReportSnapshot();
                 const options: vscode.QuickPickItem[] = [];
@@ -535,22 +536,22 @@ export function activate(context: vscode.ExtensionContext) {
                 };
             } catch (error: any) {
                 statusBar.showError(error.message);
-                vscode.window.showErrorMessage(`Owlvex report failed: ${error.message}`);
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel} report failed: ${error.message}`);
                 return { status: 'cancelled' };
             }
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.openPromptEditor', async () => {
+        vscode.commands.registerCommand(PROFILE.commands.openPromptEditor, async () => {
             await chatView.show();
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.compareScans', async () => {
-            const cfg = vscode.workspace.getConfiguration('owlvex');
-            const compareApiUrl = cfg.get<string>('apiUrl') ?? 'https://owlvex-api.azurewebsites.net';
+        vscode.commands.registerCommand(PROFILE.commands.compareScans, async () => {
+            const cfg = vscode.workspace.getConfiguration(PROFILE.configSection);
+            const compareApiUrl = cfg.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
             const licenceKey = await licenceMgr.getKey();
             if (!licenceKey) {
                 vscode.window.showErrorMessage('No licence key. Run "Owlvex: Enter Licence Key".');
@@ -622,21 +623,21 @@ export function activate(context: vscode.ExtensionContext) {
                     : diff.score_change.toFixed(1);
 
                 const panel = vscode.window.createWebviewPanel(
-                    'owlvexComparison',
-                    'Owlvex: Scan Comparison',
+                    PROFILE.comparisonPanelId,
+                    `${PROFILE.displayLabel}: Scan Comparison`,
                     vscode.ViewColumn.One,
                     {},
                 );
 
                 panel.webview.html = buildComparisonHtmlV2(diff, scoreChange);
             } catch (error: any) {
-                vscode.window.showErrorMessage(`Owlvex compare failed: ${error.message}`);
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel} compare failed: ${error.message}`);
             }
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('owlvex.revealLine', (line: number) => {
+        vscode.commands.registerCommand(PROFILE.commands.revealLine, (line: number) => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) return;
             const pos = new vscode.Position(Math.max(0, line - 1), 0);

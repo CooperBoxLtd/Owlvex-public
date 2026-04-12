@@ -1,23 +1,24 @@
 import * as vscode from 'vscode';
+import { PROFILE } from '../profile';
 
 export class StatusBar {
     private readonly item: vscode.StatusBarItem;
 
     constructor() {
         this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
-        this.item.command = 'owlvex.scanFile';
+        this.item.command = PROFILE.commands.scanFile;
         this.showIdle();
         this.item.show();
     }
 
     showIdle(): void {
-        this.item.text = '$(shield) Owlvex';
+        this.item.text = `$(shield) ${PROFILE.displayLabel}`;
         this.item.tooltip = 'Click to scan current file';
         this.item.backgroundColor = undefined;
     }
 
     showScanning(): void {
-        this.item.text = '$(sync~spin) Owlvex: Scanning...';
+        this.item.text = `$(sync~spin) ${PROFILE.displayLabel}: Scanning...`;
         this.item.tooltip = 'Scan in progress';
     }
 
@@ -36,14 +37,14 @@ export class StatusBar {
     }
 
     showError(message: string): void {
-        this.item.text = '$(shield-x) Owlvex: Error';
+        this.item.text = `$(shield-x) ${PROFILE.displayLabel}: Error`;
         this.item.tooltip = message;
         this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
     }
 
     showUnlicensed(): void {
-        this.item.text = '$(shield-x) Owlvex: No Licence';
-        this.item.command = 'owlvex.enterLicence';
+        this.item.text = `$(shield-x) ${PROFILE.displayLabel}: No Licence`;
+        this.item.command = PROFILE.commands.enterLicence;
         this.item.tooltip = 'Click to enter your licence key';
         this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     }

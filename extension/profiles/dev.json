@@ -3,6 +3,15 @@
   "displayName": "Owlvex Dev",
   "description": "Internal Owlvex development build wired to the ml30 control plane",
   "publisher": "owlvex",
+  "configSection": "owlvexDev",
+  "storagePrefix": "owlvexDev",
+  "secretPrefix": "owlvexDev",
+  "diagnosticCollection": "owlvexDev",
+  "viewContainerId": "owlvexDev",
+  "findingsViewId": "owlvexDev.findings",
+  "chatViewId": "owlvexDev.chat",
+  "comparisonPanelId": "owlvexDevComparison",
+  "commandPrefix": "owlvexDev",
   "apiUrl": "http://owlvex.ml30.local",
   "packagePath": "dist/owlvex-dev.vsix"
 }

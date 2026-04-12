@@ -5,6 +5,7 @@ import { ProviderRegistry } from '../providers/registry';
 import { CanonicalMappings, resolveIssue } from '../frameworks/issueResolver';
 import { getIssueFamilyDefinition } from '../frameworks/issueCatalog';
 import { DeterministicScanner } from './deterministicScanner';
+import { PROFILE } from '../profile';
 
 export interface Finding {
     id: string;
@@ -85,8 +86,8 @@ export class ScanEngine {
     ) {}
 
     async scanDocument(document: vscode.TextDocument): Promise<ScanResult> {
-        const config = vscode.workspace.getConfiguration('owlvex');
-        const apiUrl = config.get<string>('apiUrl') ?? 'https://owlvex-api.azurewebsites.net';
+        const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+        const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const teamContext = config.get<string>('teamContext', '');

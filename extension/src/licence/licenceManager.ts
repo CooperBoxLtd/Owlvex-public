@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
+import { PROFILE } from '../profile';
 
-const SECRET_KEY = 'owlvex.licenceKey';
+const SECRET_KEY = `${PROFILE.secretPrefix}.licenceKey`;
 
 export interface LicenceInfo {
     valid: boolean;

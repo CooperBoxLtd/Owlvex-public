@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ScanResult, Finding } from '../scanner/scanEngine';
+import { PROFILE } from '../profile';
 
 export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<FindingItem | undefined>();
@@ -108,7 +109,7 @@ class FindingItem extends vscode.TreeItem {
                 : finding.explanation;
             // Navigate to line on click
             this.command = {
-                command: 'owlvex.revealLine',
+                command: PROFILE.commands.revealLine,
                 title: 'Go to finding',
                 arguments: [finding.line],
             };

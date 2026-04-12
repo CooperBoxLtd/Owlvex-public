@@ -3,6 +3,15 @@
   "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
   "publisher": "owlvex",
+  "configSection": "owlvex",
+  "storagePrefix": "owlvex",
+  "secretPrefix": "owlvex",
+  "diagnosticCollection": "owlvex",
+  "viewContainerId": "owlvex",
+  "findingsViewId": "owlvex.findings",
+  "chatViewId": "owlvex.chat",
+  "comparisonPanelId": "owlvexComparison",
+  "commandPrefix": "owlvex",
   "apiUrl": "https://owlvex-api.azurewebsites.net",
   "packagePath": "dist/owlvex-prod.vsix"
 }

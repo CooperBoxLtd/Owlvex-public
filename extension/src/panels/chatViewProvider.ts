@@ -3,6 +3,7 @@ import * as path from 'path';
 import { ProviderRegistry } from '../providers/registry';
 import { collectScannableFiles } from '../scanner/workspaceScanner';
 import { formatFrameworkSummary } from '../frameworks/catalog';
+import { PROFILE } from '../profile';
 
 type ChatRole = 'user' | 'assistant' | 'system';
 type MessageKind = 'advisory' | 'scan';
@@ -45,8 +46,8 @@ interface ChatState {
     lastScanTarget: string;
 }
 
-const CHAT_STATE_KEY = 'owlvex.chat.messages';
-const LAST_SCAN_TARGET_KEY = 'owlvex.chat.lastScanTarget';
+const CHAT_STATE_KEY = `${PROFILE.storagePrefix}.chat.messages`;
+const LAST_SCAN_TARGET_KEY = `${PROFILE.storagePrefix}.chat.lastScanTarget`;
 const MAX_PERSISTED_MESSAGES = 40;
 
 function summarizeIssueFamilies(findings: Array<{ canonicalFamilyLabel?: string; canonicalFamily?: string }>): string {
@@ -64,7 +65,7 @@ function summarizeIssueFamilies(findings: Array<{ canonicalFamilyLabel?: string;
 }
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'owlvex.chat';
+    public static readonly viewType = PROFILE.chatViewId;
 
     private view?: vscode.WebviewView;
     private readonly messages: ChatMessage[];
@@ -117,7 +118,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     async show(): Promise<void> {
-        await vscode.commands.executeCommand('owlvex.chat.focus');
+        await vscode.commands.executeCommand(PROFILE.commands.chatFocus);
     }
 
     setLastScanTarget(value: string): void {
@@ -199,7 +200,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (intent.action === 'scanFolder') {
-            const result = await vscode.commands.executeCommand<any>('owlvex.scanWorkspace');
+            const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspace);
             if (result?.status === 'cancelled') {
                 return { handled: true, response: 'Folder scan was cancelled.', kind: 'scan' };
             }
@@ -225,7 +226,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             };
         }
 
-        const result = await vscode.commands.executeCommand<any>('owlvex.scanWorkspaceReport');
+        const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspaceReport);
             if (result?.status === 'cancelled') {
                 return {
                     handled: true,
@@ -302,7 +303,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (!action) return;
 
         if (action === 'selectFrameworks') {
-            await vscode.commands.executeCommand('owlvex.selectFrameworks');
+            await vscode.commands.executeCommand(PROFILE.commands.selectFrameworks);
             this.refresh();
             return;
         }
@@ -318,7 +319,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         try {
             if (action === 'scanFile') {
-                const result = await vscode.commands.executeCommand<any>('owlvex.scanFile');
+                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanFile);
                 if (result?.status === 'cancelled') {
                     this.messages.pop();
                     void this.persistState();
@@ -343,7 +344,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         : 'File scan did not complete.',
                 };
             } else if (action === 'scanFolder') {
-                const result = await vscode.commands.executeCommand<any>('owlvex.scanWorkspace');
+                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspace);
                 if (result?.status === 'cancelled') {
                     this.messages.pop();
                     void this.persistState();
@@ -371,7 +372,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             : 'Folder scan was cancelled.',
                 };
             } else if (action === 'scanReport') {
-                const result = await vscode.commands.executeCommand<any>('owlvex.scanWorkspaceReport');
+                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspaceReport);
                 if (result?.status === 'cancelled') {
                     this.messages.pop();
                     void this.persistState();
@@ -424,7 +425,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const targetUri = intent.fileHint
             ? await this.resolveFileIntentTarget(intent.fileHint)
             : undefined;
-        const result = await vscode.commands.executeCommand<any>('owlvex.scanFile', targetUri);
+        const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanFile, targetUri);
 
         if (result?.status === 'cancelled') {
             return {
@@ -563,7 +564,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private buildScanContext(): EditorContext {
         const frameworks = this.getFrameworks();
         const severity = this.getSeverityThreshold();
-        const teamContext = vscode.workspace.getConfiguration('owlvex').get<string>('teamContext', '').trim();
+        const teamContext = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('teamContext', '').trim();
 
         return {
             summary: `Active scan profile: frameworks=${frameworks.join(', ') || 'none'}, severity threshold=${severity}`,
@@ -576,11 +577,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private getFrameworks(): string[] {
-        return vscode.workspace.getConfiguration('owlvex').get<string[]>('frameworks', ['OWASP', 'STRIDE']);
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string[]>('frameworks', ['OWASP', 'STRIDE']);
     }
 
     private getSeverityThreshold(): string {
-        return vscode.workspace.getConfiguration('owlvex').get<string>('severityThreshold', 'MEDIUM');
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('severityThreshold', 'MEDIUM');
     }
 
     private getWorkspaceSummary(): string {

@@ -1,15 +1,16 @@
 import * as vscode from 'vscode';
 import { Finding } from '../scanner/scanEngine';
+import { PROFILE } from '../profile';
 
 export class DiagnosticsProvider {
     private readonly collection: vscode.DiagnosticCollection;
 
     constructor() {
-        this.collection = vscode.languages.createDiagnosticCollection('owlvex');
+        this.collection = vscode.languages.createDiagnosticCollection(PROFILE.diagnosticCollection);
     }
 
     applyFindings(document: vscode.TextDocument, findings: Finding[]): void {
-        const config = vscode.workspace.getConfiguration('owlvex');
+        const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const threshold = config.get<string>('severityThreshold', 'MEDIUM');
         const order = { LOW: 0, MEDIUM: 1, HIGH: 2, CRITICAL: 3 };
         const minLevel = order[threshold as keyof typeof order] ?? 1;
@@ -29,7 +30,7 @@ export class DiagnosticsProvider {
                     `[${f.ruleCode}] ${f.title}: ${f.explanation}`,
                     this._vscodeSeverity(f.severity),
                 );
-                diag.source = `Owlvex (${f.framework})`;
+                diag.source = `${PROFILE.displayLabel} (${f.framework})`;
                 diag.code = f.ruleCode;
                 return diag;
             });

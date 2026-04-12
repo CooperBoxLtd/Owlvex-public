@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { PROFILE } from '../profile';
 
 export interface CompletionRequest {
     systemPrompt: string;
@@ -45,8 +46,8 @@ class OpenAIProvider implements AIProvider {
     selectedModel = 'gpt-4o';
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension('owlvex.owlvex');
-        return ext?.exports?.secrets?.get('owlvex.openai.apiKey');
+        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
+        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.openai.apiKey`);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -120,8 +121,8 @@ class AnthropicProvider implements AIProvider {
     selectedModel = 'claude-opus-4-6';
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension('owlvex.owlvex');
-        return ext?.exports?.secrets?.get('owlvex.anthropic.apiKey');
+        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
+        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.anthropic.apiKey`);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -185,11 +186,11 @@ class AzureFoundryProvider implements AIProvider {
     selectedModel = 'gpt-4o';
 
     private async getCredentials(): Promise<{ endpoint: string; apiKey: string } | null> {
-        const ext = vscode.extensions.getExtension('owlvex.owlvex');
+        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
         const secrets = ext?.exports?.secrets;
-        const config = vscode.workspace.getConfiguration('owlvex');
+        const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const endpoint = config.get<string>('foundry.endpoint', '');
-        const apiKey = await secrets?.get('owlvex.foundry.apiKey');
+        const apiKey = await secrets?.get(`${PROFILE.secretPrefix}.foundry.apiKey`);
         if (!endpoint || !apiKey) return null;
         return { endpoint, apiKey };
     }
@@ -264,14 +265,14 @@ class OllamaProvider implements AIProvider {
     name = 'Ollama (local)';
 
     get selectedModel(): string {
-        return vscode.workspace.getConfiguration('owlvex').get<string>('ollama.model', 'qwen2.5:7b');
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('ollama.model', 'qwen2.5:7b');
     }
     set selectedModel(value: string) {
-        void vscode.workspace.getConfiguration('owlvex').update('ollama.model', value, getPreferredConfigurationTarget());
+        void vscode.workspace.getConfiguration(PROFILE.configSection).update('ollama.model', value, getPreferredConfigurationTarget());
     }
 
     private get host(): string {
-        return vscode.workspace.getConfiguration('owlvex').get<string>('ollama.host', 'http://localhost:11434');
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('ollama.host', 'http://localhost:11434');
     }
 
     async isConfigured(): Promise<boolean> {
@@ -328,8 +329,8 @@ class MistralProvider implements AIProvider {
     selectedModel = 'mistral-large-latest';
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension('owlvex.owlvex');
-        return ext?.exports?.secrets?.get('owlvex.mistral.apiKey');
+        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
+        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.mistral.apiKey`);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -400,8 +401,8 @@ class GeminiProvider implements AIProvider {
     selectedModel = 'gemini-1.5-pro';
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension('owlvex.owlvex');
-        return ext?.exports?.secrets?.get('owlvex.gemini.apiKey');
+        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
+        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.gemini.apiKey`);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -469,8 +470,8 @@ class GroqProvider implements AIProvider {
     selectedModel = 'llama-3.3-70b-versatile';
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension('owlvex.owlvex');
-        return ext?.exports?.secrets?.get('owlvex.groq.apiKey');
+        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
+        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.groq.apiKey`);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -540,19 +541,19 @@ class CustomProvider implements AIProvider {
     name = 'Custom Endpoint';
 
     get selectedModel(): string {
-        return vscode.workspace.getConfiguration('owlvex').get<string>('custom.model', 'custom-model');
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('custom.model', 'custom-model');
     }
     set selectedModel(value: string) {
-        void vscode.workspace.getConfiguration('owlvex').update('custom.model', value, getPreferredConfigurationTarget());
+        void vscode.workspace.getConfiguration(PROFILE.configSection).update('custom.model', value, getPreferredConfigurationTarget());
     }
 
     private get baseUrl(): string {
-        return vscode.workspace.getConfiguration('owlvex').get<string>('custom.baseUrl', '');
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('custom.baseUrl', '');
     }
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension('owlvex.owlvex');
-        return ext?.exports?.secrets?.get('owlvex.custom.apiKey');
+        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
+        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.custom.apiKey`);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -577,7 +578,7 @@ class CustomProvider implements AIProvider {
     }
 
     async complete(req: CompletionRequest): Promise<CompletionResponse> {
-        if (!this.baseUrl) throw new Error('Custom endpoint base URL not configured. Set owlvex.custom.baseUrl.');
+        if (!this.baseUrl) throw new Error(`Custom endpoint base URL not configured. Set ${PROFILE.configSection}.custom.baseUrl.`);
         const key = await this.getApiKey();
         const res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
             method: 'POST',
@@ -638,12 +639,12 @@ export class ProviderRegistry {
     }
 
     getActive(): AIProvider {
-        const id = vscode.workspace.getConfiguration('owlvex').get<string>('provider', 'openai');
+        const id = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('provider', 'openai');
         return this.providers.get(id) ?? this.providers.get('openai')!;
     }
 
     async setActiveProvider(id: string): Promise<void> {
-        await vscode.workspace.getConfiguration('owlvex').update('provider', id, getPreferredConfigurationTarget());
+        await vscode.workspace.getConfiguration(PROFILE.configSection).update('provider', id, getPreferredConfigurationTarget());
     }
 
     allProviders(): AIProvider[] {

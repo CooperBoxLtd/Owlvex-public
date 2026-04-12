@@ -12,6 +12,7 @@ if (!profileName) {
 const extensionRoot = process.cwd();
 const packageJsonPath = path.join(extensionRoot, "package.json");
 const profilePath = path.join(extensionRoot, "profiles", `${profileName}.json`);
+const profileSourcePath = path.join(extensionRoot, "src", "profile.ts");
 
 if (!fs.existsSync(profilePath)) {
   console.error(`Unknown profile '${profileName}'. Expected ${profilePath}`);
@@ -19,6 +20,7 @@ if (!fs.existsSync(profilePath)) {
 }
 
 const originalManifestText = fs.readFileSync(packageJsonPath, "utf8");
+const originalProfileSource = fs.readFileSync(profileSourcePath, "utf8");
 const manifest = JSON.parse(originalManifestText);
 const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
 
@@ -29,13 +31,80 @@ manifest.name = profile.name;
 manifest.displayName = profile.displayName;
 manifest.description = profile.description;
 manifest.publisher = profile.publisher;
+manifest.contributes.configuration.title = profile.displayName;
 
-if (manifest.contributes?.configuration?.properties?.["owlvex.apiUrl"]) {
-  manifest.contributes.configuration.properties["owlvex.apiUrl"].default = profile.apiUrl;
+const originalProperties = manifest.contributes?.configuration?.properties ?? {};
+const rewrittenProperties = {};
+for (const [key, value] of Object.entries(originalProperties)) {
+  const nextKey = key.replace(/^owlvex\./, `${profile.configSection}.`);
+  rewrittenProperties[nextKey] = value;
 }
+manifest.contributes.configuration.properties = rewrittenProperties;
+if (manifest.contributes.configuration.properties[`${profile.configSection}.apiUrl`]) {
+  manifest.contributes.configuration.properties[`${profile.configSection}.apiUrl`].default = profile.apiUrl;
+}
+
+const commandIdMap = {
+  "owlvex.scanFile": `${profile.commandPrefix}.scanFile`,
+  "owlvex.scanWorkspace": `${profile.commandPrefix}.scanWorkspace`,
+  "owlvex.scanWorkspaceReport": `${profile.commandPrefix}.scanWorkspaceReport`,
+  "owlvex.selectFrameworks": `${profile.commandPrefix}.selectFrameworks`,
+  "owlvex.openPromptEditor": `${profile.commandPrefix}.openPromptEditor`,
+  "owlvex.switchModel": `${profile.commandPrefix}.switchModel`,
+  "owlvex.setupAI": `${profile.commandPrefix}.setupAI`,
+  "owlvex.enterLicence": `${profile.commandPrefix}.enterLicence`,
+  "owlvex.compareScans": `${profile.commandPrefix}.compareScans`,
+};
+
+manifest.contributes.commands = manifest.contributes.commands.map((command) => ({
+  ...command,
+  command: commandIdMap[command.command] ?? command.command,
+  title: command.title.replace(/^Owlvex/, profile.displayName),
+}));
+
+if (manifest.contributes.viewsContainers?.activitybar?.[0]) {
+  manifest.contributes.viewsContainers.activitybar[0].id = profile.viewContainerId;
+  manifest.contributes.viewsContainers.activitybar[0].title = profile.displayName;
+}
+
+const existingViews = manifest.contributes.views?.owlvex ?? [];
+delete manifest.contributes.views.owlvex;
+manifest.contributes.views[profile.viewContainerId] = existingViews.map((view) => ({
+  ...view,
+  id: view.id === "owlvex.findings" ? profile.findingsViewId : profile.chatViewId,
+}));
+
+const generatedProfileSource = `export const PROFILE = ${JSON.stringify({
+  profileName,
+  extensionId: `${profile.publisher}.${profile.name}`,
+  configSection: profile.configSection,
+  displayLabel: profile.displayName,
+  defaultApiUrl: profile.apiUrl,
+  storagePrefix: profile.storagePrefix,
+  secretPrefix: profile.secretPrefix,
+  diagnosticCollection: profile.diagnosticCollection,
+  viewContainerId: profile.viewContainerId,
+  findingsViewId: profile.findingsViewId,
+  chatViewId: profile.chatViewId,
+  comparisonPanelId: profile.comparisonPanelId,
+  commands: {
+    scanFile: `${profile.commandPrefix}.scanFile`,
+    scanWorkspace: `${profile.commandPrefix}.scanWorkspace`,
+    scanWorkspaceReport: `${profile.commandPrefix}.scanWorkspaceReport`,
+    selectFrameworks: `${profile.commandPrefix}.selectFrameworks`,
+    openPromptEditor: `${profile.commandPrefix}.openPromptEditor`,
+    switchModel: `${profile.commandPrefix}.switchModel`,
+    setupAI: `${profile.commandPrefix}.setupAI`,
+    enterLicence: `${profile.commandPrefix}.enterLicence`,
+    compareScans: `${profile.commandPrefix}.compareScans`,
+    revealLine: `${profile.commandPrefix}.revealLine`,
+    chatFocus: `${profile.chatViewId}.focus`
+  }
+}, null, 4)} as const;\n`;
 
 try {
   fs.writeFileSync(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  fs.writeFileSync(profileSourcePath, generatedProfileSource, "utf8");
 
   const compile = spawnSync("npm", ["run", "compile"], {
     cwd: extensionRoot,
@@ -58,4 +127,5 @@ try {
   console.log(`Built ${profileName} package at ${packagePath}`);
 } finally {
   fs.writeFileSync(packageJsonPath, originalManifestText, "utf8");
+  fs.writeFileSync(profileSourcePath, originalProfileSource, "utf8");
 }
