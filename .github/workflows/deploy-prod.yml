@@ -68,9 +68,10 @@ jobs:
         run: |
           IMAGE_TAG=${{ github.sha }}
           docker build \
+            -f backend/Dockerfile \
             -t ${{ secrets.ACR_LOGIN_SERVER }}/owlvex-api:${IMAGE_TAG} \
             -t ${{ secrets.ACR_LOGIN_SERVER }}/owlvex-api:latest \
-            ./backend
+            .
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/owlvex-api:${IMAGE_TAG}
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/owlvex-api:latest
           echo "IMAGE_TAG=${IMAGE_TAG}" >> $GITHUB_ENV

@@ -142,7 +142,7 @@ docker build \
   --tag "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}" \
   --tag "${ACR_LOGIN_SERVER}/owlvex-api:latest" \
   --file "${REPO_ROOT}/backend/Dockerfile" \
-  "${REPO_ROOT}/backend"
+  "${REPO_ROOT}"
 
 docker push "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}"
 docker push "${ACR_LOGIN_SERVER}/owlvex-api:latest"

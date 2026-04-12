@@ -37,13 +37,14 @@ services:
   # ----------------------------------------------------------
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: owlvex_backend
     restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      OWLVEX_DATA_DIR: /app/docs/data
       SECRET_KEY: ${SECRET_KEY}
       ADMIN_KEY: ${ADMIN_KEY}
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}

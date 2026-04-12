@@ -72,7 +72,7 @@ az account show --query "{name:name, id:id}" -o table
 ## Step 2: Create The Production Resource Group
 
 ```bash
-az group create --name owlvex-prod --location westeurope
+az group create --name owlvex-prd --location uksouth
 ```
 
 This is safe to run again later.
@@ -111,7 +111,6 @@ Run the deploy script. It will provision:
 - Azure App Service Plan
 - Azure Web App for Containers
 - Log Analytics workspace
-- Application Insights
 
 ```bash
 cp infra/.env.prod.example infra/.env.prod
@@ -142,7 +141,6 @@ Handled automatically by `deploy.sh` via `az webapp config container set`. The B
 - optional Stripe values
 - optional SendGrid value
 - `ENVIRONMENT=production`
-- `APPLICATIONINSIGHTS_CONNECTION_STRING`
 
 ## Step 7: Initialize The Database Schema
 
@@ -166,7 +164,7 @@ Health    : https://<app-service-hostname>/health
 To retrieve it later:
 
 ```bash
-az webapp show --name owlvex-api --resource-group owlvex-prod --query defaultHostName -o tsv
+az webapp show --name owlvex-api --resource-group owlvex-prd --query defaultHostName -o tsv
 ```
 
 ## Step 9: Point The Extension At Production
@@ -174,6 +172,10 @@ az webapp show --name owlvex-api --resource-group owlvex-prod --query defaultHos
 Set:
 
 - `owlvex.apiUrl = https://<app-service-hostname>`
+
+The current live production endpoint is:
+
+- `https://owlvex-api.azurewebsites.net`
 
 Development can continue using:
 

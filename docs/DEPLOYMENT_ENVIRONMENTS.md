@@ -87,12 +87,12 @@ Production should use a dedicated resource group.
 
 Recommended initial value:
 
-- `owlvex-prod`
+- `owlvex-prd`
 
 Create it once:
 
 ```bash
-az group create --name owlvex-prod --location westeurope
+az group create --name owlvex-prd --location uksouth
 ```
 
 ## Environment Files
@@ -151,7 +151,7 @@ The exact App Service deployment scripts are not yet implemented in the repo.
 
 The production infrastructure is implemented and deployed. The files under `infra/` target Azure App Service for Containers:
 
-- [main.bicep](D:/Dev/repos/CodeScanner/infra/main.bicep) — provisions ACR, PostgreSQL Flexible Server, Key Vault, Log Analytics, Application Insights, App Service Plan, Web App for Containers
+- [main.bicep](D:/Dev/repos/CodeScanner/infra/main.bicep) — provisions ACR, PostgreSQL Flexible Server, Key Vault, Log Analytics, App Service Plan, and the Web App for Containers
 - [deploy.sh](D:/Dev/repos/CodeScanner/infra/deploy.sh) — full bootstrap: provisions infra via Bicep, builds and pushes image, updates Web App, applies schema, health checks
 - [deploy-prod.yml](D:/Dev/repos/CodeScanner/.github/workflows/deploy-prod.yml) — CI gate: runs tests and benchmark, then builds/pushes image and updates Web App on push to `main`
 
@@ -175,6 +175,7 @@ Current key:
 Expected usage:
 
 - dev -> `http://owlvex.ml30.local`
+- prod default -> `https://owlvex-api.azurewebsites.net`
 - prod -> Azure App Service URL
 
 This keeps the environment switch operationally simple.
@@ -207,6 +208,7 @@ The production infrastructure is live. Hardening priorities:
 - replace ACR admin credentials with managed identity where practical
 - formalize environment selection in extension settings if needed
 - document backend request shapes that are allowed to carry metadata only
+- add real telemetry instrumentation before reintroducing Application Insights settings
 
 ## Bottom Line
 

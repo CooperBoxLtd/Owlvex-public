@@ -1,3 +1,6 @@
+from pathlib import Path
+
+from app.services import knowledge_base
 from app.services.knowledge_base import (
     get_canonical_issue,
     get_canonical_issues,
@@ -28,3 +31,12 @@ def test_framework_index_maps_cwe_to_issue():
 def test_prompt_summary_contains_canonical_ids():
     summary = summarize_issues_for_prompt(limit=2)
     assert "owlvex.issue.sql_injection.001" in summary
+
+
+def test_data_root_prefers_env_override(monkeypatch):
+    expected = Path(__file__).resolve().parents[2] / "docs" / "data"
+    monkeypatch.setenv("OWLVEX_DATA_DIR", str(expected))
+    knowledge_base.load_issue_pack.cache_clear()
+    knowledge_base.load_issue_mapping_pack.cache_clear()
+    knowledge_base.load_stride_profile.cache_clear()
+    assert knowledge_base._data_root() == expected

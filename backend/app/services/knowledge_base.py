@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -10,8 +11,25 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+def _data_root() -> Path:
+    configured = os.getenv("OWLVEX_DATA_DIR", "").strip()
+    if configured:
+        return Path(configured).expanduser().resolve()
+
+    candidates = [
+        _repo_root() / "docs" / "data",
+        Path("/app/docs/data"),
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    return candidates[0]
+
+
 def _load_json(relative_path: str) -> dict[str, Any]:
-    path = _repo_root() / relative_path
+    path = _data_root() / Path(relative_path).relative_to("docs/data")
     with path.open("r", encoding="utf-8") as handle:
         return json.load(handle)
 

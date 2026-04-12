@@ -7,7 +7,6 @@
 //   - Azure Database for PostgreSQL Flexible Server
 //   - Azure Key Vault
 //   - Log Analytics workspace
-//   - Application Insights
 //   - Azure App Service Plan
 //   - Azure Web App for Containers
 //
@@ -63,8 +62,6 @@ param fromEmail string = 'noreply@owlvex.io'
 var acrName = '${prefix}registry'
 var appServicePlanName = '${prefix}-plan'
 var webAppName = '${prefix}-api'
-var appInsightsName = '${prefix}-appi'
-var appInsightsConnectionStringSetting = 'APPLICATIONINSIGHTS_CONNECTION_STRING'
 var acrLoginServer = acr.properties.loginServer
 var dbHost = postgres.properties.fullyQualifiedDomainName
 var dbUrl = 'postgresql+asyncpg://${postgresAdminUser}:${postgresAdminPassword}@${dbHost}:5432/${postgresDbName}?ssl=require'
@@ -85,17 +82,6 @@ resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2022-10-01' = {
   properties: {
     sku: { name: 'PerGB2018' }
     retentionInDays: 30
-  }
-  tags: { environment: environment }
-}
-
-resource appInsights 'Microsoft.Insights/components@2020-02-02' = {
-  name: appInsightsName
-  location: location
-  kind: 'web'
-  properties: {
-    Application_Type: 'web'
-    WorkspaceResourceId: logAnalytics.id
   }
   tags: { environment: environment }
 }
@@ -279,10 +265,6 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
         {
           name: 'ENVIRONMENT'
           value: 'production'
-        }
-        {
-          name: appInsightsConnectionStringSetting
-          value: appInsights.properties.ConnectionString
         }
       ]
       healthCheckPath: '/health'

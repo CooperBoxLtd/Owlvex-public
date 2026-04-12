@@ -5,7 +5,7 @@
     "_generator": {
       "name": "bicep",
       "version": "0.42.1.51946",
-      "templateHash": "5696676337197287227"
+      "templateHash": "2392320448131285112"
     }
   },
   "parameters": {
@@ -99,9 +99,7 @@
   "variables": {
     "acrName": "[format('{0}registry', parameters('prefix'))]",
     "appServicePlanName": "[format('{0}-plan', parameters('prefix'))]",
-    "webAppName": "[format('{0}-api', parameters('prefix'))]",
-    "appInsightsName": "[format('{0}-appi', parameters('prefix'))]",
-    "appInsightsConnectionStringSetting": "APPLICATIONINSIGHTS_CONNECTION_STRING"
+    "webAppName": "[format('{0}-api', parameters('prefix'))]"
   },
   "resources": [
     {
@@ -133,23 +131,6 @@
       "tags": {
         "environment": "[parameters('environment')]"
       }
-    },
-    {
-      "type": "Microsoft.Insights/components",
-      "apiVersion": "2020-02-02",
-      "name": "[variables('appInsightsName')]",
-      "location": "[parameters('location')]",
-      "kind": "web",
-      "properties": {
-        "Application_Type": "web",
-        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('prefix')))]"
-      },
-      "tags": {
-        "environment": "[parameters('environment')]"
-      },
-      "dependsOn": [
-        "[resourceId('Microsoft.OperationalInsights/workspaces', format('{0}-logs', parameters('prefix')))]"
-      ]
     },
     {
       "type": "Microsoft.KeyVault/vaults",
@@ -379,10 +360,6 @@
             {
               "name": "ENVIRONMENT",
               "value": "production"
-            },
-            {
-              "name": "[variables('appInsightsConnectionStringSetting')]",
-              "value": "[reference(resourceId('Microsoft.Insights/components', variables('appInsightsName')), '2020-02-02').ConnectionString]"
             }
           ],
           "healthCheckPath": "/health",
@@ -398,7 +375,6 @@
       },
       "dependsOn": [
         "[resourceId('Microsoft.ContainerRegistry/registries', variables('acrName'))]",
-        "[resourceId('Microsoft.Insights/components', variables('appInsightsName'))]",
         "[resourceId('Microsoft.Web/serverfarms', variables('appServicePlanName'))]",
         "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', format('{0}-db', parameters('prefix')))]"
       ]
