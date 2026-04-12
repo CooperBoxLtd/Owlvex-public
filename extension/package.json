@@ -1,25 +1,62 @@
 {
   "name": "owlvex",
-  "displayName": "Owlvex — AI Code Security Scanner",
+  "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
   "version": "0.1.0",
   "publisher": "owlvex",
-  "repository": { "type": "git", "url": "https://github.com/owlvex/owlvex.git" },
-  "engines": { "vscode": "^1.85.0" },
-  "categories": ["Linters", "Other"],
-  "activationEvents": ["onStartupFinished"],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/owlvex/owlvex.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Linters",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-      { "command": "owlvex.scanFile",       "title": "Owlvex: Scan Current File" },
-      { "command": "owlvex.scanWorkspace",  "title": "Owlvex: Scan Workspace" },
-      { "command": "owlvex.scanWorkspaceReport", "title": "Owlvex: Create Report" },
-      { "command": "owlvex.selectFrameworks", "title": "Owlvex: Select Frameworks" },
-      { "command": "owlvex.openPromptEditor","title": "Owlvex: Open AI Chat" },
-      { "command": "owlvex.switchModel",    "title": "Owlvex: Switch AI Model" },
-      { "command": "owlvex.setupAI",        "title": "Owlvex: Setup AI Connection" },
-      { "command": "owlvex.enterLicence",   "title": "Owlvex: Enter Licence Key" },
-      { "command": "owlvex.compareScans",   "title": "Owlvex: Compare Scans" }
+      {
+        "command": "owlvex.scanFile",
+        "title": "Owlvex: Scan Current File"
+      },
+      {
+        "command": "owlvex.scanWorkspace",
+        "title": "Owlvex: Scan Workspace"
+      },
+      {
+        "command": "owlvex.scanWorkspaceReport",
+        "title": "Owlvex: Create Report"
+      },
+      {
+        "command": "owlvex.selectFrameworks",
+        "title": "Owlvex: Select Frameworks"
+      },
+      {
+        "command": "owlvex.openPromptEditor",
+        "title": "Owlvex: Open AI Chat"
+      },
+      {
+        "command": "owlvex.switchModel",
+        "title": "Owlvex: Switch AI Model"
+      },
+      {
+        "command": "owlvex.setupAI",
+        "title": "Owlvex: Setup AI Connection"
+      },
+      {
+        "command": "owlvex.enterLicence",
+        "title": "Owlvex: Enter Licence Key"
+      },
+      {
+        "command": "owlvex.compareScans",
+        "title": "Owlvex: Compare Scans"
+      }
     ],
     "configuration": {
       "title": "Owlvex",
@@ -31,7 +68,16 @@
         },
         "owlvex.provider": {
           "type": "string",
-          "enum": ["azure-foundry","anthropic","openai","mistral","gemini","groq","ollama","custom"],
+          "enum": [
+            "azure-foundry",
+            "anthropic",
+            "openai",
+            "mistral",
+            "gemini",
+            "groq",
+            "ollama",
+            "custom"
+          ],
           "default": "openai",
           "description": "AI provider to use for scanning"
         },
@@ -62,7 +108,10 @@
         },
         "owlvex.frameworks": {
           "type": "array",
-          "default": ["OWASP", "STRIDE"],
+          "default": [
+            "OWASP",
+            "STRIDE"
+          ],
           "description": "Security frameworks to scan against"
         },
         "owlvex.scanOnSave": {
@@ -72,7 +121,12 @@
         },
         "owlvex.severityThreshold": {
           "type": "string",
-          "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"],
+          "enum": [
+            "LOW",
+            "MEDIUM",
+            "HIGH",
+            "CRITICAL"
+          ],
           "default": "MEDIUM",
           "description": "Minimum severity to display"
         },
@@ -99,8 +153,15 @@
     },
     "views": {
       "owlvex": [
-        { "id": "owlvex.findings", "name": "Security Findings" },
-        { "id": "owlvex.chat", "name": "AI Chat", "type": "webview" }
+        {
+          "id": "owlvex.findings",
+          "name": "Security Findings"
+        },
+        {
+          "id": "owlvex.chat",
+          "name": "AI Chat",
+          "type": "webview"
+        }
       ]
     }
   },
@@ -108,7 +169,10 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package",
+    "package": "npm run package:prod",
+    "package:prod": "node ./scripts/package-profile.mjs prod",
+    "package:dev": "node ./scripts/package-profile.mjs dev",
+    "package:all": "npm run package:prod && npm run package:dev",
     "lint": "eslint src --ext ts",
     "test": "jest --coverage",
     "corpus:test": "npm run compile && node ./out/frameworks/corpusRunner.js",
@@ -155,9 +219,16 @@
     "moduleNameMapper": {
       "^vscode$": "<rootDir>/src/__mocks__/vscode.ts"
     },
-    "modulePathIgnorePatterns": ["<rootDir>/out/"],
-    "testMatch": ["**/src/**/*.test.ts"],
-    "collectCoverageFrom": ["src/**/*.ts", "!src/__mocks__/**"]
+    "modulePathIgnorePatterns": [
+      "<rootDir>/out/"
+    ],
+    "testMatch": [
+      "**/src/**/*.test.ts"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.ts",
+      "!src/__mocks__/**"
+    ]
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.0",

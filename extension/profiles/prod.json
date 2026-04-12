@@ -1,0 +1,8 @@
+{
+  "name": "owlvex",
+  "displayName": "Owlvex",
+  "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
+  "publisher": "owlvex",
+  "apiUrl": "https://owlvex-api.azurewebsites.net",
+  "packagePath": "dist/owlvex-prod.vsix"
+}

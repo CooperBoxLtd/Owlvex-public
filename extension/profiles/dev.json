@@ -1,0 +1,8 @@
+{
+  "name": "owlvex-dev",
+  "displayName": "Owlvex Dev",
+  "description": "Internal Owlvex development build wired to the ml30 control plane",
+  "publisher": "owlvex",
+  "apiUrl": "http://owlvex.ml30.local",
+  "packagePath": "dist/owlvex-dev.vsix"
+}

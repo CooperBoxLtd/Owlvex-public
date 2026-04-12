@@ -13,8 +13,6 @@ import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog'
 
 export let secrets: vscode.SecretStorage;
 
-const DEFAULT_API_URL = 'https://owlvex-api.azurewebsites.net';
-
 const MAX_STORED_SCANS = 20;
 const scanStore = new Map<string, ScanResult>();
 const SCAN_STORE_KEY = 'owlvex.scanStore';
@@ -101,7 +99,7 @@ export function activate(context: vscode.ExtensionContext) {
     secrets = context.secrets;
 
     const config = vscode.workspace.getConfiguration('owlvex');
-    const apiUrl = config.get<string>('apiUrl', DEFAULT_API_URL);
+    const apiUrl = config.get<string>('apiUrl') ?? 'https://owlvex-api.azurewebsites.net';
 
     const licenceMgr = new LicenceManager(context.secrets);
     const registry = new ProviderRegistry();
@@ -552,7 +550,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('owlvex.compareScans', async () => {
             const cfg = vscode.workspace.getConfiguration('owlvex');
-            const compareApiUrl = cfg.get<string>('apiUrl', DEFAULT_API_URL);
+            const compareApiUrl = cfg.get<string>('apiUrl') ?? 'https://owlvex-api.azurewebsites.net';
             const licenceKey = await licenceMgr.getKey();
             if (!licenceKey) {
                 vscode.window.showErrorMessage('No licence key. Run "Owlvex: Enter Licence Key".');

@@ -167,6 +167,18 @@ cd extension && npm install && npm run compile
 
 Open `extension/` in VS Code and press `F5`.
 
+### Build the extension packages
+
+```bash
+cd extension && npm run package:prod
+cd extension && npm run package:dev
+```
+
+This produces two `.vsix` packages from the same codebase:
+
+- `prod` -> default backend `https://owlvex-api.azurewebsites.net`
+- `dev` -> default backend `http://owlvex.ml30.local`
+
 ### Start the backend (Docker)
 
 ```bash

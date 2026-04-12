@@ -180,6 +180,13 @@ Expected usage:
 
 This keeps the environment switch operationally simple.
 
+The extension now supports two packaging profiles from the same source tree:
+
+- `npm run package:dev` -> `Owlvex Dev`
+- `npm run package:prod` -> `Owlvex`
+
+These builds are intended as environment-specific package outputs, not long-term side-by-side installs.
+
 ## Recommended Operating Pattern
 
 Use this workflow:
