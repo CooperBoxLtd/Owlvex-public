@@ -103,3 +103,8 @@ async def test_record_comparison_includes_canonical_issue_changes():
     assert comparison["canonical_changes"][0]["count_a"] == 2
     assert comparison["canonical_changes"][0]["count_b"] == 1
     assert comparison["canonical_changes"][0]["delta"] == -1
+    assert comparison["new_findings"] == 0
+    assert comparison["resolved_findings"] == 1
+    assert comparison["agreed_findings"] == 1
+    assert comparison["resolved_finding_details"][0]["issue_id"] == "owlvex.issue.sql_injection.001"
+    assert comparison["resolved_finding_details"][0]["line"] == 20

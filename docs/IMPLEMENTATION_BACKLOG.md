@@ -126,6 +126,7 @@ Move toward a model where the extension executes locally but can receive version
 ### Likely Files
 
 - [IMPLEMENTATION_DESIGN.md](D:/Dev/repos/CodeScanner/docs/IMPLEMENTATION_DESIGN.md)
+- [RULE_PACK_DELIVERY_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/RULE_PACK_DELIVERY_CONTRACT.md)
 - [backend](D:/Dev/repos/CodeScanner/backend)
 - [extension/src](D:/Dev/repos/CodeScanner/extension/src)
 

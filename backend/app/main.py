@@ -67,7 +67,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["vscode-webview://*"] if not settings.is_development else ["*"],
+    allow_origins=["*"] if settings.is_development else [],
+    allow_origin_regex=r"^vscode-webview://.*$" if not settings.is_development else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

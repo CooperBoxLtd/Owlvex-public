@@ -3,6 +3,7 @@
  * we test the parser by driving it with mocked provider and backend calls).
  */
 import { ScanEngine } from './scanEngine';
+import * as vscode from 'vscode';
 
 // We need access to the private parser — use a subclass to expose it.
 class TestableScanEngine extends ScanEngine {
@@ -176,5 +177,160 @@ describe('ScanEngine._parseAIResponse', () => {
             nist: ['SI-10', 'SA-11'],
         });
         expect(result.findings[0].matchedSignals).toEqual(['CWE:CWE-89', 'sql injection']);
+    });
+});
+
+describe('ScanEngine.scanDocument caching', () => {
+    const createJsonResponse = (body: unknown, ok = true, status = 200) => ({
+        ok,
+        status,
+        text: jest.fn().mockResolvedValue(JSON.stringify(body)),
+    }) as any;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: (key: string, defaultValue?: any) => {
+                switch (key) {
+                    case 'apiUrl':
+                        return 'https://api.example.test';
+                    case 'frameworks':
+                        return ['OWASP'];
+                    case 'severityThreshold':
+                        return 'MEDIUM';
+                    case 'teamContext':
+                        return '';
+                    default:
+                        return defaultValue;
+                }
+            },
+        });
+    });
+
+    it('reuses licence validation and prompt build across repeated scans with the same settings', async () => {
+        const validate = jest.fn().mockResolvedValue({
+            valid: true,
+            features: { frameworks: ['OWASP'] },
+        });
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate,
+        } as any;
+        const complete = jest.fn().mockResolvedValue({
+            content: JSON.stringify({
+                score: 8,
+                summary: 'ok',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+            }),
+            tokenCount: 42,
+        });
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-2' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const firstDoc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\a.js',
+            getText: () => 'const a = 1;',
+        } as any;
+        const secondDoc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\b.js',
+            getText: () => 'const b = 2;',
+        } as any;
+
+        await engine.scanDocument(firstDoc);
+        await engine.scanDocument(secondDoc);
+
+        expect(validate).toHaveBeenCalledTimes(1);
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+        expect((global.fetch as jest.Mock).mock.calls[0][0]).toContain('/v1/prompts/build');
+        expect((global.fetch as jest.Mock).mock.calls[1][0]).toContain('/v1/scans/record');
+        expect((global.fetch as jest.Mock).mock.calls[2][0]).toContain('/v1/scans/record');
+        expect(complete).toHaveBeenCalledTimes(2);
+    });
+
+    it('falls back to deterministic-only results when the backend is unavailable', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockRejectedValue(new Error('connect ECONNREFUSED')),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn(),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\a.js',
+            getText: () => 'exec(`cat ${file}`);',
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.model).toContain('deterministic-only');
+        expect(result.warnings[0]).toMatch(/backend unavailable/i);
+        expect(provider.complete).not.toHaveBeenCalled();
+    });
+
+    it('falls back to deterministic-only results when the AI provider fails', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockRejectedValue(new Error('provider timeout')),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\a.js',
+            getText: () => 'exec(`cat ${file}`);',
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.warnings[0]).toMatch(/AI provider unavailable/i);
+        expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 });

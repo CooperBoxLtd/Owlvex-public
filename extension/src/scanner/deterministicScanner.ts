@@ -29,10 +29,10 @@ const HTML_SANITIZERS = [
     'escapeHtml', 'htmlspecialchars', 'encodeHtml', 'htmlEscape', 'escapeXml',
 ];
 
-// GR-001: shell sink names that accept a command string argument.
-// Matches exec(), execSync(), spawn(), spawnSync(), execFile(), execFileSync().
+// GR-001: shell-parsed command string sinks.
+// Matches exec()/execSync() only. Other process APIs require separate modeling.
 const SHELL_SINK_PATTERN =
-    /\b(exec|execSync|spawn|spawnSync|execFile|execFileSync)\s*\(\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
+    /\b(exec|execSync)\s*\(\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
 
 // SQ-001: SQL sink call with a template literal as the first argument (inline).
 // Matches db.query(`...${x}...`) — excludes parameterized (.query('...', [...])).
@@ -47,6 +47,10 @@ const SQL_SINK_VAR_PATTERN =
 // Template literal assignment: const query = `SELECT ... ${x} ...`
 const TEMPLATE_ASSIGN_PATTERN =
     /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
+
+// HTML sanitizer assignment: const cleaned = escapeHtml(username)
+const SANITIZER_ASSIGN_PATTERN =
+    /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:escapeHtml|htmlspecialchars|encodeHtml|htmlEscape|escapeXml)\s*\(/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -646,9 +650,31 @@ function lineOfOffset(source: string, offset: number): number {
     return line;
 }
 
-function hasHtmlSanitizerBefore(source: string, sinkOffset: number): boolean {
-    const prefix = source.slice(0, sinkOffset);
-    return HTML_SANITIZERS.some(fn => prefix.includes(`${fn}(`));
+function collectSanitizedVariables(source: string): Set<string> {
+    const sanitized = new Set<string>();
+    const pattern = new RegExp(SANITIZER_ASSIGN_PATTERN.source, SANITIZER_ASSIGN_PATTERN.flags);
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(source)) !== null) {
+        sanitized.add(match[1]);
+    }
+
+    return sanitized;
+}
+
+function templateContainsHtmlSanitizer(templateBody: string, sanitizedVars: Set<string>): boolean {
+    if (HTML_SANITIZERS.some(fn => new RegExp(String.raw`\$\{\s*${fn}\s*\(`).test(templateBody))) {
+        return true;
+    }
+
+    for (const variable of sanitizedVars) {
+        const escapedVariable = variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(String.raw`\$\{\s*${escapedVariable}\s*\}`).test(templateBody)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 function scanShellSinks(source: string): InternalFinding[] {
@@ -739,19 +765,24 @@ function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: 
 
 function scanSqlSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
+    const sanitizedVars = collectSanitizedVariables(source);
 
     // Collect template literal assignments: `const query = \`SELECT ${x}\``
-    const templateVars = new Set<string>();
+    const templateVars = new Map<string, boolean>();
     const assignPattern = new RegExp(TEMPLATE_ASSIGN_PATTERN.source, TEMPLATE_ASSIGN_PATTERN.flags);
     let match: RegExpExecArray | null;
     while ((match = assignPattern.exec(source)) !== null) {
-        templateVars.add(match[1]);
+        templateVars.set(match[1], templateContainsHtmlSanitizer(match[2], sanitizedVars));
     }
 
     // Case A: inline template literal passed directly to the sink.
     const inlinePattern = new RegExp(SQL_SINK_INLINE_PATTERN.source, SQL_SINK_INLINE_PATTERN.flags);
     while ((match = inlinePattern.exec(source)) !== null) {
-        found.push(makeSqlFinding(match.index, hasHtmlSanitizerBefore(source, match.index), match[1]));
+        found.push(makeSqlFinding(
+            match.index,
+            templateContainsHtmlSanitizer(match[2], sanitizedVars),
+            match[1],
+        ));
     }
 
     // Case B: variable previously assigned a template literal passed to the sink.
@@ -759,7 +790,7 @@ function scanSqlSinks(source: string): InternalFinding[] {
     while ((match = varPattern.exec(source)) !== null) {
         const varName = match[2];
         if (templateVars.has(varName)) {
-            found.push(makeSqlFinding(match.index, hasHtmlSanitizerBefore(source, match.index), match[1]));
+            found.push(makeSqlFinding(match.index, templateVars.get(varName) === true, match[1]));
         }
     }
 

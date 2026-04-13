@@ -125,6 +125,10 @@ The supported dev/prod deployment model lives in [docs/DEPLOYMENT_ENVIRONMENTS.m
 
 The fastest first-production bootstrap checklist lives in [docs/FIRST_PRODUCTION_DEPLOY.md](docs/FIRST_PRODUCTION_DEPLOY.md).
 
+The explicit release bar for calling Owlvex production ready lives in [docs/PRODUCTION_READINESS_CONTRACT.md](docs/PRODUCTION_READINESS_CONTRACT.md).
+
+The backend-served intelligence and IP-protection contract for rule/config delivery lives in [docs/RULE_PACK_DELIVERY_CONTRACT.md](docs/RULE_PACK_DELIVERY_CONTRACT.md).
+
 Current note: Azure production is now planned around App Service for Containers. Existing Container Apps deployment files in `infra/` are deprecated and need to be rewritten before first prod bootstrap.
 
 That document is the source of truth for:

@@ -1,14 +1,10 @@
 """
 Integration tests for the FastAPI endpoints using an in-memory database.
-Covers: /health, /v1/licences/validate, /v1/licences/generate, /v1/prompts/build.
+Covers the production extension/backend contract surfaces.
 """
 import pytest
-import json
 import uuid
-from unittest.mock import patch, AsyncMock, MagicMock
-
-from unittest.mock import MagicMock
-from app.services.licence_service import hash_licence_key, generate_licence_key
+from unittest.mock import patch, MagicMock
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +188,7 @@ async def test_record_scan_valid(client):
     mock_scan = MagicMock()
     mock_scan.id = str(uuid.uuid4())
     with patch("app.routers.scans.validate_licence", return_value=mock_licence), \
-         patch("app.services.scan_recorder.record_scan", return_value=mock_scan):
+         patch("app.routers.scans.record_scan", return_value=mock_scan):
         response = await client.post(
             "/v1/scans/record",
             headers={"X-Licence-Key": "owlvex_lic_valid"},
@@ -210,6 +206,70 @@ async def test_record_scan_valid(client):
         )
     assert response.status_code == 200
     assert "scan_id" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_compare_scan_returns_extension_compatible_shape(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"comparison": True, "frameworks": ["OWASP"]},
+    }
+    comparison_payload = {
+        "comparison_id": str(uuid.uuid4()),
+        "score_a": 6.0,
+        "score_b": 8.0,
+        "score_change": 2.0,
+        "new_findings": 1,
+        "resolved_findings": 2,
+        "agreed_findings": 3,
+        "new_finding_details": [
+            {
+                "issue_id": "owlvex.issue.command_injection.001",
+                "line": 10,
+                "framework": "OWASP",
+                "rule_code": "GR-001",
+                "severity": "HIGH",
+                "title": "Command Injection",
+            }
+        ],
+        "resolved_finding_details": [
+            {
+                "issue_id": "owlvex.issue.sql_injection.001",
+                "line": 5,
+                "framework": "OWASP",
+                "rule_code": "SQ-001",
+                "severity": "HIGH",
+                "title": "SQL Injection",
+            }
+        ],
+        "canonical_changes": [],
+        "summary": {"verdict": "improved"},
+    }
+
+    with patch("app.routers.scans.validate_licence", return_value=mock_licence), \
+         patch("app.routers.scans.record_comparison", return_value=comparison_payload):
+        response = await client.post(
+            "/v1/scans/compare",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+            json={
+                "scan_a_id": str(uuid.uuid4()),
+                "scan_b_id": str(uuid.uuid4()),
+                "findings_a": [],
+                "findings_b": [],
+                "score_a": 6.0,
+                "score_b": 8.0,
+            },
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["new_findings"] == 1
+    assert data["resolved_findings"] == 2
+    assert isinstance(data["new_finding_details"], list)
+    assert isinstance(data["resolved_finding_details"], list)
 
 
 # ---------------------------------------------------------------------------

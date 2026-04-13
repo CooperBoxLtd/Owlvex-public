@@ -58,18 +58,16 @@ function handler(req, res) {
         expect(findings[0].ruleCode).toBe('GR-001');
     });
 
-    it('detects spawn() with template literal interpolation', () => {
+    it('does not flag spawn() because shell semantics are not proven by this rule', () => {
         const source = `spawn(\`bash -c \${cmd}\`)`;
         const findings = scanner.scan(source, 'javascript');
-        expect(findings).toHaveLength(1);
-        expect(findings[0].ruleCode).toBe('GR-001');
+        expect(findings).toHaveLength(0);
     });
 
-    it('detects spawnSync() with template literal interpolation', () => {
+    it('does not flag spawnSync() because shell semantics are not proven by this rule', () => {
         const source = `spawnSync(\`grep \${pattern} /etc/passwd\`)`;
         const findings = scanner.scan(source, 'javascript');
-        expect(findings).toHaveLength(1);
-        expect(findings[0].ruleCode).toBe('GR-001');
+        expect(findings).toHaveLength(0);
     });
 
     it('does not flag exec() with a plain string literal', () => {
@@ -191,6 +189,27 @@ db.query(\`SELECT * FROM t WHERE val = '\${safe}'\`);`;
         const findings = scanner.scan(source, 'javascript');
         expect(findings).toHaveLength(1);
         expect(findings[0].title).toBe('SQL Injection');
+    });
+
+    it('does not infer context mismatch from an unrelated sanitizer elsewhere in the file', () => {
+        const source = `
+function formatPreview(input) {
+  return escapeHtml(input);
+}
+
+function loadUser(db, userId) {
+  return db.query(\`SELECT * FROM users WHERE id = '\${userId}'\`);
+}`;
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].title).toBe('SQL Injection');
+    });
+
+    it('detects inline sanitizer use inside the SQL template expression', () => {
+        const source = "db.query(`SELECT * FROM users WHERE name = '${escapeHtml(username)}'`)";
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].title).toContain('Ineffective Sanitizer');
     });
 });
 

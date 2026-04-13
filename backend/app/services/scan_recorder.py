@@ -100,6 +100,17 @@ async def record_comparison(
     score_a: float,
     score_b: float,
 ) -> dict:
+    def normalize_finding_detail(finding: dict) -> dict:
+        return {
+            "issue_id": finding.get("issue_id") or finding.get("canonical_id"),
+            "canonical_title": finding.get("canonical_title"),
+            "line": finding.get("line"),
+            "framework": finding.get("framework"),
+            "rule_code": finding.get("rule_code"),
+            "severity": finding.get("severity"),
+            "title": finding.get("title"),
+        }
+
     # Diff algorithm:
     # 1. Canonical issue identity when present
     # 2. Fallback to line/framework/rule_code for legacy findings
@@ -139,6 +150,8 @@ async def record_comparison(
     new_findings = [f for k, f in keys_b.items() if k not in keys_a]
     resolved_findings = [f for k, f in keys_a.items() if k not in keys_b]
     agreed_findings = [f for k, f in keys_b.items() if k in keys_a]
+    new_finding_details = [normalize_finding_detail(f) for f in new_findings]
+    resolved_finding_details = [normalize_finding_detail(f) for f in resolved_findings]
 
     severity_changes = []
     for key in set(keys_a) & set(keys_b):
@@ -204,9 +217,11 @@ async def record_comparison(
         "score_a": score_a,
         "score_b": score_b,
         "score_change": score_change,
-        "new_findings": new_findings,
-        "resolved_findings": resolved_findings,
-        "agreed_findings": agreed_findings,
+        "new_findings": len(new_findings),
+        "resolved_findings": len(resolved_findings),
+        "agreed_findings": len(agreed_findings),
+        "new_finding_details": new_finding_details,
+        "resolved_finding_details": resolved_finding_details,
         "severity_changes": severity_changes,
         "canonical_changes": canonical_changes,
         "summary": {**diff_summary},

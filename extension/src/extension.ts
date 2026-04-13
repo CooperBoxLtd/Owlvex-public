@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { LicenceManager } from './licence/licenceManager';
-import { ProviderRegistry } from './providers/registry';
+import { ProviderRegistry, persistProviderSetting } from './providers/registry';
 import { ScanEngine, ScanResult } from './scanner/scanEngine';
 import { DiagnosticsProvider } from './diagnostics/diagnosticsProvider';
 import { StatusBar } from './ui/statusBar';
@@ -11,6 +11,7 @@ import { pickScanFile, pickScanRoot, scanFolder } from './scanner/workspaceScann
 import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { PROFILE } from './profile';
+import { initializeSecretStorage } from './secrets';
 
 export let secrets: vscode.SecretStorage;
 
@@ -73,6 +74,37 @@ function getFrameworkConfigurationTarget(): vscode.ConfigurationTarget {
         : vscode.ConfigurationTarget.Global;
 }
 
+function normalizeServiceUrl(value: string): string {
+    return value.trim().replace(/\/+$/, '');
+}
+
+async function promptForSetting(
+    settingKey: string,
+    prompt: string,
+    placeHolder: string,
+    validateInput?: (value: string) => string | undefined,
+): Promise<string | undefined> {
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    const current = config.get<string>(settingKey, '');
+    const value = await vscode.window.showInputBox({
+        prompt,
+        placeHolder,
+        value: current,
+        ignoreFocusOut: true,
+        validateInput,
+    });
+
+    if (!value) {
+        return undefined;
+    }
+
+    const normalized = settingKey.endsWith('endpoint') || settingKey.endsWith('baseUrl')
+        ? normalizeServiceUrl(value)
+        : value.trim();
+    await persistProviderSetting(settingKey, normalized);
+    return normalized;
+}
+
 async function readErrorResponse(res: Response, prefix: string): Promise<string> {
     const text = await res.text();
     if (!text.trim()) {
@@ -98,6 +130,7 @@ async function readJsonResponse(res: Response, prefix: string): Promise<any> {
 
 export function activate(context: vscode.ExtensionContext) {
     secrets = context.secrets;
+    initializeSecretStorage(context.secrets);
 
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
@@ -380,6 +413,56 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
+            if (provider.id === 'azure-foundry') {
+                const endpoint = await promptForSetting(
+                    'foundry.endpoint',
+                    'Enter the Azure AI Foundry endpoint for this environment',
+                    'https://your-resource.openai.azure.com',
+                    (value) => value.trim() ? undefined : 'The Foundry endpoint is required.',
+                );
+                if (!endpoint) {
+                    return;
+                }
+
+                const deployment = await vscode.window.showInputBox({
+                    prompt: 'Enter the Azure AI Foundry deployment name',
+                    placeHolder: 'For example: owlvex-gpt4o',
+                    value: provider.selectedModel,
+                    ignoreFocusOut: true,
+                    validateInput: (value) => value.trim() ? undefined : 'The deployment name is required.',
+                });
+                if (!deployment) {
+                    return;
+                }
+
+                await persistProviderSetting('foundry.model', deployment.trim());
+            }
+
+            if (provider.id === 'custom') {
+                const baseUrl = await promptForSetting(
+                    'custom.baseUrl',
+                    'Enter the base URL for your OpenAI-compatible endpoint',
+                    'https://api.example.com',
+                    (value) => value.trim() ? undefined : 'The custom endpoint URL is required.',
+                );
+                if (!baseUrl) {
+                    return;
+                }
+
+                const model = await vscode.window.showInputBox({
+                    prompt: 'Enter the model name for the custom endpoint',
+                    placeHolder: 'For example: my-custom-model',
+                    value: provider.selectedModel,
+                    ignoreFocusOut: true,
+                    validateInput: (value) => value.trim() ? undefined : 'The custom model name is required.',
+                });
+                if (!model) {
+                    return;
+                }
+
+                await persistProviderSetting('custom.model', model.trim());
+            }
+
             const key = await vscode.window.showInputBox({
                 prompt: `Enter API key for ${provider.name}`,
                 ignoreFocusOut: true,
@@ -388,11 +471,25 @@ export function activate(context: vscode.ExtensionContext) {
             if (!key) return;
 
             await context.secrets.store(`${PROFILE.secretPrefix}.${provider.id}.apiKey`, key);
-            const { success, latencyMs } = await provider.testConnection();
+            const { success, latencyMs, message } = await provider.testConnection();
             if (success) {
-                vscode.window.showInformationMessage(`${provider.name} connected (${latencyMs}ms)`);
+                try {
+                    const models = await provider.listModels();
+                    if (models.length && !models.includes(provider.selectedModel)) {
+                        provider.selectedModel = models[0];
+                    }
+                    const activeModel = provider.selectedModel;
+                    vscode.window.showInformationMessage(`${provider.name} connected (${latencyMs}ms) using ${activeModel}`);
+                } catch {
+                    vscode.window.showInformationMessage(`${provider.name} connected (${latencyMs}ms)`);
+                }
             } else {
-                vscode.window.showErrorMessage(`${provider.name} connection failed - check your key`);
+                const extraHint = provider.id === 'azure-foundry'
+                    ? ' Check the endpoint, deployment name, and API key.'
+                    : provider.id === 'custom'
+                        ? ' Check the base URL, model name, and API key.'
+                        : ' Check your key.';
+                vscode.window.showErrorMessage(message?.trim() || `${provider.name} connection failed.${extraHint}`);
             }
         })
     );
@@ -650,6 +747,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 function buildComparisonHtml(diff: any, scoreChange: string): string {
+    const normalizedDiff = normalizeComparisonDiff(diff);
     const severityWeight = (severity: string) => {
         switch (severity) {
             case 'CRITICAL': return 4;
@@ -660,7 +758,7 @@ function buildComparisonHtml(diff: any, scoreChange: string): string {
         }
     };
 
-    const canonicalChanges = diff.canonical_changes ?? [];
+    const canonicalChanges = normalizedDiff.canonical_changes ?? [];
     const weightedBefore = canonicalChanges.reduce((total: number, item: any) =>
         total + ((item.count_a ?? 0) * severityWeight(item.severity ?? '')), 0);
     const weightedAfter = canonicalChanges.reduce((total: number, item: any) =>
@@ -669,10 +767,10 @@ function buildComparisonHtml(diff: any, scoreChange: string): string {
         ? Math.round(((weightedBefore - weightedAfter) / weightedBefore) * 100)
         : 0;
 
-    const newRows = (diff.new_finding_details ?? []).map((f: any) =>
+    const newRows = (normalizedDiff.new_finding_details ?? []).map((f: any) =>
         `<tr class="new"><td>${f.severity}</td><td>${f.framework}</td><td>${f.title}</td><td>L${f.line}</td></tr>`
     ).join('');
-    const resolvedRows = (diff.resolved_finding_details ?? []).map((f: any) =>
+    const resolvedRows = (normalizedDiff.resolved_finding_details ?? []).map((f: any) =>
         `<tr class="resolved"><td>${f.severity}</td><td>${f.framework}</td><td>${f.title}</td><td>L${f.line}</td></tr>`
     ).join('');
     const canonicalRows = canonicalChanges.map((item: any) => {
@@ -743,8 +841,8 @@ function buildComparisonHtml(diff: any, scoreChange: string): string {
 <h1>Scan Comparison</h1>
 <div class="summary">
   <div class="stat"><div class="value ${Number(scoreChange) >= 0 ? 'positive' : 'negative'}">${scoreChange}</div><div class="label">Score Change</div></div>
-  <div class="stat"><div class="value negative">${diff.new_findings ?? 0}</div><div class="label">New Findings</div></div>
-  <div class="stat"><div class="value positive">${diff.resolved_findings ?? 0}</div><div class="label">Resolved</div></div>
+  <div class="stat"><div class="value negative">${normalizedDiff.new_findings ?? 0}</div><div class="label">New Findings</div></div>
+  <div class="stat"><div class="value positive">${normalizedDiff.resolved_findings ?? 0}</div><div class="label">Resolved</div></div>
 </div>
 ${canonicalRows ? `<h2>Canonical Issue Changes</h2><table><thead><tr><th>Owlvex Issue</th><th>Severity</th><th>Before</th><th>After</th><th>Δ</th><th>Frameworks</th></tr></thead><tbody>${canonicalRows}</tbody></table>` : '<p>No canonical issue changes.</p>'}
 ${newRows ? `<h2>New Findings</h2><table><thead><tr><th>Severity</th><th>Framework</th><th>Title</th><th>Line</th></tr></thead><tbody>${newRows}</tbody></table>` : '<p>No new findings.</p>'}
@@ -752,7 +850,29 @@ ${resolvedRows ? `<h2>Resolved Findings</h2><table><thead><tr><th>Severity</th><
 </body></html>`;
 }
 
+export function normalizeComparisonDiff(diff: any): any {
+    const newFindingDetails = Array.isArray(diff?.new_finding_details)
+        ? diff.new_finding_details
+        : Array.isArray(diff?.new_findings)
+            ? diff.new_findings
+            : [];
+    const resolvedFindingDetails = Array.isArray(diff?.resolved_finding_details)
+        ? diff.resolved_finding_details
+        : Array.isArray(diff?.resolved_findings)
+            ? diff.resolved_findings
+            : [];
+
+    return {
+        ...diff,
+        new_findings: typeof diff?.new_findings === 'number' ? diff.new_findings : newFindingDetails.length,
+        resolved_findings: typeof diff?.resolved_findings === 'number' ? diff.resolved_findings : resolvedFindingDetails.length,
+        new_finding_details: newFindingDetails,
+        resolved_finding_details: resolvedFindingDetails,
+    };
+}
+
 function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
+    const normalizedDiff = normalizeComparisonDiff(diff);
     const severityWeight = (severity: string) => {
         switch (severity) {
             case 'CRITICAL': return 4;
@@ -763,7 +883,7 @@ function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
         }
     };
 
-    const canonicalChanges = diff.canonical_changes ?? [];
+    const canonicalChanges = normalizedDiff.canonical_changes ?? [];
     const weightedBefore = canonicalChanges.reduce((total: number, item: any) =>
         total + ((item.count_a ?? 0) * severityWeight(item.severity ?? '')), 0);
     const weightedAfter = canonicalChanges.reduce((total: number, item: any) =>
@@ -772,10 +892,10 @@ function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
         ? Math.round(((weightedBefore - weightedAfter) / weightedBefore) * 100)
         : 0;
 
-    const newRows = (diff.new_finding_details ?? []).map((f: any) =>
+    const newRows = (normalizedDiff.new_finding_details ?? []).map((f: any) =>
         `<tr class="new"><td>${f.severity}</td><td>${f.framework}</td><td>${f.title}</td><td>L${f.line}</td></tr>`
     ).join('');
-    const resolvedRows = (diff.resolved_finding_details ?? []).map((f: any) =>
+    const resolvedRows = (normalizedDiff.resolved_finding_details ?? []).map((f: any) =>
         `<tr class="resolved"><td>${f.severity}</td><td>${f.framework}</td><td>${f.title}</td><td>L${f.line}</td></tr>`
     ).join('');
 
@@ -882,12 +1002,12 @@ function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
 <div class="hero">
   <div class="eyebrow">Security Posture</div>
   <div class="headline ${weightedAfter <= weightedBefore ? 'positive' : 'negative'}">${weightedAfter <= weightedBefore ? `Improved by ${weightedImprovement}%` : `Regressed by ${Math.abs(weightedImprovement)}%`}</div>
-  <div class="support">Weighted exposure moved from ${weightedBefore} to ${weightedAfter}. ${diff.resolved_findings ?? 0} findings were resolved and ${diff.new_findings ?? 0} new findings were introduced.</div>
+  <div class="support">Weighted exposure moved from ${weightedBefore} to ${weightedAfter}. ${normalizedDiff.resolved_findings ?? 0} findings were resolved and ${normalizedDiff.new_findings ?? 0} new findings were introduced.</div>
 </div>
 <div class="summary">
   <div class="stat"><div class="value ${Number(scoreChange) >= 0 ? 'positive' : 'negative'}">${scoreChange}</div><div class="label">Score Change</div></div>
-  <div class="stat"><div class="value negative">${diff.new_findings ?? 0}</div><div class="label">New Findings</div></div>
-  <div class="stat"><div class="value positive">${diff.resolved_findings ?? 0}</div><div class="label">Resolved</div></div>
+  <div class="stat"><div class="value negative">${normalizedDiff.new_findings ?? 0}</div><div class="label">New Findings</div></div>
+  <div class="stat"><div class="value positive">${normalizedDiff.resolved_findings ?? 0}</div><div class="label">Resolved</div></div>
   <div class="stat"><div class="value ${weightedAfter <= weightedBefore ? 'positive' : 'negative'}">${weightedImprovement}%</div><div class="label">Weighted Improvement</div></div>
 </div>
 <div class="summary">

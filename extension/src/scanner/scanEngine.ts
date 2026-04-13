@@ -45,6 +45,11 @@ export interface ScanResult {
     warnings: string[];
 }
 
+interface PromptContext {
+    templateId?: string;
+    systemPrompt: string;
+}
+
 function normalizeStringList(value: unknown): string[] | undefined {
     if (Array.isArray(value)) {
         return value
@@ -79,6 +84,8 @@ function normalizeMappings(value: any): CanonicalMappings | undefined {
 
 export class ScanEngine {
     private readonly deterministicScanner = new DeterministicScanner();
+    private readonly licenceValidationCache = new Map<string, Promise<void>>();
+    private readonly promptCache = new Map<string, Promise<PromptContext>>();
 
     constructor(
         private readonly licenceMgr: LicenceManager,
@@ -91,56 +98,76 @@ export class ScanEngine {
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const teamContext = config.get<string>('teamContext', '');
-
-        const licenceKey = await this.licenceMgr.getKey();
-        if (!licenceKey) {
-            throw new Error('No licence key. Run "Owlvex: Enter Licence Key".');
-        }
-
-        await this.licenceMgr.validate(apiUrl);
-
-        const promptRes = await fetch(`${apiUrl}/v1/prompts/build`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Licence-Key': licenceKey,
-            },
-            body: JSON.stringify({
-                frameworks,
-                language: this._detectLanguage(document),
-                model: this.registry.getActive().selectedModel,
-                severity_threshold: severityThreshold,
-                team_context: teamContext,
-            }),
-        });
-
-        if (!promptRes.ok) {
-            throw new Error(await this._readErrorResponse(promptRes, 'Failed to fetch prompt'));
-        }
-
-        const promptData = await this._readJsonResponse(promptRes, 'Prompt builder returned invalid JSON');
-        const systemPrompt: string = promptData.system_prompt;
-
-        const code = document.getText();
         const language = this._detectLanguage(document);
         const provider = this.registry.getActive();
 
-        // Run deterministic scanner first — high-confidence, zero-cost findings.
+        const code = document.getText();
         const deterministicFindings = this.deterministicScanner
             .scan(code, document.languageId)
             .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding));
 
+        const licenceKey = await this.licenceMgr.getKey();
+        if (!licenceKey) {
+            return this._buildDeterministicOnlyResult(
+                deterministicFindings,
+                'Owlvex backend unavailable: no licence key configured. Returning deterministic-only results.',
+                provider,
+            );
+        }
+
+        let promptContext: PromptContext;
+        try {
+            await this._validateLicenceCached(apiUrl, licenceKey);
+            promptContext = await this._getPromptContextCached({
+                apiUrl,
+                licenceKey,
+                frameworks,
+                language,
+                model: provider.selectedModel,
+                severityThreshold,
+                teamContext,
+            });
+        } catch (error: any) {
+            return this._buildDeterministicOnlyResult(
+                deterministicFindings,
+                `Owlvex backend unavailable: ${error.message}`,
+                provider,
+            );
+        }
+        const systemPrompt = promptContext.systemPrompt;
+
+
+        // Run deterministic scanner first — high-confidence, zero-cost findings.
+
         const start = Date.now();
 
-        const aiResponse = await provider.complete({
-            systemPrompt,
-            userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, and matched_signals if you can determine them.\n\nCode:\n\n${code}`,
-            model: provider.selectedModel,
-            temperature: 0.1,
-        });
+        let aiResponse;
+        try {
+            aiResponse = await provider.complete({
+                systemPrompt,
+                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, and matched_signals if you can determine them.\n\nCode:\n\n${code}`,
+                model: provider.selectedModel,
+                temperature: 0.1,
+            });
+        } catch (error: any) {
+            return this._buildDeterministicOnlyResult(
+                deterministicFindings,
+                `AI provider unavailable: ${error.message}`,
+                provider,
+            );
+        }
 
         const durationMs = Date.now() - start;
-        const parsed = this._parseAIResponse(aiResponse.content);
+        let parsed;
+        try {
+            parsed = this._parseAIResponse(aiResponse.content);
+        } catch (error: any) {
+            return this._buildDeterministicOnlyResult(
+                deterministicFindings,
+                `AI response unusable: ${error.message}`,
+                provider,
+            );
+        }
 
         const fileHash = crypto.createHash('sha256').update(code).digest('hex');
         const fileName = document.fileName.split(/[/\\]/).pop() ?? 'unknown';
@@ -167,7 +194,7 @@ export class ScanEngine {
                     finding_count: parsed.findings.length,
                     token_count: aiResponse.tokenCount,
                     duration_ms: durationMs,
-                    prompt_id: promptData.template_id,
+                    prompt_id: promptContext.templateId,
                     prompt_snapshot: systemPrompt,
                 }),
             });
@@ -210,6 +237,123 @@ export class ScanEngine {
             model: provider.selectedModel,
             provider: provider.id,
             warnings,
+        };
+    }
+
+    private _buildDeterministicOnlyResult(
+        deterministicFindings: Finding[],
+        warning: string,
+        provider: { id: string; selectedModel: string },
+    ): ScanResult {
+        const metrics = {
+            critical: deterministicFindings.filter(f => f.severity === 'CRITICAL').length,
+            high: deterministicFindings.filter(f => f.severity === 'HIGH').length,
+            medium: deterministicFindings.filter(f => f.severity === 'MEDIUM').length,
+            low: deterministicFindings.filter(f => f.severity === 'LOW').length,
+        };
+        const score = Math.max(0, 10 - (metrics.critical * 3) - (metrics.high * 2) - metrics.medium - (metrics.low * 0.5));
+        const summary = deterministicFindings.length
+            ? `${deterministicFindings.length} deterministic finding(s) returned while backend or AI services were unavailable.`
+            : 'No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.';
+
+        return {
+            scanId: crypto.randomUUID(),
+            score,
+            summary,
+            findings: deterministicFindings,
+            positives: [],
+            metrics,
+            durationMs: 0,
+            model: `${provider.selectedModel} (deterministic-only)`,
+            provider: provider.id,
+            warnings: [warning],
+        };
+    }
+
+    private async _validateLicenceCached(apiUrl: string, licenceKey: string): Promise<void> {
+        const cacheKey = `${apiUrl}::${licenceKey}`;
+        const cached = this.licenceValidationCache.get(cacheKey);
+        if (cached) {
+            await cached;
+            return;
+        }
+
+        const validationPromise = this.licenceMgr.validate(apiUrl).then(() => undefined);
+        this.licenceValidationCache.set(cacheKey, validationPromise);
+
+        try {
+            await validationPromise;
+        } catch (error) {
+            this.licenceValidationCache.delete(cacheKey);
+            throw error;
+        }
+    }
+
+    private async _getPromptContextCached(params: {
+        apiUrl: string;
+        licenceKey: string;
+        frameworks: string[];
+        language: string;
+        model: string;
+        severityThreshold: string;
+        teamContext: string;
+    }): Promise<PromptContext> {
+        const cacheKey = JSON.stringify({
+            apiUrl: params.apiUrl,
+            frameworks: [...params.frameworks].sort(),
+            language: params.language,
+            model: params.model,
+            severityThreshold: params.severityThreshold,
+            teamContext: params.teamContext,
+        });
+        const cached = this.promptCache.get(cacheKey);
+        if (cached) {
+            return cached;
+        }
+
+        const promptPromise = this._fetchPromptContext(params);
+        this.promptCache.set(cacheKey, promptPromise);
+
+        try {
+            return await promptPromise;
+        } catch (error) {
+            this.promptCache.delete(cacheKey);
+            throw error;
+        }
+    }
+
+    private async _fetchPromptContext(params: {
+        apiUrl: string;
+        licenceKey: string;
+        frameworks: string[];
+        language: string;
+        model: string;
+        severityThreshold: string;
+        teamContext: string;
+    }): Promise<PromptContext> {
+        const promptRes = await fetch(`${params.apiUrl}/v1/prompts/build`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Licence-Key': params.licenceKey,
+            },
+            body: JSON.stringify({
+                frameworks: params.frameworks,
+                language: params.language,
+                model: params.model,
+                severity_threshold: params.severityThreshold,
+                team_context: params.teamContext,
+            }),
+        });
+
+        if (!promptRes.ok) {
+            throw new Error(await this._readErrorResponse(promptRes, 'Failed to fetch prompt'));
+        }
+
+        const promptData = await this._readJsonResponse(promptRes, 'Prompt builder returned invalid JSON');
+        return {
+            templateId: promptData.template_id,
+            systemPrompt: promptData.system_prompt,
         };
     }
 
