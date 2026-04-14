@@ -24,6 +24,7 @@ const SCAN_STORE_KEY = `${PROFILE.storagePrefix}.scanStore`;
 const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
 const ISSUE_PACK_ID = 'owlvex.issue-pack.v1';
 const ISSUE_MAPPING_PACK_ID = 'owlvex.issue-mapping-pack.v1';
+const REMEDIATION_PACK_ID = 'owlvex.remediation-pack.v1';
 
 interface ScanFileCommandResult {
     status: 'completed' | 'cancelled';
@@ -208,12 +209,13 @@ export function activate(context: vscode.ExtensionContext) {
         const manifestFreshness = rulePackClient.getCachedManifestFreshness(entitlement);
         const cachedIssuePack = rulePackClient.getCachedPack(ISSUE_PACK_ID, entitlement);
         const cachedMappingPack = rulePackClient.getCachedPack(ISSUE_MAPPING_PACK_ID, entitlement);
-        configureRulePackRuntime(cachedIssuePack?.artifact, cachedMappingPack?.artifact);
+        const cachedRemediationPack = rulePackClient.getCachedPack(REMEDIATION_PACK_ID, entitlement);
+        configureRulePackRuntime(cachedIssuePack?.artifact, cachedMappingPack?.artifact, cachedRemediationPack?.artifact);
         currentRulePackContext = cachedIssuePack && cachedMappingPack
             ? {
                 mode: 'cached',
-                packIds: [ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID],
-                fetchedAt: cachedIssuePack.fetched_at ?? cachedMappingPack.fetched_at,
+                packIds: [ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID, ...(cachedRemediationPack ? [REMEDIATION_PACK_ID] : [])],
+                fetchedAt: cachedIssuePack.fetched_at ?? cachedMappingPack.fetched_at ?? cachedRemediationPack?.fetched_at,
                 manifestFreshness: manifestFreshness === 'missing' ? 'stale' : manifestFreshness,
             }
             : {
@@ -243,7 +245,7 @@ export function activate(context: vscode.ExtensionContext) {
             return;
         }
 
-        const requiredPackIds = new Set([ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID]);
+        const requiredPackIds = new Set([ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID, REMEDIATION_PACK_ID]);
         const manifestById = new Map<string, PackManifestEntry>(
             manifest.packs
                 .filter(entry => requiredPackIds.has(entry.pack_id))
@@ -273,18 +275,24 @@ export function activate(context: vscode.ExtensionContext) {
             }
         };
 
-        const [issuePackResult, mappingPackResult] = await Promise.all([
+        const [issuePackResult, mappingPackResult, remediationPackResult] = await Promise.all([
             fetchIfListed(ISSUE_PACK_ID),
             fetchIfListed(ISSUE_MAPPING_PACK_ID),
+            fetchIfListed(REMEDIATION_PACK_ID),
         ]);
         const issuePack = issuePackResult.artifact;
         const mappingPack = mappingPackResult.artifact;
+        const remediationPack = remediationPackResult.artifact;
 
-        configureRulePackRuntime(issuePack?.artifact, mappingPack?.artifact);
+        configureRulePackRuntime(issuePack?.artifact, mappingPack?.artifact, remediationPack?.artifact);
         currentRulePackContext = issuePack && mappingPack
             ? {
-                mode: issuePackResult.source === 'fresh' && mappingPackResult.source === 'fresh' ? 'fresh' : 'cached',
-                packIds: [ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID],
+                mode: issuePackResult.source === 'fresh'
+                    && mappingPackResult.source === 'fresh'
+                    && (!remediationPack || remediationPackResult.source === 'fresh')
+                    ? 'fresh'
+                    : 'cached',
+                packIds: [ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID, ...(remediationPack ? [REMEDIATION_PACK_ID] : [])],
                 fetchedAt: manifest.fetched_at,
                 manifestFreshness: 'fresh',
             }

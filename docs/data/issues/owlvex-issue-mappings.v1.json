@@ -57,6 +57,27 @@
           "Tampering",
           "Information Disclosure"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-89",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-89"
+          },
+          {
+            "label": "OWASP SQL Injection Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -109,6 +130,27 @@
           "Elevation of Privilege",
           "Denial of Service"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-78",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-78"
+          },
+          {
+            "label": "OWASP OS Command Injection Defense Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -159,6 +201,27 @@
         "stride_categories": [
           "Information Disclosure",
           "Spoofing"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-798",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          },
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -211,6 +274,27 @@
           "Information Disclosure",
           "Spoofing"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-798",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          },
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -261,6 +345,27 @@
         "stride_categories": [
           "Information Disclosure",
           "Spoofing"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-798",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          },
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -313,6 +418,27 @@
           "Information Disclosure",
           "Spoofing"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-798",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          },
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -364,6 +490,27 @@
           "Tampering",
           "Information Disclosure",
           "Elevation of Privilege"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-22",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-22"
+          },
+          {
+            "label": "OWASP Path Traversal Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -423,6 +570,33 @@
           "Information Disclosure",
           "Tampering"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-639",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-639"
+          },
+          {
+            "label": "OWASP Authorization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "OWASP API Security Top 10 API1:2023 Broken Object Level Authorization",
+            "kind": "standard",
+            "publisher": "OWASP",
+            "document_id": "API1:2023"
+          }
+        ]
       }
     },
     {
@@ -468,6 +642,27 @@
           "Information Disclosure",
           "Repudiation"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-532",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-532"
+          },
+          {
+            "label": "OWASP Logging Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -505,6 +700,27 @@
         "stride_profile": "owlvex.stride.2026.1",
         "stride_categories": [
           "Repudiation"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-778",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-778"
+          },
+          {
+            "label": "OWASP Logging Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -564,6 +780,27 @@
           "Tampering",
           "Denial of Service"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-918",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-918"
+          },
+          {
+            "label": "OWASP Server Side Request Forgery Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -615,6 +852,27 @@
           "Tampering",
           "Elevation of Privilege",
           "Denial of Service"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-502",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-502"
+          },
+          {
+            "label": "OWASP Deserialization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -673,6 +931,27 @@
           "Spoofing",
           "Elevation of Privilege"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-521",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-521"
+          },
+          {
+            "label": "OWASP Authentication Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -723,6 +1002,27 @@
         "stride_categories": [
           "Tampering",
           "Information Disclosure"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-79",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-79"
+          },
+          {
+            "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -775,6 +1075,27 @@
           "Tampering",
           "Information Disclosure"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-79",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-79"
+          },
+          {
+            "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -819,6 +1140,27 @@
         "stride_categories": [
           "Spoofing",
           "Information Disclosure"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-601",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-601"
+          },
+          {
+            "label": "OWASP Unvalidated Redirects and Forwards Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -871,6 +1213,27 @@
           "Tampering",
           "Spoofing"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-352",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-352"
+          },
+          {
+            "label": "OWASP Cross-Site Request Forgery Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -903,6 +1266,27 @@
         "stride_categories": [
           "Information Disclosure",
           "Tampering"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-942",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-942"
+          },
+          {
+            "label": "OWASP Cross Origin Resource Sharing Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -954,6 +1338,27 @@
         "stride_categories": [
           "Spoofing",
           "Elevation of Privilege"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-345",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-345"
+          },
+          {
+            "label": "OWASP JSON Web Token Cheat Sheet for Java",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -1007,6 +1412,27 @@
           "Denial of Service",
           "Elevation of Privilege"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-434",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-434"
+          },
+          {
+            "label": "OWASP File Upload Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -1045,6 +1471,27 @@
         "stride_categories": [
           "Tampering",
           "Elevation of Privilege"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-915",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-915"
+          },
+          {
+            "label": "OWASP Mass Assignment Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -1091,6 +1538,27 @@
           "Information Disclosure",
           "Denial of Service"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-611",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-611"
+          },
+          {
+            "label": "OWASP XML External Entity Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -1130,6 +1598,27 @@
           "Information Disclosure",
           "Spoofing"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-327",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-327"
+          },
+          {
+            "label": "OWASP Cryptographic Storage Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -1162,6 +1651,27 @@
         "stride_categories": [
           "Spoofing",
           "Elevation of Privilege"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-330",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-330"
+          },
+          {
+            "label": "OWASP Cryptographic Storage Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -1201,6 +1711,27 @@
         "stride_categories": [
           "Information Disclosure"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-209",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-209"
+          },
+          {
+            "label": "OWASP Error Handling Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -1234,6 +1765,27 @@
           "Tampering",
           "Elevation of Privilege",
           "Denial of Service"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-1321",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-1321"
+          },
+          {
+            "label": "OWASP Prototype Pollution Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -1272,6 +1824,27 @@
         "stride_profile": "owlvex.stride.2026.1",
         "stride_categories": [
           "Denial of Service"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-1333",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-1333"
+          },
+          {
+            "label": "OWASP Input Validation Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     },
@@ -1325,6 +1898,27 @@
           "Elevation of Privilege",
           "Information Disclosure"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-94",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-94"
+          },
+          {
+            "label": "OWASP Server Side Template Injection Prevention guidance",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -1376,6 +1970,27 @@
           "Tampering",
           "Information Disclosure"
         ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-943",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-943"
+          },
+          {
+            "label": "OWASP NoSQL Security Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
       }
     },
     {
@@ -1414,6 +2029,27 @@
         "stride_categories": [
           "Tampering",
           "Information Disclosure"
+        ]
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "CWE-90",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-90"
+          },
+          {
+            "label": "OWASP LDAP Injection Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
         ]
       }
     }

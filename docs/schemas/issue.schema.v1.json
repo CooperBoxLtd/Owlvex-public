@@ -186,6 +186,9 @@
         }
       }
     },
+    "provenance": {
+      "$ref": "https://owlvex.io/schemas/provenance.schema.v1.json"
+    },
     "evidence_requirements": {
       "type": "object",
       "additionalProperties": false,

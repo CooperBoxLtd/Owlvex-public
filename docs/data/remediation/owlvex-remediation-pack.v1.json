@@ -1,0 +1,511 @@
+{
+  "schema_version": "owlvex.remediation-pack.v1",
+  "pack_id": "owlvex.remediation.core.2026.1",
+  "entries": [
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.sql_injection.001",
+      "issue_id": "owlvex.issue.sql_injection.001",
+      "title": "Canonical remediation for SQL injection",
+      "canonical_fix_summary": "Separate query structure from untrusted data with parameter binding or ORM-safe APIs, constrain dynamic query parts to allow-lists, and verify that attacker-controlled input can no longer change SQL semantics.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Use parameterized queries in `pg`, `mysql2`, Prisma, or Sequelize and never concatenate request data into SQL strings.",
+          "recommended_actions": [
+            "Replace string-built SQL with placeholders and a separate values array.",
+            "Allow-list any dynamic sort column or table selector before it reaches the query builder."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Prefer SQLAlchemy ORM or parameter binding through SQLAlchemy text constructs instead of interpolating request data into raw SQL.",
+          "recommended_actions": [
+            "Move request values into bound parameters instead of f-strings or percent formatting.",
+            "Keep raw SQL behind reviewed helper functions that reject dynamic structural tokens."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Use the Django ORM by default and parameterize any unavoidable raw queries through framework-supported bindings.",
+          "recommended_actions": [
+            "Replace raw query string assembly with ORM filters where possible.",
+            "If raw SQL remains, pass parameters separately and never build WHERE clauses from user strings."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Use prepared statements, named parameters, or JPA parameter binding so request values never become SQL syntax.",
+          "recommended_actions": [
+            "Switch JDBC string concatenation to prepared statements or named parameter helpers.",
+            "Constrain dynamic sort fields or repository selectors with server-side enums or allow-lists."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use parameterized `SqlCommand`, Dapper parameters, or EF Core LINQ instead of concatenated SQL.",
+          "recommended_actions": [
+            "Move external input into typed command parameters rather than interpolated SQL.",
+            "Prefer EF Core LINQ or stored procedures for complex filtering when practical."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat SQL injection as a server-side fix; client components should not be presented as the security boundary.",
+          "recommended_actions": [
+            "Apply the remediation in route handlers, server actions, or API services that build queries.",
+            "Do not rely on client-side validation or escaping as a substitute for parameterized execution."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Run the vulnerable request with SQL metacharacters and confirm the query still behaves as a normal data lookup.",
+        "Add a regression test that passes attacker-controlled input into the same code path and asserts parameter binding is used.",
+        "Review logging or query traces to confirm untrusted input is emitted as data values, not merged into SQL text."
+      ],
+      "unsafe_alternatives": [
+        "Escaping quotes manually instead of using parameterized execution.",
+        "Relying on client-side validation or hidden form fields to keep SQL safe.",
+        "Switching to a different query string template without changing the dataflow model."
+      ],
+      "references": [
+        {
+          "label": "OWASP SQL Injection Prevention Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-89 Improper Neutralization of Special Elements used in an SQL Command",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-89"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP SQL Injection Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-89 Improper Neutralization of Special Elements used in an SQL Command",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-89"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.command_injection.001",
+      "issue_id": "owlvex.issue.command_injection.001",
+      "title": "Canonical remediation for command injection",
+      "canonical_fix_summary": "Remove shell-string execution where possible, call safe library APIs directly, and when process execution is unavoidable pass fixed executables with validated argument lists that never include attacker-controlled shell syntax.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Prefer Node libraries over `exec()` or shell-based helpers and pass fixed binaries with validated argument arrays when process execution is unavoidable.",
+          "recommended_actions": [
+            "Replace `exec()` with a safer API path or fixed-command execution using validated arguments.",
+            "Allow-list every user-influenced flag, filename, or mode before it becomes a process argument."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Avoid `subprocess` shell execution on request data and move user choices into explicit, validated application-level operations.",
+          "recommended_actions": [
+            "Remove `shell=True` and stop building command strings from path or query parameters.",
+            "If invoking an external binary is required, validate each argument against a strict allow-list."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Handle user actions through Python application logic instead of shell commands, especially in admin or upload workflows.",
+          "recommended_actions": [
+            "Replace shell-based file or utility operations with native Python libraries where possible.",
+            "If subprocess execution remains, isolate the executable and restrict arguments to known-safe values."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Use Java libraries for file, archive, or system operations and avoid shell composition through runtime process APIs with untrusted input.",
+          "recommended_actions": [
+            "Move user-controlled behavior into enum-backed operations instead of command text.",
+            "Normalize and validate every argument before it reaches process execution."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Avoid piping request data into shell execution and use managed APIs instead of `cmd.exe`, PowerShell, or interpolated process strings.",
+          "recommended_actions": [
+            "Replace shell command composition with direct framework APIs or fixed executable invocations.",
+            "Validate any remaining arguments and disable shell interpretation paths."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat command injection as a server-side concern in route handlers, server actions, background jobs, or API services.",
+          "recommended_actions": [
+            "Move the fix to the server code that launches the process, not the client component that triggered it.",
+            "Do not rely on disabled buttons or client-side field constraints as command injection controls."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay the attacker-controlled input and confirm it can no longer change the executed command, flags, or separator behavior.",
+        "Add regression coverage for malicious arguments such as shell metacharacters, path traversal tokens, or extra flags.",
+        "Confirm the final code path uses native libraries or fixed executable-plus-argument execution rather than shell string parsing."
+      ],
+      "unsafe_alternatives": [
+        "Escaping a few shell characters but continuing to build command strings from user input.",
+        "Relying on front-end restrictions to prevent dangerous values from reaching the server.",
+        "Switching from one shell helper to another without removing user control over the command text."
+      ],
+      "references": [
+        {
+          "label": "OWASP OS Command Injection Defense Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-78 Improper Neutralization of Special Elements used in an OS Command",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-78"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP OS Command Injection Defense Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-78 Improper Neutralization of Special Elements used in an OS Command",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-78"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.weak_jwt_validation.001",
+      "issue_id": "owlvex.issue.weak_jwt_validation.001",
+      "title": "Canonical remediation for weak JWT validation",
+      "canonical_fix_summary": "Verify signature, issuer, audience, expiry, and accepted algorithms on every token, and reject tokens that are unsigned, weakly validated, or trusted only because they exist.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Configure JWT verification middleware to require allowed algorithms, issuer, audience, and lifetime checks rather than relying on library defaults.",
+          "recommended_actions": [
+            "Pass explicit verification options for issuer, audience, and accepted algorithms in the middleware or auth helper.",
+            "Reject unsigned or weakly validated tokens before controller logic runs."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Validate JWT claims explicitly in the dependency or auth layer and bind accepted algorithms and issuer or audience checks to configuration you control.",
+          "recommended_actions": [
+            "Enforce issuer, audience, expiry, and algorithm validation when decoding tokens.",
+            "Separate token parsing from trust decisions so presence of a token is never enough."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Require full token validation in authentication backends or DRF auth classes, including claim validation and accepted signing algorithms.",
+          "recommended_actions": [
+            "Centralize JWT verification in one reviewed backend instead of scattered helper code.",
+            "Reject tokens with missing or unexpected issuer, audience, expiry, or algorithm claims."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Use Spring Security resource-server or equivalent configuration to pin issuer, audience policy, and accepted signing algorithms.",
+          "recommended_actions": [
+            "Configure JWT decoders with explicit issuer and key expectations.",
+            "Apply audience and expiry validation before the token is converted into authorities."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use `TokenValidationParameters` to require issuer, audience, signing key, lifetime, and algorithm policy checks.",
+          "recommended_actions": [
+            "Set issuer, audience, and lifetime validation to required instead of permissive defaults.",
+            "Ensure tokens are rejected when signature or algorithm policy does not match the trusted configuration."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat JWT validation as a server-side responsibility in route handlers, middleware, or the upstream API rather than a client-side trust decision.",
+          "recommended_actions": [
+            "Apply strict verification where the session is established or protected server data is fetched.",
+            "Do not trust decoded client-side claims as authorization truth."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Test expired, wrong-issuer, wrong-audience, and unexpected-algorithm tokens and confirm each one is rejected.",
+        "Add automated tests that prove protected routes fail closed when claim validation is incomplete.",
+        "Review authentication middleware configuration to confirm signature and claim validation occur before authorization logic."
+      ],
+      "unsafe_alternatives": [
+        "Decoding JWTs without verification and treating decoded claims as trusted identity.",
+        "Checking expiry alone while skipping issuer, audience, or algorithm validation.",
+        "Using the token's declared algorithm as the only source of truth for what to accept."
+      ],
+      "references": [
+        {
+          "label": "OWASP JSON Web Token Cheat Sheet for Java",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-345 Insufficient Verification of Data Authenticity",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-345"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP JSON Web Token Cheat Sheet for Java",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-345 Insufficient Verification of Data Authenticity",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-345"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.xss_reflected.001",
+      "issue_id": "owlvex.issue.xss_reflected.001",
+      "title": "Canonical remediation for reflected cross-site scripting",
+      "canonical_fix_summary": "Apply context-appropriate output encoding by default, sanitize rich HTML only when genuinely required, and ensure untrusted data cannot reach HTML, script, URL, or attribute sinks without the right protection for that sink.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Prefer templating and response helpers that escape by default, and sanitize any HTML rendering path that intentionally accepts rich content.",
+          "recommended_actions": [
+            "Replace direct HTML concatenation with auto-escaping templates or safe response encoding.",
+            "If rich HTML is required, sanitize before rendering and keep dangerous sinks out of controller code."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Return data through templating or JSON layers that keep untrusted input out of raw HTML sinks unless explicitly sanitized.",
+          "recommended_actions": [
+            "Avoid injecting request values into raw HTML responses without context-aware encoding.",
+            "Use sanitization and strict templates for any feature that renders user-provided markup."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Rely on Django auto-escaping by default and avoid raw-output bypasses for untrusted content.",
+          "recommended_actions": [
+            "Remove unsafe template bypasses on data derived from request input.",
+            "Sanitize stored or reflected rich text before intentionally rendering it as HTML."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Use templating engines and view helpers that escape output by default and keep user input out of direct script or HTML sinks.",
+          "recommended_actions": [
+            "Remove direct HTML assembly in controllers or views when request data is reflected.",
+            "Sanitize any unavoidable rich HTML path and keep it isolated from generic rendering."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use Razor encoding defaults and avoid raw HTML helpers on untrusted data unless sanitized through a reviewed path.",
+          "recommended_actions": [
+            "Replace raw output helpers with encoded rendering for request-derived values.",
+            "Constrain and sanitize any feature that intentionally supports rich user HTML."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Keep untrusted data in JSX text positions by default and avoid `dangerouslySetInnerHTML` unless the content is sanitized through a reviewed path.",
+          "recommended_actions": [
+            "Render attacker-controlled values as text rather than HTML.",
+            "If `dangerouslySetInnerHTML` is unavoidable, sanitize the content and isolate the sink behind a reviewed component."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay the payload with script tags or event-handler input and confirm the browser renders inert text or sanitized markup instead of executing code.",
+        "Add regression coverage for the exact sink that previously reflected attacker-controlled data.",
+        "Review all equivalent render paths to ensure the same encoding or sanitization policy is consistently applied."
+      ],
+      "unsafe_alternatives": [
+        "Encoding some characters manually while leaving context-specific sinks unprotected.",
+        "Trusting framework auto-escaping after explicitly opting out with raw HTML helpers.",
+        "Relying on client-side validation alone to keep dangerous markup out of the response."
+      ],
+      "references": [
+        {
+          "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-79 Improper Neutralization of Input During Web Page Generation",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-79"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-79 Improper Neutralization of Input During Web Page Generation",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-79"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.path_traversal.001",
+      "issue_id": "owlvex.issue.path_traversal.001",
+      "title": "Canonical remediation for path traversal",
+      "canonical_fix_summary": "Constrain file access to a fixed base directory, normalize and resolve paths before use, and reject any request-derived path that escapes the allowed boundary or selects unexpected files.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Resolve request-derived filenames against a fixed base path and reject traversal attempts before file-system access occurs.",
+          "recommended_actions": [
+            "Map user choices to known-safe filenames or identifiers instead of accepting raw paths.",
+            "Normalize and verify the resolved path remains under the intended storage root before reading or writing."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Treat path parameters and query inputs as untrusted selectors and bind them to controlled storage locations or identifiers.",
+          "recommended_actions": [
+            "Resolve user input against a fixed base directory and reject any normalized path that escapes it.",
+            "Use server-side identifiers for downloads or uploads instead of raw filesystem paths."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Keep request data out of direct filesystem paths and serve files through reviewed storage abstractions or allow-listed names.",
+          "recommended_actions": [
+            "Translate request values into known-safe object keys rather than concatenated paths.",
+            "Normalize and boundary-check any remaining file path before storage access."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Resolve file requests against a fixed application-controlled root and verify the canonical path never leaves that root.",
+          "recommended_actions": [
+            "Replace raw path concatenation with canonical path checks and allow-listed resources.",
+            "Use storage services that expose identifiers instead of arbitrary filesystem paths."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Normalize request-derived paths, compare them to a fixed trusted base directory, and reject any path that escapes the expected root.",
+          "recommended_actions": [
+            "Use server-side identifiers or storage abstractions instead of path strings from the request.",
+            "Enforce canonical path prefix checks before file read, write, or archive operations."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat path traversal remediation as a server-side fix in route handlers, uploads, downloads, or API utilities rather than a client-side validation problem.",
+          "recommended_actions": [
+            "Apply path normalization and boundary checks in the server code that touches storage.",
+            "Do not rely on hidden inputs or restricted file pickers as the path traversal control."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Test traversal payloads such as `../`, encoded traversal, and platform-specific separators and confirm the request is rejected.",
+        "Add regression tests that assert resolved paths always remain under the intended storage root.",
+        "Review adjacent archive, upload, download, and temp-file code paths for the same normalization and boundary-check rules."
+      ],
+      "unsafe_alternatives": [
+        "Removing only a few traversal tokens while still accepting arbitrary paths.",
+        "Checking string prefixes before normalization or canonical resolution.",
+        "Assuming UI constraints or route structure prevent malicious path input from reaching the filesystem."
+      ],
+      "references": [
+        {
+          "label": "OWASP Path Traversal",
+          "kind": "official-doc",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-22 Improper Limitation of a Pathname to a Restricted Directory",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-22"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Path Traversal",
+            "kind": "official-doc",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-22 Improper Limitation of a Pathname to a Restricted Directory",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-22"
+          }
+        ]
+      }
+    }
+  ]
+}

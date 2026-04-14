@@ -24,6 +24,11 @@ PACK_DEFINITIONS = {
         "relative_path": Path("issues/owlvex-issue-mappings.v1.json"),
         "frameworks": [],
     },
+    "owlvex.remediation-pack.v1": {
+        "pack_type": "remediation-pack",
+        "relative_path": Path("remediation/owlvex-remediation-pack.v1.json"),
+        "frameworks": [],
+    },
     "owlvex.stride.2026.1": {
         "pack_type": "reasoning-profile",
         "relative_path": Path("stride/owlvex.stride.2026.1.json"),

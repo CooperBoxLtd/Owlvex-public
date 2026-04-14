@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { getCanonicalIssueById } from '../frameworks/issueResolver';
+import { resolveRemediationForFinding } from '../frameworks/remediationResolver';
 import { describeRulePackRuntime, getRulePackModeLabel } from '../packs/packRuntime';
 import { ScanResult } from './scanEngine';
 import { FolderScanSummary } from './workspaceScanner';
@@ -73,31 +73,11 @@ function getCanonicalRemediation(finding: ScanResult['findings'][number]): {
     remediation: string;
     refs: string[];
     modelNote?: string;
+    frameworkVariant?: { framework: string; summary: string; recommendedActions: string[] };
+    validationSteps: string[];
+    unsafeAlternatives: string[];
 } {
-    const issue = finding.canonicalId ? getCanonicalIssueById(finding.canonicalId) : undefined;
-    const canonicalRemediation = issue?.remediationSummary?.trim();
-    const canonicalRefs = issue?.cheatSheetRefs ?? [];
-    const modelFix = finding.fix?.trim();
-
-    if (!canonicalRemediation) {
-        return {
-            remediation: modelFix || 'No fix returned.',
-            refs: [],
-        };
-    }
-
-    if (!modelFix || modelFix === canonicalRemediation) {
-        return {
-            remediation: canonicalRemediation,
-            refs: canonicalRefs,
-        };
-    }
-
-    return {
-        remediation: canonicalRemediation,
-        refs: canonicalRefs,
-        modelNote: modelFix,
-    };
+    return resolveRemediationForFinding(finding);
 }
 
 // ---------------------------------------------------------------------------
@@ -438,6 +418,18 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Summary: ${sample.explanation || 'No explanation returned.'}`);
             lines.push(`- Threat: ${sample.threat || 'No threat description returned.'}`);
             lines.push(`- Recommended fix: ${remediation.remediation}`);
+            if (remediation.frameworkVariant) {
+                lines.push(`- Framework-specific guidance (${remediation.frameworkVariant.framework}): ${remediation.frameworkVariant.summary}`);
+                if (remediation.frameworkVariant.recommendedActions.length) {
+                    lines.push(`- Recommended actions: ${remediation.frameworkVariant.recommendedActions.join(' | ')}`);
+                }
+            }
+            if (remediation.validationSteps.length) {
+                lines.push(`- Validation steps: ${remediation.validationSteps.join(' | ')}`);
+            }
+            if (remediation.unsafeAlternatives.length) {
+                lines.push(`- Unsafe alternatives to avoid: ${remediation.unsafeAlternatives.join(' | ')}`);
+            }
             if (remediation.refs.length) {
                 lines.push(`- Remediation sources: ${remediation.refs.join(', ')}`);
             }
@@ -478,6 +470,18 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`  Reasoning: ${item.finding.explanation || 'No explanation returned.'}`);
                 lines.push(`  Threat: ${item.finding.threat || 'No threat description returned.'}`);
                 lines.push(`  Recommended remediation: ${remediation.remediation}`);
+                if (remediation.frameworkVariant) {
+                    lines.push(`  Framework-specific guidance (${remediation.frameworkVariant.framework}): ${remediation.frameworkVariant.summary}`);
+                    if (remediation.frameworkVariant.recommendedActions.length) {
+                        lines.push(`  Recommended actions: ${remediation.frameworkVariant.recommendedActions.join(' | ')}`);
+                    }
+                }
+                if (remediation.validationSteps.length) {
+                    lines.push(`  Validation steps: ${remediation.validationSteps.join(' | ')}`);
+                }
+                if (remediation.unsafeAlternatives.length) {
+                    lines.push(`  Unsafe alternatives to avoid: ${remediation.unsafeAlternatives.join(' | ')}`);
+                }
                 if (remediation.modelNote) {
                     lines.push(`  Model implementation note: ${remediation.modelNote}`);
                 }

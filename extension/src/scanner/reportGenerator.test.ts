@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import { generateReportFromSnapshot } from './reportGenerator';
 import { ScanResult } from './scanEngine';
+import { configureRulePackRuntime, resetRulePackRuntime } from '../frameworks/rulePackRegistry';
 
 describe('reportGenerator', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        resetRulePackRuntime();
     });
 
     function buildResult(overrides: Partial<ScanResult> = {}): ScanResult {
@@ -193,5 +195,72 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- STRIDE: Tampering, Information Disclosure');
         expect(written).toContain('- Matched signals: CWE:CWE-89, sql injection');
+    });
+
+    it('prefers remediation-pack guidance with framework actions, validation, and unsafe alternatives', async () => {
+        configureRulePackRuntime(
+            undefined,
+            undefined,
+            {
+                entries: [{
+                    id: 'owlvex.remediation.sql_injection.001',
+                    issue_id: 'owlvex.issue.sql_injection.001',
+                    title: 'Canonical remediation for SQL injection',
+                    canonical_fix_summary: 'Use parameter binding and allow-list dynamic SQL structure.',
+                    framework_variants: [{
+                        framework: 'Express',
+                        summary: 'Use placeholders and values arrays in your database client.',
+                        recommended_actions: [
+                            'Replace string-built SQL with placeholders.',
+                            'Allow-list dynamic sort fields.',
+                        ],
+                    }],
+                    validation_steps: ['Replay the injection payload and confirm it is treated as data.'],
+                    unsafe_alternatives: ['Manual quote escaping.'],
+                    references: [{
+                        label: 'OWASP SQL Injection Prevention Cheat Sheet',
+                        kind: 'cheat-sheet',
+                        publisher: 'OWASP',
+                    }],
+                    provenance: {
+                        source_type: 'hybrid',
+                        curation_method: 'manual',
+                        review_status: 'reviewed',
+                        sources: [{ label: 'OWASP SQL Injection Prevention Cheat Sheet', kind: 'cheat-sheet' }],
+                    },
+                }],
+            },
+        );
+
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('app.get("/users");'));
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        const snapshot = {
+            targetLabel: 'src/probes/express.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\express.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                framework: 'Express',
+                                fix: 'Parameterize the query.',
+                            },
+                        ],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Framework-specific guidance (Express): Use placeholders and values arrays in your database client.');
+        expect(written).toContain('- Recommended actions: Replace string-built SQL with placeholders. | Allow-list dynamic sort fields.');
+        expect(written).toContain('- Validation steps: Replay the injection payload and confirm it is treated as data.');
+        expect(written).toContain('- Unsafe alternatives to avoid: Manual quote escaping.');
+        expect(written).toContain('  Framework-specific guidance (Express): Use placeholders and values arrays in your database client.');
     });
 });

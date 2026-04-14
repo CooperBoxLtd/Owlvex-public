@@ -64,6 +64,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP SQL Injection Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-89 Improper Neutralization of Special Elements used in an SQL Command",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-89"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "sql injection",
@@ -139,6 +160,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP OS Command Injection Defense Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-78 Improper Neutralization of Special Elements used in an OS Command",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-78"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "command injection",
@@ -212,6 +254,27 @@
           "OWASP Secrets Management Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-798 Use of Hard-coded Credentials",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -289,6 +352,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-798 Use of Hard-coded Credentials",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "password",
@@ -362,6 +446,27 @@
           "OWASP Secrets Management Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-798 Use of Hard-coded Credentials",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -437,6 +542,27 @@
           "OWASP Secrets Management Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-798 Use of Hard-coded Credentials",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -514,6 +640,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Path Traversal Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-22 Improper Limitation of a Pathname to a Restricted Directory",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-22"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "path traversal",
@@ -589,6 +736,33 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Authorization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-639 Authorization Bypass Through User-Controlled Key",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-639"
+          },
+          {
+            "label": "OWASP API Security Top 10 API1:2023 Broken Object Level Authorization",
+            "kind": "standard",
+            "publisher": "OWASP",
+            "document_id": "API1:2023"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "idor",
@@ -660,6 +834,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Logging Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-532 Insertion of Sensitive Information into Log File",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-532"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "log",
@@ -726,6 +921,27 @@
           "OWASP Logging Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Logging Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-778 Insufficient Logging",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-778"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -801,6 +1017,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Server Side Request Forgery Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-918 Server-Side Request Forgery",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-918"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "ssrf",
@@ -873,6 +1110,27 @@
           "OWASP Deserialization Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Deserialization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-502 Deserialization of Untrusted Data",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-502"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -948,6 +1206,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Authentication Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-521 Weak Password Requirements",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-521"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "weak password",
@@ -1018,6 +1297,27 @@
           "OWASP Cross Site Scripting Prevention Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-79 Improper Neutralization of Input During Web Page Generation",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-79"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -1090,6 +1390,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-79 Improper Neutralization of Input During Web Page Generation",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-79"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "stored xss",
@@ -1160,6 +1481,27 @@
           "OWASP Unvalidated Redirects and Forwards Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Unvalidated Redirects and Forwards Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-601 URL Redirection to Untrusted Site",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-601"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -1232,6 +1574,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross-Site Request Forgery Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-352 Cross-Site Request Forgery",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-352"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "csrf",
@@ -1298,6 +1661,27 @@
           "OWASP Cross Origin Resource Sharing Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross Origin Resource Sharing Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-942 Permissive Cross-domain Policy with Untrusted Domains",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-942"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -1371,6 +1755,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP JSON Web Token Cheat Sheet for Java",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-345 Insufficient Verification of Data Authenticity",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-345"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "jwt",
@@ -1443,6 +1848,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP File Upload Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-434 Unrestricted Upload of File with Dangerous Type",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-434"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "file upload",
@@ -1510,6 +1936,27 @@
           "OWASP Mass Assignment Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Mass Assignment Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-915 Improperly Controlled Modification of Dynamically-Determined Object Attributes",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-915"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -1581,6 +2028,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP XML External Entity Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-611 Improper Restriction of XML External Entity Reference",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-611"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "xxe",
@@ -1650,6 +2118,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cryptographic Storage Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-327 Use of a Broken or Risky Cryptographic Algorithm",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-327"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "md5",
@@ -1714,6 +2203,27 @@
           "OWASP Cryptographic Storage Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cryptographic Storage Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-330 Use of Insufficiently Random Values",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-330"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -1782,6 +2292,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Error Handling Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-209 Information Exposure Through an Error Message",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-209"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "error.message",
@@ -1849,6 +2380,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Prototype Pollution Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-1321 Improperly Controlled Modification of Object Prototype Attributes",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-1321"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "prototype pollution",
@@ -1915,6 +2467,27 @@
           "OWASP Input Validation Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Input Validation Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-1333 Inefficient Regular Expression Complexity",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-1333"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [
@@ -1988,6 +2561,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Server Side Template Injection Prevention guidance",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-94 Improper Control of Generation of Code",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-94"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "template injection",
@@ -2060,6 +2654,27 @@
         ],
         "code_examples": []
       },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP NoSQL Security Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-943 Improper Neutralization of Special Elements in Data Query Logic",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-943"
+          }
+        ]
+      },
       "evidence_requirements": {
         "required_signals": [
           "nosql injection",
@@ -2127,6 +2742,27 @@
           "OWASP LDAP Injection Prevention Cheat Sheet"
         ],
         "code_examples": []
+      },
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP LDAP Injection Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-90 Improper Neutralization of Special Elements used in an LDAP Query",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-90"
+          }
+        ]
       },
       "evidence_requirements": {
         "required_signals": [

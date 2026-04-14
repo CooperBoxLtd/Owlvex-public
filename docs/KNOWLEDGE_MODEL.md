@@ -47,6 +47,9 @@ Owlvex should standardize on three core artifacts:
 - `docs/schemas/issue-mapping.schema.v1.json`
   Mapping and correlation schema
 
+- `docs/schemas/provenance.schema.v1.json`
+  Trusted-source provenance schema for curated grounded data
+
 ## First Curated Pack
 
 The first concrete Owlvex rule pack now exists in:
@@ -151,6 +154,27 @@ This is important because Owlvex’s moat is not only detecting flaws. It is nor
       }
     ]
   },
+  "provenance": {
+    "source_type": "hybrid",
+    "curation_method": "manual",
+    "review_status": "reviewed",
+    "reviewed_by": "security-team",
+    "reviewed_at": "2026-04-14T00:00:00Z",
+    "last_verified_at": "2026-04-14T00:00:00Z",
+    "sources": [
+      {
+        "label": "OWASP SQL Injection Prevention Cheat Sheet",
+        "kind": "cheat-sheet",
+        "publisher": "OWASP"
+      },
+      {
+        "label": "CWE-89",
+        "kind": "taxonomy",
+        "publisher": "MITRE",
+        "document_id": "CWE-89"
+      }
+    ]
+  },
   "evidence_requirements": {
     "must_identify_source": true,
     "must_identify_sink": true,
@@ -207,3 +231,23 @@ Important distinction:
 
 - `OWASP`, `CWE`, `ATT&CK`, `CAPEC`, and `NIST` are source datasets or publications
 - `STRIDE` is a reasoning model that Owlvex should formalize into its own curated profile
+
+## Provenance Requirement
+
+Grounded packs should be auditable, not just plausible.
+
+That means curated entries should carry provenance metadata that answers:
+
+- where the guidance came from
+- whether the content was manually curated or AI-assisted
+- whether a human reviewed it
+- when it was last verified
+
+Recommended rule:
+
+- no production issue, mapping, remediation, or policy entry should ship without populated provenance metadata
+
+Suggested validation path:
+
+- `node tools/validate-grounded-data.mjs`
+- `node tools/validate-grounded-data.mjs --strict`

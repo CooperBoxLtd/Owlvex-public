@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import { LicenceManager } from '../licence/licenceManager';
 import { ProviderRegistry } from '../providers/registry';
 import { CanonicalMappings, resolveIssue } from '../frameworks/issueResolver';
+import { buildGroundedRemediationPromptContext } from '../frameworks/remediationResolver';
 import { getIssueFamilyDefinition } from '../frameworks/issueCatalog';
 import { DeterministicScanner } from './deterministicScanner';
 import type { RulePackRuntimeContext } from '../packs/packRuntime';
@@ -144,10 +145,11 @@ export class ScanEngine {
         const start = Date.now();
 
         let aiResponse;
+        const groundedRemediationContext = buildGroundedRemediationPromptContext();
         try {
             aiResponse = await provider.complete({
                 systemPrompt,
-                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, and matched_signals if you can determine them.\n\nCode:\n\n${code}`,
+                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, and matched_signals if you can determine them.\nUse grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.\nDeterministic findings are confirmed structural violations. AI-only findings should stay evidence-based and avoid overclaiming.\n${groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : ''}\nCode:\n\n${code}`,
                 model: provider.selectedModel,
                 temperature: 0.1,
             });

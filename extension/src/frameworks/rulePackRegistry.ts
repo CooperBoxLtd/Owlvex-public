@@ -14,6 +14,35 @@ interface RulePackMappingArtifact {
     }>;
 }
 
+interface RulePackRemediationArtifact {
+    entries?: Array<Record<string, unknown>>;
+}
+
+export interface RemediationFrameworkVariant {
+    framework: string;
+    summary: string;
+    recommendedActions: string[];
+}
+
+export interface RemediationReference {
+    label: string;
+    kind: string;
+    publisher?: string;
+    documentId?: string;
+    section?: string;
+}
+
+export interface CanonicalRemediation {
+    id: string;
+    issueId: string;
+    title: string;
+    canonicalFixSummary: string;
+    frameworkVariants: RemediationFrameworkVariant[];
+    validationSteps: string[];
+    unsafeAlternatives: string[];
+    references: RemediationReference[];
+}
+
 export interface DynamicFrameworkMappingMatch {
     issue: CanonicalIssue;
     matchedSignals: string[];
@@ -22,6 +51,7 @@ export interface DynamicFrameworkMappingMatch {
 let effectiveCatalog: CanonicalIssue[] = ISSUE_CATALOG;
 let effectiveIssueIndex: Map<string, CanonicalIssue> = new Map(ISSUE_CATALOG.map(issue => [issue.id, issue]));
 let dynamicMappingIndex: Map<string, DynamicFrameworkMappingMatch> = new Map();
+let effectiveRemediationIndex: Map<string, CanonicalRemediation> = new Map();
 
 function normalizeStringList(value: unknown): string[] {
     if (!Array.isArray(value)) {
@@ -43,6 +73,55 @@ function normalizeMappings(value: unknown): CanonicalMappings {
         capec: normalizeStringList(raw.capec),
         nist: normalizeStringList(raw.nist),
     };
+}
+
+function normalizeFrameworkVariants(value: unknown): RemediationFrameworkVariant[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map(item => {
+            const raw = (item && typeof item === 'object') ? item as Record<string, unknown> : {};
+            const framework = String(raw.framework ?? '').trim();
+            const summary = String(raw.summary ?? '').trim();
+            const recommendedActions = normalizeStringList(raw.recommended_actions);
+            if (!framework || !summary || !recommendedActions.length) {
+                return undefined;
+            }
+
+            return {
+                framework,
+                summary,
+                recommendedActions,
+            };
+        })
+        .filter((item): item is RemediationFrameworkVariant => Boolean(item));
+}
+
+function normalizeReferences(value: unknown): RemediationReference[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map(item => {
+            const raw = (item && typeof item === 'object') ? item as Record<string, unknown> : {};
+            const label = String(raw.label ?? '').trim();
+            const kind = String(raw.kind ?? '').trim();
+            if (!label || !kind) {
+                return undefined;
+            }
+
+            return {
+                label,
+                kind,
+                publisher: String(raw.publisher ?? '').trim() || undefined,
+                documentId: String(raw.document_id ?? raw.documentId ?? '').trim() || undefined,
+                section: String(raw.section ?? '').trim() || undefined,
+            };
+        })
+        .filter((item): item is RemediationReference => Boolean(item));
 }
 
 function normalizeSeverity(value: unknown): CanonicalIssue['severity'] {
@@ -93,6 +172,30 @@ function buildDynamicIssueOverlay(rawIssue: Record<string, unknown>): Partial<Ca
     };
 }
 
+function buildDynamicRemediationEntry(rawEntry: Record<string, unknown>): CanonicalRemediation | undefined {
+    const issueId = String(rawEntry.issue_id ?? rawEntry.issueId ?? '').trim();
+    const id = String(rawEntry.id ?? '').trim();
+    if (!issueId || !id) {
+        return undefined;
+    }
+
+    const canonicalFixSummary = String(rawEntry.canonical_fix_summary ?? rawEntry.canonicalFixSummary ?? '').trim();
+    if (!canonicalFixSummary) {
+        return undefined;
+    }
+
+    return {
+        id,
+        issueId,
+        title: String(rawEntry.title ?? issueId).trim(),
+        canonicalFixSummary,
+        frameworkVariants: normalizeFrameworkVariants(rawEntry.framework_variants ?? rawEntry.frameworkVariants),
+        validationSteps: normalizeStringList(rawEntry.validation_steps ?? rawEntry.validationSteps),
+        unsafeAlternatives: normalizeStringList(rawEntry.unsafe_alternatives ?? rawEntry.unsafeAlternatives),
+        references: normalizeReferences(rawEntry.references),
+    };
+}
+
 function mappingKey(frameworkCode: string, externalId: string): string {
     return `${frameworkCode.trim().toUpperCase()}::${externalId.trim().toUpperCase()}`;
 }
@@ -100,9 +203,11 @@ function mappingKey(frameworkCode: string, externalId: string): string {
 export function configureRulePackRuntime(
     issueArtifact?: Record<string, unknown>,
     mappingArtifact?: Record<string, unknown>,
+    remediationArtifact?: Record<string, unknown>,
 ): void {
     const issuePack = issueArtifact as RulePackIssueArtifact | undefined;
     const mappingPack = mappingArtifact as RulePackMappingArtifact | undefined;
+    const remediationPack = remediationArtifact as RulePackRemediationArtifact | undefined;
 
     const dynamicIssues = new Map<string, Partial<CanonicalIssue>>();
     for (const rawIssue of issuePack?.issues ?? []) {
@@ -154,6 +259,7 @@ export function configureRulePackRuntime(
 
     effectiveIssueIndex = new Map(effectiveCatalog.map(issue => [issue.id, issue]));
     dynamicMappingIndex = new Map();
+    effectiveRemediationIndex = new Map();
 
     for (const mapping of mappingPack?.mappings ?? []) {
         const issueId = String(mapping.issue_id ?? '').trim();
@@ -179,12 +285,20 @@ export function configureRulePackRuntime(
             });
         }
     }
+
+    for (const rawEntry of remediationPack?.entries ?? []) {
+        const entry = buildDynamicRemediationEntry(rawEntry);
+        if (entry) {
+            effectiveRemediationIndex.set(entry.issueId, entry);
+        }
+    }
 }
 
 export function resetRulePackRuntime(): void {
     effectiveCatalog = ISSUE_CATALOG;
     effectiveIssueIndex = new Map(ISSUE_CATALOG.map(issue => [issue.id, issue]));
     dynamicMappingIndex = new Map();
+    effectiveRemediationIndex = new Map();
 }
 
 export function getEffectiveIssueCatalog(): CanonicalIssue[] {
@@ -201,4 +315,12 @@ export function findDynamicFrameworkMapping(framework: string, ruleCode: string)
     }
 
     return dynamicMappingIndex.get(mappingKey(framework, ruleCode));
+}
+
+export function getEffectiveRemediationByIssueId(issueId: string): CanonicalRemediation | undefined {
+    return effectiveRemediationIndex.get(issueId);
+}
+
+export function getEffectiveRemediationCatalog(): CanonicalRemediation[] {
+    return [...effectiveRemediationIndex.values()];
 }
