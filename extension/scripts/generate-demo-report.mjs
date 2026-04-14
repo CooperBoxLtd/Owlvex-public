@@ -13,14 +13,14 @@ const demoDir = path.join(repoRoot, 'tools', 'demo');
 const scanner = new DeterministicScanner();
 
 const severityPenalty = {
-    CRITICAL: 3,
-    HIGH: 2,
-    MEDIUM: 1,
+    CRITICAL: 4,
+    HIGH: 2.5,
+    MEDIUM: 1.5,
     LOW: 0.5,
 };
 
 const likelihoodMultiplier = {
-    HIGH: 1.25,
+    HIGH: 1.5,
     MEDIUM: 1,
     LOW: 0.75,
 };
@@ -37,10 +37,10 @@ function getLikelihood(finding) {
 
 function getRiskScore(finding) {
     const matrix = {
-        LOW: { LOW: 1, MEDIUM: 2, HIGH: 3 },
-        MEDIUM: { LOW: 3, MEDIUM: 5, HIGH: 6 },
-        HIGH: { LOW: 5, MEDIUM: 7, HIGH: 8 },
-        CRITICAL: { LOW: 7, MEDIUM: 9, HIGH: 10 },
+        LOW: { LOW: 1, MEDIUM: 2, HIGH: 4 },
+        MEDIUM: { LOW: 3, MEDIUM: 5, HIGH: 7 },
+        HIGH: { LOW: 5, MEDIUM: 8, HIGH: 9 },
+        CRITICAL: { LOW: 8, MEDIUM: 9, HIGH: 10 },
     };
     return matrix[finding.severity]?.[getLikelihood(finding)] ?? 0;
 }

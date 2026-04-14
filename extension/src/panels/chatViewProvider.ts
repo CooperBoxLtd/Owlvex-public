@@ -83,14 +83,14 @@ function buildScoreBreakdown(result: ScanResult): string {
 
     const parts = result.findings.map(finding => {
         const basePenalty = finding.severity === 'CRITICAL'
-            ? 3
+            ? 4
             : finding.severity === 'HIGH'
-            ? 2
+            ? 2.5
             : finding.severity === 'MEDIUM'
-            ? 1
+            ? 1.5
             : 0.5;
         const multiplier = getFindingLikelihood(finding) === 'HIGH'
-            ? 1.25
+            ? 1.5
             : getFindingLikelihood(finding) === 'LOW'
             ? 0.75
             : 1;

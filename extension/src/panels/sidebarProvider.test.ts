@@ -78,7 +78,7 @@ describe('SidebarProvider', () => {
 
         const roots = provider.getChildren();
         expect(roots[0].label).toBe('Score: 4.2/10');
-        expect(String(roots[0].tooltip)).toContain('Breakdown: 10.0 baseline - high x high (2.5)');
+        expect(String(roots[0].tooltip)).toContain('Breakdown: 10.0 baseline - high x high (3.75)');
         expect(String(roots[0].tooltip)).toContain('Top risk: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
         expect(severityNode).toBeTruthy();

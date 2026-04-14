@@ -72,23 +72,23 @@ type FindingSeverity = Finding['severity'];
 type FindingLikelihood = NonNullable<Finding['likelihood']>;
 
 const RISK_MATRIX: Record<FindingSeverity, Record<FindingLikelihood, number>> = {
-    LOW: { LOW: 1, MEDIUM: 2, HIGH: 3 },
-    MEDIUM: { LOW: 3, MEDIUM: 5, HIGH: 6 },
-    HIGH: { LOW: 5, MEDIUM: 7, HIGH: 8 },
-    CRITICAL: { LOW: 7, MEDIUM: 9, HIGH: 10 },
+    LOW: { LOW: 1, MEDIUM: 2, HIGH: 4 },
+    MEDIUM: { LOW: 3, MEDIUM: 5, HIGH: 7 },
+    HIGH: { LOW: 5, MEDIUM: 8, HIGH: 9 },
+    CRITICAL: { LOW: 8, MEDIUM: 9, HIGH: 10 },
 };
 
 const SEVERITY_PENALTY: Record<FindingSeverity, number> = {
     LOW: 0.5,
-    MEDIUM: 1,
-    HIGH: 2,
-    CRITICAL: 3,
+    MEDIUM: 1.5,
+    HIGH: 2.5,
+    CRITICAL: 4,
 };
 
 const LIKELIHOOD_MULTIPLIER: Record<FindingLikelihood, number> = {
     LOW: 0.75,
     MEDIUM: 1,
-    HIGH: 1.25,
+    HIGH: 1.5,
 };
 
 function buildMetrics(findings: Finding[]): SeverityMetrics {

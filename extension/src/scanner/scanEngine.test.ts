@@ -474,7 +474,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].ruleCode).toBe('AC-001');
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.idor.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Access Control & Authorization');
-        expect(result.score).toBe(8);
+        expect(result.score).toBe(6.3);
     });
 
     it('recalculates the final score from merged severity metrics instead of trusting the model score', async () => {
@@ -539,9 +539,9 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.metrics).toEqual({ critical: 0, high: 0, medium: 1, low: 0 });
-        expect(result.score).toBe(9);
-        expect(result.findings[0].likelihood).toBe('MEDIUM');
-        expect(result.findings[0].riskScore).toBe(5);
-        expect(result.summary).toBe('1 finding(s) detected, led by 1 medium-severity issue(s). Highest contextual risk: medium impact x medium likelihood = 5/10. Issue families: Identity & Auth Failures.');
+        expect(result.score).toBe(7.8);
+        expect(result.findings[0].likelihood).toBe('HIGH');
+        expect(result.findings[0].riskScore).toBe(7);
+        expect(result.summary).toBe('1 finding(s) detected, led by 1 medium-severity issue(s). Highest contextual risk: medium impact x high likelihood = 7/10. Issue families: Identity & Auth Failures.');
     });
 });
