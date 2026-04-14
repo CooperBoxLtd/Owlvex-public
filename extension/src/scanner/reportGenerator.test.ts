@@ -33,6 +33,9 @@ describe('reportGenerator', () => {
                     canonicalFamilyLabel: 'Injection & Execution',
                     stride: ['Tampering', 'Information Disclosure'],
                     matchedSignals: ['CWE:CWE-89', 'sql injection'],
+                    likelihood: 'MEDIUM',
+                    likelihoodReasons: ['Dynamic SQL uses user-controlled input directly.'],
+                    riskScore: 7,
                     mappings: {
                         cwe: ['CWE-89'],
                         owasp: ['A03:2021'],
@@ -95,10 +98,14 @@ describe('reportGenerator', () => {
         expect(written).toContain('## Issue Family Coverage');
         expect(written).toContain('- Injection & Execution: 1 finding(s)');
         expect(written).toContain('## Canonical Findings');
-        expect(written).toContain('| example.js | 4.2 | 1 | 1 finding(s), led by a high-severity Unsanitized SQL query construction. Primary issue family: Injection & Execution. |');
+        expect(written).toContain('| example.js | 4.2 | 1 | 1 finding(s), led by a high-impact/medium-likelihood Unsanitized SQL query construction (7/10 risk). Primary issue family: Injection & Execution. |');
         expect(written).toContain('- Owlvex issue: `owlvex.issue.sql_injection.001`');
         expect(written).toContain('- Issue family: Injection & Execution');
         expect(written).toContain('- Category: unresolved');
+        expect(written).toContain('- Impact: HIGH');
+        expect(written).toContain('- Likelihood: MEDIUM');
+        expect(written).toContain('- Contextual risk: 7/10');
+        expect(written).toContain('- Likelihood reasons: Dynamic SQL uses user-controlled input directly.');
         expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Matched signals: CWE:CWE-89, sql injection');
         expect(written).toContain('- Recommended fix: Use parameterized queries or prepared statements and validate input at trust boundaries.');
@@ -108,6 +115,9 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Issue family: Injection & Execution');
         expect(written).toContain('#### File-level evidence');
         expect(written).toContain('- `example.js` at L3-4');
+        expect(written).toContain('  Impact: HIGH');
+        expect(written).toContain('  Likelihood: MEDIUM');
+        expect(written).toContain('  Contextual risk: 7/10');
         expect(written).toContain('  Original framework match: OWASP');
         expect(written).toContain('  Recommended remediation: Use parameterized queries or prepared statements and validate input at trust boundaries.');
         expect(written).toContain('## Framework Correlation View');

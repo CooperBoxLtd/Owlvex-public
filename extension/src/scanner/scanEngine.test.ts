@@ -54,6 +54,7 @@ describe('ScanEngine._parseAIResponse', () => {
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.sql_injection.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
         expect(result.findings[0].stride).toEqual(['Tampering', 'Information Disclosure']);
+        expect(result.findings[0].likelihood).toBeUndefined();
         expect(result.positives).toHaveLength(1);
         expect(result.metrics.high).toBe(1);
     });
@@ -177,6 +178,23 @@ describe('ScanEngine._parseAIResponse', () => {
             nist: ['SI-10', 'SA-11'],
         });
         expect(result.findings[0].matchedSignals).toEqual(['CWE:CWE-89', 'sql injection']);
+    });
+
+    it('parses likelihood and likelihood reasons when the model provides them', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                likelihood: 'high',
+                likelihood_reasons: ['User input reaches a query sink.', 'No validation is visible nearby.'],
+            }],
+        };
+        const result = engine.parse(JSON.stringify(payload));
+        expect(result.findings[0].likelihood).toBe('HIGH');
+        expect(result.findings[0].likelihoodReasons).toEqual([
+            'User input reaches a query sink.',
+            'No validation is visible nearby.',
+        ]);
     });
 });
 
@@ -334,6 +352,61 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
+    it('retries transient provider rate limits before succeeding', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'azure-foundry',
+            selectedModel: 'owlvex-gpt54mini',
+            complete: jest.fn()
+                .mockRejectedValueOnce(new Error('Azure Foundry error: 429'))
+                .mockRejectedValueOnce(new Error('Azure Foundry error: 429'))
+                .mockResolvedValue({
+                    content: JSON.stringify({
+                        score: 8,
+                        summary: 'ok',
+                        findings: [],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    }),
+                    tokenCount: 42,
+                }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\a.js',
+            getText: () => 'const x = 1;',
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.summary).toBe('ok');
+        expect(provider.complete).toHaveBeenCalledTimes(3);
+        setTimeoutSpy.mockRestore();
+    });
+
     it('suppresses conflicting AI findings when a deterministic IDOR finding already covers the region', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
@@ -401,5 +474,74 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].ruleCode).toBe('AC-001');
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.idor.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Access Control & Authorization');
+        expect(result.score).toBe(8);
+    });
+
+    it('recalculates the final score from merged severity metrics instead of trusting the model score', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 2.5,
+                    summary: 'Critical vulnerability detected.',
+                    findings: [
+                        {
+                            id: 'ai-1',
+                            line: 7,
+                            line_end: 7,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'SM-001',
+                            title: 'Insecure Cookie',
+                            explanation: 'Cookie is readable by client-side script.',
+                            threat: 'Session theft via XSS.',
+                            fix: 'Set httpOnly.',
+                            confidence: 0.91,
+                            issue_id: 'owlvex.issue.insecure_cookie.001',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 1, high: 0, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\10-cookie-unsafe.js',
+            getText: () => `function issueSessionCookie(req, res, token) {
+    res.cookie('session', token);
+    res.json({ ok: true });
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.metrics).toEqual({ critical: 0, high: 0, medium: 1, low: 0 });
+        expect(result.score).toBe(9);
+        expect(result.findings[0].likelihood).toBe('MEDIUM');
+        expect(result.findings[0].riskScore).toBe(5);
+        expect(result.summary).toBe('1 finding(s) detected, led by 1 medium-severity issue(s). Highest contextual risk: medium impact x medium likelihood = 5/10. Issue families: Identity & Auth Failures.');
     });
 });

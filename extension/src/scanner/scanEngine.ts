@@ -32,6 +32,9 @@ export interface Finding {
     mappings?: CanonicalMappings;
     matchedSignals?: string[];
     resolverConfidence?: number;
+    likelihood?: 'LOW' | 'MEDIUM' | 'HIGH';
+    likelihoodReasons?: string[];
+    riskScore?: number;
 }
 
 export interface ScanResult {
@@ -48,9 +51,122 @@ export interface ScanResult {
     packContext?: RulePackRuntimeContext;
 }
 
+export interface ScanDocumentOptions {
+    forceDeterministicOnly?: boolean;
+    deterministicOnlyReason?: string;
+}
+
 interface PromptContext {
     templateId?: string;
     systemPrompt: string;
+}
+
+interface SeverityMetrics {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+}
+
+type FindingSeverity = Finding['severity'];
+type FindingLikelihood = NonNullable<Finding['likelihood']>;
+
+const RISK_MATRIX: Record<FindingSeverity, Record<FindingLikelihood, number>> = {
+    LOW: { LOW: 1, MEDIUM: 2, HIGH: 3 },
+    MEDIUM: { LOW: 3, MEDIUM: 5, HIGH: 6 },
+    HIGH: { LOW: 5, MEDIUM: 7, HIGH: 8 },
+    CRITICAL: { LOW: 7, MEDIUM: 9, HIGH: 10 },
+};
+
+const SEVERITY_PENALTY: Record<FindingSeverity, number> = {
+    LOW: 0.5,
+    MEDIUM: 1,
+    HIGH: 2,
+    CRITICAL: 3,
+};
+
+const LIKELIHOOD_MULTIPLIER: Record<FindingLikelihood, number> = {
+    LOW: 0.75,
+    MEDIUM: 1,
+    HIGH: 1.25,
+};
+
+function buildMetrics(findings: Finding[]): SeverityMetrics {
+    return {
+        critical: findings.filter(f => f.severity === 'CRITICAL').length,
+        high: findings.filter(f => f.severity === 'HIGH').length,
+        medium: findings.filter(f => f.severity === 'MEDIUM').length,
+        low: findings.filter(f => f.severity === 'LOW').length,
+    };
+}
+
+function normalizeLikelihood(value: unknown): FindingLikelihood | undefined {
+    const normalized = String(value ?? '').trim().toUpperCase();
+    if (normalized === 'LOW' || normalized === 'MEDIUM' || normalized === 'HIGH') {
+        return normalized;
+    }
+
+    return undefined;
+}
+
+function getFindingLikelihood(finding: Finding): FindingLikelihood {
+    return normalizeLikelihood(finding.likelihood) ?? 'MEDIUM';
+}
+
+function computeFindingRiskScore(severity: FindingSeverity, likelihood: FindingLikelihood): number {
+    return RISK_MATRIX[severity][likelihood];
+}
+
+function computeFindingPenalty(finding: Finding): number {
+    const likelihood = getFindingLikelihood(finding);
+    return SEVERITY_PENALTY[finding.severity] * LIKELIHOOD_MULTIPLIER[likelihood];
+}
+
+function calculateScoreFromFindings(findings: Finding[]): number {
+    const penalty = findings.reduce((total, finding) => total + computeFindingPenalty(finding), 0);
+    return Math.max(0, Number((10 - penalty).toFixed(1)));
+}
+
+function enrichFindingRisk(finding: Finding): Finding {
+    const likelihood = getFindingLikelihood(finding);
+    return {
+        ...finding,
+        likelihood,
+        riskScore: computeFindingRiskScore(finding.severity, likelihood),
+    };
+}
+
+function summarizeFindings(findings: Finding[], fallbackSummary: string): string {
+    if (!findings.length) {
+        return fallbackSummary || 'No findings detected.';
+    }
+
+    const severityOrder: Finding['severity'][] = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
+    const highestSeverity = severityOrder.find(severity => findings.some(f => f.severity === severity)) ?? 'LOW';
+    const highestSeverityCount = findings.filter(f => f.severity === highestSeverity).length;
+    const families = [...new Set(
+        findings
+            .map(f => f.canonicalFamilyLabel || f.canonicalFamily)
+            .filter((value): value is string => Boolean(value)),
+    )];
+
+    const highestRisk = findings
+        .slice()
+        .sort((left, right) => (right.riskScore ?? 0) - (left.riskScore ?? 0))[0];
+
+    const parts = [`${findings.length} finding(s) detected, led by ${highestSeverityCount} ${highestSeverity.toLowerCase()}-severity issue(s).`];
+
+    if (highestRisk) {
+        parts.push(
+            `Highest contextual risk: ${highestRisk.severity.toLowerCase()} impact x ${getFindingLikelihood(highestRisk).toLowerCase()} likelihood = ${(highestRisk.riskScore ?? 0)}/10.`,
+        );
+    }
+
+    if (families.length) {
+        parts.push(`Issue families: ${families.join(', ')}.`);
+    }
+
+    return parts.join(' ');
 }
 
 function normalizeStringList(value: unknown): string[] | undefined {
@@ -152,6 +268,30 @@ function mergeDeterministicAndAiFindings(deterministicFindings: Finding[], aiFin
     return [...deterministicFindings, ...filteredAiFindings];
 }
 
+function isRateLimitError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return /\b429\b/.test(message) || /rate limit/i.test(message);
+}
+
+function extractRetryAfterMs(error: unknown): number | undefined {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    const retryAfterSecondsMatch = message.match(/retry-after:\s*(\d+(?:\.\d+)?)/i);
+    if (retryAfterSecondsMatch) {
+        return Math.max(0, Math.ceil(Number(retryAfterSecondsMatch[1]) * 1000));
+    }
+
+    const retryAfterMsMatch = message.match(/retry-after-ms:\s*(\d+)/i);
+    if (retryAfterMsMatch) {
+        return Math.max(0, Number(retryAfterMsMatch[1]));
+    }
+
+    return undefined;
+}
+
+async function sleep(ms: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export class ScanEngine {
     private readonly deterministicScanner = new DeterministicScanner();
     private readonly licenceValidationCache = new Map<string, Promise<void>>();
@@ -162,7 +302,7 @@ export class ScanEngine {
         private readonly registry: ProviderRegistry,
     ) {}
 
-    async scanDocument(document: vscode.TextDocument): Promise<ScanResult> {
+    async scanDocument(document: vscode.TextDocument, options?: ScanDocumentOptions): Promise<ScanResult> {
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
@@ -174,7 +314,16 @@ export class ScanEngine {
         const code = document.getText();
         const deterministicFindings = this.deterministicScanner
             .scan(code, document.languageId)
-            .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding));
+            .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding))
+            .map(f => enrichFindingRisk(f));
+
+        if (options?.forceDeterministicOnly || options?.deterministicOnlyReason) {
+            return this._buildDeterministicOnlyResult(
+                deterministicFindings,
+                options?.deterministicOnlyReason ?? 'AI enrichment skipped for this scan.',
+                provider,
+            );
+        }
 
         const licenceKey = await this.licenceMgr.getKey();
         if (!licenceKey) {
@@ -214,9 +363,9 @@ export class ScanEngine {
         let aiResponse;
         const groundedRemediationContext = buildGroundedRemediationPromptContext();
         try {
-            aiResponse = await provider.complete({
+            aiResponse = await this._completeWithRateLimitHandling(provider, {
                 systemPrompt,
-                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, and matched_signals if you can determine them.\nUse grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.\nDeterministic findings are confirmed structural violations. AI-only findings should stay evidence-based and avoid overclaiming.\n${buildDeterministicGroundingContext(deterministicFindings)}\n${groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : ''}\nCode:\n\n${code}`,
+                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, matched_signals, likelihood, and likelihood_reasons if you can determine them.\nTreat severity as impact. Use likelihood only for exploitability in this specific code context, and keep it evidence-based: LOW, MEDIUM, or HIGH.\nUse grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.\nDeterministic findings are confirmed structural violations. AI-only findings should stay evidence-based and avoid overclaiming.\n${buildDeterministicGroundingContext(deterministicFindings)}\n${groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : ''}\nCode:\n\n${code}`,
                 model: provider.selectedModel,
                 temperature: 0.1,
             });
@@ -243,6 +392,15 @@ export class ScanEngine {
         const fileHash = crypto.createHash('sha256').update(code).digest('hex');
         const fileName = document.fileName.split(/[/\\]/).pop() ?? 'unknown';
 
+        // Merge deterministic findings with AI findings.
+        // Deterministic findings lead — they are high-confidence and zero-cost.
+        // Deduplicate by canonicalId + line to avoid doubling up when the AI
+        // also found the same issue at the same location.
+        const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, parsed.findings)
+            .map(finding => enrichFindingRisk(finding));
+        const mergedMetrics = buildMetrics(allFindings);
+        const calculatedScore = calculateScoreFromFindings(allFindings);
+        const summary = summarizeFindings(allFindings, parsed.summary);
         let scanId = crypto.randomUUID();
         const warnings: string[] = [];
 
@@ -260,9 +418,9 @@ export class ScanEngine {
                     model: provider.selectedModel,
                     provider: provider.id,
                     frameworks,
-                    score: parsed.score,
-                    findings_summary: parsed.metrics,
-                    finding_count: parsed.findings.length,
+                    score: calculatedScore,
+                    findings_summary: mergedMetrics,
+                    finding_count: allFindings.length,
                     token_count: aiResponse.tokenCount,
                     duration_ms: durationMs,
                     prompt_id: promptContext.templateId,
@@ -280,22 +438,10 @@ export class ScanEngine {
             warnings.push(`Failed to record scan: ${error.message}`);
         }
 
-        // Merge deterministic findings with AI findings.
-        // Deterministic findings lead — they are high-confidence and zero-cost.
-        // Deduplicate by canonicalId + line to avoid doubling up when the AI
-        // also found the same issue at the same location.
-        const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, parsed.findings);
-        const mergedMetrics = {
-            critical: allFindings.filter(f => f.severity === 'CRITICAL').length,
-            high: allFindings.filter(f => f.severity === 'HIGH').length,
-            medium: allFindings.filter(f => f.severity === 'MEDIUM').length,
-            low: allFindings.filter(f => f.severity === 'LOW').length,
-        };
-
         return {
             scanId,
-            score: parsed.score,
-            summary: parsed.summary,
+            score: calculatedScore,
+            summary,
             findings: allFindings,
             positives: parsed.positives,
             metrics: mergedMetrics,
@@ -311,15 +457,13 @@ export class ScanEngine {
         warning: string,
         provider: { id: string; selectedModel: string },
     ): ScanResult {
-        const metrics = {
-            critical: deterministicFindings.filter(f => f.severity === 'CRITICAL').length,
-            high: deterministicFindings.filter(f => f.severity === 'HIGH').length,
-            medium: deterministicFindings.filter(f => f.severity === 'MEDIUM').length,
-            low: deterministicFindings.filter(f => f.severity === 'LOW').length,
-        };
-        const score = Math.max(0, 10 - (metrics.critical * 3) - (metrics.high * 2) - metrics.medium - (metrics.low * 0.5));
+        const metrics = buildMetrics(deterministicFindings);
+        const score = calculateScoreFromFindings(deterministicFindings);
         const summary = deterministicFindings.length
-            ? `${deterministicFindings.length} deterministic finding(s) returned while backend or AI services were unavailable.`
+            ? summarizeFindings(
+                deterministicFindings,
+                `${deterministicFindings.length} deterministic finding(s) returned while backend or AI services were unavailable.`,
+            )
             : 'No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.';
 
         return {
@@ -334,6 +478,29 @@ export class ScanEngine {
             provider: provider.id,
             warnings: [warning],
         };
+    }
+
+    private async _completeWithRateLimitHandling(
+        provider: { complete(req: { systemPrompt: string; userMessage: string; model: string; temperature: number }): Promise<any> },
+        req: { systemPrompt: string; userMessage: string; model: string; temperature: number },
+    ): Promise<any> {
+        const maxAttempts = 3;
+
+        for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+            try {
+                return await provider.complete(req);
+            } catch (error) {
+                if (!isRateLimitError(error) || attempt === maxAttempts) {
+                    throw error;
+                }
+
+                const retryAfterMs = extractRetryAfterMs(error);
+                const backoffMs = retryAfterMs ?? (1500 * (2 ** (attempt - 1)));
+                await sleep(backoffMs);
+            }
+        }
+
+        throw new Error('AI provider unavailable after retries.');
     }
 
     private async _validateLicenceCached(apiUrl: string, licenceKey: string): Promise<void> {
@@ -494,6 +661,8 @@ export class ScanEngine {
                     stride: normalizeStringList(f.stride),
                     mappings: normalizeMappings(f.mappings),
                     matchedSignals: normalizeStringList(f.matched_signals),
+                    likelihood: normalizeLikelihood(f.likelihood),
+                    likelihoodReasons: normalizeStringList(f.likelihood_reasons ?? f.likelihoodReasons ?? f.context_reasons),
                 })).map((finding: Finding) => this._resolveCanonicalFinding(finding)),
                 positives: data.positives ?? [],
                 metrics: data.metrics ?? { critical: 0, high: 0, medium: 0, low: 0 },

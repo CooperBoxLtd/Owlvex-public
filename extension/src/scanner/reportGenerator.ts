@@ -69,6 +69,14 @@ function getFindingSignals(finding: ScanResult['findings'][number]): string[] {
     return normalizeList(finding.matchedSignals);
 }
 
+function getFindingLikelihood(finding: ScanResult['findings'][number]): string {
+    return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
+}
+
+function getFindingLikelihoodReasons(finding: ScanResult['findings'][number]): string[] {
+    return normalizeList(finding.likelihoodReasons);
+}
+
 function getCanonicalRemediation(finding: ScanResult['findings'][number]): {
     remediation: string;
     refs: string[];
@@ -88,15 +96,16 @@ function summarizeFileResult(result: ScanResult): string {
     }
 
     const highestSeverityFinding = [...result.findings]
-        .sort((left, right) => severityRank(right.severity) - severityRank(left.severity))[0];
+        .sort((left, right) => riskRank(right) - riskRank(left))[0];
 
     const severityText = highestSeverityFinding.severity.toLowerCase();
+    const likelihoodText = getFindingLikelihood(highestSeverityFinding).toLowerCase();
     const title = highestSeverityFinding.canonicalTitle || highestSeverityFinding.title || 'finding';
     const family = highestSeverityFinding.canonicalFamilyLabel || highestSeverityFinding.canonicalFamily;
     const additionalCount = result.findings.length - 1;
 
     return [
-        `${result.findings.length} finding(s), led by a ${severityText}-severity ${title}.`,
+        `${result.findings.length} finding(s), led by a ${severityText}-impact/${likelihoodText}-likelihood ${title} (${highestSeverityFinding.riskScore ?? 'n/a'}/10 risk).`,
         family ? `Primary issue family: ${family}.` : '',
         additionalCount > 0 ? `${additionalCount} additional finding(s) also detected.` : '',
     ].filter(Boolean).join(' ');
@@ -344,7 +353,13 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         '## Risk Scoring',
         '',
         '- Score meaning: `10` is strongest, `0` is weakest.',
-        '- Severity scale: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.',
+        '- Source of truth: final score is recalculated from finding impact and likelihood, not taken verbatim from the AI model output.',
+        '- Impact source: canonical severity is treated as impact: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.',
+        '- Likelihood scale: `LOW`, `MEDIUM`, `HIGH`. Missing likelihood defaults to `MEDIUM`.',
+        '- Score calculation: `10 - sum(impact penalty x likelihood multiplier)`, floored at `0`.',
+        '- Impact penalties: `CRITICAL=3`, `HIGH=2`, `MEDIUM=1`, `LOW=0.5`.',
+        '- Likelihood multipliers: `LOW=0.75`, `MEDIUM=1.0`, `HIGH=1.25`.',
+        '- Contextual risk matrix: `LOW impact -> 1/2/3`, `MEDIUM -> 3/5/6`, `HIGH -> 5/7/8`, `CRITICAL -> 7/9/10` for `LOW/MEDIUM/HIGH` likelihood.',
         '- Frameworks requested for this scan: `OWASP`, `STRIDE`.',
         '',
         '## Intelligence Source',
@@ -359,6 +374,12 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- High: ${aggregateMetrics.high}`,
         `- Medium: ${aggregateMetrics.medium}`,
         `- Low: ${aggregateMetrics.low}`,
+        '',
+        '## Likelihood Breakdown',
+        '',
+        `- High: ${allFindingItems.filter(item => getFindingLikelihood(item.finding) === 'HIGH').length}`,
+        `- Medium: ${allFindingItems.filter(item => getFindingLikelihood(item.finding) === 'MEDIUM').length}`,
+        `- Low: ${allFindingItems.filter(item => getFindingLikelihood(item.finding) === 'LOW').length}`,
         '',
         '## Framework Coverage',
         '',
@@ -402,7 +423,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
 
     if (findingsByCanonicalIssue.size) {
         for (const [issueKey, items] of [...findingsByCanonicalIssue.entries()]
-            .sort((a, b) => severityRank(b[1][0].finding.severity) - severityRank(a[1][0].finding.severity))
+            .sort((a, b) => riskRank(b[1][0].finding) - riskRank(a[1][0].finding))
             .slice(0, 25)) {
             const sample = items[0].finding;
             const packContext = items[0].packContext;
@@ -419,6 +440,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Issue family: ${sample.canonicalFamilyLabel || sample.canonicalFamily}`);
             }
             lines.push(`- Category: ${sample.canonicalCategory || 'unresolved'}`);
+            lines.push(`- Impact: ${sample.severity}`);
+            lines.push(`- Likelihood: ${getFindingLikelihood(sample)}`);
+            lines.push(`- Contextual risk: ${sample.riskScore ?? 'n/a'}/10`);
             lines.push(`- Occurrences: ${items.length}`);
             lines.push(`- Files affected: ${new Set(items.map(item => item.file)).size}`);
             lines.push(`- Intelligence source: ${describeRulePackRuntime(packContext)}`);
@@ -432,6 +456,10 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             const sampleSignals = getFindingSignals(sample);
             if (sampleSignals.length) {
                 lines.push(`- Matched signals: ${sampleSignals.join(', ')}`);
+            }
+            const sampleLikelihoodReasons = getFindingLikelihoodReasons(sample);
+            if (sampleLikelihoodReasons.length) {
+                lines.push(`- Likelihood reasons: ${sampleLikelihoodReasons.join(' | ')}`);
             }
             const mappingSummary = formatMappings(sample.mappings);
             if (mappingSummary) {
@@ -477,20 +505,28 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             }
             lines.push(`- Occurrences: ${items.length}`);
             lines.push(`- Files affected: ${new Set(items.map(item => item.file)).size}`);
-            lines.push(`- Typical severity: ${sample.severity}`);
+            lines.push(`- Typical impact: ${sample.severity}`);
+            lines.push(`- Typical likelihood: ${getFindingLikelihood(sample)}`);
+            lines.push(`- Typical contextual risk: ${sample.riskScore ?? 'n/a'}/10`);
             lines.push('');
             lines.push('#### File-level evidence');
             lines.push('');
-            for (const item of items.sort((a, b) => severityRank(b.finding.severity) - severityRank(a.finding.severity))) {
+            for (const item of items.sort((a, b) => riskRank(b.finding) - riskRank(a.finding))) {
                 const snippet = await readCodeSnippet(root, item.file, item.finding.line, item.finding.lineEnd);
                 const remediation = getCanonicalRemediation(item.finding);
                 lines.push(`- \`${item.file}\` at L${item.finding.line}${item.finding.lineEnd !== item.finding.line ? `-${item.finding.lineEnd}` : ''}`);
-                lines.push(`  Severity: ${item.finding.severity}`);
+                lines.push(`  Impact: ${item.finding.severity}`);
+                lines.push(`  Likelihood: ${getFindingLikelihood(item.finding)}`);
+                lines.push(`  Contextual risk: ${item.finding.riskScore ?? 'n/a'}/10`);
                 lines.push(`  Confidence: ${Math.round((item.finding.resolverConfidence ?? item.finding.confidence) * 100)}%`);
                 lines.push(`  Original framework match: ${item.finding.framework}`);
                 lines.push(`  Original rule code: ${item.finding.ruleCode || 'n/a'}`);
                 lines.push(`  Reasoning: ${item.finding.explanation || 'No explanation returned.'}`);
                 lines.push(`  Threat: ${item.finding.threat || 'No threat description returned.'}`);
+                const likelihoodReasons = getFindingLikelihoodReasons(item.finding);
+                if (likelihoodReasons.length) {
+                    lines.push(`  Likelihood reasons: ${likelihoodReasons.join(' | ')}`);
+                }
                 lines.push(`  Recommended remediation: ${remediation.remediation}`);
                 if (remediation.frameworkVariant) {
                     lines.push(`  Framework-specific guidance (${remediation.frameworkVariant.framework}): ${remediation.frameworkVariant.summary}`);
@@ -526,7 +562,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         for (const [framework, items] of findingsByFramework.entries()) {
             lines.push(`### ${framework}`);
             lines.push('');
-            for (const item of items.sort((a, b) => severityRank(b.finding.severity) - severityRank(a.finding.severity))) {
+            for (const item of items.sort((a, b) => riskRank(b.finding) - riskRank(a.finding))) {
                 lines.push(`- \`${item.finding.canonicalId || item.finding.ruleCode || item.finding.title}\` in \`${item.file}\` at L${item.finding.line}`);
             }
             lines.push('');
@@ -603,4 +639,8 @@ function severityRank(severity: string): number {
         default:
             return 0;
     }
+}
+
+function riskRank(finding: ScanResult['findings'][number]): number {
+    return (finding.riskScore ?? 0) * 10 + severityRank(finding.severity);
 }
