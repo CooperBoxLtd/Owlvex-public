@@ -26,6 +26,12 @@ const EXCLUDED_DIRS = new Set([
     '.turbo',
 ]);
 
+const RATE_LIMIT_COOLDOWN_MS = 5000;
+
+async function sleep(ms: number): Promise<void> {
+    await new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export async function pickScanRoot(): Promise<vscode.Uri | undefined> {
     const picked = await vscode.window.showOpenDialog({
         canSelectFiles: false,
@@ -126,6 +132,7 @@ export async function scanFolder(options: {
     const errors: string[] = [];
     const results: FolderScanFileResult[] = [];
     let cancelled = false;
+    let cooldownUntil = 0;
 
     await vscode.window.withProgress(
         {
@@ -140,6 +147,14 @@ export async function scanFolder(options: {
                     break;
                 }
 
+                const remainingCooldownMs = cooldownUntil - Date.now();
+                if (remainingCooldownMs > 0) {
+                    progress.report({
+                        message: `Provider rate limit hit. Cooling down for ${Math.ceil(remainingCooldownMs / 1000)}s before continuing...`,
+                    });
+                    await sleep(remainingCooldownMs);
+                }
+
                 const attemptedIndex = completed + errors.length + 1;
                 const shortName = path.relative(options.root.fsPath, uri.fsPath) || path.basename(uri.fsPath);
                 progress.report({
@@ -150,6 +165,9 @@ export async function scanFolder(options: {
                 try {
                     const doc = await vscode.workspace.openTextDocument(uri);
                     const result = await options.scanEngine.scanDocument(doc);
+                    if ((result.warnings ?? []).some(warning => /\b429\b|rate limit/i.test(warning))) {
+                        cooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+                    }
                     options.diagnostics.applyFindings(doc, result.findings);
                     totalFindings += result.findings.length;
                     results.push({ uri, result });

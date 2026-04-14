@@ -122,4 +122,78 @@ describe('workspaceScanner', () => {
         expect(summary.status).toBe('cancelled');
         expect(summary.completed).toBe(0);
     });
+
+    it('waits before scanning the next file after a provider rate limit warning', async () => {
+        (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
+            if (currentPath.endsWith('repo')) {
+                return [
+                    { name: 'first.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'second.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'third.js', isDirectory: () => false, isFile: () => true },
+                ];
+            }
+            return [];
+        });
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Folder');
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+
+        const scanEngine = {
+            scanDocument: jest
+                .fn()
+                .mockResolvedValueOnce({
+                    scanId: 'scan-1',
+                    score: 8,
+                    summary: 'first',
+                    findings: [{ line: 1 }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: ['AI provider unavailable: Azure Foundry error: 429'],
+                })
+                .mockResolvedValueOnce({
+                    scanId: 'scan-2',
+                    score: 7,
+                    summary: 'second',
+                    findings: [{ line: 2 }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    durationMs: 12,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: [],
+                })
+                .mockResolvedValueOnce({
+                    scanId: 'scan-3',
+                    score: 9,
+                    summary: 'third',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 11,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: [],
+                }),
+        };
+        const diagnostics = { applyFindings: jest.fn() };
+
+        const summary = await scanFolder({
+            root: vscode.Uri.file('d:\\repo'),
+            scanEngine: scanEngine as any,
+            diagnostics,
+        });
+
+        expect(summary.status).toBe('completed');
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything());
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything());
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything());
+        expect(setTimeoutSpy).toHaveBeenCalled();
+        expect(summary.results).toHaveLength(3);
+        setTimeoutSpy.mockRestore();
+    });
 });
