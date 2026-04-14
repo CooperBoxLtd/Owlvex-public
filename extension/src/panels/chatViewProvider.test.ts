@@ -43,6 +43,12 @@ describe('parseChatIntent', () => {
         });
     });
 
+    it('routes calibration review requests to the risk calibration action', () => {
+        expect(parseChatIntent('review scoring posture')).toEqual({
+            action: 'reviewRiskCalibration',
+        });
+    });
+
     it('returns undefined for normal advisory chat', () => {
         expect(parseChatIntent('hey there')).toBeUndefined();
     });

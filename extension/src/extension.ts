@@ -7,6 +7,7 @@ import { DiagnosticsProvider } from './diagnostics/diagnosticsProvider';
 import { StatusBar } from './ui/statusBar';
 import { SidebarProvider } from './panels/sidebarProvider';
 import { ChatViewProvider } from './panels/chatViewProvider';
+import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
 import { pickScanFile, pickScanRoot, scanFolder } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
@@ -19,7 +20,7 @@ import { RulePackRuntimeContext } from './packs/packRuntime';
 export let secrets: vscode.SecretStorage;
 
 const MAX_STORED_SCANS = 20;
-const scanStore = new Map<string, ScanResult>();
+const scanStore = new Map<string, StoredScanRecord>();
 const SCAN_STORE_KEY = `${PROFILE.storagePrefix}.scanStore`;
 const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
 const ISSUE_PACK_ID = 'owlvex.issue-pack.v1';
@@ -55,22 +56,39 @@ interface ReportCommandResult {
     };
 }
 
-function storeScanResult(scanId: string, result: ScanResult): void {
+function storeScanResult(scanId: string, result: ScanResult, targetLabel?: string): void {
     if (scanStore.size >= MAX_STORED_SCANS) {
         const firstKey = scanStore.keys().next().value;
         if (firstKey) scanStore.delete(firstKey);
     }
-    scanStore.set(scanId, normalizeScanResult(result));
+    scanStore.set(scanId, normalizeStoredScanRecord({
+        scanId,
+        result,
+        targetLabel,
+        scannedAt: new Date().toISOString(),
+    }));
 }
 
-function serializeScanStore(): Array<{ scanId: string; result: ScanResult }> {
-    return Array.from(scanStore.entries()).map(([scanId, result]) => ({ scanId, result }));
+function serializeScanStore(): StoredScanRecord[] {
+    return Array.from(scanStore.values()).map(item => ({
+        ...item,
+        result: normalizeScanResult(item.result),
+    }));
 }
 
 function normalizeScanResult(result: ScanResult): ScanResult {
     return {
         ...result,
         warnings: result.warnings ?? [],
+    };
+}
+
+function normalizeStoredScanRecord(item: { scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }): StoredScanRecord {
+    return {
+        scanId: item.scanId,
+        result: normalizeScanResult(item.result),
+        targetLabel: item.targetLabel,
+        scannedAt: item.scannedAt,
     };
 }
 
@@ -182,9 +200,9 @@ export function activate(context: vscode.ExtensionContext) {
     const diagnostics = new DiagnosticsProvider();
     const statusBar = new StatusBar();
     const sidebar = new SidebarProvider();
-    const restoredScans = context.workspaceState.get<Array<{ scanId: string; result: ScanResult }>>(SCAN_STORE_KEY, []);
+    const restoredScans = context.workspaceState.get<Array<{ scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }>>(SCAN_STORE_KEY, []);
     for (const item of restoredScans) {
-        scanStore.set(item.scanId, normalizeScanResult(item.result));
+        scanStore.set(item.scanId, normalizeStoredScanRecord(item));
     }
     const lastStoredScan = restoredScans[restoredScans.length - 1]?.result;
     if (lastStoredScan) {
@@ -535,7 +553,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             try {
                 const result = applyRulePackContext(await scanEngine.scanDocument(editor.document));
-                storeScanResult(result.scanId, result);
+                storeScanResult(result.scanId, result, vscode.workspace.asRelativePath(editor.document.uri, false));
                 await persistScans();
                 await persistLastReportSnapshot({
                     targetLabel: vscode.workspace.asRelativePath(editor.document.uri, false),
@@ -569,7 +587,7 @@ export function activate(context: vscode.ExtensionContext) {
             statusBar.showScanning();
             try {
                 const result = applyRulePackContext(await scanEngine.scanDocument(doc));
-                storeScanResult(result.scanId, result);
+                storeScanResult(result.scanId, result, vscode.workspace.asRelativePath(doc.uri, false));
                 await persistScans();
                 await persistLastReportSnapshot({
                     targetLabel: vscode.workspace.asRelativePath(doc.uri, false),
@@ -804,7 +822,7 @@ export function activate(context: vscode.ExtensionContext) {
             }));
 
             for (const item of summary.results) {
-                storeScanResult(item.result.scanId, item.result);
+                storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
             }
             await persistScans();
             await persistLastReportSnapshot({
@@ -867,7 +885,7 @@ export function activate(context: vscode.ExtensionContext) {
                     sidebar.clear();
 
                     const result = applyRulePackContext(await scanEngine.scanDocument(document));
-                    storeScanResult(result.scanId, result);
+                    storeScanResult(result.scanId, result, vscode.workspace.asRelativePath(document.uri, false));
                     await persistScans();
                     diagnostics.applyFindings(document, result.findings);
                     sidebar.refresh(result);
@@ -902,7 +920,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }));
 
                 for (const item of summary.results) {
-                    storeScanResult(item.result.scanId, item.result);
+                    storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
                 }
                 await persistScans();
 
@@ -955,27 +973,41 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const storedIds = Array.from(scanStore.keys());
-            if (storedIds.length < 2) {
+            const storedScans = Array.from(scanStore.values());
+            if (storedScans.length < 2) {
                 vscode.window.showWarningMessage(
                     'Owlvex: Need at least 2 scans in this session to compare. Scan a file or folder twice first.'
                 );
                 return;
             }
 
-            const scanAId = await vscode.window.showQuickPick(storedIds, {
+            const scanAChoice = await vscode.window.showQuickPick(storedScans.map(item => ({
+                label: item.targetLabel || item.scanId,
+                description: `${item.result.score.toFixed(1)}/10 | ${item.result.findings.length} finding(s)`,
+                detail: item.scanId,
+                record: item,
+            })), {
                 placeHolder: 'Select baseline scan (Scan A)',
             });
-            if (!scanAId) return;
+            if (!scanAChoice) return;
 
-            const scanBId = await vscode.window.showQuickPick(
-                storedIds.filter(id => id !== scanAId),
+            const scanBChoice = await vscode.window.showQuickPick(
+                storedScans
+                    .filter(item => item.scanId !== scanAChoice.record.scanId)
+                    .map(item => ({
+                        label: item.targetLabel || item.scanId,
+                        description: `${item.result.score.toFixed(1)}/10 | ${item.result.findings.length} finding(s)`,
+                        detail: item.scanId,
+                        record: item,
+                    })),
                 { placeHolder: 'Select comparison scan (Scan B)' },
             );
-            if (!scanBId) return;
+            if (!scanBChoice) return;
 
-            const scanA = scanStore.get(scanAId)!;
-            const scanB = scanStore.get(scanBId)!;
+            const scanAId = scanAChoice.record.scanId;
+            const scanBId = scanBChoice.record.scanId;
+            const scanA = scanAChoice.record.result;
+            const scanB = scanBChoice.record.result;
 
             try {
                 const res = await fetch(`${compareApiUrl}/v1/scans/compare`, {
@@ -1030,6 +1062,24 @@ export function activate(context: vscode.ExtensionContext) {
             } catch (error: any) {
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} compare failed: ${error.message}`);
             }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.reviewRiskCalibration, async () => {
+            const storedScans = Array.from(scanStore.values());
+            if (!storedScans.length) {
+                vscode.window.showWarningMessage('Owlvex: Run at least one scan before reviewing risk calibration.');
+                return { status: 'empty', count: 0 };
+            }
+
+            const report = buildRiskCalibrationReport(storedScans);
+            const document = await vscode.workspace.openTextDocument({
+                language: 'markdown',
+                content: report,
+            });
+            await vscode.window.showTextDocument(document, { preview: false });
+            return { status: 'completed', count: storedScans.length };
         })
     );
 

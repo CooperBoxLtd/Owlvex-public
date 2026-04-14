@@ -24,6 +24,7 @@ export const PROFILE = {
         "testAI": "owlvex.testAIConnection",
         "enterLicence": "owlvex.enterLicence",
         "compareScans": "owlvex.compareScans",
+        "reviewRiskCalibration": "owlvex.reviewRiskCalibration",
         "revealLine": "owlvex.revealLine",
         "chatFocus": "owlvex.chat.focus"
     }

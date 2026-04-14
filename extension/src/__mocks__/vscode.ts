@@ -10,6 +10,7 @@ export const window = {
     showInputBox: jest.fn(),
     showQuickPick: jest.fn(),
     showOpenDialog: jest.fn(),
+    showTextDocument: jest.fn(),
     activeTextEditor: undefined as any,
     createWebviewPanel: jest.fn(),
     createStatusBarItem: jest.fn(),

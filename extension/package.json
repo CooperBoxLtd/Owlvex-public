@@ -60,6 +60,10 @@
       {
         "command": "owlvex.compareScans",
         "title": "Owlvex: Compare Scans"
+      },
+      {
+        "command": "owlvex.reviewRiskCalibration",
+        "title": "Owlvex: Review Risk Calibration"
       }
     ],
     "configuration": {

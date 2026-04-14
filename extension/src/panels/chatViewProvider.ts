@@ -27,7 +27,7 @@ interface LocalActionResult {
     kind?: MessageKind;
 }
 
-type ChatActionKind = 'scanFile' | 'scanFolder' | 'scanReport';
+type ChatActionKind = 'scanFile' | 'scanFolder' | 'scanReport' | 'reviewRiskCalibration';
 
 interface ChatLocalIntent {
     action: ChatActionKind;
@@ -330,6 +330,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             };
         }
 
+        if (intent.action === 'reviewRiskCalibration') {
+            const result = await vscode.commands.executeCommand<any>(PROFILE.commands.reviewRiskCalibration);
+            return {
+                handled: true,
+                response: result?.status === 'completed'
+                    ? `Opened risk calibration review for ${result.count} stored scan(s).`
+                    : 'Risk calibration review is not available yet. Run at least one scan first.',
+                kind: 'advisory',
+            };
+        }
+
         const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspaceReport);
             if (result?.status === 'cancelled') {
                 return {
@@ -445,6 +456,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 content: configured
                     ? `Connection test ran for ${provider.name}.`
                     : `${provider.name} is not configured yet. ${getProviderSetupHint(provider.id)}`,
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'reviewRiskCalibration') {
+            const result = await vscode.commands.executeCommand<any>(PROFILE.commands.reviewRiskCalibration);
+            this.messages.push({
+                role: 'system',
+                content: result?.status === 'completed'
+                    ? `Opened risk calibration review for ${result.count} stored scan(s).`
+                    : 'Risk calibration review is not available yet. Run at least one scan first.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -1055,6 +1080,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             <button class="chip" data-action="setupAI">Configure LLM</button>
             <button class="chip" data-action="testAI">Test Connection</button>
             <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
+            <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
           </div>
         </div>
       </details>
@@ -1195,7 +1221,12 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
     const wantsReport = /\b(report|summary|markdown|document)\b/.test(normalized);
     const wantsFolder = /\b(repo|repository|workspace|folder|project|codebase)\b/.test(normalized);
     const wantsFile = /\b(file|current file|this file|selected file)\b/.test(normalized);
+    const wantsCalibration = /\b(calibration|score posture|risk posture|review scores|review scoring)\b/.test(normalized);
     const explicitFile = extractFileHint(prompt);
+
+    if (wantsCalibration) {
+        return { action: 'reviewRiskCalibration' };
+    }
 
     if (wantsScan && wantsReport) {
         return { action: 'scanReport', fileHint: explicitFile };
