@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { PROFILE } from '../profile';
-import { getRulePackModeLabel, type RulePackRuntimeContext } from '../packs/packRuntime';
+import type { ScanResult } from '../scanner/scanEngine';
+import { getRulePackModeLabel } from '../packs/packRuntime';
 
 export class StatusBar {
     private readonly item: vscode.StatusBarItem;
@@ -23,15 +24,26 @@ export class StatusBar {
         this.item.tooltip = 'Scan in progress';
     }
 
-    showResult(score: number, model: string, findingCount: number, packContext?: RulePackRuntimeContext): void {
-        const icon = score >= 8 ? '$(shield-check)' : score >= 5 ? '$(shield)' : '$(shield-x)';
-        const packLabel = getRulePackModeLabel(packContext);
-        this.item.text = `${icon} ${score.toFixed(1)}/10 | ${model} | ${packLabel}`;
-        this.item.tooltip = `Score: ${score.toFixed(1)}/10 | ${findingCount} finding(s) | Model: ${model} | Intelligence: ${packLabel}`;
+    showResult(result: Pick<ScanResult, 'score' | 'model' | 'findings' | 'packContext'>): void {
+        const icon = result.score >= 8 ? '$(shield-check)' : result.score >= 5 ? '$(shield)' : '$(shield-x)';
+        const topRiskFinding = result.findings
+            .slice()
+            .sort((left, right) => ((right.riskScore ?? 0) - (left.riskScore ?? 0)))[0];
+        const packLabel = getRulePackModeLabel(result.packContext);
+        this.item.text = `${icon} ${result.score.toFixed(1)}/10 | ${result.model} | ${packLabel}`;
+        this.item.tooltip = [
+            `Score: ${result.score.toFixed(1)}/10`,
+            `Findings: ${result.findings.length}`,
+            `Model: ${result.model}`,
+            `Intelligence: ${packLabel}`,
+            topRiskFinding
+                ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${String(topRiskFinding.likelihood ?? 'MEDIUM').toUpperCase()} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
+                : '',
+        ].filter(Boolean).join(' | ');
 
-        if (score < 5) {
+        if (result.score < 5) {
             this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-        } else if (score < 8) {
+        } else if (result.score < 8) {
             this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         } else {
             this.item.backgroundColor = undefined;

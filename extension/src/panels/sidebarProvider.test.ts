@@ -59,6 +59,9 @@ describe('SidebarProvider', () => {
                 confidence: 0.9,
                 canonicalId: 'owlvex.issue.path_traversal.001',
                 provenance: 'deterministic',
+                likelihood: 'HIGH',
+                likelihoodReasons: ['User-controlled path reaches a filesystem boundary directly.'],
+                riskScore: 8,
             }],
             positives: [],
             metrics: { critical: 0, high: 1, medium: 0, low: 0 },
@@ -74,14 +77,22 @@ describe('SidebarProvider', () => {
         });
 
         const roots = provider.getChildren();
+        expect(roots[0].label).toBe('Score: 4.2/10');
+        expect(String(roots[0].tooltip)).toContain('Breakdown: 10.0 baseline - high x high (2.5)');
+        expect(String(roots[0].tooltip)).toContain('Top risk: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
         expect(severityNode).toBeTruthy();
+        expect(severityNode?.label).toBe('Impact HIGH (1)');
 
         const findingNode = provider.getChildren(severityNode)[0];
         expect(findingNode.collapsibleState).toBe(1);
+        expect(findingNode.label).toBe('L12 Path traversal (8/10)');
+        expect(String(findingNode.tooltip)).toContain('[Deterministic] User input reaches filesystem APIs.');
 
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toEqual(expect.arrayContaining([
+            'Risk: HIGH/HIGH -> 8/10',
+            'Why likely: User-controlled path reaches a filesystem boundary directly.',
             'Fix: Resolve user paths against a fixed base directory.',
             'Validate: Replay ../ payloads and confirm rejection.',
             'Avoid: Strip ../ without canonical checks.',

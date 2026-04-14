@@ -372,7 +372,12 @@ export function activate(context: vscode.ExtensionContext) {
         const totalFindings = safeSnapshot.results.reduce((total, item) => total + item.result.findings.length, 0);
         const warningCount = safeSnapshot.results.reduce((total, item) => total + (item.result.warnings ?? []).length, 0);
 
-        statusBar.showResult(averageScore, modelNames, totalFindings, packContext);
+        statusBar.showResult({
+            score: averageScore,
+            model: modelNames,
+            findings: safeSnapshot.results.flatMap(item => item.result.findings),
+            packContext,
+        });
         vscode.window.showInformationMessage(
             `${PROFILE.displayLabel}: Report created for ${safeSnapshot.results.length} file(s) with ${totalFindings} finding(s) using ${providerNames}/${modelNames}.${warningCount ? ` ${warningCount} warning(s) were captured.` : ''}`
         );
@@ -540,7 +545,7 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 diagnostics.applyFindings(editor.document, result.findings);
                 sidebar.refresh(result);
-                statusBar.showResult(result.score, result.model, result.findings.length, result.packContext);
+                statusBar.showResult(result);
                 chatView.setLastScanTarget(`File: ${vscode.workspace.asRelativePath(editor.document.uri, false)}`);
 
                 vscode.window.showInformationMessage(
@@ -574,7 +579,7 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 diagnostics.applyFindings(doc, result.findings);
                 sidebar.refresh(result);
-                statusBar.showResult(result.score, result.model, result.findings.length, result.packContext);
+                statusBar.showResult(result);
                 chatView.setLastScanTarget(`Saved file: ${vscode.workspace.asRelativePath(doc.uri, false)}`);
             } catch (error: any) {
                 statusBar.showError(error.message);
@@ -866,7 +871,7 @@ export function activate(context: vscode.ExtensionContext) {
                     await persistScans();
                     diagnostics.applyFindings(document, result.findings);
                     sidebar.refresh(result);
-                    statusBar.showResult(result.score, result.model, result.findings.length, result.packContext);
+                    statusBar.showResult(result);
 
                     const snapshot: ReportSnapshot = {
                         targetLabel: vscode.workspace.asRelativePath(document.uri, false),

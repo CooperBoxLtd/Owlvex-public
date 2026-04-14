@@ -68,10 +68,42 @@ function summarizeIssueFamilies(findings: Array<{ canonicalFamilyLabel?: string;
     return `Issue families: ${labels.join(', ')}`;
 }
 
+function getFindingLikelihood(finding: Finding): string {
+    return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
+}
+
+function riskRank(finding: Finding): number {
+    return (finding.riskScore ?? 0) * 10 + severityRank(finding.severity);
+}
+
+function buildScoreBreakdown(result: ScanResult): string {
+    if (!result.findings.length) {
+        return '10.0 baseline | no finding penalties';
+    }
+
+    const parts = result.findings.map(finding => {
+        const basePenalty = finding.severity === 'CRITICAL'
+            ? 3
+            : finding.severity === 'HIGH'
+            ? 2
+            : finding.severity === 'MEDIUM'
+            ? 1
+            : 0.5;
+        const multiplier = getFindingLikelihood(finding) === 'HIGH'
+            ? 1.25
+            : getFindingLikelihood(finding) === 'LOW'
+            ? 0.75
+            : 1;
+        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (${Number((basePenalty * multiplier).toFixed(2))})`;
+    });
+
+    return `10.0 baseline - ${parts.join(' - ')}`;
+}
+
 export function buildGroundedRemediationHighlights(findings: Finding[], maxFindings = 2): string[] {
     return findings
         .slice()
-        .sort((left, right) => severityRank(right.severity) - severityRank(left.severity))
+        .sort((left, right) => riskRank(right) - riskRank(left))
         .slice(0, maxFindings)
         .map(finding => {
             const remediation = resolveRemediationForFinding(finding);
@@ -84,9 +116,16 @@ export function buildGroundedRemediationHighlights(findings: Finding[], maxFindi
 
 function buildScanSummaryLines(result: ScanResult): string[] {
     const remediationHighlights = buildGroundedRemediationHighlights(result.findings);
+    const topRiskFinding = result.findings
+        .slice()
+        .sort((left, right) => riskRank(right) - riskRank(left))[0];
     return [
         `Score: ${result.score.toFixed(1)}/10`,
+        `Score breakdown: ${buildScoreBreakdown(result)}`,
         `Findings: ${result.findings.length}`,
+        topRiskFinding
+            ? `Top risk: ${topRiskFinding.title} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
+            : 'Top risk: none',
         summarizeIssueFamilies(result.findings),
         `Model: ${result.model}`,
         ...(remediationHighlights.length

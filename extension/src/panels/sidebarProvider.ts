@@ -4,6 +4,46 @@ import { PROFILE } from '../profile';
 import { getRulePackModeLabel } from '../packs/packRuntime';
 import { resolveRemediationForFinding } from '../frameworks/remediationResolver';
 
+function getFindingLikelihood(finding: Finding): string {
+    return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
+}
+
+function riskRank(finding: Finding): number {
+    const severityRank = finding.severity === 'CRITICAL'
+        ? 4
+        : finding.severity === 'HIGH'
+        ? 3
+        : finding.severity === 'MEDIUM'
+        ? 2
+        : 1;
+    return (finding.riskScore ?? 0) * 10 + severityRank;
+}
+
+function buildScoreBreakdown(findings: Finding[]): string {
+    if (!findings.length) {
+        return '10.0 baseline | no finding penalties';
+    }
+
+    const penalties = findings.map(finding => {
+        const basePenalty = finding.severity === 'CRITICAL'
+            ? 3
+            : finding.severity === 'HIGH'
+            ? 2
+            : finding.severity === 'MEDIUM'
+            ? 1
+            : 0.5;
+        const multiplier = getFindingLikelihood(finding) === 'HIGH'
+            ? 1.25
+            : getFindingLikelihood(finding) === 'LOW'
+            ? 0.75
+            : 1;
+        const adjustedPenalty = Number((basePenalty * multiplier).toFixed(2));
+        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (${adjustedPenalty})`;
+    });
+
+    return `10.0 baseline - ${penalties.join(' - ')}`;
+}
+
 export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<FindingItem | undefined>();
     readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
@@ -32,11 +72,19 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
         if (!this.lastResult) return [];
 
         if (!element) {
-            // Root nodes: score header + severity groups
+            const topRiskFinding = this.lastResult.findings
+                .slice()
+                .sort((left, right) => riskRank(right) - riskRank(left))[0];
             const items: FindingItem[] = [
                 new FindingItem(
                     `Score: ${this.lastResult.score.toFixed(1)}/10`,
-                    `${this.lastResult.findings.length} finding(s) | ${this.lastResult.model} | ${getRulePackModeLabel(this.lastResult.packContext)}`,
+                    [
+                        `${this.lastResult.findings.length} finding(s) | ${this.lastResult.model} | ${getRulePackModeLabel(this.lastResult.packContext)}`,
+                        `Breakdown: ${buildScoreBreakdown(this.lastResult.findings)}`,
+                        topRiskFinding
+                            ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
+                            : '',
+                    ].filter(Boolean).join('\n'),
                     vscode.TreeItemCollapsibleState.None,
                     'score',
                 ),
@@ -52,7 +100,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
             for (const [sev, findings] of Object.entries(bySeverity)) {
                 if (findings.length > 0) {
                     items.push(new FindingItem(
-                        `${sev} (${findings.length})`,
+                        `Impact ${sev} (${findings.length})`,
                         '',
                         vscode.TreeItemCollapsibleState.Expanded,
                         'severity',
@@ -76,8 +124,13 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                 );
 
                 return new FindingItem(
-                    `L${f.line} ${f.title}`,
-                    remediation.remediation || f.explanation,
+                    `L${f.line} ${f.title} (${f.riskScore ?? 'n/a'}/10)`,
+                    [
+                        `Impact: ${f.severity}`,
+                        `Likelihood: ${getFindingLikelihood(f)}`,
+                        `Contextual risk: ${f.riskScore ?? 'n/a'}/10`,
+                        remediation.remediation || f.explanation,
+                    ].join('\n'),
                     hasDetails ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
                     'finding',
                     f,
@@ -104,10 +157,21 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
     const remediation = resolveRemediationForFinding(finding);
     const details: Array<{ label: string; tooltip: string }> = [
         {
+            label: `Risk: ${finding.severity}/${getFindingLikelihood(finding)} -> ${finding.riskScore ?? 'n/a'}/10`,
+            tooltip: `Impact ${finding.severity}, likelihood ${getFindingLikelihood(finding)}, contextual risk ${finding.riskScore ?? 'n/a'}/10`,
+        },
+        {
             label: `Fix: ${remediation.remediation}`,
             tooltip: remediation.remediation,
         },
     ];
+
+    if ((finding.likelihoodReasons ?? []).length) {
+        details.push({
+            label: `Why likely: ${(finding.likelihoodReasons ?? []).join(' | ')}`,
+            tooltip: (finding.likelihoodReasons ?? []).join('\n'),
+        });
+    }
 
     if (remediation.frameworkVariant) {
         details.push({
