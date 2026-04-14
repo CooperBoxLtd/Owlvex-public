@@ -1,0 +1,193 @@
+{
+  "schema_version": "owlvex.policy-pack.v1",
+  "pack_id": "owlvex.policy-pack.2026.1",
+  "templates": [
+    {
+      "schema_version": "owlvex.policy-template.v1",
+      "id": "owlvex.policy.block_injection_and_rce.001",
+      "name": "Block Injection And Code Execution Risk",
+      "description": "Block builds or review gates when high-confidence injection or code-execution classes are present at high severity.",
+      "policy": {
+        "policy": "block",
+        "conditions": {
+          "issue_ids": [
+            "owlvex.issue.sql_injection.001",
+            "owlvex.issue.command_injection.001",
+            "owlvex.issue.path_traversal.001",
+            "owlvex.issue.ssrf.001",
+            "owlvex.issue.template_injection.001",
+            "owlvex.issue.nosql_injection.001",
+            "owlvex.issue.ldap_injection.001",
+            "owlvex.issue.xxe.001"
+          ],
+          "severity": [
+            "HIGH",
+            "CRITICAL"
+          ]
+        }
+      },
+      "rationale": [
+        "Injection and code-execution paths frequently translate directly into confidentiality, integrity, or availability compromise.",
+        "High-severity findings in these classes are usually strong candidates for stop-the-line review or release blocking."
+      ],
+      "recommended_workflow": [
+        "Route findings to security review before merge or release.",
+        "Require validated remediation and rerun scanning after fixes land."
+      ],
+      "references": [
+        {
+          "label": "OWASP ASVS 5.0 Validation, Sanitization and Encoding Requirements",
+          "kind": "standard",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE Top 25 Most Dangerous Software Weaknesses",
+          "kind": "taxonomy",
+          "publisher": "MITRE"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP ASVS 5.0 Validation, Sanitization and Encoding Requirements",
+            "kind": "standard",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE Top 25 Most Dangerous Software Weaknesses",
+            "kind": "taxonomy",
+            "publisher": "MITRE"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.policy-template.v1",
+      "id": "owlvex.policy.warn_identity_and_access.001",
+      "name": "Warn On Identity And Access Control Drift",
+      "description": "Warn when authorization, authentication, and audit controls show medium-or-higher weakness patterns that should be fixed before release hardening completes.",
+      "policy": {
+        "policy": "warn",
+        "conditions": {
+          "issue_ids": [
+            "owlvex.issue.idor.001",
+            "owlvex.issue.weak_auth_policy.001",
+            "owlvex.issue.audit_gap.001",
+            "owlvex.issue.sensitive_logging.001",
+            "owlvex.issue.verbose_error_disclosure.001"
+          ],
+          "minimum_severity": "MEDIUM"
+        }
+      },
+      "rationale": [
+        "Identity and access-control weaknesses often accumulate into exploitable chains even when individual findings are not release blockers by themselves.",
+        "Teams benefit from a visible warning policy that pushes these findings into remediation planning rather than letting them drift indefinitely."
+      ],
+      "recommended_workflow": [
+        "Open tracked remediation work before release sign-off.",
+        "Require an owner and due date for unresolved warnings in this class."
+      ],
+      "references": [
+        {
+          "label": "OWASP Authorization Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "OWASP Logging Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Authorization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "OWASP Logging Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.policy-template.v1",
+      "id": "owlvex.policy.block_exposed_secrets.001",
+      "name": "Block Exposed Secrets And Hardcoded Credentials",
+      "description": "Block release progression when committed secrets or hardcoded credentials are detected, regardless of whether they came from app code, config, or integration helpers.",
+      "policy": {
+        "policy": "block",
+        "conditions": {
+          "issue_ids": [
+            "owlvex.issue.hardcoded_api_key.001",
+            "owlvex.issue.hardcoded_password.001",
+            "owlvex.issue.hardcoded_token.001",
+            "owlvex.issue.hardcoded_secret.001"
+          ],
+          "severity": [
+            "HIGH",
+            "CRITICAL"
+          ]
+        }
+      },
+      "rationale": [
+        "Committed secrets are immediately reusable by anyone who can access the repository, artifacts, or leaked history.",
+        "The right operational response usually includes rotation or revocation, which makes these findings appropriate release blockers."
+      ],
+      "recommended_workflow": [
+        "Revoke or rotate exposed credentials immediately.",
+        "Confirm the secret has been removed from code and replacement delivery is managed outside source control."
+      ],
+      "references": [
+        {
+          "label": "OWASP Secrets Management Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-798 Use of Hard-coded Credentials",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-798"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-798 Use of Hard-coded Credentials",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -246,6 +246,7 @@ That means curated entries should carry provenance metadata that answers:
 Recommended rule:
 
 - no production issue, mapping, remediation, or policy entry should ship without populated provenance metadata
+- policy templates should be treated as grounded product intelligence: source-backed, reviewed, versioned, and delivered as packs rather than improvised ad hoc in client code
 
 Suggested validation path:
 

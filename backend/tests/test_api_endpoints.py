@@ -49,6 +49,7 @@ async def test_pack_manifest_returns_entitled_packs(client):
     assert data["schema_version"] == "owlvex.rulepack.manifest-list.v1"
     assert any(pack["pack_id"] == "owlvex.issue-pack.v1" for pack in data["packs"])
     assert any(pack["pack_id"] == "owlvex.remediation-pack.v1" for pack in data["packs"])
+    assert any(pack["pack_id"] == "owlvex.policy-pack.v1" for pack in data["packs"])
     assert any(pack["pack_id"] == "owlvex.stride.2026.1" for pack in data["packs"])
     assert all(pack["signature_algorithm"] == "ed25519" for pack in data["packs"])
     assert all(pack.get("signature") for pack in data["packs"])
@@ -108,6 +109,28 @@ async def test_remediation_pack_artifact_is_available(client):
     data = response.json()
     assert data["pack_id"] == "owlvex.remediation-pack.v1"
     assert data["artifact"]["schema_version"] == "owlvex.remediation-pack.v1"
+
+
+@pytest.mark.asyncio
+async def test_policy_pack_artifact_is_available(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"frameworks": ["OWASP", "STRIDE"]},
+    }
+
+    with patch("app.routers.packs.validate_licence", return_value=mock_licence):
+        response = await client.get(
+            "/v1/packs/owlvex.policy-pack.v1",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["pack_id"] == "owlvex.policy-pack.v1"
+    assert data["artifact"]["schema_version"] == "owlvex.policy-pack.v1"
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ const strict = process.argv.includes('--strict');
 const issuePackPath = path.join(repoRoot, 'docs', 'data', 'issues', 'owlvex-issue-pack.v1.json');
 const issueMappingPath = path.join(repoRoot, 'docs', 'data', 'issues', 'owlvex-issue-mappings.v1.json');
 const remediationPackPath = path.join(repoRoot, 'docs', 'data', 'remediation', 'owlvex-remediation-pack.v1.json');
+const policyPackPath = path.join(repoRoot, 'docs', 'data', 'policies', 'owlvex-policy-pack.v1.json');
 
 function isValidProvenance(value) {
     return value
@@ -47,6 +48,33 @@ function isValidReference(value) {
         && value.kind.trim().length > 0;
 }
 
+function isValidPolicyTemplate(value) {
+    const conditions = value?.policy?.conditions ?? {};
+    const hasIssueIds = !('issue_ids' in conditions) || (Array.isArray(conditions.issue_ids) && conditions.issue_ids.every((item) => typeof item === 'string' && item.trim().length > 0));
+    const hasSeverities = !('severity' in conditions) || (Array.isArray(conditions.severity) && conditions.severity.every((item) => typeof item === 'string' && item.trim().length > 0));
+    const hasMinimumSeverity = !('minimum_severity' in conditions) || (typeof conditions.minimum_severity === 'string' && conditions.minimum_severity.trim().length > 0);
+
+    return value
+        && typeof value === 'object'
+        && typeof value.id === 'string'
+        && value.id.trim().length > 0
+        && typeof value.name === 'string'
+        && value.name.trim().length > 0
+        && typeof value.description === 'string'
+        && value.description.trim().length > 0
+        && typeof value.policy === 'object'
+        && typeof value.policy.policy === 'string'
+        && typeof conditions === 'object'
+        && hasIssueIds
+        && hasSeverities
+        && hasMinimumSeverity
+        && hasNonEmptyStrings(value.rationale)
+        && (!('recommended_workflow' in value) || hasNonEmptyStrings(value.recommended_workflow))
+        && Array.isArray(value.references)
+        && value.references.length > 0
+        && value.references.every(isValidReference);
+}
+
 async function readJson(jsonPath) {
     return JSON.parse(await fs.readFile(jsonPath, 'utf8'));
 }
@@ -55,6 +83,7 @@ async function main() {
     const issues = await readJson(issuePackPath);
     const mappings = await readJson(issueMappingPath);
     const remediationPack = await readJson(remediationPackPath);
+    const policyPack = await readJson(policyPackPath);
     const problems = [];
 
     for (const issue of issues.issues ?? []) {
@@ -87,6 +116,15 @@ async function main() {
         }
         if (!Array.isArray(entry.references) || entry.references.length === 0 || !entry.references.every(isValidReference)) {
             problems.push(summarizeMissing('remediation', entry.id, 'references'));
+        }
+    }
+
+    for (const template of policyPack.templates ?? []) {
+        if (!isValidProvenance(template.provenance)) {
+            problems.push(summarizeMissing('policy', template.id));
+        }
+        if (!isValidPolicyTemplate(template)) {
+            problems.push(summarizeMissing('policy', template.id, 'template_fields'));
         }
     }
 

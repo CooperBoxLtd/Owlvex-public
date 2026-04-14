@@ -31,6 +31,11 @@ PACK_DEFINITIONS = {
         "relative_path": Path("remediation/owlvex-remediation-pack.v1.json"),
         "frameworks": [],
     },
+    "owlvex.policy-pack.v1": {
+        "pack_type": "policy-pack",
+        "relative_path": Path("policies/owlvex-policy-pack.v1.json"),
+        "frameworks": [],
+    },
     "owlvex.stride.2026.1": {
         "pack_type": "reasoning-profile",
         "relative_path": Path("stride/owlvex.stride.2026.1.json"),
