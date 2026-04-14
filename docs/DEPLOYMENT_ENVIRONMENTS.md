@@ -63,6 +63,7 @@ Production hosts only the Owlvex control plane:
 - policy evaluation
 - billing and Stripe webhook handling
 - scan metadata storage
+- signed pack delivery and pack access audit logging
 
 Expected backend URL shape:
 
@@ -212,6 +213,7 @@ These must remain true after Azure production is added:
 The production infrastructure is live. Hardening priorities:
 
 - move from raw secret injection toward Key Vault references in App Settings
+- ensure `OWLVEX_PACK_SIGNING_PRIVATE_KEY_PEM` and `OWLVEX_PACK_SIGNING_KEY_ID` are set from managed production secrets; production must not fall back to development signing keys
 - replace ACR admin credentials with managed identity where practical
 - formalize environment selection in extension settings if needed
 - document backend request shapes that are allowed to carry metadata only

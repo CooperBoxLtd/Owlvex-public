@@ -3,15 +3,17 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-import os
+import logging
 from pathlib import Path
 from typing import Any
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
+from app.config import get_settings
 from app.services.knowledge_base import _data_root
 
+logger = logging.getLogger(__name__)
 
 PACK_DEFINITIONS = {
     "owlvex.issue-pack.v1": {
@@ -55,11 +57,23 @@ def _canonical_json_bytes(payload: dict[str, Any]) -> bytes:
 
 
 def _get_signing_private_key_pem() -> str:
-    return os.getenv("OWLVEX_PACK_SIGNING_PRIVATE_KEY_PEM", "").strip() or DEV_PACK_SIGNING_PRIVATE_KEY_PEM
+    settings = get_settings()
+    configured = settings.owlvex_pack_signing_private_key_pem.strip()
+    if configured:
+        return configured
+    if settings.is_development:
+        return DEV_PACK_SIGNING_PRIVATE_KEY_PEM
+    raise RuntimeError("OWLVEX pack signing private key is required outside development")
 
 
 def _get_signing_key_id() -> str:
-    return os.getenv("OWLVEX_PACK_SIGNING_KEY_ID", "").strip() or DEFAULT_SIGNING_KEY_ID
+    settings = get_settings()
+    configured = settings.owlvex_pack_signing_key_id.strip()
+    if configured:
+        return configured
+    if settings.is_development:
+        return DEFAULT_SIGNING_KEY_ID
+    raise RuntimeError("OWLVEX pack signing key id is required outside development")
 
 
 def _sign_manifest_payload(payload: dict[str, Any]) -> str:
@@ -130,4 +144,14 @@ def get_pack_artifact(pack_id: str, plan: str, allowed_frameworks: list[str]) ->
         "schema_version": "owlvex.rulepack.artifact.v1",
         **manifest,
         "artifact": artifact,
+    }
+
+
+def get_pack_signing_posture() -> dict[str, Any]:
+    settings = get_settings()
+    key_id = _get_signing_key_id()
+    return {
+        "environment": settings.environment,
+        "key_id": key_id,
+        "using_dev_fallback": settings.is_development and key_id == DEFAULT_SIGNING_KEY_ID,
     }

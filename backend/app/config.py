@@ -24,6 +24,8 @@ class Settings(BaseSettings):
 
     # Runtime
     environment: str = "development"
+    owlvex_pack_signing_private_key_pem: str = ""
+    owlvex_pack_signing_key_id: str = ""
 
     @property
     def is_development(self) -> bool:

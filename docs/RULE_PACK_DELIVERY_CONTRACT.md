@@ -202,6 +202,7 @@ Production note:
 - production should set a rotation-friendly `OWLVEX_PACK_SIGNING_KEY_ID`
 - the extension should accept only pinned Owlvex public keys for known `key_id` values
 - the extension should pin more than one active or upcoming public key to support non-breaking key rotation
+- production must fail closed if pack signing material is not configured; silent development-key fallback is only allowed in development
 
 If any check fails, the pack must not become active.
 
@@ -288,6 +289,7 @@ The backend is responsible for:
 - publishing integrity metadata
 - defining pack compatibility
 - keeping release metadata authoritative
+- auditing manifest and artifact issuance events without logging customer source or secrets
 
 The backend is not responsible for:
 

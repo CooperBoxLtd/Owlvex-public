@@ -37,7 +37,8 @@ async def test_pack_manifest_returns_entitled_packs(client):
         "features": {"frameworks": ["OWASP", "STRIDE"]},
     }
 
-    with patch("app.routers.packs.validate_licence", return_value=mock_licence):
+    with patch("app.routers.packs.validate_licence", return_value=mock_licence), \
+         patch("app.routers.packs.logger") as mock_logger:
         response = await client.get(
             "/v1/packs/manifest",
             headers={"X-Licence-Key": "owlvex_lic_valid"},
@@ -54,6 +55,7 @@ async def test_pack_manifest_returns_entitled_packs(client):
     assert all(pack.get("key_id") for pack in data["packs"])
     assert all(pack["licence_scope"]["plan"] == "developer" for pack in data["packs"])
     assert all("OWASP" in pack["licence_scope"]["frameworks"] for pack in data["packs"])
+    mock_logger.info.assert_called()
 
 
 @pytest.mark.asyncio
@@ -66,7 +68,8 @@ async def test_pack_artifact_returns_metadata_only_payload(client):
         "features": {"frameworks": ["OWASP", "STRIDE"]},
     }
 
-    with patch("app.routers.packs.validate_licence", return_value=mock_licence):
+    with patch("app.routers.packs.validate_licence", return_value=mock_licence), \
+         patch("app.routers.packs.logger") as mock_logger:
         response = await client.get(
             "/v1/packs/owlvex.issue-pack.v1",
             headers={"X-Licence-Key": "owlvex_lic_valid"},
@@ -82,6 +85,7 @@ async def test_pack_artifact_returns_metadata_only_payload(client):
     assert data["signature"]
     assert data["licence_scope"]["plan"] == "developer"
     assert data["artifact"]["schema_version"] == "owlvex.issue-pack.v1"
+    mock_logger.info.assert_called()
 
 
 @pytest.mark.asyncio
