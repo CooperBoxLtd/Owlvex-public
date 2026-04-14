@@ -137,6 +137,36 @@ Move toward a model where the extension executes locally but can receive version
 - rule/config versions are explicit and traceable
 - product behavior is defined for online and offline states
 
+## Workstream 2A: Trusted Source Provenance
+
+### Goal
+
+Make Owlvex grounded data auditable so we can prove curated intelligence is based on trustworthy sources rather than undocumented generation.
+
+### Tasks
+
+- add provenance fields to issue, mapping, policy, and future remediation pack schemas
+- require `sources[]`, `source_type`, `curation_method`, and `review_status` for curated entries
+- add reviewer metadata such as `reviewed_by`, `reviewed_at`, and `last_verified_at`
+- fail pack validation or release when required provenance is missing
+- backfill existing issue and reasoning packs with source attribution and review state
+- expose provenance state in internal validation and release outputs
+
+### Likely Files
+
+- [docs/schemas](D:/Dev/repos/CodeScanner/docs/schemas)
+- [docs/data/issues](D:/Dev/repos/CodeScanner/docs/data/issues)
+- [docs/data/stride](D:/Dev/repos/CodeScanner/docs/data/stride)
+- [RULE_PACK_DELIVERY_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/RULE_PACK_DELIVERY_CONTRACT.md)
+- [PRODUCTION_READINESS_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/PRODUCTION_READINESS_CONTRACT.md)
+
+### Acceptance Criteria
+
+- every production pack entry has auditable source attribution
+- generated or AI-assisted content is explicitly marked and human-reviewed before release
+- pack release fails when provenance requirements are not met
+- Owlvex can distinguish source-backed curated guidance from unverified draft content
+
 ## Workstream 3: Product Output Alignment
 
 ### Goal
@@ -219,6 +249,7 @@ Make deterministic correctness part of the default shipping path rather than a m
 - deterministic regressions block release by default
 - release reviewers have one clear benchmark signal to inspect
 - run artifacts are retained in a predictable format
+- trusted-source provenance validation blocks release for grounded packs
 
 ## Workstream 6: Fourth Deterministic Axis
 

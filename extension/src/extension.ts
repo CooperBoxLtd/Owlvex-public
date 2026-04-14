@@ -10,9 +10,11 @@ import { ChatViewProvider } from './panels/chatViewProvider';
 import { pickScanFile, pickScanRoot, scanFolder } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
+import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
 import { PROFILE } from './profile';
 import { initializeSecretStorage } from './secrets';
-import { RulePackClient } from './packs/packClient';
+import { PackArtifactResponse, PackEntitlement, PackManifestEntry, RulePackClient } from './packs/packClient';
+import { RulePackRuntimeContext } from './packs/packRuntime';
 
 export let secrets: vscode.SecretStorage;
 
@@ -20,6 +22,8 @@ const MAX_STORED_SCANS = 20;
 const scanStore = new Map<string, ScanResult>();
 const SCAN_STORE_KEY = `${PROFILE.storagePrefix}.scanStore`;
 const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
+const ISSUE_PACK_ID = 'owlvex.issue-pack.v1';
+const ISSUE_MAPPING_PACK_ID = 'owlvex.issue-mapping-pack.v1';
 
 interface ScanFileCommandResult {
     status: 'completed' | 'cancelled';
@@ -140,6 +144,10 @@ export function activate(context: vscode.ExtensionContext) {
     const registry = new ProviderRegistry();
     const scanEngine = new ScanEngine(licenceMgr, registry);
     const rulePackClient = new RulePackClient(context.workspaceState);
+    let currentRulePackContext: RulePackRuntimeContext = {
+        mode: 'bundled',
+        packIds: [],
+    };
     const diagnostics = new DiagnosticsProvider();
     const statusBar = new StatusBar();
     const sidebar = new SidebarProvider();
@@ -156,18 +164,134 @@ export function activate(context: vscode.ExtensionContext) {
         await context.workspaceState.update(SCAN_STORE_KEY, serializeScanStore());
     };
 
-    const refreshRulePackManifest = async () => {
+    const currentEntitlement = (): PackEntitlement | undefined => {
+        const info = licenceMgr.getCachedInfo();
+        if (!info) {
+            return undefined;
+        }
+
+        return {
+            plan: info.plan,
+            frameworks: info.features.frameworks,
+        };
+    };
+
+    const applyRulePackContext = (result: ScanResult): ScanResult => ({
+        ...result,
+        packContext: {
+            ...currentRulePackContext,
+            packIds: [...currentRulePackContext.packIds],
+        },
+    });
+
+    const isRevocationLikeError = (error: unknown): boolean => {
+        const message = String((error as any)?.message ?? '').toLowerCase();
+        return [
+            'licence key not found',
+            'licence is inactive',
+            'licence has expired',
+            'http 401',
+            'http 403',
+        ].some(fragment => message.includes(fragment));
+    };
+
+    const purgeRulePackState = async () => {
+        await rulePackClient.purgeCachedRulePacks();
+        configureRulePackRuntime(undefined, undefined);
+        currentRulePackContext = {
+            mode: 'bundled',
+            packIds: [],
+        };
+    };
+
+    const hydrateRulePackRuntimeFromCache = (entitlement?: PackEntitlement) => {
+        const manifestFreshness = rulePackClient.getCachedManifestFreshness(entitlement);
+        const cachedIssuePack = rulePackClient.getCachedPack(ISSUE_PACK_ID, entitlement);
+        const cachedMappingPack = rulePackClient.getCachedPack(ISSUE_MAPPING_PACK_ID, entitlement);
+        configureRulePackRuntime(cachedIssuePack?.artifact, cachedMappingPack?.artifact);
+        currentRulePackContext = cachedIssuePack && cachedMappingPack
+            ? {
+                mode: 'cached',
+                packIds: [ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID],
+                fetchedAt: cachedIssuePack.fetched_at ?? cachedMappingPack.fetched_at,
+                manifestFreshness: manifestFreshness === 'missing' ? 'stale' : manifestFreshness,
+            }
+            : {
+                mode: 'bundled',
+                packIds: [],
+            };
+    };
+
+    const refreshRulePackRuntime = async () => {
         const licenceKey = await licenceMgr.getKey();
         if (!licenceKey) {
+            hydrateRulePackRuntimeFromCache();
             return;
         }
 
+        const entitlement = currentEntitlement();
+
+        let manifest;
         try {
-            await rulePackClient.syncManifest(apiUrl, licenceKey);
-        } catch {
-            // Pack refresh is opportunistic. Scanning still works with local logic and
-            // previously cached metadata when the control plane is unavailable.
+            manifest = await rulePackClient.syncManifest(apiUrl, licenceKey);
+        } catch (error) {
+            if (isRevocationLikeError(error)) {
+                await purgeRulePackState();
+            } else {
+                hydrateRulePackRuntimeFromCache(entitlement);
+            }
+            return;
         }
+
+        const requiredPackIds = new Set([ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID]);
+        const manifestById = new Map<string, PackManifestEntry>(
+            manifest.packs
+                .filter(entry => requiredPackIds.has(entry.pack_id))
+                .map(entry => [entry.pack_id, entry]),
+        );
+
+        const fetchIfListed = async (packId: string): Promise<{ artifact?: PackArtifactResponse; source: 'fresh' | 'cached' | 'missing' }> => {
+            const entry = manifestById.get(packId);
+            if (!entry) {
+                return {
+                    artifact: rulePackClient.getCachedPack(packId, entitlement),
+                    source: rulePackClient.getCachedPack(packId, entitlement) ? 'cached' : 'missing',
+                };
+            }
+
+            try {
+                return {
+                    artifact: await rulePackClient.fetchPackArtifact(apiUrl, licenceKey, entry),
+                    source: 'fresh',
+                };
+            } catch {
+                const cached = rulePackClient.getCachedPack(packId, entitlement);
+                return {
+                    artifact: cached,
+                    source: cached ? 'cached' : 'missing',
+                };
+            }
+        };
+
+        const [issuePackResult, mappingPackResult] = await Promise.all([
+            fetchIfListed(ISSUE_PACK_ID),
+            fetchIfListed(ISSUE_MAPPING_PACK_ID),
+        ]);
+        const issuePack = issuePackResult.artifact;
+        const mappingPack = mappingPackResult.artifact;
+
+        configureRulePackRuntime(issuePack?.artifact, mappingPack?.artifact);
+        currentRulePackContext = issuePack && mappingPack
+            ? {
+                mode: issuePackResult.source === 'fresh' && mappingPackResult.source === 'fresh' ? 'fresh' : 'cached',
+                packIds: [ISSUE_PACK_ID, ISSUE_MAPPING_PACK_ID],
+                fetchedAt: manifest.fetched_at,
+                manifestFreshness: 'fresh',
+            }
+            : {
+                mode: 'bundled',
+                packIds: [],
+            };
     };
 
     const persistLastReportSnapshot = async (snapshot: ReportSnapshot) => {
@@ -203,13 +327,14 @@ export function activate(context: vscode.ExtensionContext) {
 
         const providerNames = [...new Set(safeSnapshot.results.map(item => item.result.provider))].join(', ') || 'unknown';
         const modelNames = [...new Set(safeSnapshot.results.map(item => item.result.model))].join(', ') || 'unknown';
+        const packContext = safeSnapshot.results[0]?.result.packContext;
         const averageScore = safeSnapshot.results.length
             ? safeSnapshot.results.reduce((total, item) => total + item.result.score, 0) / safeSnapshot.results.length
             : 0;
         const totalFindings = safeSnapshot.results.reduce((total, item) => total + item.result.findings.length, 0);
         const warningCount = safeSnapshot.results.reduce((total, item) => total + (item.result.warnings ?? []).length, 0);
 
-        statusBar.showResult(averageScore, modelNames, totalFindings);
+        statusBar.showResult(averageScore, modelNames, totalFindings, packContext);
         vscode.window.showInformationMessage(
             `${PROFILE.displayLabel}: Report created for ${safeSnapshot.results.length} file(s) with ${totalFindings} finding(s) using ${providerNames}/${modelNames}.${warningCount ? ` ${warningCount} warning(s) were captured.` : ''}`
         );
@@ -252,6 +377,7 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const chatView = new ChatViewProvider(registry, context.workspaceState);
+    hydrateRulePackRuntimeFromCache();
 
     vscode.window.registerTreeDataProvider(PROFILE.findingsViewId, sidebar);
     context.subscriptions.push(
@@ -260,8 +386,14 @@ export function activate(context: vscode.ExtensionContext) {
 
     licenceMgr.validate(apiUrl).then(() => {
         statusBar.showIdle();
-        void refreshRulePackManifest();
-    }).catch(() => {
+        void refreshRulePackRuntime();
+    }).catch(async (error) => {
+        if (isRevocationLikeError(error)) {
+            licenceMgr.clearCachedInfo();
+            await purgeRulePackState();
+        } else {
+            hydrateRulePackRuntimeFromCache();
+        }
         statusBar.showUnlicensed();
     });
 
@@ -282,8 +414,12 @@ export function activate(context: vscode.ExtensionContext) {
                     `${PROFILE.displayLabel} activated - ${info.plan} plan (${info.teamName})`
                 );
                 statusBar.showIdle();
-                void refreshRulePackManifest();
+                void refreshRulePackRuntime();
             } catch (error: any) {
+                if (isRevocationLikeError(error)) {
+                    licenceMgr.clearCachedInfo();
+                    await purgeRulePackState();
+                }
                 vscode.window.showErrorMessage(`Licence validation failed: ${error.message}`);
                 statusBar.showUnlicensed();
             }
@@ -355,7 +491,7 @@ export function activate(context: vscode.ExtensionContext) {
             sidebar.clear();
 
             try {
-                const result = await scanEngine.scanDocument(editor.document);
+                const result = applyRulePackContext(await scanEngine.scanDocument(editor.document));
                 storeScanResult(result.scanId, result);
                 await persistScans();
                 await persistLastReportSnapshot({
@@ -366,7 +502,7 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 diagnostics.applyFindings(editor.document, result.findings);
                 sidebar.refresh(result);
-                statusBar.showResult(result.score, result.model, result.findings.length);
+                statusBar.showResult(result.score, result.model, result.findings.length, result.packContext);
                 chatView.setLastScanTarget(`File: ${vscode.workspace.asRelativePath(editor.document.uri, false)}`);
 
                 vscode.window.showInformationMessage(
@@ -389,7 +525,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             statusBar.showScanning();
             try {
-                const result = await scanEngine.scanDocument(doc);
+                const result = applyRulePackContext(await scanEngine.scanDocument(doc));
                 storeScanResult(result.scanId, result);
                 await persistScans();
                 await persistLastReportSnapshot({
@@ -400,7 +536,7 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 diagnostics.applyFindings(doc, result.findings);
                 sidebar.refresh(result);
-                statusBar.showResult(result.score, result.model, result.findings.length);
+                statusBar.showResult(result.score, result.model, result.findings.length, result.packContext);
                 chatView.setLastScanTarget(`Saved file: ${vscode.workspace.asRelativePath(doc.uri, false)}`);
             } catch (error: any) {
                 statusBar.showError(error.message);
@@ -524,6 +660,10 @@ export function activate(context: vscode.ExtensionContext) {
                 scanEngine,
                 diagnostics,
             });
+            summary.results = summary.results.map(item => ({
+                ...item,
+                result: applyRulePackContext(item.result),
+            }));
 
             for (const item of summary.results) {
                 storeScanResult(item.result.scanId, item.result);
@@ -588,12 +728,12 @@ export function activate(context: vscode.ExtensionContext) {
                     diagnostics.clear(document.uri);
                     sidebar.clear();
 
-                    const result = await scanEngine.scanDocument(document);
+                    const result = applyRulePackContext(await scanEngine.scanDocument(document));
                     storeScanResult(result.scanId, result);
                     await persistScans();
                     diagnostics.applyFindings(document, result.findings);
                     sidebar.refresh(result);
-                    statusBar.showResult(result.score, result.model, result.findings.length);
+                    statusBar.showResult(result.score, result.model, result.findings.length, result.packContext);
 
                     const snapshot: ReportSnapshot = {
                         targetLabel: vscode.workspace.asRelativePath(document.uri, false),
@@ -618,6 +758,10 @@ export function activate(context: vscode.ExtensionContext) {
                     scanEngine,
                     diagnostics,
                 });
+                summary.results = summary.results.map(item => ({
+                    ...item,
+                    result: applyRulePackContext(item.result),
+                }));
 
                 for (const item of summary.results) {
                     storeScanResult(item.result.scanId, item.result);

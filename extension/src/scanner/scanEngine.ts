@@ -5,6 +5,7 @@ import { ProviderRegistry } from '../providers/registry';
 import { CanonicalMappings, resolveIssue } from '../frameworks/issueResolver';
 import { getIssueFamilyDefinition } from '../frameworks/issueCatalog';
 import { DeterministicScanner } from './deterministicScanner';
+import type { RulePackRuntimeContext } from '../packs/packRuntime';
 import { PROFILE } from '../profile';
 
 export interface Finding {
@@ -43,6 +44,7 @@ export interface ScanResult {
     model: string;
     provider: string;
     warnings: string[];
+    packContext?: RulePackRuntimeContext;
 }
 
 interface PromptContext {

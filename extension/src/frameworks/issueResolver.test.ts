@@ -1,6 +1,11 @@
 import { getCanonicalIssueById, resolveIssue } from './issueResolver';
+import { configureRulePackRuntime, resetRulePackRuntime } from './rulePackRegistry';
 
 describe('issueResolver', () => {
+    beforeEach(() => {
+        resetRulePackRuntime();
+    });
+
     it('resolves exact CWE matches deterministically', () => {
         const resolved = resolveIssue({
             title: 'Unsafe shell execution',
@@ -81,5 +86,69 @@ describe('issueResolver', () => {
         });
 
         expect(resolved).toBeUndefined();
+    });
+
+    it('prefers verified dynamic mapping packs for exact framework-id matches', () => {
+        configureRulePackRuntime(
+            {
+                issues: [{
+                    id: 'owlvex.issue.sql_injection.001',
+                    slug: 'sql-injection-unsanitized-query-construction',
+                    title: 'SQL injection from verified pack',
+                    category: 'injection',
+                    family: 'family.injection_execution',
+                    severity: 'high',
+                    stride: ['Tampering'],
+                    mappings: { cwe: ['CWE-89'] },
+                    detection: { patterns: ['sql injection'] },
+                    remediation: { summary: 'Use parameterized queries.' },
+                }],
+            },
+            {
+                mappings: [{
+                    issue_id: 'owlvex.issue.sql_injection.001',
+                    framework_mappings: [{
+                        framework_code: 'CWE',
+                        external_id: 'CWE-89',
+                    }],
+                }],
+            },
+        );
+
+        const resolved = resolveIssue({
+            title: 'Database injection',
+            explanation: 'The tool returned a framework mapping only.',
+            threat: 'Data exposure',
+            fix: 'Parameterize the query.',
+            framework: 'CWE',
+            ruleCode: 'CWE-89',
+            severity: 'HIGH',
+        });
+
+        expect(resolved?.issue.title).toBe('SQL injection from verified pack');
+        expect(resolved?.confidence).toBe(0.99);
+        expect(resolved?.matchedSignals).toEqual(['CWE:CWE-89']);
+    });
+
+    it('uses cached pack issue metadata for canonical issue lookups', () => {
+        configureRulePackRuntime(
+            {
+                issues: [{
+                    id: 'owlvex.issue.command_injection.001',
+                    slug: 'command-injection-unsafe-shell-execution',
+                    title: 'Unsafe shell command execution from pack',
+                    category: 'injection',
+                    family: 'family.injection_execution',
+                    severity: 'critical',
+                    stride: ['Tampering', 'Denial of Service'],
+                    mappings: { cwe: ['CWE-78'] },
+                    detection: { patterns: ['command injection', 'shell'] },
+                    remediation: { summary: 'Avoid shell invocation.' },
+                }],
+            },
+            undefined,
+        );
+
+        expect(getCanonicalIssueById('owlvex.issue.command_injection.001')?.title).toBe('Unsafe shell command execution from pack');
     });
 });

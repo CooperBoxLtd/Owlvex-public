@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from app.services.knowledge_base import _data_root
 
@@ -27,6 +32,15 @@ PACK_DEFINITIONS = {
 }
 
 
+def _normalize_frameworks(frameworks: list[str]) -> list[str]:
+    return sorted({framework.upper() for framework in frameworks})
+
+DEV_PACK_SIGNING_PRIVATE_KEY_PEM = """-----BEGIN PRIVATE KEY-----
+MC4CAQAwBQYDK2VwBCIEIPdEILhBPJPbXD/zvw5DvKx47+DNVrNmDJWYbKLfFTze
+-----END PRIVATE KEY-----"""
+DEFAULT_SIGNING_KEY_ID = "owlvex-dev-ed25519-2026-04"
+
+
 def _load_pack_json(relative_path: Path) -> dict[str, Any]:
     return json.loads((_data_root() / relative_path).read_text(encoding="utf-8"))
 
@@ -35,39 +49,72 @@ def _canonical_json_bytes(payload: dict[str, Any]) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
-def _build_manifest_entry(pack_id: str, definition: dict[str, Any]) -> dict[str, Any]:
+def _get_signing_private_key_pem() -> str:
+    return os.getenv("OWLVEX_PACK_SIGNING_PRIVATE_KEY_PEM", "").strip() or DEV_PACK_SIGNING_PRIVATE_KEY_PEM
+
+
+def _get_signing_key_id() -> str:
+    return os.getenv("OWLVEX_PACK_SIGNING_KEY_ID", "").strip() or DEFAULT_SIGNING_KEY_ID
+
+
+def _sign_manifest_payload(payload: dict[str, Any]) -> str:
+    private_key = serialization.load_pem_private_key(
+        _get_signing_private_key_pem().encode("utf-8"),
+        password=None,
+    )
+    if not isinstance(private_key, Ed25519PrivateKey):
+        raise TypeError("Owlvex pack signing key must be an Ed25519 private key")
+
+    signature = private_key.sign(_canonical_json_bytes(payload))
+    return base64.b64encode(signature).decode("ascii")
+
+
+def _build_manifest_entry(pack_id: str, definition: dict[str, Any], licence_scope: dict[str, Any]) -> dict[str, Any]:
     relative_path = definition["relative_path"]
     absolute_path = _data_root() / relative_path
     payload = _load_pack_json(relative_path)
     canonical_payload = _canonical_json_bytes(payload)
 
-    return {
+    unsigned_entry = {
         "schema_version": "owlvex.rulepack.manifest.v1",
         "pack_id": pack_id,
         "pack_type": definition["pack_type"],
         "pack_version": absolute_path.stat().st_mtime_ns,
+        "issued_at": definition.get("issued_at", "2026-04-14T00:00:00Z"),
+        "expires_at": definition.get("expires_at", "2026-05-14T00:00:00Z"),
         "sha256": hashlib.sha256(canonical_payload).hexdigest(),
         "size_bytes": len(canonical_payload),
         "frameworks": definition["frameworks"],
+        "licence_scope": licence_scope,
         "download_path": f"/v1/packs/{pack_id}",
+        "signature_algorithm": "ed25519",
+        "key_id": _get_signing_key_id(),
+    }
+    return {
+        **unsigned_entry,
+        "signature": _sign_manifest_payload(unsigned_entry),
     }
 
 
-def list_available_packs(allowed_frameworks: list[str]) -> list[dict[str, Any]]:
+def list_available_packs(plan: str, allowed_frameworks: list[str]) -> list[dict[str, Any]]:
     allowed = {framework.upper() for framework in allowed_frameworks}
     manifests: list[dict[str, Any]] = []
+    licence_scope = {
+        "plan": plan,
+        "frameworks": _normalize_frameworks(allowed_frameworks),
+    }
 
     for pack_id, definition in PACK_DEFINITIONS.items():
         pack_frameworks = {framework.upper() for framework in definition.get("frameworks", [])}
         if pack_frameworks and not pack_frameworks.issubset(allowed):
             continue
-        manifests.append(_build_manifest_entry(pack_id, definition))
+        manifests.append(_build_manifest_entry(pack_id, definition, licence_scope))
 
     return manifests
 
 
-def get_pack_artifact(pack_id: str, allowed_frameworks: list[str]) -> dict[str, Any] | None:
-    manifests = {manifest["pack_id"]: manifest for manifest in list_available_packs(allowed_frameworks)}
+def get_pack_artifact(pack_id: str, plan: str, allowed_frameworks: list[str]) -> dict[str, Any] | None:
+    manifests = {manifest["pack_id"]: manifest for manifest in list_available_packs(plan, allowed_frameworks)}
     manifest = manifests.get(pack_id)
     if not manifest:
         return None

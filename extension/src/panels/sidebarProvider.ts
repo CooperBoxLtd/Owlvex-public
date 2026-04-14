@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ScanResult, Finding } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
+import { getRulePackModeLabel } from '../packs/packRuntime';
 
 export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<FindingItem | undefined>();
@@ -34,7 +35,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
             const items: FindingItem[] = [
                 new FindingItem(
                     `Score: ${this.lastResult.score.toFixed(1)}/10`,
-                    `${this.lastResult.findings.length} finding(s) | ${this.lastResult.model}`,
+                    `${this.lastResult.findings.length} finding(s) | ${this.lastResult.model} | ${getRulePackModeLabel(this.lastResult.packContext)}`,
                     vscode.TreeItemCollapsibleState.None,
                     'score',
                 ),

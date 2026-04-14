@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PROFILE } from '../profile';
+import { getRulePackModeLabel, type RulePackRuntimeContext } from '../packs/packRuntime';
 
 export class StatusBar {
     private readonly item: vscode.StatusBarItem;
@@ -22,10 +23,11 @@ export class StatusBar {
         this.item.tooltip = 'Scan in progress';
     }
 
-    showResult(score: number, model: string, findingCount: number): void {
+    showResult(score: number, model: string, findingCount: number, packContext?: RulePackRuntimeContext): void {
         const icon = score >= 8 ? '$(shield-check)' : score >= 5 ? '$(shield)' : '$(shield-x)';
-        this.item.text = `${icon} ${score.toFixed(1)}/10 · ${model}`;
-        this.item.tooltip = `Score: ${score.toFixed(1)}/10 | ${findingCount} finding(s) | Model: ${model}`;
+        const packLabel = getRulePackModeLabel(packContext);
+        this.item.text = `${icon} ${score.toFixed(1)}/10 | ${model} | ${packLabel}`;
+        this.item.tooltip = `Score: ${score.toFixed(1)}/10 | ${findingCount} finding(s) | Model: ${model} | Intelligence: ${packLabel}`;
 
         if (score < 5) {
             this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');

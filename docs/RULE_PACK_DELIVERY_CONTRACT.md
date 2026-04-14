@@ -190,6 +190,19 @@ Minimum required checks:
 3. verify extension compatibility before activation
 4. verify licence scope before use
 
+Current implementation status:
+
+- manifest entries are Ed25519-signed by the backend
+- the extension verifies those signatures against a pinned Owlvex public key set before caching the manifest
+- the extension separately verifies the artifact `sha256` against the signed manifest entry before activating a pack
+
+Production note:
+
+- production should override the development signing key via `OWLVEX_PACK_SIGNING_PRIVATE_KEY_PEM`
+- production should set a rotation-friendly `OWLVEX_PACK_SIGNING_KEY_ID`
+- the extension should accept only pinned Owlvex public keys for known `key_id` values
+- the extension should pin more than one active or upcoming public key to support non-breaking key rotation
+
 If any check fails, the pack must not become active.
 
 ## 8. Cache Model
@@ -203,12 +216,17 @@ Cache rules:
 - cache may be reused offline until expiry if policy allows
 - expired packs should not silently remain active forever
 - failed refresh must not delete a valid last-known-good pack immediately
+- revocation-like licence failures should clear cached pack state instead of preserving it indefinitely
+- cached manifest metadata should have its own freshness TTL separate from pack expiry
 
 Recommended client behavior:
 
 - prefer in-memory cache for the current session
 - persist only last-known-good pack artifacts and metadata needed for offline use
 - avoid persisting unnecessary derived data
+- bind cached packs to the entitlement scope they were fetched under and reject them when current entitlement no longer matches
+- when online, refresh stale cached manifest metadata before treating it as current control-plane state
+- when offline, stale manifest metadata may inform degraded-mode messaging, but should not be presented as fresh state
 
 ## 9. Offline Behavior
 

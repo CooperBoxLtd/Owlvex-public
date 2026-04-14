@@ -1,6 +1,7 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { getCanonicalIssueById } from '../frameworks/issueResolver';
+import { describeRulePackRuntime, getRulePackModeLabel } from '../packs/packRuntime';
 import { ScanResult } from './scanEngine';
 import { FolderScanSummary } from './workspaceScanner';
 
@@ -220,6 +221,14 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             warning,
         }))
     );
+    const packModes = new Map<string, number>();
+    for (const item of snapshot.results) {
+        const label = getRulePackModeLabel(item.result.packContext);
+        packModes.set(label, (packModes.get(label) ?? 0) + 1);
+    }
+    const packCoverageSummary = [...packModes.entries()]
+        .map(([label, count]) => `${label}: ${count}`)
+        .join(' | ') || 'Bundled Fallback: 0';
 
     const aggregateMetrics = snapshot.results.reduce(
         (totals, item) => ({
@@ -242,6 +251,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         .flatMap(item => item.result.findings.map(finding => ({
             file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
             finding,
+            packContext: item.result.packContext,
         })))
         .sort((a, b) => severityRank(b.finding.severity) - severityRank(a.finding.severity))
         .slice(0, 25);
@@ -250,39 +260,43 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         .flatMap(item => item.result.findings.map(finding => ({
             file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
             finding,
+            packContext: item.result.packContext,
         })))
         .reduce((acc, item) => {
             const key = item.finding.framework || 'Unspecified';
             acc.set(key, [...(acc.get(key) ?? []), item]);
             return acc;
-        }, new Map<string, Array<{ file: string; finding: ScanResult['findings'][number] }>>());
+        }, new Map<string, Array<{ file: string; finding: ScanResult['findings'][number]; packContext?: ScanResult['packContext'] }>>());
 
     const findingsByFamily = snapshot.results
         .flatMap(item => item.result.findings.map(finding => ({
             file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
             finding,
+            packContext: item.result.packContext,
         })))
         .reduce((acc, item) => {
             const key = item.finding.canonicalFamilyLabel || item.finding.canonicalFamily || 'Unclassified';
             acc.set(key, [...(acc.get(key) ?? []), item]);
             return acc;
-        }, new Map<string, Array<{ file: string; finding: ScanResult['findings'][number] }>>());
+        }, new Map<string, Array<{ file: string; finding: ScanResult['findings'][number]; packContext?: ScanResult['packContext'] }>>());
 
     const findingsByCanonicalIssue = snapshot.results
         .flatMap(item => item.result.findings.map(finding => ({
             file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
             finding,
+            packContext: item.result.packContext,
         })))
         .reduce((acc, item) => {
             const key = item.finding.canonicalId || item.finding.ruleCode || item.finding.title || 'Unresolved';
             acc.set(key, [...(acc.get(key) ?? []), item]);
             return acc;
-        }, new Map<string, Array<{ file: string; finding: ScanResult['findings'][number] }>>());
+        }, new Map<string, Array<{ file: string; finding: ScanResult['findings'][number]; packContext?: ScanResult['packContext'] }>>());
 
     const allFindingItems = snapshot.results.flatMap(item =>
         item.result.findings.map(finding => ({
             file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
             finding,
+            packContext: item.result.packContext,
         })),
     );
     const deterministicItems = allFindingItems.filter(
@@ -312,6 +326,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Total findings: ${snapshot.results.reduce((total, item) => total + item.result.findings.length, 0)}`,
         `- Average score: ${averageScore.toFixed(1)}/10`,
         `- Deterministic findings: ${deterministicItems.length}`,
+        `- Intelligence source coverage: ${packCoverageSummary}`,
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         '',
@@ -329,6 +344,12 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         '- Score meaning: `10` is strongest, `0` is weakest.',
         '- Severity scale: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.',
         '- Frameworks requested for this scan: `OWASP`, `STRIDE`.',
+        '',
+        '## Intelligence Source',
+        '',
+        '- Fresh Packs: backend-served manifest and verified pack artifacts were fetched for this session.',
+        '- Cached Packs: previously verified pack artifacts were used because fresh retrieval was unavailable or skipped.',
+        '- Bundled Fallback: Owlvex used the shipped local catalog because no verified pack artifacts were available.',
         '',
         '## Severity Breakdown',
         '',
@@ -382,6 +403,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             .sort((a, b) => severityRank(b[1][0].finding.severity) - severityRank(a[1][0].finding.severity))
             .slice(0, 25)) {
             const sample = items[0].finding;
+            const packContext = items[0].packContext;
             const remediation = getCanonicalRemediation(sample);
             const isDeterministic = sample.provenance === 'deterministic';
             const provenanceLabel = isDeterministic
@@ -397,6 +419,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Category: ${sample.canonicalCategory || 'unresolved'}`);
             lines.push(`- Occurrences: ${items.length}`);
             lines.push(`- Files affected: ${new Set(items.map(item => item.file)).size}`);
+            lines.push(`- Intelligence source: ${describeRulePackRuntime(packContext)}`);
             if (!isDeterministic) {
                 lines.push(`- Confidence: ${Math.round((sample.resolverConfidence ?? sample.confidence) * 100)}%`);
             }

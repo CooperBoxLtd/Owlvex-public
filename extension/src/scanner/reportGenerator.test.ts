@@ -47,6 +47,11 @@ describe('reportGenerator', () => {
             model: 'qwen2.5:7b',
             provider: 'ollama',
             warnings: [],
+            packContext: {
+                mode: 'fresh',
+                packIds: ['owlvex.issue-pack.v1', 'owlvex.issue-mapping-pack.v1'],
+                fetchedAt: '2026-04-14T10:00:00.000Z',
+            },
             ...overrides,
         };
     }
@@ -81,6 +86,8 @@ describe('reportGenerator', () => {
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('# Owlvex Vulnerability Scan Report');
+        expect(written).toContain('- Intelligence source coverage: Fresh Packs: 1');
+        expect(written).toContain('## Intelligence Source');
         expect(written).toContain('## Framework Coverage');
         expect(written).toContain('- OWASP: 1 finding(s)');
         expect(written).toContain('## Issue Family Coverage');
@@ -89,6 +96,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Owlvex issue: `owlvex.issue.sql_injection.001`');
         expect(written).toContain('- Issue family: Injection & Execution');
         expect(written).toContain('- Category: unresolved');
+        expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Matched signals: CWE:CWE-89, sql injection');
         expect(written).toContain('- Recommended fix: Use parameterized queries or prepared statements and validate input at trust boundaries.');
         expect(written).toContain('- Remediation sources: OWASP SQL Injection Prevention Cheat Sheet');

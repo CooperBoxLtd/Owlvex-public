@@ -93,6 +93,10 @@ export class LicenceManager {
         return this.info;
     }
 
+    clearCachedInfo(): void {
+        this.info = null;
+    }
+
     isFeatureAllowed(feature: keyof LicenceInfo['features']): boolean {
         return !!this.info?.features[feature];
     }

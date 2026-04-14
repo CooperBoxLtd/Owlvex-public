@@ -19,7 +19,7 @@ async def manifest(
 
     return {
         "schema_version": "owlvex.rulepack.manifest-list.v1",
-        "packs": list_available_packs(lic["features"]["frameworks"]),
+        "packs": list_available_packs(lic["plan"], lic["features"]["frameworks"]),
     }
 
 
@@ -33,7 +33,7 @@ async def get_pack(
     if not lic["valid"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])
 
-    artifact = get_pack_artifact(pack_id, lic["features"]["frameworks"])
+    artifact = get_pack_artifact(pack_id, lic["plan"], lic["features"]["frameworks"])
     if artifact is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pack not found or not permitted for this licence")
 

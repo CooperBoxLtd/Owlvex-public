@@ -184,6 +184,20 @@ Exit criteria:
 - production CORS behavior is tested against the real client origin model
 - no known high-severity boundary or auth flaw is open at release time
 
+## 4.8 Grounded Data Readiness
+
+Required:
+
+- production grounded packs are traceable to trustworthy sources
+- curated remediation and policy content carries auditable provenance
+- AI-assisted or generated pack content is explicitly marked and human-reviewed before release
+
+Exit criteria:
+
+- production pack schemas require provenance fields for curated entries
+- release validation fails when trusted-source metadata is missing
+- pack reviewers can identify source-backed, reviewed, and draft content separately
+
 ## 5. Release Blockers
 
 The following are automatic blockers for calling Owlvex production ready:
@@ -194,6 +208,7 @@ The following are automatic blockers for calling Owlvex production ready:
 - release path does not run tests and benchmark before deploy
 - production secrets are expected to be committed or manually edited into tracked files
 - production-only behavior cannot be health-checked or rolled back
+- grounded packs ship without auditable source provenance or review state
 
 ## 6. Minimum Production Checklist
 
@@ -209,6 +224,7 @@ A release candidate is production ready only if all items below are true:
 - `/health` succeeds after deploy
 - rollback path is known
 - current docs do not overclaim deterministic certainty
+- current production packs meet trusted-source provenance requirements
 
 ## 7. Recommended Verification Evidence
 
@@ -236,6 +252,7 @@ Based on the current codebase state, the highest-value production-readiness gaps
 3. raise coverage on orchestration paths in `extension.ts`, provider integration, and backend route contracts
 4. verify production CORS against the real VS Code/webview/client call pattern
 5. make the release gate explicit in CI and docs
+6. require auditable trusted-source provenance for grounded packs and remediation content
 
 ## 9. Definition Of Production Ready
 

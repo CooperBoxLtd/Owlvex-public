@@ -48,6 +48,11 @@ async def test_pack_manifest_returns_entitled_packs(client):
     assert data["schema_version"] == "owlvex.rulepack.manifest-list.v1"
     assert any(pack["pack_id"] == "owlvex.issue-pack.v1" for pack in data["packs"])
     assert any(pack["pack_id"] == "owlvex.stride.2026.1" for pack in data["packs"])
+    assert all(pack["signature_algorithm"] == "ed25519" for pack in data["packs"])
+    assert all(pack.get("signature") for pack in data["packs"])
+    assert all(pack.get("key_id") for pack in data["packs"])
+    assert all(pack["licence_scope"]["plan"] == "developer" for pack in data["packs"])
+    assert all("OWASP" in pack["licence_scope"]["frameworks"] for pack in data["packs"])
 
 
 @pytest.mark.asyncio
@@ -72,6 +77,9 @@ async def test_pack_artifact_returns_metadata_only_payload(client):
     assert data["pack_id"] == "owlvex.issue-pack.v1"
     assert "artifact" in data
     assert "sha256" in data
+    assert data["signature_algorithm"] == "ed25519"
+    assert data["signature"]
+    assert data["licence_scope"]["plan"] == "developer"
     assert data["artifact"]["schema_version"] == "owlvex.issue-pack.v1"
 
 

@@ -1,4 +1,9 @@
-import { CanonicalIssue, CanonicalMappings, ISSUE_CATALOG } from './issueCatalog';
+import { CanonicalIssue, CanonicalMappings } from './issueCatalog';
+import {
+    findDynamicFrameworkMapping,
+    getEffectiveCanonicalIssueById,
+    getEffectiveIssueCatalog,
+} from './rulePackRegistry';
 export type { CanonicalIssue, CanonicalMappings } from './issueCatalog';
 
 export interface RawFindingLike {
@@ -48,18 +53,28 @@ function buildFindingHaystack(finding: RawFindingLike): string {
 }
 
 export function getCanonicalIssueById(id: string): CanonicalIssue | undefined {
-    return ISSUE_CATALOG.find(issue => issue.id === id);
+    return getEffectiveCanonicalIssueById(id);
 }
 
 export function resolveIssue(finding: RawFindingLike): ResolvedIssue | undefined {
     const haystack = buildFindingHaystack(finding);
     const normalizedFramework = normalizeFramework(finding.framework);
     const normalizedCode = normalizeRuleCode(finding.ruleCode);
+    const dynamicExactMatch = findDynamicFrameworkMapping(normalizedFramework, normalizedCode);
+
+    if (dynamicExactMatch) {
+        return {
+            issue: dynamicExactMatch.issue,
+            confidence: 0.99,
+            matchedSignals: dynamicExactMatch.matchedSignals,
+        };
+    }
 
     let bestMatch: ResolvedIssue | undefined;
     let bestScore = 0;
+    const issueCatalog = getEffectiveIssueCatalog();
 
-    for (const issue of ISSUE_CATALOG) {
+    for (const issue of issueCatalog) {
         let score = 0;
         const matchedSignals: string[] = [];
 
