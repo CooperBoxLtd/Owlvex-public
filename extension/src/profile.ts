@@ -21,6 +21,7 @@ export const PROFILE = {
         "openPromptEditor": "owlvex.openPromptEditor",
         "switchModel": "owlvex.switchModel",
         "setupAI": "owlvex.setupAI",
+        "testAI": "owlvex.testAIConnection",
         "enterLicence": "owlvex.enterLicence",
         "compareScans": "owlvex.compareScans",
         "revealLine": "owlvex.revealLine",

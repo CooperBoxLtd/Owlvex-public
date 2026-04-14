@@ -2,7 +2,7 @@
  * Unit tests for ProviderRegistry — provider lookup, active provider selection,
  * and all provider list coverage.
  */
-import { ProviderRegistry } from './registry';
+import { getProviderApiKeySecretName, ProviderRegistry } from './registry';
 
 // workspace.getConfiguration mock returns a cfg object — we control it per test.
 import * as vscode from 'vscode';
@@ -127,14 +127,12 @@ describe('ProviderRegistry', () => {
     describe('provider model lists', () => {
         it('OpenAI lists expected models', async () => {
             const models = await registry.getProvider('openai')!.listModels();
-            expect(models).toContain('gpt-4o');
-            expect(models).toContain('o1');
+            expect(models).toEqual(['gpt-4o']);
         });
 
         it('Anthropic lists expected models', async () => {
             const models = await registry.getProvider('anthropic')!.listModels();
-            expect(models).toContain('claude-opus-4-6');
-            expect(models).toContain('claude-sonnet-4-6');
+            expect(models).toEqual(['claude-opus-4-6']);
         });
 
         it('Mistral lists expected models', async () => {
@@ -160,6 +158,10 @@ describe('ProviderRegistry', () => {
     });
 
     describe('azure foundry configuration', () => {
+        it('maps Azure Foundry secrets to the shared foundry namespace', () => {
+            expect(getProviderApiKeySecretName('azure-foundry')).toBe('owlvex.foundry.apiKey');
+        });
+
         it('reads selected deployment name from configuration', () => {
             const provider = registry.getProvider('azure-foundry')!;
             expect(provider.selectedModel).toBe('owlvex-gpt4o');
@@ -174,16 +176,41 @@ describe('ProviderRegistry', () => {
 
         it('fails connection test when configured deployment is missing', async () => {
             (global.fetch as jest.Mock) = jest.fn().mockResolvedValue({
-                ok: true,
-                json: async () => ({
-                    value: [{ id: 'different-deployment' }],
-                }),
+                ok: false,
+                status: 404,
             });
 
             const provider = registry.getProvider('azure-foundry')!;
             const result = await provider.testConnection();
             expect(result.success).toBe(false);
-            expect(result.message).toContain('owlvex-gpt4o');
+            expect(result.message).toContain('Azure Foundry error: 404');
+        });
+
+        it('tests Azure connection against the configured deployment chat endpoint', async () => {
+            const fetchMock = jest.fn().mockResolvedValue({
+                ok: true,
+                status: 200,
+                json: async () => ({
+                    choices: [{ message: { content: 'OK' } }],
+                    usage: { total_tokens: 12 },
+                }),
+            });
+            (global.fetch as jest.Mock) = fetchMock;
+
+            const provider = registry.getProvider('azure-foundry')!;
+            const result = await provider.testConnection();
+
+            expect(result.success).toBe(true);
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringContaining('/openai/deployments/owlvex-gpt4o/chat/completions?api-version=2024-10-21'),
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: expect.objectContaining({
+                        'Content-Type': 'application/json',
+                        'api-key': 'test-foundry-key',
+                    }),
+                }),
+            );
         });
 
         it('uses configured deployment in completion URL', async () => {
@@ -206,8 +233,10 @@ describe('ProviderRegistry', () => {
             });
 
             expect(fetchMock).toHaveBeenCalledWith(
-                expect.stringContaining('/openai/deployments/owlvex-gpt4o/chat/completions?api-version=2024-02-01'),
-                expect.anything(),
+                expect.stringContaining('/openai/deployments/owlvex-gpt4o/chat/completions?api-version=2024-10-21'),
+                expect.objectContaining({
+                    body: expect.stringContaining('"max_completion_tokens":4096'),
+                }),
             );
         });
     });

@@ -40,6 +40,8 @@ interface ChatState {
     model: string;
     models: string[];
     providers: Array<{ id: string; name: string }>;
+    providerStatus: string;
+    providerHint: string;
     messages: ChatMessage[];
     editorSummary: string;
     frameworksLabel: string;
@@ -109,6 +111,19 @@ function severityRank(severity: string): number {
             return 1;
         default:
             return 0;
+    }
+}
+
+function getProviderSetupHint(providerId: string): string {
+    switch (providerId) {
+        case 'azure-foundry':
+            return 'Set the Azure endpoint, deployment name, and API key.';
+        case 'custom':
+            return 'Set the base URL, model name, and API key for your compatible endpoint.';
+        case 'ollama':
+            return 'Point Owlvex at your Ollama host and make sure the local model is installed.';
+        default:
+            return 'Add the API key for this provider.';
     }
 }
 
@@ -315,7 +330,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private pushState(): void {
-        this.postState(this.buildState(this.getFallbackModels()));
+        const provider = this.registry.getActive();
+        this.postState(this.buildState(
+            this.getFallbackModels(),
+            [{ id: provider.id, name: provider.name }],
+            `Provider status: checking ${provider.name}...`,
+            getProviderSetupHint(provider.id),
+        ));
         void this.pushResolvedState();
     }
 
@@ -356,6 +377,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         if (action === 'selectFrameworks') {
             await vscode.commands.executeCommand(PROFILE.commands.selectFrameworks);
+            this.refresh();
+            return;
+        }
+
+        if (action === 'setupAI') {
+            await vscode.commands.executeCommand(PROFILE.commands.setupAI);
+            const provider = this.registry.getActive();
+            const configured = await provider.isConfigured().catch(() => false);
+            this.messages.push({
+                role: 'system',
+                content: configured
+                    ? `${provider.name} is configured and ready using ${provider.selectedModel}.`
+                    : `${provider.name} still needs setup. ${getProviderSetupHint(provider.id)}`,
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'testAI') {
+            await vscode.commands.executeCommand(PROFILE.commands.testAI);
+            const provider = this.registry.getActive();
+            const configured = await provider.isConfigured().catch(() => false);
+            this.messages.push({
+                role: 'system',
+                content: configured
+                    ? `Connection test ran for ${provider.name}.`
+                    : `${provider.name} is not configured yet. ${getProviderSetupHint(provider.id)}`,
+                kind: 'advisory',
+            });
+            void this.persistState();
             this.refresh();
             return;
         }
@@ -503,7 +556,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         };
     }
 
-    private buildState(models: string[]): ChatState {
+    private buildState(
+        models: string[],
+        providers: Array<{ id: string; name: string }>,
+        providerStatus: string,
+        providerHint: string,
+    ): ChatState {
         const editorContext = this.buildEditorContext();
         const provider = this.registry.getActive();
         return {
@@ -511,7 +569,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             providerId: provider.id,
             model: provider.selectedModel,
             models,
-            providers: this.registry.allProviders().map(item => ({ id: item.id, name: item.name })),
+            providers,
+            providerStatus,
+            providerHint,
             messages: this.messages,
             editorSummary: editorContext.summary,
             frameworksLabel: formatFrameworkSummary(this.getFrameworks()),
@@ -534,9 +594,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async pushResolvedState(): Promise<void> {
-        const provider = this.registry.getActive();
+        const configuredProviders = await this.getConfiguredProviders();
+        let provider = this.registry.getActive();
+
+        if (configuredProviders.length && !configuredProviders.some(item => item.id === provider.id)) {
+            await this.registry.setActiveProvider(configuredProviders[0].id);
+            provider = this.registry.getActive();
+        }
+
         const models = await this.getModelsForProvider(provider);
-        this.postState(this.buildState(models));
+        const providerStatus = configuredProviders.length
+            ? `Provider status: ${provider.name} is configured`
+            : `Provider status: no LLM provider configured`;
+        const providerHint = configuredProviders.length
+            ? 'Configured providers only are shown here.'
+            : `${getProviderSetupHint(provider.id)} Use "Configure LLM" to add your first provider.`;
+        const visibleProviders = configuredProviders.length
+            ? configuredProviders
+            : [];
+        this.postState(this.buildState(models, visibleProviders, providerStatus, providerHint));
     }
 
     private async getModelsForProvider(provider: ReturnType<ProviderRegistry['getActive']>): Promise<string[]> {
@@ -547,6 +623,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             // Ignore list failures and fall back to current model.
         }
         return [provider.selectedModel];
+    }
+
+    private async getConfiguredProviders(): Promise<Array<{ id: string; name: string }>> {
+        const allProviders = this.registry.allProviders();
+        const configured = await Promise.all(allProviders.map(async (provider) => ({
+            id: provider.id,
+            name: provider.name,
+            configured: await provider.isConfigured().catch(() => false),
+        })));
+
+        return configured
+            .filter(item => item.configured)
+            .map(({ id, name }) => ({ id, name }));
     }
 
     private async resolveFileIntentTarget(fileHint: string): Promise<vscode.Uri | undefined> {
@@ -649,14 +738,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       background: var(--vscode-sideBar-background);
     }
     .shell {
-      display: grid;
-      grid-template-rows: auto 1fr auto;
+      display: flex;
+      flex-direction: column;
       height: 100vh;
     }
     .header {
       padding: 12px 14px;
       border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
       background: linear-gradient(135deg, var(--vscode-editorWidget-background), var(--vscode-sideBar-background));
+    }
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
     }
     .title {
       font-size: 13px;
@@ -667,11 +762,87 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       font-size: 11px;
       opacity: 0.75;
     }
-    .controls {
+    .meta.compact {
+      margin-top: 6px;
+    }
+    .summary-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
       margin-top: 10px;
+    }
+    .summary-card {
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: color-mix(in srgb, var(--vscode-editorWidget-background) 82%, transparent);
+    }
+    .summary-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      opacity: 0.68;
+    }
+    .summary-value {
+      margin-top: 4px;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .primary-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .settings-panel {
+      margin-top: 12px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--vscode-editorWidget-background) 85%, transparent);
+      overflow: hidden;
+    }
+    .settings-panel summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      user-select: none;
+    }
+    .settings-panel summary::-webkit-details-marker {
+      display: none;
+    }
+    .settings-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .settings-badge {
+      font-size: 10px;
+      font-weight: 500;
+      opacity: 0.8;
+    }
+    .settings-chevron {
+      font-size: 11px;
+      opacity: 0.75;
+      transition: transform 0.18s ease;
+    }
+    .settings-panel[open] .settings-chevron {
+      transform: rotate(180deg);
+    }
+    .settings-body {
+      border-top: 1px solid var(--vscode-widget-border);
+      padding: 10px 12px 12px;
+    }
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 0;
     }
     .quick-actions {
       display: flex;
@@ -699,7 +870,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       border: 1px solid var(--vscode-dropdown-border);
       font: inherit;
     }
+    .conversation {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      min-height: 260px;
+      resize: vertical;
+      overflow: auto;
+      border-top: 1px solid var(--vscode-sideBarSectionHeader-border);
+      border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border);
+      background: color-mix(in srgb, var(--vscode-editor-background) 30%, var(--vscode-sideBar-background));
+    }
+    .conversation-header {
+      padding: 8px 14px;
+      font-size: 11px;
+      opacity: 0.72;
+      border-bottom: 1px solid color-mix(in srgb, var(--vscode-sideBarSectionHeader-border) 70%, transparent);
+    }
     .messages {
+      flex: 1 1 auto;
       overflow-y: auto;
       padding: 14px;
       display: flex;
@@ -707,7 +896,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       gap: 10px;
     }
     .msg {
-      max-width: 92%;
+      max-width: 100%;
       padding: 10px 12px;
       border-radius: 12px;
       white-space: pre-wrap;
@@ -735,6 +924,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
     .msg.user {
       align-self: flex-end;
+      max-width: 88%;
       background: var(--vscode-button-background);
       color: var(--vscode-button-foreground);
     }
@@ -786,24 +976,54 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 <body>
   <div class="shell">
     <div class="header">
-      <div class="title">Owlvex Assistant</div>
-      <div class="meta" id="meta">Connecting...</div>
-      <div class="meta" id="workspace">Workspace: loading...</div>
-      <div class="meta" id="editor">Inspecting editor...</div>
-      <div class="meta" id="scanProfile">Loading scan profile...</div>
-      <div class="meta" id="lastScan">Last scan target: none</div>
-      <div class="controls">
-        <select id="provider"></select>
-        <select id="model"></select>
+      <div class="header-top">
+        <div class="title">Owlvex Assistant</div>
       </div>
-      <div class="quick-actions">
-        <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
+      <div class="meta" id="meta">Connecting...</div>
+      <div class="summary-grid">
+        <div class="summary-card">
+          <div class="summary-label">Workspace</div>
+          <div class="summary-value" id="workspace">loading...</div>
+        </div>
+        <div class="summary-card">
+          <div class="summary-label">Scan Profile</div>
+          <div class="summary-value" id="scanProfile">Loading scan profile...</div>
+        </div>
+      </div>
+      <div class="meta compact" id="lastScan">Last scan target: none</div>
+      <div class="primary-actions">
         <button class="chip" data-action="scanFile">Scan Current File</button>
         <button class="chip" data-action="scanFolder">Scan Folder</button>
         <button class="chip" data-action="scanReport">Create Report</button>
       </div>
+      <details class="settings-panel" id="settingsPanel">
+        <summary>
+          <span class="settings-title">
+            <span>Configuration</span>
+            <span class="settings-badge" id="providerStatus">Provider status: checking...</span>
+          </span>
+          <span class="settings-chevron">v</span>
+        </summary>
+        <div class="settings-body">
+          <div class="meta" id="workspaceDetail">Workspace: loading...</div>
+          <div class="meta" id="editor">Inspecting editor...</div>
+          <div class="meta" id="providerHint">LLM setup hint: loading...</div>
+          <div class="controls">
+            <select id="provider"></select>
+            <select id="model"></select>
+          </div>
+          <div class="quick-actions">
+            <button class="chip" data-action="setupAI">Configure LLM</button>
+            <button class="chip" data-action="testAI">Test Connection</button>
+            <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
+          </div>
+        </div>
+      </details>
     </div>
-    <div class="messages" id="messages"></div>
+    <div class="conversation" id="conversation">
+      <div class="conversation-header">Conversation. Drag this section edge to resize.</div>
+      <div class="messages" id="messages"></div>
+    </div>
     <div class="composer">
       <textarea id="prompt" placeholder="Ask Owlvex about this repo, a vulnerability, or what to scan next."></textarea>
       <div class="actions">
@@ -818,25 +1038,45 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const metaEl = document.getElementById('meta');
     const promptEl = document.getElementById('prompt');
     const workspaceEl = document.getElementById('workspace');
+    const workspaceDetailEl = document.getElementById('workspaceDetail');
     const editorEl = document.getElementById('editor');
     const scanProfileEl = document.getElementById('scanProfile');
+    const providerStatusEl = document.getElementById('providerStatus');
+    const providerHintEl = document.getElementById('providerHint');
     const lastScanEl = document.getElementById('lastScan');
     const providerEl = document.getElementById('provider');
     const modelEl = document.getElementById('model');
+    const settingsPanelEl = document.getElementById('settingsPanel');
 
     function render(state) {
       metaEl.textContent = 'Provider: ' + state.provider + ' | Model: ' + state.model;
-      workspaceEl.textContent = 'Workspace: ' + (state.workspaceSummary || 'No workspace folder open');
+      workspaceEl.textContent = state.workspaceSummary || 'No workspace folder open';
+      workspaceDetailEl.textContent = 'Workspace: ' + (state.workspaceSummary || 'No workspace folder open');
       editorEl.textContent = state.editorSummary || 'Active editor: none';
-      scanProfileEl.textContent = 'Frameworks: ' + state.frameworksLabel + ' | Threshold: ' + state.severityThreshold;
+      scanProfileEl.textContent = state.frameworksLabel + ' | ' + state.severityThreshold;
+      providerStatusEl.textContent = state.providerStatus || 'Provider status: unknown';
+      providerHintEl.textContent = state.providerHint || '';
       lastScanEl.textContent = 'Last scan target: ' + (state.lastScanTarget || 'No scan run yet');
+      if (settingsPanelEl && !state.providers.length) {
+        settingsPanelEl.open = true;
+      }
       providerEl.innerHTML = '';
-      for (const provider of state.providers) {
+      if (!state.providers.length) {
         const option = document.createElement('option');
-        option.value = provider.id;
-        option.textContent = provider.name;
-        option.selected = provider.id === state.providerId;
+        option.value = '';
+        option.textContent = 'No configured providers';
+        option.selected = true;
         providerEl.appendChild(option);
+        providerEl.disabled = true;
+      } else {
+        providerEl.disabled = false;
+        for (const provider of state.providers) {
+          const option = document.createElement('option');
+          option.value = provider.id;
+          option.textContent = provider.name;
+          option.selected = provider.id === state.providerId;
+          providerEl.appendChild(option);
+        }
       }
 
       modelEl.innerHTML = '';
@@ -847,6 +1087,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         option.selected = model === state.model;
         modelEl.appendChild(option);
       }
+      modelEl.disabled = !state.providers.length;
 
       messagesEl.innerHTML = '';
       for (const message of state.messages) {

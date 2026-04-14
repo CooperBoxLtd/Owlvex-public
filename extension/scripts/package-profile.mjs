@@ -52,6 +52,7 @@ const commandIdMap = {
   "owlvex.openPromptEditor": `${profile.commandPrefix}.openPromptEditor`,
   "owlvex.switchModel": `${profile.commandPrefix}.switchModel`,
   "owlvex.setupAI": `${profile.commandPrefix}.setupAI`,
+  "owlvex.testAIConnection": `${profile.commandPrefix}.testAIConnection`,
   "owlvex.enterLicence": `${profile.commandPrefix}.enterLicence`,
   "owlvex.compareScans": `${profile.commandPrefix}.compareScans`,
 };
@@ -98,6 +99,7 @@ const generatedProfileSource = `export const PROFILE = ${JSON.stringify({
     openPromptEditor: `${profile.commandPrefix}.openPromptEditor`,
     switchModel: `${profile.commandPrefix}.switchModel`,
     setupAI: `${profile.commandPrefix}.setupAI`,
+    testAI: `${profile.commandPrefix}.testAIConnection`,
     enterLicence: `${profile.commandPrefix}.enterLicence`,
     compareScans: `${profile.commandPrefix}.compareScans`,
     revealLine: `${profile.commandPrefix}.revealLine`,

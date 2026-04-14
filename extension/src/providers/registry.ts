@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { PROFILE } from '../profile';
+import { getSecretStorage } from '../secrets';
 
 export interface CompletionRequest {
     systemPrompt: string;
@@ -23,6 +24,38 @@ export interface AIProvider {
     testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }>;
 }
 
+export function getProviderApiKeySecretName(providerId: string): string {
+    const secretId = providerId === 'azure-foundry' ? 'foundry' : providerId;
+    return `${PROFILE.secretPrefix}.${secretId}.apiKey`;
+}
+
+async function readProviderApiKey(
+    secrets: { get(key: string): Thenable<string | undefined> | Promise<string | undefined> | string | undefined } | undefined,
+    providerId: string,
+): Promise<string | undefined> {
+    if (!secrets) return undefined;
+
+    const primary = await secrets.get(getProviderApiKeySecretName(providerId));
+    if (primary) return primary;
+
+    // Legacy fallback for Azure Foundry keys stored before the secret-name fix.
+    if (providerId === 'azure-foundry') {
+        return await secrets.get(`${PROFILE.secretPrefix}.azure-foundry.apiKey`);
+    }
+
+    return undefined;
+}
+
+function getProviderSecretStorage(): { get(key: string): Thenable<string | undefined> | Promise<string | undefined> | string | undefined } | undefined {
+    const initializedSecrets = getSecretStorage();
+    if (initializedSecrets) {
+        return initializedSecrets;
+    }
+
+    const ext = vscode.extensions.getExtension(PROFILE.extensionId);
+    return ext?.exports?.secrets;
+}
+
 function getPreferredConfigurationTarget(): vscode.ConfigurationTarget {
     return vscode.workspace.workspaceFolders?.length
         ? vscode.ConfigurationTarget.Workspace
@@ -42,6 +75,7 @@ const ANTHROPIC_MODELS     = ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-ha
 const MISTRAL_FALLBACK     = ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest'];
 const GEMINI_FALLBACK      = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
 const GROQ_FALLBACK        = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
+const AZURE_CHAT_API_VERSION = '2024-10-21';
 
 // ----------------------------------------------------------------
 // OpenAI Provider (also used as base for compatible endpoints)
@@ -49,11 +83,15 @@ const GROQ_FALLBACK        = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant',
 class OpenAIProvider implements AIProvider {
     id = 'openai';
     name = 'OpenAI';
-    selectedModel = 'gpt-4o';
+    get selectedModel(): string {
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('openai.model', 'gpt-4o');
+    }
+    set selectedModel(value: string) {
+        void persistProviderSetting('openai.model', value);
+    }
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
-        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.openai.apiKey`);
+        return readProviderApiKey(getProviderSecretStorage(), this.id);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -63,19 +101,19 @@ class OpenAIProvider implements AIProvider {
     async listModels(): Promise<string[]> {
         try {
             const key = await this.getApiKey();
-            if (!key) return OPENAI_FALLBACK_MODELS;
+            if (!key) return [this.selectedModel];
             const res = await fetch('https://api.openai.com/v1/models', {
                 headers: { 'Authorization': `Bearer ${key}` },
             });
-            if (!res.ok) return OPENAI_FALLBACK_MODELS;
+            if (!res.ok) return [this.selectedModel];
             const data = await res.json() as any;
             const chat = (data.data as any[])
                 .map((m: any) => m.id as string)
                 .filter(id => OPENAI_CHAT_PREFIXES.some(p => id.startsWith(p)))
                 .sort();
-            return chat.length ? chat : OPENAI_FALLBACK_MODELS;
+            return chat.length ? chat : [this.selectedModel];
         } catch {
-            return OPENAI_FALLBACK_MODELS;
+            return [this.selectedModel];
         }
     }
 
@@ -124,11 +162,15 @@ class OpenAIProvider implements AIProvider {
 class AnthropicProvider implements AIProvider {
     id = 'anthropic';
     name = 'Anthropic';
-    selectedModel = 'claude-opus-4-6';
+    get selectedModel(): string {
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('anthropic.model', 'claude-opus-4-6');
+    }
+    set selectedModel(value: string) {
+        void persistProviderSetting('anthropic.model', value);
+    }
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
-        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.anthropic.apiKey`);
+        return readProviderApiKey(getProviderSecretStorage(), this.id);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -136,8 +178,7 @@ class AnthropicProvider implements AIProvider {
     }
 
     async listModels(): Promise<string[]> {
-        // Anthropic has no public model-list endpoint — return curated list.
-        return ANTHROPIC_MODELS;
+        return [this.selectedModel];
     }
 
     async complete(req: CompletionRequest): Promise<CompletionResponse> {
@@ -198,11 +239,9 @@ class AzureFoundryProvider implements AIProvider {
     }
 
     private async getCredentials(): Promise<{ endpoint: string; apiKey: string } | null> {
-        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
-        const secrets = ext?.exports?.secrets;
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const endpoint = config.get<string>('foundry.endpoint', '').trim().replace(/\/+$/, '');
-        const apiKey = await secrets?.get(`${PROFILE.secretPrefix}.foundry.apiKey`);
+        const apiKey = await readProviderApiKey(getProviderSecretStorage(), this.id);
         if (!endpoint || !apiKey) return null;
         return { endpoint, apiKey };
     }
@@ -212,21 +251,7 @@ class AzureFoundryProvider implements AIProvider {
     }
 
     async listModels(): Promise<string[]> {
-        // Azure Foundry lists only the deployments the customer has provisioned —
-        // fetch live, fall back to common deployment names if unavailable.
-        const AZURE_FALLBACK = ['gpt-4o', 'gpt-4o-mini', 'o1', 'o3', 'phi-4', 'llama-3.3-70b', 'mistral-large'];
-        try {
-            const creds = await this.getCredentials();
-            if (!creds) return AZURE_FALLBACK;
-            const url = `${creds.endpoint}/openai/deployments?api-version=2024-02-01`;
-            const res = await fetch(url, { headers: { 'api-key': creds.apiKey } });
-            if (!res.ok) return AZURE_FALLBACK;
-            const data = await res.json() as any;
-            const names = (data.value as any[]).map((d: any) => d.id as string).sort();
-            return names.length ? names : AZURE_FALLBACK;
-        } catch {
-            return AZURE_FALLBACK;
-        }
+        return [this.selectedModel];
     }
 
     async complete(req: CompletionRequest): Promise<CompletionResponse> {
@@ -234,12 +259,12 @@ class AzureFoundryProvider implements AIProvider {
         if (!creds) throw new Error('Azure Foundry not configured. Set owlvex.foundry.endpoint and run "Owlvex: Setup AI Connection".');
 
         const deployment = this.selectedModel.trim();
-        const url = `${creds.endpoint}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=2024-02-01`;
+        const url = `${creds.endpoint}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${AZURE_CHAT_API_VERSION}`;
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'api-key': creds.apiKey },
             body: JSON.stringify({
-                max_tokens: 4096,
+                max_completion_tokens: 4096,
                 temperature: req.temperature,
                 messages: [
                     { role: 'system', content: req.systemPrompt },
@@ -259,31 +284,19 @@ class AzureFoundryProvider implements AIProvider {
     async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
-            const creds = await this.getCredentials();
-            if (!creds) return { success: false, latencyMs: 0, message: 'Azure Foundry endpoint or API key is missing.' };
-            const url = `${creds.endpoint}/openai/deployments?api-version=2024-02-01`;
-            const res = await fetch(url, { headers: { 'api-key': creds.apiKey } });
-            if (!res.ok) {
-                return {
-                    success: false,
-                    latencyMs: Date.now() - start,
-                    message: `Azure Foundry returned HTTP ${res.status} when listing deployments.`,
-                };
-            }
-
-            const data = await res.json() as any;
-            const deployments = ((data.value as any[]) ?? []).map((item: any) => item.id as string);
-            if (!deployments.includes(this.selectedModel)) {
-                return {
-                    success: false,
-                    latencyMs: Date.now() - start,
-                    message: `Azure Foundry deployment "${this.selectedModel}" was not found at the configured endpoint.`,
-                };
-            }
-
+            await this.complete({
+                systemPrompt: 'Return OK.',
+                userMessage: 'ping',
+                model: this.selectedModel,
+                temperature: 0,
+            });
             return { success: true, latencyMs: Date.now() - start };
-        } catch {
-            return { success: false, latencyMs: Date.now() - start, message: 'Azure Foundry connection failed.' };
+        } catch (error: any) {
+            return {
+                success: false,
+                latencyMs: Date.now() - start,
+                message: error?.message || 'Azure Foundry connection failed.',
+            };
         }
     }
 }
@@ -316,9 +329,11 @@ class OllamaProvider implements AIProvider {
     async listModels(): Promise<string[]> {
         try {
             const res = await fetch(`${this.host}/api/tags`);
+            if (!res.ok) return [this.selectedModel];
             const data = await res.json() as any;
-            return data.models?.map((m: any) => m.name) ?? [];
-        } catch { return ['llama3.2', 'codellama', 'mistral']; }
+            const models = data.models?.map((m: any) => m.name) ?? [];
+            return models.length ? models : [this.selectedModel];
+        } catch { return [this.selectedModel]; }
     }
 
     async complete(req: CompletionRequest): Promise<CompletionResponse> {
@@ -357,11 +372,15 @@ class OllamaProvider implements AIProvider {
 class MistralProvider implements AIProvider {
     id = 'mistral';
     name = 'Mistral';
-    selectedModel = 'mistral-large-latest';
+    get selectedModel(): string {
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('mistral.model', 'mistral-large-latest');
+    }
+    set selectedModel(value: string) {
+        void persistProviderSetting('mistral.model', value);
+    }
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
-        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.mistral.apiKey`);
+        return readProviderApiKey(getProviderSecretStorage(), this.id);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -371,16 +390,16 @@ class MistralProvider implements AIProvider {
     async listModels(): Promise<string[]> {
         try {
             const key = await this.getApiKey();
-            if (!key) return MISTRAL_FALLBACK;
+            if (!key) return [this.selectedModel];
             const res = await fetch('https://api.mistral.ai/v1/models', {
                 headers: { 'Authorization': `Bearer ${key}` },
             });
-            if (!res.ok) return MISTRAL_FALLBACK;
+            if (!res.ok) return [this.selectedModel];
             const data = await res.json() as any;
             const ids = (data.data as any[]).map((m: any) => m.id as string).sort();
-            return ids.length ? ids : MISTRAL_FALLBACK;
+            return ids.length ? ids : [this.selectedModel];
         } catch {
-            return MISTRAL_FALLBACK;
+            return [this.selectedModel];
         }
     }
 
@@ -429,11 +448,15 @@ class MistralProvider implements AIProvider {
 class GeminiProvider implements AIProvider {
     id = 'gemini';
     name = 'Google Gemini';
-    selectedModel = 'gemini-1.5-pro';
+    get selectedModel(): string {
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('gemini.model', 'gemini-1.5-pro');
+    }
+    set selectedModel(value: string) {
+        void persistProviderSetting('gemini.model', value);
+    }
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
-        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.gemini.apiKey`);
+        return readProviderApiKey(getProviderSecretStorage(), this.id);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -443,17 +466,17 @@ class GeminiProvider implements AIProvider {
     async listModels(): Promise<string[]> {
         try {
             const key = await this.getApiKey();
-            if (!key) return GEMINI_FALLBACK;
+            if (!key) return [this.selectedModel];
             const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
-            if (!res.ok) return GEMINI_FALLBACK;
+            if (!res.ok) return [this.selectedModel];
             const data = await res.json() as any;
             const ids = (data.models as any[])
                 .filter((m: any) => (m.supportedGenerationMethods as string[])?.includes('generateContent'))
                 .map((m: any) => (m.name as string).replace('models/', ''))
                 .sort();
-            return ids.length ? ids : GEMINI_FALLBACK;
+            return ids.length ? ids : [this.selectedModel];
         } catch {
-            return GEMINI_FALLBACK;
+            return [this.selectedModel];
         }
     }
 
@@ -498,11 +521,15 @@ class GeminiProvider implements AIProvider {
 class GroqProvider implements AIProvider {
     id = 'groq';
     name = 'Groq';
-    selectedModel = 'llama-3.3-70b-versatile';
+    get selectedModel(): string {
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('groq.model', 'llama-3.3-70b-versatile');
+    }
+    set selectedModel(value: string) {
+        void persistProviderSetting('groq.model', value);
+    }
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
-        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.groq.apiKey`);
+        return readProviderApiKey(getProviderSecretStorage(), this.id);
     }
 
     async isConfigured(): Promise<boolean> {
@@ -512,16 +539,16 @@ class GroqProvider implements AIProvider {
     async listModels(): Promise<string[]> {
         try {
             const key = await this.getApiKey();
-            if (!key) return GROQ_FALLBACK;
+            if (!key) return [this.selectedModel];
             const res = await fetch('https://api.groq.com/openai/v1/models', {
                 headers: { 'Authorization': `Bearer ${key}` },
             });
-            if (!res.ok) return GROQ_FALLBACK;
+            if (!res.ok) return [this.selectedModel];
             const data = await res.json() as any;
             const ids = (data.data as any[]).map((m: any) => m.id as string).sort();
-            return ids.length ? ids : GROQ_FALLBACK;
+            return ids.length ? ids : [this.selectedModel];
         } catch {
-            return GROQ_FALLBACK;
+            return [this.selectedModel];
         }
     }
 
@@ -583,8 +610,7 @@ class CustomProvider implements AIProvider {
     }
 
     private async getApiKey(): Promise<string | undefined> {
-        const ext = vscode.extensions.getExtension(PROFILE.extensionId);
-        return ext?.exports?.secrets?.get(`${PROFILE.secretPrefix}.custom.apiKey`);
+        return readProviderApiKey(getProviderSecretStorage(), this.id);
     }
 
     async isConfigured(): Promise<boolean> {

@@ -50,6 +50,10 @@
         "title": "Owlvex: Setup AI Connection"
       },
       {
+        "command": "owlvex.testAIConnection",
+        "title": "Owlvex: Test AI Connection"
+      },
+      {
         "command": "owlvex.enterLicence",
         "title": "Owlvex: Enter Licence Key"
       },
@@ -91,6 +95,16 @@
           "default": "gpt-4o",
           "description": "Azure AI Foundry deployment name to use for chat completions"
         },
+        "owlvex.openai.model": {
+          "type": "string",
+          "default": "gpt-4o",
+          "description": "Default OpenAI model"
+        },
+        "owlvex.anthropic.model": {
+          "type": "string",
+          "default": "claude-opus-4-6",
+          "description": "Default Anthropic model"
+        },
         "owlvex.ollama.host": {
           "type": "string",
           "default": "http://localhost:11434",
@@ -110,6 +124,21 @@
           "type": "string",
           "default": "",
           "description": "Model name for custom endpoint"
+        },
+        "owlvex.mistral.model": {
+          "type": "string",
+          "default": "mistral-large-latest",
+          "description": "Default Mistral model"
+        },
+        "owlvex.gemini.model": {
+          "type": "string",
+          "default": "gemini-1.5-pro",
+          "description": "Default Gemini model"
+        },
+        "owlvex.groq.model": {
+          "type": "string",
+          "default": "llama-3.3-70b-versatile",
+          "description": "Default Groq model"
         },
         "owlvex.frameworks": {
           "type": "array",

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { LicenceManager } from './licence/licenceManager';
-import { ProviderRegistry, persistProviderSetting } from './providers/registry';
+import { getProviderApiKeySecretName, ProviderRegistry, persistProviderSetting } from './providers/registry';
 import { ScanEngine, ScanResult } from './scanner/scanEngine';
 import { DiagnosticsProvider } from './diagnostics/diagnosticsProvider';
 import { StatusBar } from './ui/statusBar';
@@ -82,6 +82,36 @@ function getFrameworkConfigurationTarget(): vscode.ConfigurationTarget {
 
 function normalizeServiceUrl(value: string): string {
     return value.trim().replace(/\/+$/, '');
+}
+
+function isLikelyAzureFoundryEndpoint(value: string): boolean {
+    const normalized = normalizeServiceUrl(value);
+    return /^https:\/\/[A-Za-z0-9-]+\.(openai\.azure\.com|services\.ai\.azure\.com)$/i.test(normalized);
+}
+
+function getProviderSetupSummary(providerId: string): string {
+    switch (providerId) {
+        case 'azure-foundry':
+            return 'Paste the Azure endpoint, the deployment name you created in Azure AI Foundry, and the API key from Keys and Endpoint.';
+        case 'custom':
+            return 'Provide the base URL, the exact model name, and an API key if your endpoint requires one.';
+        case 'ollama':
+            return 'Provide the Ollama host URL and the local model name installed on that host.';
+        case 'anthropic':
+            return 'Provide the API key and the exact Claude model name you want Owlvex to use.';
+        default:
+            return 'Provide the API key and, when applicable, the exact model name you want Owlvex to use.';
+    }
+}
+
+async function testCurrentProviderConnection(registry: ProviderRegistry): Promise<{ success: boolean; latencyMs: number; message?: string; providerName: string; model: string }> {
+    const provider = registry.getActive();
+    const result = await provider.testConnection();
+    return {
+        ...result,
+        providerName: provider.name,
+        model: provider.selectedModel,
+    };
 }
 
 async function promptForSetting(
@@ -569,18 +599,69 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.setupAI, async () => {
+            const currentProvider = registry.getActive();
+            const providerChoice = await vscode.window.showQuickPick(
+                registry.allProviders().map(item => ({
+                    label: item.name,
+                    description: item.id === currentProvider.id ? 'Current provider' : '',
+                    providerId: item.id,
+                })),
+                {
+                    placeHolder: 'Choose the LLM provider to configure',
+                    ignoreFocusOut: true,
+                },
+            );
+            if (!providerChoice) {
+                return;
+            }
+
+            await registry.setActiveProvider(providerChoice.providerId);
             const provider = registry.getActive();
             if (provider.id === 'ollama') {
-                vscode.window.showInformationMessage('Ollama uses no API key - ensure it is reachable from the configured host.');
+                vscode.window.showInformationMessage(getProviderSetupSummary(provider.id));
+                const host = await promptForSetting(
+                    'ollama.host',
+                    'Enter the Ollama host URL',
+                    'http://localhost:11434',
+                    (value) => value.trim() ? undefined : 'The Ollama host is required.',
+                );
+                if (!host) {
+                    return;
+                }
+
+                const model = await vscode.window.showInputBox({
+                    prompt: 'Enter the Ollama model name',
+                    placeHolder: 'For example: qwen2.5:7b',
+                    value: provider.selectedModel,
+                    ignoreFocusOut: true,
+                    validateInput: (value) => value.trim() ? undefined : 'The Ollama model name is required.',
+                });
+                if (!model) {
+                    return;
+                }
+
+                provider.selectedModel = model.trim();
+                const { success, latencyMs } = await provider.testConnection();
+                if (success) {
+                    vscode.window.showInformationMessage(`Ollama connected (${latencyMs}ms) using ${provider.selectedModel} at ${host}`);
+                } else {
+                    vscode.window.showErrorMessage('Ollama connection failed. Check the host URL, confirm Ollama is running, and verify the model is installed.');
+                }
                 return;
             }
 
             if (provider.id === 'azure-foundry') {
+                vscode.window.showInformationMessage(getProviderSetupSummary(provider.id));
                 const endpoint = await promptForSetting(
                     'foundry.endpoint',
                     'Enter the Azure AI Foundry endpoint for this environment',
                     'https://your-resource.openai.azure.com',
-                    (value) => value.trim() ? undefined : 'The Foundry endpoint is required.',
+                    (value) => {
+                        if (!value.trim()) return 'The Foundry endpoint is required.';
+                        return isLikelyAzureFoundryEndpoint(value)
+                            ? undefined
+                            : 'Use the Azure endpoint from Keys and Endpoint, for example https://your-resource.openai.azure.com';
+                    },
                 );
                 if (!endpoint) {
                     return;
@@ -588,7 +669,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                 const deployment = await vscode.window.showInputBox({
                     prompt: 'Enter the Azure AI Foundry deployment name',
-                    placeHolder: 'For example: owlvex-gpt4o',
+                    placeHolder: 'Use the deployment name you created in Azure AI Foundry, for example: owlvex-gpt4o',
                     value: provider.selectedModel,
                     ignoreFocusOut: true,
                     validateInput: (value) => value.trim() ? undefined : 'The deployment name is required.',
@@ -600,7 +681,40 @@ export function activate(context: vscode.ExtensionContext) {
                 await persistProviderSetting('foundry.model', deployment.trim());
             }
 
+            if (provider.id === 'anthropic') {
+                vscode.window.showInformationMessage(getProviderSetupSummary(provider.id));
+                const model = await vscode.window.showInputBox({
+                    prompt: 'Enter the Anthropic model name',
+                    placeHolder: 'For example: claude-sonnet-4-6',
+                    value: provider.selectedModel,
+                    ignoreFocusOut: true,
+                    validateInput: (value) => value.trim() ? undefined : 'The model name is required.',
+                });
+                if (!model) {
+                    return;
+                }
+
+                provider.selectedModel = model.trim();
+            }
+
+            if (provider.id === 'openai' || provider.id === 'gemini' || provider.id === 'mistral' || provider.id === 'groq') {
+                vscode.window.showInformationMessage(getProviderSetupSummary(provider.id));
+                const model = await vscode.window.showInputBox({
+                    prompt: `Enter the ${provider.name} model name`,
+                    placeHolder: `For example: ${provider.selectedModel}`,
+                    value: provider.selectedModel,
+                    ignoreFocusOut: true,
+                    validateInput: (value) => value.trim() ? undefined : 'The model name is required.',
+                });
+                if (!model) {
+                    return;
+                }
+
+                provider.selectedModel = model.trim();
+            }
+
             if (provider.id === 'custom') {
+                vscode.window.showInformationMessage(getProviderSetupSummary(provider.id));
                 const baseUrl = await promptForSetting(
                     'custom.baseUrl',
                     'Enter the base URL for your OpenAI-compatible endpoint',
@@ -632,7 +746,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
             if (!key) return;
 
-            await context.secrets.store(`${PROFILE.secretPrefix}.${provider.id}.apiKey`, key);
+            await context.secrets.store(getProviderApiKeySecretName(provider.id), key);
             const { success, latencyMs, message } = await provider.testConnection();
             if (success) {
                 try {
@@ -652,6 +766,17 @@ export function activate(context: vscode.ExtensionContext) {
                         ? ' Check the base URL, model name, and API key.'
                         : ' Check your key.';
                 vscode.window.showErrorMessage(message?.trim() || `${provider.name} connection failed.${extraHint}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.testAI, async () => {
+            const { success, latencyMs, message, providerName, model } = await testCurrentProviderConnection(registry);
+            if (success) {
+                vscode.window.showInformationMessage(`${providerName} is reachable (${latencyMs}ms) using ${model}`);
+            } else {
+                vscode.window.showErrorMessage(message?.trim() || `${providerName} connection failed. ${getProviderSetupSummary(registry.getActive().id)}`);
             }
         })
     );
