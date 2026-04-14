@@ -52,6 +52,7 @@ interface ChatState {
 
 const CHAT_STATE_KEY = `${PROFILE.storagePrefix}.chat.messages`;
 const LAST_SCAN_TARGET_KEY = `${PROFILE.storagePrefix}.chat.lastScanTarget`;
+const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
 const MAX_PERSISTED_MESSAGES = 40;
 
 function summarizeIssueFamilies(findings: Array<{ canonicalFamilyLabel?: string; canonicalFamily?: string }>): string {
@@ -136,6 +137,35 @@ function buildScanSummaryLines(result: ScanResult): string[] {
             : 'No scan warnings were reported.',
         `Summary: ${result.summary || 'No summary returned.'}`,
     ];
+}
+
+function buildLatestReportPromptContext(storage: vscode.Memento): EditorContext | undefined {
+    const raw = storage.get<any>(LAST_REPORT_SNAPSHOT_KEY);
+    if (!raw?.results?.length) {
+        return undefined;
+    }
+
+    const results = Array.isArray(raw.results) ? raw.results : [];
+    const findings = results.flatMap((item: any) => item?.result?.findings ?? []);
+    const topFindings = findings
+        .slice()
+        .sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))
+        .slice(0, 3);
+
+    const summary = `Latest report: ${raw.targetLabel ?? 'unknown target'} with ${findings.length} finding(s) across ${results.length} file(s)`;
+    const details = [
+        `Latest report target: ${raw.targetLabel ?? 'unknown'}`,
+        `Latest report files scanned: ${results.length}`,
+        `Latest report findings: ${findings.length}`,
+        ...topFindings.map((finding: Finding, index: number) =>
+            `Finding ${index + 1}: ${finding.canonicalTitle || finding.title} at line ${finding.line} | severity ${finding.severity} | explanation ${finding.explanation} | fix ${finding.fix || 'none provided'}`
+        ),
+    ];
+
+    return {
+        summary,
+        promptContext: details.join('\n'),
+    };
 }
 
 function severityRank(severity: string): number {
@@ -259,17 +289,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 : 'No workspace folder is currently open.';
             const editorContext = this.buildEditorContext();
             const scanContext = this.buildScanContext();
+            const latestReportContext = buildLatestReportPromptContext(this.storage);
 
             const response = await provider.complete({
                 systemPrompt: [
                     'You are Owlvex Assistant, an in-editor AI teammate focused on security and repository-level guidance.',
                     'Be concise, practical, and specific.',
                     'These chat responses are advisory guidance unless the user explicitly triggers a scan action.',
+                    'When the user asks how to fix a finding, replace vulnerable code, or explain a scan result, explain the problem in plain language first and then show the safe replacement code.',
+                    'When relevant, explicitly say what the current code is doing wrong, what to stop doing, and what safe pattern should replace it.',
+                    'If the active file or latest scan already points to a concrete finding, ground the answer in that finding instead of answering generically.',
                     `Open workspace folders: ${workspaceSummary}`,
                     scanContext.summary,
                     editorContext.summary,
+                    latestReportContext?.summary ?? 'Latest report: none',
                 ].join('\n'),
-                userMessage: `${trimmed}\n\n${scanContext.promptContext}\n\n${editorContext.promptContext}`,
+                userMessage: [
+                    trimmed,
+                    scanContext.promptContext,
+                    editorContext.promptContext,
+                    latestReportContext?.promptContext ?? 'Latest report context: none',
+                ].join('\n\n'),
                 model: provider.selectedModel,
                 temperature: 0.2,
             });

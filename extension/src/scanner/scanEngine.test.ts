@@ -37,6 +37,7 @@ describe('ScanEngine._parseAIResponse', () => {
                 explanation: 'User input concatenated into SQL query.',
                 threat: 'Attacker can dump the database.',
                 fix: 'Use parameterised queries.',
+                plain_language_fix: 'Do not build the SQL by inserting user input into the query string. Keep the SQL fixed and pass the user value separately as a parameter.',
                 confidence: 0.95,
             },
         ],
@@ -53,6 +54,7 @@ describe('ScanEngine._parseAIResponse', () => {
         expect(result.findings[0].ruleCode).toBe('OWASP-A03');
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.sql_injection.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
+        expect(result.findings[0].plainLanguageFix).toBe('Do not build the SQL by inserting user input into the query string. Keep the SQL fixed and pass the user value separately as a parameter.');
         expect(result.findings[0].stride).toEqual(['Tampering', 'Information Disclosure']);
         expect(result.findings[0].likelihood).toBeUndefined();
         expect(result.positives).toHaveLength(1);
@@ -195,6 +197,19 @@ describe('ScanEngine._parseAIResponse', () => {
             'User input reaches a query sink.',
             'No validation is visible nearby.',
         ]);
+    });
+
+    it('accepts camelCase plainLanguageFix from the model as well', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                plain_language_fix: undefined,
+                plainLanguageFix: 'Keep the SQL static and send the value separately.',
+            }],
+        };
+        const result = engine.parse(JSON.stringify(payload));
+        expect(result.findings[0].plainLanguageFix).toBe('Keep the SQL static and send the value separately.');
     });
 });
 

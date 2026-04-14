@@ -353,102 +353,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         '',
-        ...buildAttackSurfaceAssessment(
-            totalFindings,
-            deterministicItems.length,
-            aggregateMetrics,
-            topFamilies,
-            snapshot.results.length,
-            snapshot.results.filter(item => item.result.findings.length > 0).length,
-        ),
-        ...buildDeterministicPanel(deterministicItems),
-        '## Risk Scoring',
-        '',
-        '- Score meaning: `10` is strongest, `0` is weakest.',
-        '- Source of truth: final score is recalculated from finding impact and likelihood, not taken verbatim from the AI model output.',
-        '- Impact source: canonical severity is treated as impact: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`.',
-        '- Likelihood scale: `LOW`, `MEDIUM`, `HIGH`. Missing likelihood defaults to `MEDIUM`.',
-        '- Score calculation: `10 - sum(impact penalty x likelihood multiplier)`, floored at `0`.',
-        '- Impact penalties: `CRITICAL=4`, `HIGH=2.5`, `MEDIUM=1.5`, `LOW=0.5`.',
-        '- Likelihood multipliers: `LOW=0.75`, `MEDIUM=1.0`, `HIGH=1.5`.',
-        '- Contextual risk matrix: `LOW impact -> 1/2/4`, `MEDIUM -> 3/5/7`, `HIGH -> 5/8/9`, `CRITICAL -> 8/9/10` for `LOW/MEDIUM/HIGH` likelihood.',
-        '- Frameworks requested for this scan: `OWASP`, `STRIDE`.',
-        '',
-        '## Intelligence Source',
-        '',
-        '- Fresh Packs: backend-served manifest and verified pack artifacts were fetched for this session.',
-        '- Cached Packs: previously verified pack artifacts were used because fresh retrieval was unavailable or skipped.',
-        '- Bundled Fallback: Owlvex used the shipped local catalog because no verified pack artifacts were available.',
-        '',
-        '## Severity Breakdown',
-        '',
-        `- Critical: ${aggregateMetrics.critical}`,
-        `- High: ${aggregateMetrics.high}`,
-        `- Medium: ${aggregateMetrics.medium}`,
-        `- Low: ${aggregateMetrics.low}`,
-        '',
-        '## Likelihood Breakdown',
-        '',
-        `- High: ${allFindingItems.filter(item => getFindingLikelihood(item.finding) === 'HIGH').length}`,
-        `- Medium: ${allFindingItems.filter(item => getFindingLikelihood(item.finding) === 'MEDIUM').length}`,
-        `- Low: ${allFindingItems.filter(item => getFindingLikelihood(item.finding) === 'LOW').length}`,
-        '',
-        '## Framework Coverage',
-        '',
     ];
-
-    if (findingsByFramework.size) {
-        for (const [framework, items] of findingsByFramework.entries()) {
-            lines.push(`- ${framework}: ${items.length} finding(s)`);
-        }
-    } else {
-        lines.push('- No framework-mapped findings were returned.');
-    }
-
-    lines.push('', '## Issue Family Coverage', '');
-    if (findingsByFamily.size) {
-        for (const [family, items] of [...findingsByFamily.entries()].sort((a, b) => b[1].length - a[1].length)) {
-            lines.push(`- ${family}: ${items.length} finding(s)`);
-        }
-    } else {
-        lines.push('- No canonical issue families were resolved.');
-    }
-
-    lines.push(
-        '',
-        '## Riskiest Files',
-        '',
-        '| File | Score | Findings | Summary |',
-        '| --- | ---: | ---: | --- |',
-        ...(
-            riskyFiles.length
-                ? riskyFiles.map(item => {
-                    const relative = path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath);
-                    return `| ${escapeMarkdown(relative)} | ${item.result.score.toFixed(1)} | ${item.result.findings.length} | ${escapeMarkdown(summarizeFileResult(item.result))} |`;
-                })
-                : ['| No files were scanned successfully | - | - | - |']
-        ),
-        '',
-        '## Canonical Findings',
-        '',
-    );
-
-    if (findingsByCanonicalIssue.size) {
-        lines.push('| Issue | Impact | Likelihood | Risk | Occurrences | Files |');
-        lines.push('| --- | --- | --- | ---: | ---: | ---: |');
-        for (const [, items] of [...findingsByCanonicalIssue.entries()]
-            .sort((a, b) => riskRank(b[1][0].finding) - riskRank(a[1][0].finding))
-            .slice(0, 25)) {
-            const sample = items[0].finding;
-            lines.push(
-                `| ${escapeMarkdown(sample.canonicalTitle || sample.title)} | ${sample.severity} | ${getFindingLikelihood(sample)} | ${sample.riskScore ?? 'n/a'} | ${items.length} | ${new Set(items.map(item => item.file)).size} |`,
-            );
-        }
-        lines.push('');
-    } else {
-        lines.push('No findings were returned.');
-        lines.push('');
-    }
 
     lines.push('## Findings By File', '');
 
@@ -526,21 +431,6 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         }
     } else {
         lines.push('No detailed findings were returned.');
-        lines.push('');
-    }
-
-    lines.push('## Framework Correlation View', '');
-    if (findingsByFramework.size) {
-        for (const [framework, items] of findingsByFramework.entries()) {
-            lines.push(`### ${framework}`);
-            lines.push('');
-            for (const item of items.sort((a, b) => riskRank(b.finding) - riskRank(a.finding))) {
-                lines.push(`- \`${item.finding.canonicalId || item.finding.ruleCode || item.finding.title}\` in \`${item.file}\` at L${item.finding.line}`);
-            }
-            lines.push('');
-        }
-    } else {
-        lines.push('No framework correlations were returned.');
         lines.push('');
     }
 

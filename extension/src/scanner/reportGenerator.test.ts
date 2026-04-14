@@ -27,6 +27,7 @@ describe('reportGenerator', () => {
                     threat: 'Attackers can read or modify database contents.',
                     fix: 'Use parameterized queries.',
                     confidence: 0.93,
+                    provenance: 'ai',
                     canonicalId: 'owlvex.issue.sql_injection.001',
                     canonicalTitle: 'Unsanitized SQL query construction',
                     canonicalFamily: 'family.injection_execution',
@@ -61,7 +62,7 @@ describe('reportGenerator', () => {
         };
     }
 
-    it('writes a compact report with canonical overview, per-file findings, and code snippets', async () => {
+    it('writes a compact report with per-file findings and code snippets', async () => {
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(
             Buffer.from([
                 'export async function findUser(db, username) {',
@@ -92,14 +93,6 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('# Owlvex Vulnerability Scan Report');
         expect(written).toContain('- Intelligence source coverage: Fresh Packs: 1');
-        expect(written).toContain('## Intelligence Source');
-        expect(written).toContain('## Framework Coverage');
-        expect(written).toContain('- OWASP: 1 finding(s)');
-        expect(written).toContain('## Issue Family Coverage');
-        expect(written).toContain('- Injection & Execution: 1 finding(s)');
-        expect(written).toContain('## Canonical Findings');
-        expect(written).toContain('| example.js | 4.2 | 1 | 1 finding(s), led by a high-impact/medium-likelihood Unsanitized SQL query construction (7/10 risk). Primary issue family: Injection & Execution. |');
-        expect(written).toContain('| Unsanitized SQL query construction | HIGH | MEDIUM | 7 | 1 | 1 |');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- Score: 4.2/10');
@@ -113,10 +106,12 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Why likely: Dynamic SQL uses user-controlled input directly.');
         expect(written).toContain('- Matched signals: CWE:CWE-89, sql injection');
         expect(written).toContain('- Sources: OWASP SQL Injection Prevention Cheat Sheet');
-        expect(written).toContain('## Framework Correlation View');
-        expect(written).toContain('- `owlvex.issue.sql_injection.001` in `example.js` at L3');
         expect(written).toContain('- Code involved in the reasoning:');
         expect(written).toContain("SELECT * FROM users WHERE username = '${username}'");
+        expect(written).not.toContain('## Intelligence Source');
+        expect(written).not.toContain('## Framework Coverage');
+        expect(written).not.toContain('## Canonical Findings');
+        expect(written).not.toContain('## Framework Correlation View');
     });
 
     it('handles snapshots with no findings and includes scan errors', async () => {
@@ -141,10 +136,8 @@ describe('reportGenerator', () => {
         await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
-        expect(written).toContain('- No framework-mapped findings were returned.');
-        expect(written).toContain('No findings were returned.');
-        expect(written).toContain('| clean.js | 9.5 | 0 | No findings detected. |');
         expect(written).toContain('## Findings By File');
+        expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Errors');
         expect(written).toContain('- clean.js: model timeout');
     });
@@ -196,8 +189,10 @@ describe('reportGenerator', () => {
         await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
-        expect(written).toContain('| degraded-clean.js | 10.0 | 0 | No findings detected. Scan completed with provider/backend warnings. |');
-        expect(written).not.toContain('| degraded-clean.js | 10.0 | 0 | No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results. |');
+        expect(written).toContain('- Scan warnings: 1');
+        expect(written).toContain('No detailed findings were returned.');
+        expect(written).toContain('## Scan Warnings');
+        expect(written).not.toContain('No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.');
     });
 
     it('normalizes string-based stride and matched signals without crashing', async () => {
@@ -296,4 +291,5 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Avoid: Manual quote escaping.');
         expect(written).toContain('## Findings By File');
     });
+
 });
