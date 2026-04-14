@@ -7,6 +7,20 @@ on:
     branches: ["**"]
 
 jobs:
+  grounded-data-gate:
+    name: Grounded data gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validate grounded data provenance and remediation packs
+        run: node tools/validate-grounded-data.mjs --strict
+
   extension-test:
     name: Extension tests
     runs-on: ubuntu-latest
@@ -35,6 +49,7 @@ jobs:
   owlvex-scan:
     name: Owlvex security gate
     runs-on: ubuntu-latest
+    needs: grounded-data-gate
 
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +78,7 @@ jobs:
   deterministic-gate:
     name: Deterministic benchmark gate
     runs-on: ubuntu-latest
+    needs: grounded-data-gate
 
     steps:
       - uses: actions/checkout@v4

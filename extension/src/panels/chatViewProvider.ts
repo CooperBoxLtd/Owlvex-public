@@ -3,6 +3,8 @@ import * as path from 'path';
 import { ProviderRegistry } from '../providers/registry';
 import { collectScannableFiles } from '../scanner/workspaceScanner';
 import { formatFrameworkSummary } from '../frameworks/catalog';
+import { resolveRemediationForFinding } from '../frameworks/remediationResolver';
+import type { Finding, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 
 type ChatRole = 'user' | 'assistant' | 'system';
@@ -62,6 +64,52 @@ function summarizeIssueFamilies(findings: Array<{ canonicalFamilyLabel?: string;
     }
 
     return `Issue families: ${labels.join(', ')}`;
+}
+
+export function buildGroundedRemediationHighlights(findings: Finding[], maxFindings = 2): string[] {
+    return findings
+        .slice()
+        .sort((left, right) => severityRank(right.severity) - severityRank(left.severity))
+        .slice(0, maxFindings)
+        .map(finding => {
+            const remediation = resolveRemediationForFinding(finding);
+            const frameworkNote = remediation.frameworkVariant
+                ? ` [${remediation.frameworkVariant.framework}] ${remediation.frameworkVariant.summary}`
+                : '';
+            return `${finding.title}: ${remediation.remediation}${frameworkNote}`;
+        });
+}
+
+function buildScanSummaryLines(result: ScanResult): string[] {
+    const remediationHighlights = buildGroundedRemediationHighlights(result.findings);
+    return [
+        `Score: ${result.score.toFixed(1)}/10`,
+        `Findings: ${result.findings.length}`,
+        summarizeIssueFamilies(result.findings),
+        `Model: ${result.model}`,
+        ...(remediationHighlights.length
+            ? remediationHighlights.map((line, index) => `Remediation ${index + 1}: ${line}`)
+            : []),
+        (result.warnings ?? []).length
+            ? `Warnings: ${(result.warnings ?? []).join(' | ')}`
+            : 'No scan warnings were reported.',
+        `Summary: ${result.summary || 'No summary returned.'}`,
+    ];
+}
+
+function severityRank(severity: string): number {
+    switch (severity) {
+        case 'CRITICAL':
+            return 4;
+        case 'HIGH':
+            return 3;
+        case 'MEDIUM':
+            return 2;
+        case 'LOW':
+            return 1;
+        default:
+            return 0;
+    }
 }
 
 export class ChatViewProvider implements vscode.WebviewViewProvider {
@@ -215,6 +263,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 response: [
                     `Folder scan completed for ${result.completed} file(s).`,
                     `Total findings: ${result.totalFindings}`,
+                    ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
+                        .map((line, index) => `Remediation ${index + 1}: ${line}`),
                     result.results.some((item: any) => item.result.warnings.length)
                         ? `Scan warnings: ${result.results.reduce((total: number, item: any) => total + item.result.warnings.length, 0)}`
                         : 'No scan warnings were reported.',
@@ -249,6 +299,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 `Vulnerability scan completed for ${result.summary.completed} file(s).`,
                 `Total findings: ${result.summary.totalFindings}`,
                 `Average score: ${result.averageScore.toFixed(1)}/10`,
+                ...buildGroundedRemediationHighlights(result.summary.results.flatMap((item: any) => item.result.findings))
+                    .map((line, index) => `Remediation ${index + 1}: ${line}`),
                 `Report: ${relativeReportPath}`,
                 result.summary.errors.length
                     ? `Scan errors: ${result.summary.errors.length}`
@@ -332,14 +384,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     content: result?.status === 'completed' && result.result
                         ? [
                             `Scan completed for the selected file.`,
-                            `Score: ${result.result.score.toFixed(1)}/10`,
-                            `Findings: ${result.result.findings.length}`,
-                            summarizeIssueFamilies(result.result.findings),
-                            `Model: ${result.result.model}`,
-                            (result.result.warnings ?? []).length
-                                ? `Warnings: ${(result.result.warnings ?? []).join(' | ')}`
-                                : 'No scan warnings were reported.',
-                            `Summary: ${result.result.summary || 'No summary returned.'}`,
+                            ...buildScanSummaryLines(result.result),
                         ].join('\n')
                         : 'File scan did not complete.',
                 };
@@ -360,6 +405,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             `Files scanned: ${result.completed}`,
                             `Total findings: ${result.totalFindings}`,
                             summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
+                            ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
+                                .map((line, index) => `Remediation ${index + 1}: ${line}`),
                             result.results.some((item: any) => (item.result.warnings ?? []).length)
                                 ? `Scan warnings: ${result.results.reduce((total: number, item: any) => total + (item.result.warnings ?? []).length, 0)}`
                                 : 'No scan warnings were reported.',
@@ -388,6 +435,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             `Total findings: ${result.summary.totalFindings}`,
                             `Average score: ${result.averageScore.toFixed(1)}/10`,
                             summarizeIssueFamilies(result.summary.results.flatMap((item: any) => item.result.findings)),
+                            ...buildGroundedRemediationHighlights(result.summary.results.flatMap((item: any) => item.result.findings))
+                                .map((line, index) => `Remediation ${index + 1}: ${line}`),
                             result.summary.results.some((item: any) => (item.result.warnings ?? []).length)
                                 ? `Scan warnings: ${result.summary.results.reduce((total: number, item: any) => total + (item.result.warnings ?? []).length, 0)}`
                                 : 'No scan warnings were reported.',
@@ -448,14 +497,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             handled: true,
             response: [
                 `File scan completed for ${relativePath}.`,
-                `Score: ${result.result.score.toFixed(1)}/10`,
-                `Findings: ${result.result.findings.length}`,
-                summarizeIssueFamilies(result.result.findings),
-                `Model: ${result.result.model}`,
-                (result.result.warnings ?? []).length
-                    ? `Warnings: ${(result.result.warnings ?? []).join(' | ')}`
-                    : 'No scan warnings were reported.',
-                `Summary: ${result.result.summary || 'No summary returned.'}`,
+                ...buildScanSummaryLines(result.result),
             ].join('\n'),
             kind: 'scan',
         };

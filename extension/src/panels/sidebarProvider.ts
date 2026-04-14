@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ScanResult, Finding } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 import { getRulePackModeLabel } from '../packs/packRuntime';
+import { resolveRemediationForFinding } from '../frameworks/remediationResolver';
 
 export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
     private _onDidChangeTreeData = new vscode.EventEmitter<FindingItem | undefined>();
@@ -63,17 +64,92 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
             return items;
         }
 
-        // Children: individual findings under a severity group
-        return (element.findings ?? []).map(f =>
-            new FindingItem(
-                `L${f.line} ${f.title}`,
-                f.explanation,
-                vscode.TreeItemCollapsibleState.None,
-                'finding',
-                f,
-            )
-        );
+        if (element.kind === 'severity') {
+            return (element.findings ?? []).map(f => {
+                const remediation = resolveRemediationForFinding(f);
+                const hasDetails = Boolean(
+                    remediation.frameworkVariant
+                    || remediation.validationSteps.length
+                    || remediation.unsafeAlternatives.length
+                    || remediation.refs.length
+                    || remediation.modelNote,
+                );
+
+                return new FindingItem(
+                    `L${f.line} ${f.title}`,
+                    remediation.remediation || f.explanation,
+                    hasDetails ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+                    'finding',
+                    f,
+                );
+            });
+        }
+
+        if (element.kind === 'finding' && element.finding) {
+            return buildFindingDetails(element.finding).map(detail =>
+                new FindingItem(
+                    detail.label,
+                    detail.tooltip,
+                    vscode.TreeItemCollapsibleState.None,
+                    'detail',
+                ),
+            );
+        }
+
+        return [];
     }
+}
+
+function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: string }> {
+    const remediation = resolveRemediationForFinding(finding);
+    const details: Array<{ label: string; tooltip: string }> = [
+        {
+            label: `Fix: ${remediation.remediation}`,
+            tooltip: remediation.remediation,
+        },
+    ];
+
+    if (remediation.frameworkVariant) {
+        details.push({
+            label: `Framework: ${remediation.frameworkVariant.framework} - ${remediation.frameworkVariant.summary}`,
+            tooltip: [
+                remediation.frameworkVariant.summary,
+                remediation.frameworkVariant.recommendedActions.length
+                    ? `Actions: ${remediation.frameworkVariant.recommendedActions.join(' | ')}`
+                    : '',
+            ].filter(Boolean).join('\n'),
+        });
+    }
+
+    if (remediation.validationSteps.length) {
+        details.push({
+            label: `Validate: ${remediation.validationSteps.join(' | ')}`,
+            tooltip: remediation.validationSteps.join('\n'),
+        });
+    }
+
+    if (remediation.unsafeAlternatives.length) {
+        details.push({
+            label: `Avoid: ${remediation.unsafeAlternatives.join(' | ')}`,
+            tooltip: remediation.unsafeAlternatives.join('\n'),
+        });
+    }
+
+    if (remediation.refs.length) {
+        details.push({
+            label: `Sources: ${remediation.refs.join(', ')}`,
+            tooltip: remediation.refs.join('\n'),
+        });
+    }
+
+    if (remediation.modelNote) {
+        details.push({
+            label: `Model note: ${remediation.modelNote}`,
+            tooltip: remediation.modelNote,
+        });
+    }
+
+    return details;
 }
 
 class FindingItem extends vscode.TreeItem {
@@ -81,7 +157,7 @@ class FindingItem extends vscode.TreeItem {
         label: string,
         tooltip: string,
         collapsible: vscode.TreeItemCollapsibleState,
-        public readonly kind: 'score' | 'severity' | 'finding',
+        public readonly kind: 'score' | 'severity' | 'finding' | 'detail',
         public readonly finding?: Finding,
         public readonly findings?: Finding[],
     ) {
@@ -114,6 +190,11 @@ class FindingItem extends vscode.TreeItem {
                 title: 'Go to finding',
                 arguments: [finding.line],
             };
+        }
+
+        if (kind === 'detail') {
+            this.iconPath = new vscode.ThemeIcon('note');
+            this.description = undefined;
         }
     }
 }

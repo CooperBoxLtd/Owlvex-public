@@ -35,7 +35,10 @@ jobs:
           cache: npm
           cache-dependency-path: extension/package-lock.json
 
-      - name: Extension — install and compile
+      - name: Grounded data gate
+        run: node tools/validate-grounded-data.mjs --strict
+
+      - name: Extension - install and compile
         run: npm ci && npm run compile
         working-directory: extension
 
