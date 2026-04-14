@@ -12,6 +12,7 @@ import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGene
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { PROFILE } from './profile';
 import { initializeSecretStorage } from './secrets';
+import { RulePackClient } from './packs/packClient';
 
 export let secrets: vscode.SecretStorage;
 
@@ -138,6 +139,7 @@ export function activate(context: vscode.ExtensionContext) {
     const licenceMgr = new LicenceManager(context.secrets);
     const registry = new ProviderRegistry();
     const scanEngine = new ScanEngine(licenceMgr, registry);
+    const rulePackClient = new RulePackClient(context.workspaceState);
     const diagnostics = new DiagnosticsProvider();
     const statusBar = new StatusBar();
     const sidebar = new SidebarProvider();
@@ -152,6 +154,20 @@ export function activate(context: vscode.ExtensionContext) {
 
     const persistScans = async () => {
         await context.workspaceState.update(SCAN_STORE_KEY, serializeScanStore());
+    };
+
+    const refreshRulePackManifest = async () => {
+        const licenceKey = await licenceMgr.getKey();
+        if (!licenceKey) {
+            return;
+        }
+
+        try {
+            await rulePackClient.syncManifest(apiUrl, licenceKey);
+        } catch {
+            // Pack refresh is opportunistic. Scanning still works with local logic and
+            // previously cached metadata when the control plane is unavailable.
+        }
     };
 
     const persistLastReportSnapshot = async (snapshot: ReportSnapshot) => {
@@ -244,6 +260,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     licenceMgr.validate(apiUrl).then(() => {
         statusBar.showIdle();
+        void refreshRulePackManifest();
     }).catch(() => {
         statusBar.showUnlicensed();
     });
@@ -265,6 +282,7 @@ export function activate(context: vscode.ExtensionContext) {
                     `${PROFILE.displayLabel} activated - ${info.plan} plan (${info.teamName})`
                 );
                 statusBar.showIdle();
+                void refreshRulePackManifest();
             } catch (error: any) {
                 vscode.window.showErrorMessage(`Licence validation failed: ${error.message}`);
                 statusBar.showUnlicensed();

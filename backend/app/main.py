@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.session import engine, check_db_connection
-from app.routers import health, licences, prompts, scans, billing, policies
+from app.routers import health, licences, prompts, scans, billing, policies, packs
 
 settings = get_settings()
 
@@ -83,3 +83,4 @@ app.include_router(prompts.router)
 app.include_router(scans.router)
 app.include_router(policies.router)
 app.include_router(billing.router)
+app.include_router(packs.router)

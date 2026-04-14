@@ -19,6 +19,82 @@ async def test_health_returns_ok(client):
 
 
 # ---------------------------------------------------------------------------
+# /v1/packs/manifest and /v1/packs/{pack_id}
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_pack_manifest_requires_licence(client):
+    response = await client.get("/v1/packs/manifest")
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_pack_manifest_returns_entitled_packs(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"frameworks": ["OWASP", "STRIDE"]},
+    }
+
+    with patch("app.routers.packs.validate_licence", return_value=mock_licence):
+        response = await client.get(
+            "/v1/packs/manifest",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema_version"] == "owlvex.rulepack.manifest-list.v1"
+    assert any(pack["pack_id"] == "owlvex.issue-pack.v1" for pack in data["packs"])
+    assert any(pack["pack_id"] == "owlvex.stride.2026.1" for pack in data["packs"])
+
+
+@pytest.mark.asyncio
+async def test_pack_artifact_returns_metadata_only_payload(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"frameworks": ["OWASP", "STRIDE"]},
+    }
+
+    with patch("app.routers.packs.validate_licence", return_value=mock_licence):
+        response = await client.get(
+            "/v1/packs/owlvex.issue-pack.v1",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["schema_version"] == "owlvex.rulepack.artifact.v1"
+    assert data["pack_id"] == "owlvex.issue-pack.v1"
+    assert "artifact" in data
+    assert "sha256" in data
+    assert data["artifact"]["schema_version"] == "owlvex.issue-pack.v1"
+
+
+@pytest.mark.asyncio
+async def test_pack_artifact_hides_unentitled_pack(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"frameworks": ["OWASP"]},
+    }
+
+    with patch("app.routers.packs.validate_licence", return_value=mock_licence):
+        response = await client.get(
+            "/v1/packs/owlvex.stride.2026.1",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+        )
+
+    assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
 # /v1/licences/validate
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio
