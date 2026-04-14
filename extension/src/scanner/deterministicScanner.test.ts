@@ -49,6 +49,8 @@ function handler(req, res) {
         expect(findings[0].title).toBe('Command Injection');
         expect(findings[0].confidence).toBe(1);
         expect(findings[0].canonicalId).toBe('owlvex.issue.command_injection.001');
+        expect(findings[0].likelihood).toBe('HIGH');
+        expect(findings[0].likelihoodReasons).toContain('The vulnerable sink is fed by a request-derived or externally controlled value.');
     });
 
     it('detects execSync() with template literal interpolation', () => {
@@ -120,6 +122,7 @@ return db.query(query);`;
         expect(findings[0].title).toBe('SQL Injection');
         expect(findings[0].confidence).toBe(1);
         expect(findings[0].canonicalId).toBe('owlvex.issue.sql_injection.001');
+        expect(findings[0].likelihood).toBe('HIGH');
     });
 
     it('detects inline template literal in db.query()', () => {
@@ -230,6 +233,7 @@ async function getDoc(currentUser, docId, db) {
         expect(idorFindings[0].title).toContain('Insecure Direct Object Reference');
         expect(idorFindings[0].confidence).toBe(1);
         expect(idorFindings[0].canonicalId).toBe('owlvex.issue.idor.001');
+        expect(idorFindings[0].likelihood).toBe('HIGH');
     });
 
     it('detects IDOR for userId param in query args', () => {
@@ -401,6 +405,7 @@ function loginHandler(user) {
         expect(findings[0].title).toBe('Sensitive Data Exposure in Log Output');
         expect(findings[0].canonicalId).toBe('owlvex.issue.sensitive_logging.001');
         expect(findings[0].confidence).toBe(1);
+        expect(findings[0].likelihood).toBe('HIGH');
     });
 
     it('detects accessToken passed to logger.info', () => {
@@ -480,6 +485,8 @@ function setSession(res, token) {
         expect(findings[0].title).toBe('Insecure Cookie: httpOnly Flag Missing');
         expect(findings[0].canonicalId).toBe('owlvex.issue.insecure_cookie.001');
         expect(findings[0].confidence).toBe(1);
+        expect(findings[0].likelihood).toBe('HIGH');
+        expect(findings[0].likelihoodReasons).toContain('The cookie name suggests a session or authentication token.');
     });
 
     it('detects cookie set with no options argument at all', () => {
@@ -499,6 +506,8 @@ function setCookie(res, value) {
 }`;
         const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'SM-001');
         expect(findings).toHaveLength(1);
+        expect(findings[0].likelihood).toBe('LOW');
+        expect(findings[0].likelihoodReasons).toContain('The cookie name looks low-sensitivity and not session-bearing.');
     });
 
     it('does NOT flag cookie set with httpOnly: true', () => {

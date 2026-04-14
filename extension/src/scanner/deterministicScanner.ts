@@ -182,6 +182,10 @@ function scanIdorSinks(source: string): InternalFinding[] {
                 `if the function is reachable through multiple call paths.`,
             canonicalId: 'owlvex.issue.idor.001',
             framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: [
+                'The query directly uses a caller-supplied object identifier without an ownership constraint.',
+            ],
         });
     }
 
@@ -277,6 +281,10 @@ function scanTenantIsolationSinks(source: string): InternalFinding[] {
                 `document that explicitly and guard it with a role check.`,
             canonicalId: 'owlvex.issue.tenant_isolation_missing.001',
             framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: [
+                'Tenant-scoped access exists in the function signature but is not enforced in the data query.',
+            ],
         });
     }
 
@@ -406,6 +414,10 @@ function scanPiiLoggingSinks(source: string): InternalFinding[] {
                 'rather than the raw value.',
             canonicalId: 'owlvex.issue.sensitive_logging.001',
             framework: 'OWASP',
+            likelihood: HIGH_SENSITIVITY_LOG_FIELD_RE.test(piiMatch[0]) ? 'HIGH' : 'MEDIUM',
+            likelihoodReasons: HIGH_SENSITIVITY_LOG_FIELD_RE.test(piiMatch[0])
+                ? ['The log statement exposes a high-value credential or token field directly.']
+                : ['The log statement exposes a sensitive field, but exploitability depends on log access.'],
         });
     }
 
@@ -441,6 +453,21 @@ function scanInsecureCookieSinks(source: string): InternalFinding[] {
 
         // Must have at least cookie name + value to be a valid set call.
         if (parts.length < 2) { continue; }
+        const cookieName = parts[0].replace(/^['"`]|['"`]$/g, '').trim();
+        const cookieLikelihood = AUTH_COOKIE_NAME_RE.test(cookieName)
+            ? {
+                likelihood: 'HIGH' as const,
+                reasons: ['The cookie name suggests a session or authentication token.'],
+            }
+            : LOW_SENSITIVITY_COOKIE_NAME_RE.test(cookieName)
+            ? {
+                likelihood: 'LOW' as const,
+                reasons: ['The cookie name looks low-sensitivity and not session-bearing.'],
+            }
+            : {
+                likelihood: 'MEDIUM' as const,
+                reasons: ['The cookie purpose is unclear, so session impact is possible but not proven.'],
+            };
 
         if (parts.length === 2) {
             // No options argument — httpOnly defaults to false in Express.
@@ -461,6 +488,8 @@ function scanInsecureCookieSinks(source: string): InternalFinding[] {
                     'Also set secure: true to prevent transmission over plain HTTP.',
                 canonicalId: 'owlvex.issue.insecure_cookie.001',
                 framework: 'OWASP',
+                likelihood: cookieLikelihood.likelihood,
+                likelihoodReasons: cookieLikelihood.reasons,
             });
             continue;
         }
@@ -492,6 +521,8 @@ function scanInsecureCookieSinks(source: string): InternalFinding[] {
                     'Also set secure: true to prevent transmission over plain HTTP.',
                 canonicalId: 'owlvex.issue.insecure_cookie.001',
                 framework: 'OWASP',
+                likelihood: cookieLikelihood.likelihood,
+                likelihoodReasons: cookieLikelihood.reasons,
             });
         }
     }
@@ -638,6 +669,34 @@ interface InternalFinding {
     fix: string;
     canonicalId: string;
     framework: string;
+    likelihood?: 'LOW' | 'MEDIUM' | 'HIGH';
+    likelihoodReasons?: string[];
+}
+
+const REQUEST_SIGNAL_RE =
+    /\b(?:req|request)\.(?:body|query|params|headers)|\b(?:userInput|input|payload|username|filename|file|path|dir|cmd|command|token|userId|docId|tenantId|id)\b/i;
+const AUTH_COOKIE_NAME_RE =
+    /^(?:session|sess|sid|connect\.sid|auth|accessToken|refreshToken|token|jwt)$/i;
+const LOW_SENSITIVITY_COOKIE_NAME_RE =
+    /^(?:tracker|analytics|theme|prefs?|preference|abtest)$/i;
+const HIGH_SENSITIVITY_LOG_FIELD_RE =
+    /\b(?:password|accessToken|refreshToken|privateKey|secretKey|apiSecret)\b/i;
+
+function inferRequestDrivenLikelihood(snippet: string, fallbackReason: string): {
+    likelihood: 'MEDIUM' | 'HIGH';
+    likelihoodReasons: string[];
+} {
+    if (REQUEST_SIGNAL_RE.test(snippet)) {
+        return {
+            likelihood: 'HIGH',
+            likelihoodReasons: ['The vulnerable sink is fed by a request-derived or externally controlled value.'],
+        };
+    }
+
+    return {
+        likelihood: 'MEDIUM',
+        likelihoodReasons: [fallbackReason],
+    };
 }
 
 function lineOfOffset(source: string, offset: number): number {
@@ -705,13 +764,17 @@ function scanShellSinks(source: string): InternalFinding[] {
                 'are treated as literal data, not shell syntax.',
             canonicalId: 'owlvex.issue.command_injection.001',
             framework: 'OWASP',
+            ...inferRequestDrivenLikelihood(
+                match[2],
+                'The sink is shell-parsed and clearly injectable, but the source of the interpolated value is not fully visible.',
+            ),
         });
     }
 
     return found;
 }
 
-function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: string): InternalFinding {
+function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: string, snippet: string): InternalFinding {
     if (contextMismatch) {
         return {
             matchIndex,
@@ -736,6 +799,10 @@ function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: 
                 'The database driver handles safe binding; the value never becomes part of the SQL text.',
             canonicalId: 'owlvex.issue.sql_injection.001',
             framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: [
+                'The query is injectable and the applied sanitizer is ineffective for SQL context.',
+            ],
         };
     }
 
@@ -760,6 +827,10 @@ function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: 
             'escaping, and the value never becomes part of the SQL text.',
         canonicalId: 'owlvex.issue.sql_injection.001',
         framework: 'OWASP',
+        ...inferRequestDrivenLikelihood(
+            snippet,
+            'The SQL text is directly interpolated, but the source of the value is not fully visible in this file.',
+        ),
     };
 }
 
@@ -768,11 +839,14 @@ function scanSqlSinks(source: string): InternalFinding[] {
     const sanitizedVars = collectSanitizedVariables(source);
 
     // Collect template literal assignments: `const query = \`SELECT ${x}\``
-    const templateVars = new Map<string, boolean>();
+    const templateVars = new Map<string, { contextMismatch: boolean; templateBody: string }>();
     const assignPattern = new RegExp(TEMPLATE_ASSIGN_PATTERN.source, TEMPLATE_ASSIGN_PATTERN.flags);
     let match: RegExpExecArray | null;
     while ((match = assignPattern.exec(source)) !== null) {
-        templateVars.set(match[1], templateContainsHtmlSanitizer(match[2], sanitizedVars));
+        templateVars.set(match[1], {
+            contextMismatch: templateContainsHtmlSanitizer(match[2], sanitizedVars),
+            templateBody: match[2],
+        });
     }
 
     // Case A: inline template literal passed directly to the sink.
@@ -782,6 +856,7 @@ function scanSqlSinks(source: string): InternalFinding[] {
             match.index,
             templateContainsHtmlSanitizer(match[2], sanitizedVars),
             match[1],
+            match[2],
         ));
     }
 
@@ -790,7 +865,14 @@ function scanSqlSinks(source: string): InternalFinding[] {
     while ((match = varPattern.exec(source)) !== null) {
         const varName = match[2];
         if (templateVars.has(varName)) {
-            found.push(makeSqlFinding(match.index, templateVars.get(varName) === true, match[1]));
+            const templateVar = templateVars.get(varName);
+            if (!templateVar) { continue; }
+            found.push(makeSqlFinding(
+                match.index,
+                templateVar.contextMismatch,
+                match[1],
+                templateVar.templateBody,
+            ));
         }
     }
 
@@ -826,6 +908,8 @@ export class DeterministicScanner {
             fix: f.fix,
             confidence: 1,
             canonicalId: f.canonicalId,
+            likelihood: f.likelihood,
+            likelihoodReasons: f.likelihoodReasons,
         }));
     }
 }

@@ -233,7 +233,8 @@
     "benchmark:ac004": "node ../tools/owlvex-benchmark/engine/ac004/run-ac004-corpus.mjs",
     "benchmark:ac005": "node ../tools/owlvex-benchmark/engine/ac005/run-ac005-corpus.mjs",
     "benchmark:ac-integration": "node ../tools/owlvex-benchmark/engine/access-control-integration/run-access-control-integration.mjs",
-    "benchmark:sm002": "node ../tools/owlvex-benchmark/engine/sm002/run-sm002-corpus.mjs"
+    "benchmark:sm002": "node ../tools/owlvex-benchmark/engine/sm002/run-sm002-corpus.mjs",
+    "demo:report": "npm run compile && node ./scripts/generate-demo-report.mjs"
   },
   "devDependencies": {
     "@types/jest": "^29.5.0",
