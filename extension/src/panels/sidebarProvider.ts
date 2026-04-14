@@ -145,6 +145,10 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                     detail.tooltip,
                     vscode.TreeItemCollapsibleState.None,
                     'detail',
+                    undefined,
+                    undefined,
+                    detail.command,
+                    detail.iconId,
                 ),
             );
         }
@@ -153,9 +157,19 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
     }
 }
 
-function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: string }> {
+function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: string; command?: vscode.Command; iconId?: string }> {
     const remediation = resolveRemediationForFinding(finding);
-    const details: Array<{ label: string; tooltip: string }> = [
+    const details: Array<{ label: string; tooltip: string; command?: vscode.Command; iconId?: string }> = [
+        {
+            label: 'Discuss this finding',
+            tooltip: 'Open Owlvex Assistant with this finding preloaded for explanation and remediation discussion.',
+            command: {
+                command: PROFILE.commands.discussFinding,
+                title: 'Discuss this finding',
+                arguments: [finding],
+            },
+            iconId: 'comment-discussion',
+        },
         {
             label: `Risk: ${finding.severity}/${getFindingLikelihood(finding)} -> ${finding.riskScore ?? 'n/a'}/10`,
             tooltip: `Impact ${finding.severity}, likelihood ${getFindingLikelihood(finding)}, contextual risk ${finding.riskScore ?? 'n/a'}/10`,
@@ -224,10 +238,13 @@ class FindingItem extends vscode.TreeItem {
         public readonly kind: 'score' | 'severity' | 'finding' | 'detail',
         public readonly finding?: Finding,
         public readonly findings?: Finding[],
+        command?: vscode.Command,
+        iconId?: string,
     ) {
         super(label, collapsible);
         this.tooltip = tooltip;
         this.description = kind === 'finding' ? finding?.ruleCode : undefined;
+        this.command = command;
 
         if (kind === 'finding' && finding) {
             const isDeterministic = finding.provenance === 'deterministic';
@@ -257,7 +274,7 @@ class FindingItem extends vscode.TreeItem {
         }
 
         if (kind === 'detail') {
-            this.iconPath = new vscode.ThemeIcon('note');
+            this.iconPath = new vscode.ThemeIcon(iconId ?? 'note');
             this.description = undefined;
         }
     }

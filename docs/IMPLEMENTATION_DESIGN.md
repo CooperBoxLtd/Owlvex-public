@@ -92,7 +92,9 @@ It owns:
 - requesting rule/config/prompt data from backend
 - invoking the customer-selected model provider
 - merging deterministic and AI findings
-- rendering findings, diagnostics, reports, and comparisons
+- rendering findings, diagnostics, reports, comparisons, and advisory chat guidance
+- proposing review-first remediation diffs when a user asks Owlvex to help change code
+- expanding AI context beyond the active file when the finding or remediation depends on nearby project structure
 
 It must not:
 
@@ -252,6 +254,18 @@ Users must be able to tell:
 - what is proven
 - what is inferred
 
+Output surfaces should stay intentionally distinct:
+
+- reports are concise scan artifacts focused on factual findings, remediation guidance, and scan errors/warnings
+- advisory chat is the surface for plain-language fix explanations and concrete replacement code when a user asks for help remediating a finding
+- remediation edits, when introduced, must remain review-first: Owlvex may generate candidate code changes and diffs, but must not silently rewrite files without explicit user approval
+
+AI-assisted reasoning should use progressive context expansion:
+
+- file-only context is the fast default path
+- when imports, helper resolution, framework wiring, or data flow cross file boundaries, the extension should gather nearby project context before presenting stronger AI conclusions or remediation proposals
+- higher-risk or ambiguous remediation guidance should prefer expanded context over isolated single-file guesses
+
 ## 9. Security and Privacy Requirements
 
 ### 9.1 Client-Side Source Protection
@@ -301,10 +315,12 @@ The architecture should support:
 - align benchmark outputs with extension/report outputs
 - add CI gates
 - strengthen release rules
+- add controlled remediation discussion and patch-generation flows that stay grounded in findings and require explicit apply/approve steps
+- add progressive project-context expansion for AI reasoning and remediation flows so single-file analysis is the default, not the maximum context path
 
-### Phase D: Coverage Expansion
+### Phase D: Coverage And Claim Maintenance
 
-- add more conditional rule benchmark coverage
+- keep benchmark-backed claims, confidence docs, and product wording aligned as deterministic coverage evolves
 - add more deterministic axes
 - grow issue catalog and framework mapping depth
 
@@ -318,6 +334,8 @@ The architecture is being followed correctly if all of the following are true:
 - benchmark gate remains green for covered axes
 - product UI distinguishes deterministic from AI findings
 - backend APIs remain metadata/control-plane oriented
+- any future code-edit flow remains local/review-first and does not require source upload to Owlvex backend
+- AI-assisted reasoning can expand beyond the active file when project context is necessary for trustworthy conclusions
 
 ## 12. Guidance For AI Coding Agents
 
@@ -329,6 +347,8 @@ When implementing against this design:
 4. prefer local execution plus backend-served config/rule metadata
 5. preserve benchmark-first discipline for any new deterministic capability
 6. preserve explicit provenance in user-facing outputs
+7. if implementing remediation edits, make them review-first and approval-gated rather than silent auto-edits
+8. do not assume the active file is sufficient AI context when imports, shared helpers, or framework wiring clearly affect the conclusion
 
 If a requested change would violate the source-code boundary or the local-execution model, stop and call that out explicitly.
 

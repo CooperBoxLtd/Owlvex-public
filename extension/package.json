@@ -64,6 +64,10 @@
       {
         "command": "owlvex.reviewRiskCalibration",
         "title": "Owlvex: Review Risk Calibration"
+      },
+      {
+        "command": "owlvex.discussFinding",
+        "title": "Owlvex: Discuss Finding"
       }
     ],
     "configuration": {
@@ -172,11 +176,6 @@
           "type": "string",
           "default": "",
           "description": "Optional project/team context appended to every prompt"
-        },
-        "owlvex.customPrompt": {
-          "type": "string",
-          "default": null,
-          "description": "Custom system prompt (overrides template when set)"
         }
       }
     },

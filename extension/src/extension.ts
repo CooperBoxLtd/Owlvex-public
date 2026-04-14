@@ -445,6 +445,17 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatView)
     );
 
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.discussFinding, async (finding?: any) => {
+            if (!finding) {
+                await chatView.show();
+                return;
+            }
+
+            await chatView.discussFinding(finding);
+        })
+    );
+
     licenceMgr.validate(apiUrl).then(() => {
         statusBar.showIdle();
         void refreshRulePackRuntime();

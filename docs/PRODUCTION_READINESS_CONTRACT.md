@@ -250,9 +250,11 @@ Based on the current codebase state, the highest-value production-readiness gaps
 1. close extension/backend response-shape mismatches in scan comparison
 2. align deterministic claims with actual rule certainty and benchmark coverage
 3. raise coverage on orchestration paths in `extension.ts`, provider integration, and backend route contracts
-4. verify production CORS against the real VS Code/webview/client call pattern
-5. make the release gate explicit in CI and docs
-6. require auditable trusted-source provenance for grounded packs and remediation content
+4. tighten what scan-related prompt context is persisted so the backend stores prompt identity and minimal metadata rather than broad prompt snapshots where possible
+5. verify production CORS against the real VS Code/webview/client call pattern
+6. make the release gate explicit in CI and docs
+7. require auditable trusted-source provenance for grounded packs and remediation content
+8. resolve product-contract drift such as contributed settings or advertised behaviors that are not wired end-to-end in the runtime
 
 ## 9. Definition Of Production Ready
 

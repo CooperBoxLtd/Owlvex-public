@@ -25,6 +25,7 @@ export const PROFILE = {
         "enterLicence": "owlvex.enterLicence",
         "compareScans": "owlvex.compareScans",
         "reviewRiskCalibration": "owlvex.reviewRiskCalibration",
+        "discussFinding": "owlvex.discussFinding",
         "revealLine": "owlvex.revealLine",
         "chatFocus": "owlvex.chat.focus"
     }

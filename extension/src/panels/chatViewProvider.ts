@@ -21,6 +21,11 @@ interface EditorContext {
     promptContext: string;
 }
 
+interface UserPromptOptions {
+    displayedPrompt?: string;
+    injectedContext?: string;
+}
+
 interface LocalActionResult {
     handled: boolean;
     response?: string;
@@ -54,6 +59,12 @@ const CHAT_STATE_KEY = `${PROFILE.storagePrefix}.chat.messages`;
 const LAST_SCAN_TARGET_KEY = `${PROFILE.storagePrefix}.chat.lastScanTarget`;
 const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
 const MAX_PERSISTED_MESSAGES = 40;
+const CONTEXT_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cs', '.go', '.rs', '.php', '.rb', '.cpp', '.c', '.h'];
+
+interface ImportedSymbolContext {
+    specifier: string;
+    importedNames: string[];
+}
 
 function summarizeIssueFamilies(findings: Array<{ canonicalFamilyLabel?: string; canonicalFamily?: string }>): string {
     const labels = [...new Set(
@@ -168,6 +179,185 @@ function buildLatestReportPromptContext(storage: vscode.Memento): EditorContext 
     };
 }
 
+export function buildFindingPromptContext(finding: Finding, snippet?: string): string {
+    const remediation = resolveRemediationForFinding(finding);
+    return [
+        'Finding selected for discussion:',
+        `Title: ${finding.canonicalTitle || finding.title}`,
+        `Rule: ${finding.ruleCode || 'n/a'}`,
+        `Provenance: ${finding.provenance ?? 'unknown'}`,
+        `Location: line ${finding.line}${finding.lineEnd && finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`,
+        `Impact: ${finding.severity}`,
+        `Likelihood: ${getFindingLikelihood(finding)}`,
+        `Risk: ${finding.riskScore ?? 'n/a'}/10`,
+        `Why it matters: ${finding.explanation || 'No explanation provided.'}`,
+        `Suggested remediation: ${remediation.remediation}`,
+        remediation.frameworkVariant
+            ? `Framework-specific guidance: ${remediation.frameworkVariant.framework} | ${remediation.frameworkVariant.summary}`
+            : '',
+        (finding.likelihoodReasons ?? []).length
+            ? `Likelihood reasons: ${(finding.likelihoodReasons ?? []).join(' | ')}`
+            : '',
+        snippet ? `Local code snippet:\n${snippet}` : 'Local code snippet: unavailable',
+        'Help the user understand the issue in plain language, explain why the fix works, and show a safe replacement approach grounded in this finding.',
+    ].filter(Boolean).join('\n');
+}
+
+function extractLocalImports(source: string): ImportedSymbolContext[] {
+    const contexts = new Map<string, Set<string>>();
+
+    const importMatches = source.matchAll(/import\s+([\s\S]*?)\s+from\s+['"](\.[^'"]+)['"]/g);
+    for (const match of importMatches) {
+        const clause = match[1]?.trim() ?? '';
+        const specifier = match[2]?.trim();
+        if (!specifier) {
+            continue;
+        }
+
+        const names = contexts.get(specifier) ?? new Set<string>();
+        const defaultMatch = clause.match(/^([A-Za-z_$][\w$]*)/);
+        if (defaultMatch?.[1] && !defaultMatch[1].startsWith('{') && defaultMatch[1] !== '*') {
+            names.add(defaultMatch[1]);
+        }
+
+        const namedGroup = clause.match(/\{([^}]+)\}/);
+        if (namedGroup?.[1]) {
+            for (const part of namedGroup[1].split(',')) {
+                const token = part.trim();
+                if (!token) {
+                    continue;
+                }
+                const alias = token.split(/\s+as\s+/i).pop()?.trim();
+                if (alias) {
+                    names.add(alias);
+                }
+            }
+        }
+
+        contexts.set(specifier, names);
+    }
+
+    const requireMatches = source.matchAll(/(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*require\(\s*['"](\.[^'"]+)['"]\s*\)/g);
+    for (const match of requireMatches) {
+        const localName = match[1]?.trim();
+        const specifier = match[2]?.trim();
+        if (!localName || !specifier) {
+            continue;
+        }
+        const names = contexts.get(specifier) ?? new Set<string>();
+        names.add(localName);
+        contexts.set(specifier, names);
+    }
+
+    return [...contexts.entries()].map(([specifier, names]) => ({
+        specifier,
+        importedNames: [...names],
+    }));
+}
+
+async function tryReadWorkspaceFile(uri: vscode.Uri): Promise<string | undefined> {
+    try {
+        const raw = await vscode.workspace.fs.readFile(uri);
+        return Buffer.from(raw).toString('utf8');
+    } catch {
+        return undefined;
+    }
+}
+
+async function resolveLocalImportUri(baseFile: vscode.Uri, specifier: string): Promise<vscode.Uri | undefined> {
+    const baseDir = path.dirname(baseFile.fsPath);
+    const resolvedBase = path.resolve(baseDir, specifier);
+    const explicitExt = path.extname(resolvedBase);
+    const candidates = explicitExt
+        ? [resolvedBase]
+        : [
+            ...CONTEXT_EXTENSIONS.map(ext => `${resolvedBase}${ext}`),
+            ...CONTEXT_EXTENSIONS.map(ext => path.join(resolvedBase, `index${ext}`)),
+        ];
+
+    for (const candidate of candidates) {
+        const uri = vscode.Uri.file(candidate);
+        const content = await tryReadWorkspaceFile(uri);
+        if (content !== undefined) {
+            return uri;
+        }
+    }
+
+    return undefined;
+}
+
+function buildExcerpt(content: string, maxLines = 20): string {
+    return content
+        .split(/\r?\n/)
+        .slice(0, maxLines)
+        .map((text, index) => `${String(index + 1).padStart(4, ' ')} | ${text}`)
+        .join('\n');
+}
+
+export async function buildNearbyProjectContext(
+    document: vscode.TextDocument,
+    finding?: Pick<Finding, 'line' | 'lineEnd'>,
+    maxFiles = 2,
+): Promise<string | undefined> {
+    const source = document.getText();
+    const imports = extractLocalImports(source);
+    if (!imports.length) {
+        return undefined;
+    }
+
+    const allLines = source.split(/\r?\n/);
+    const relevantStart = Math.max(0, (finding?.line ?? 1) - 4);
+    const relevantEnd = Math.min(allLines.length, Math.max(finding?.lineEnd ?? finding?.line ?? 1, finding?.line ?? 1) + 3);
+    const relevantWindow = allLines
+        .slice(relevantStart, relevantEnd)
+        .filter(line => !/^\s*(import\b|const\s+.+?=\s*require\()/.test(line))
+        .join('\n');
+    const rankedImports = imports
+        .map(item => ({
+            ...item,
+            score: item.importedNames.reduce((total, name) => total + (new RegExp(`\\b${name}\\b`).test(relevantWindow) ? 10 : 0), 0),
+        }))
+        .sort((left, right) => right.score - left.score || left.specifier.localeCompare(right.specifier));
+
+    const collected: string[] = [];
+    for (const item of rankedImports.slice(0, 6)) {
+        if (collected.length >= maxFiles) {
+            break;
+        }
+
+        const uri = await resolveLocalImportUri(document.uri, item.specifier);
+        if (!uri) {
+            continue;
+        }
+
+        const content = await tryReadWorkspaceFile(uri);
+        if (!content) {
+            continue;
+        }
+
+        const relative = vscode.workspace.asRelativePath(uri, false);
+        collected.push(
+            [
+                `Nearby context file: ${relative}`,
+                `Imported via: ${item.specifier}`,
+                item.importedNames.length ? `Referenced symbols: ${item.importedNames.join(', ')}` : '',
+                buildExcerpt(content),
+            ].join('\n'),
+        );
+    }
+
+    if (!collected.length) {
+        return undefined;
+    }
+
+    return [
+        'Nearby project context:',
+        finding ? `Context prioritized around finding lines ${finding.line}${finding.lineEnd && finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}.` : '',
+        ...collected,
+        'Use these nearby files only when they materially improve the explanation or remediation. Say when the answer depends on cross-file context.',
+    ].join('\n\n');
+}
+
 function severityRank(severity: string): number {
     switch (severity) {
         case 'CRITICAL':
@@ -258,11 +448,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.refresh();
     }
 
-    private async handleUserMessage(prompt: string): Promise<void> {
+    async discussFinding(finding: Finding): Promise<void> {
+        const editor = vscode.window.activeTextEditor;
+        const snippet = this.buildActiveSnippetForFinding(finding);
+        const nearbyContext = editor ? await buildNearbyProjectContext(editor.document, finding) : undefined;
+        await this.show();
+        await this.handleUserMessage(
+            `Discuss this finding: ${finding.canonicalTitle || finding.title} at line ${finding.line}. Explain what is wrong and how to fix it.`,
+            {
+                displayedPrompt: `Discuss this finding: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
+                injectedContext: [
+                    buildFindingPromptContext(finding, snippet),
+                    nearbyContext ?? 'Nearby project context: none',
+                ].join('\n\n'),
+            },
+        );
+    }
+
+    private async handleUserMessage(prompt: string, options: UserPromptOptions = {}): Promise<void> {
         const trimmed = prompt.trim();
         if (!trimmed) return;
 
-        this.messages.push({ role: 'user', content: trimmed });
+        this.messages.push({ role: 'user', content: options.displayedPrompt ?? trimmed });
         this.messages.push({ role: 'assistant', content: 'Thinking...', kind: 'advisory' });
         this.refresh();
 
@@ -306,6 +513,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 ].join('\n'),
                 userMessage: [
                     trimmed,
+                    options.injectedContext ?? 'Injected discussion context: none',
                     scanContext.promptContext,
                     editorContext.promptContext,
                     latestReportContext?.promptContext ?? 'Latest report context: none',
@@ -447,6 +655,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
         void this.persistState();
         this.refresh();
+    }
+
+    private buildActiveSnippetForFinding(finding: Finding): string | undefined {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            return undefined;
+        }
+
+        const lines = editor.document.getText().split(/\r?\n/);
+        const start = Math.max(0, finding.line - 2);
+        const end = Math.min(lines.length, Math.max(finding.lineEnd ?? finding.line, finding.line) + 1);
+        return lines
+            .slice(start, end)
+            .map((text, index) => `${String(start + index + 1).padStart(4, ' ')} | ${text}`)
+            .join('\n');
     }
 
     private async handleSetModel(model: string): Promise<void> {

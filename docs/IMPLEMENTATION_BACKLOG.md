@@ -197,32 +197,90 @@ Make benchmark-backed deterministic findings and live product findings tell the 
 - users can tell what is proven versus inferred
 - report output and sidebar output preserve rule identity and provenance
 
-## Workstream 4: Conditional-Rule Benchmark Catch-Up
+## Workstream 3A: Review-First Remediation Flow
 
 ### Goal
 
-Bring benchmark coverage in line with the live deterministic rules already implemented in the extension.
+Let Owlvex help users change code safely by turning grounded findings into reviewable candidate patches rather than silent auto-edits.
 
 ### Tasks
 
-- add benchmark corpus and runners for `AC-T001`
-- add benchmark corpus and runners for `DP-001`
-- add benchmark corpus and runners for `SM-001`
-- fold those suites into the aggregate deterministic gate
-- update confidence and status docs once benchmark coverage matches live behavior
+- define a finding-to-remediation discussion flow in advisory chat
+- add a finding-focused action such as `Discuss this finding` or `Generate fix`
+- pass the active finding, local snippet, and grounded remediation context into the advisory request
+- define a patch proposal format that can be reviewed as a diff before apply
+- require explicit user approval before any file edit is applied
+- keep remediation generation local/provider-direct and never route source-bearing edit requests through Owlvex backend
 
 ### Likely Files
 
-- [corpus](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark/corpus)
-- [engine](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark/engine)
-- [run-deterministic.mjs](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark/run-deterministic.mjs)
-- [release-confidence.md](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark/release-confidence.md)
+- [chatViewProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/chatViewProvider.ts)
+- [sidebarProvider.ts](D:/Dev/repos/CodeScanner/extension/src/sidebarProvider.ts)
+- [extension.ts](D:/Dev/repos/CodeScanner/extension/src/extension.ts)
+- [scanEngine.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/scanEngine.ts)
 
 ### Acceptance Criteria
 
-- every live deterministic conditional rule has benchmark coverage
-- `benchmark:deterministic` reflects actual rule coverage, not a subset
+- users can start a remediation discussion from a concrete finding
+- Owlvex can produce a candidate code change tied to the finding context
+- users see a reviewable diff before apply
+- file edits require explicit user approval
+- the flow preserves the local-execution and metadata-only backend boundary
+
+## Workstream 3B: Progressive Project-Context Expansion
+
+### Goal
+
+Improve AI trustworthiness by letting Owlvex expand from active-file analysis to nearby project context when single-file reasoning is not sufficient.
+
+### Tasks
+
+- define when AI flows should stay file-only versus when they should fetch additional local context
+- gather nearby context such as imports, referenced local symbols, route/controller pairs, shared validators, and related framework files
+- cap and prioritize fetched context so the experience stays fast and explainable
+- surface which additional files or snippets informed an AI explanation or remediation proposal
+- use expanded context for higher-risk or ambiguous findings before presenting stronger AI conclusions or candidate patches
+
+### Likely Files
+
+- [chatViewProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/chatViewProvider.ts)
+- [scanEngine.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/scanEngine.ts)
+- [workspaceScanner.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/workspaceScanner.ts)
+- [extension.ts](D:/Dev/repos/CodeScanner/extension/src/extension.ts)
+
+### Acceptance Criteria
+
+- file-only analysis remains the default fast path
+- Owlvex can gather additional nearby project context when needed for trustworthy AI reasoning
+- remediation and advisory responses can identify the context sources they used
+- the expanded-context flow stays local/provider-direct and does not require source upload to Owlvex backend
+
+## Workstream 4: Benchmark And Claim Maintenance
+
+### Goal
+
+Keep benchmark-backed claims, confidence docs, and product wording aligned as deterministic coverage evolves.
+
+### Tasks
+
+- keep benchmark status and product docs in sync when suites or case counts change
+- update confidence and release docs whenever a deterministic group is added or promoted
+- audit product wording so deterministic claims match benchmark-backed reality
+- add a lightweight release check that compares docs claims against current benchmark status output
+
+### Likely Files
+
+- [PRODUCT.md](D:/Dev/repos/CodeScanner/docs/PRODUCT.md)
+- [PRODUCTION_READINESS_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/PRODUCTION_READINESS_CONTRACT.md)
+- [release-confidence.md](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark/release-confidence.md)
+- [run-deterministic.mjs](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark/run-deterministic.mjs)
+- [.github/workflows](D:/Dev/repos/CodeScanner/.github/workflows)
+
+### Acceptance Criteria
+
 - benchmark confidence claims match real implementation scope
+- current product docs do not describe stale benchmark coverage or outdated report behavior
+- deterministic release wording is reviewed whenever benchmark status changes
 
 ## Workstream 5: CI And Release Discipline
 
@@ -319,7 +377,7 @@ Prepare the backend for Azure deployment without changing the customer-code boun
 
 If we want the smallest high-value delivery sequence, do this first:
 
-1. finish conditional-rule benchmark catch-up
+1. keep benchmark claims and product docs aligned
 2. align benchmark deterministic findings with extension output fields
 3. define rule/config pack shape for backend delivery
 4. add local cache and version handling for that rule/config data

@@ -91,6 +91,7 @@ describe('SidebarProvider', () => {
 
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toEqual(expect.arrayContaining([
+            'Discuss this finding',
             'Risk: HIGH/HIGH -> 8/10',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
             'Fix: Resolve user paths against a fixed base directory.',
@@ -98,5 +99,8 @@ describe('SidebarProvider', () => {
             'Avoid: Strip ../ without canonical checks.',
             'Sources: OWASP Path Traversal',
         ]));
+        const discussNode = detailNodes.find(node => node.label === 'Discuss this finding');
+        expect(discussNode?.command?.command).toBe('owlvex.discussFinding');
+        expect(discussNode?.command?.arguments?.[0]).toMatchObject({ id: 'finding-1', title: 'Path traversal' });
     });
 });
