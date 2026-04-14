@@ -86,6 +86,11 @@
           "default": "",
           "description": "Azure AI Foundry endpoint URL"
         },
+        "owlvex.foundry.model": {
+          "type": "string",
+          "default": "gpt-4o",
+          "description": "Azure AI Foundry deployment name to use for chat completions"
+        },
         "owlvex.ollama.host": {
           "type": "string",
           "default": "http://localhost:11434",
@@ -147,7 +152,7 @@
         {
           "id": "owlvex",
           "title": "Owlvex",
-          "icon": "$(shield)"
+          "icon": "media/owlvex-prod.svg"
         }
       ]
     },

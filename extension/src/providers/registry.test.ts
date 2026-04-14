@@ -9,9 +9,28 @@ import * as vscode from 'vscode';
 
 describe('ProviderRegistry', () => {
     let registry: ProviderRegistry;
+    let configState: Record<string, any>;
+    let updateMock: jest.Mock;
+    let secretGetMock: jest.Mock;
 
     beforeEach(() => {
         jest.clearAllMocks();
+        configState = {
+            provider: 'openai',
+            'foundry.endpoint': 'https://example.openai.azure.com',
+            'foundry.model': 'owlvex-gpt4o',
+        };
+        updateMock = jest.fn(async (key: string, value: any) => {
+            configState[key] = value;
+        });
+        (vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
+            get: (key: string, def: any) => key in configState ? configState[key] : def,
+            update: updateMock,
+        }));
+        secretGetMock = jest.fn(async (key: string) => key === 'owlvex.foundry.apiKey' ? 'test-foundry-key' : undefined);
+        (vscode.extensions.getExtension as jest.Mock).mockReturnValue({
+            exports: { secrets: { get: secretGetMock, store: jest.fn() } },
+        });
         registry = new ProviderRegistry();
     });
 
@@ -137,6 +156,59 @@ describe('ProviderRegistry', () => {
             (global.fetch as jest.Mock) = jest.fn().mockRejectedValue(new Error('not running'));
             const models = await registry.getProvider('ollama')!.listModels();
             expect(models.length).toBeGreaterThan(0);
+        });
+    });
+
+    describe('azure foundry configuration', () => {
+        it('reads selected deployment name from configuration', () => {
+            const provider = registry.getProvider('azure-foundry')!;
+            expect(provider.selectedModel).toBe('owlvex-gpt4o');
+        });
+
+        it('persists selected deployment name back to configuration', async () => {
+            const provider = registry.getProvider('azure-foundry')!;
+            provider.selectedModel = 'owlvex-security-chat';
+            await Promise.resolve();
+            expect(updateMock).toHaveBeenCalledWith('foundry.model', 'owlvex-security-chat', expect.anything());
+        });
+
+        it('fails connection test when configured deployment is missing', async () => {
+            (global.fetch as jest.Mock) = jest.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({
+                    value: [{ id: 'different-deployment' }],
+                }),
+            });
+
+            const provider = registry.getProvider('azure-foundry')!;
+            const result = await provider.testConnection();
+            expect(result.success).toBe(false);
+            expect(result.message).toContain('owlvex-gpt4o');
+        });
+
+        it('uses configured deployment in completion URL', async () => {
+            const fetchMock = jest.fn()
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({
+                        choices: [{ message: { content: 'ok' } }],
+                        usage: { total_tokens: 12 },
+                    }),
+                });
+            (global.fetch as jest.Mock) = fetchMock;
+
+            const provider = registry.getProvider('azure-foundry')!;
+            await provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'user',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+
+            expect(fetchMock).toHaveBeenCalledWith(
+                expect.stringContaining('/openai/deployments/owlvex-gpt4o/chat/completions?api-version=2024-02-01'),
+                expect.anything(),
+            );
         });
     });
 });

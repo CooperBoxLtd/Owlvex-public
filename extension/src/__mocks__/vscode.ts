@@ -45,6 +45,7 @@ export const extensions = {
 
 export const ProgressLocation = { Notification: 15, SourceControl: 1, Window: 10 };
 export const StatusBarAlignment = { Left: 1, Right: 2 };
+export const ConfigurationTarget = { Global: 1, Workspace: 2, WorkspaceFolder: 3 };
 export class ThemeColor {
     constructor(public id: string) {}
 }

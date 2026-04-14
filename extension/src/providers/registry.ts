@@ -20,13 +20,19 @@ export interface AIProvider {
     isConfigured(): Promise<boolean>;
     listModels(): Promise<string[]>;
     complete(req: CompletionRequest): Promise<CompletionResponse>;
-    testConnection(): Promise<{ success: boolean; latencyMs: number }>;
+    testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }>;
 }
 
 function getPreferredConfigurationTarget(): vscode.ConfigurationTarget {
     return vscode.workspace.workspaceFolders?.length
         ? vscode.ConfigurationTarget.Workspace
         : vscode.ConfigurationTarget.Global;
+}
+
+export async function persistProviderSetting(settingKey: string, value: string): Promise<void> {
+    await vscode.workspace
+        .getConfiguration(PROFILE.configSection)
+        .update(settingKey, value, getPreferredConfigurationTarget());
 }
 
 // Chat-capable model prefixes used to filter OpenAI/Groq model lists
@@ -98,7 +104,7 @@ class OpenAIProvider implements AIProvider {
         };
     }
 
-    async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
             const key = await this.getApiKey();
@@ -161,7 +167,7 @@ class AnthropicProvider implements AIProvider {
         };
     }
 
-    async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
             await this.complete({
@@ -183,13 +189,19 @@ class AnthropicProvider implements AIProvider {
 class AzureFoundryProvider implements AIProvider {
     id = 'azure-foundry';
     name = 'Azure AI Foundry';
-    selectedModel = 'gpt-4o';
+
+    get selectedModel(): string {
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('foundry.model', 'gpt-4o');
+    }
+    set selectedModel(value: string) {
+        void persistProviderSetting('foundry.model', value);
+    }
 
     private async getCredentials(): Promise<{ endpoint: string; apiKey: string } | null> {
         const ext = vscode.extensions.getExtension(PROFILE.extensionId);
         const secrets = ext?.exports?.secrets;
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
-        const endpoint = config.get<string>('foundry.endpoint', '');
+        const endpoint = config.get<string>('foundry.endpoint', '').trim().replace(/\/+$/, '');
         const apiKey = await secrets?.get(`${PROFILE.secretPrefix}.foundry.apiKey`);
         if (!endpoint || !apiKey) return null;
         return { endpoint, apiKey };
@@ -221,7 +233,8 @@ class AzureFoundryProvider implements AIProvider {
         const creds = await this.getCredentials();
         if (!creds) throw new Error('Azure Foundry not configured. Set owlvex.foundry.endpoint and run "Owlvex: Setup AI Connection".');
 
-        const url = `${creds.endpoint}/openai/deployments/${this.selectedModel}/chat/completions?api-version=2024-02-01`;
+        const deployment = this.selectedModel.trim();
+        const url = `${creds.endpoint}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=2024-02-01`;
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'api-key': creds.apiKey },
@@ -243,16 +256,34 @@ class AzureFoundryProvider implements AIProvider {
         };
     }
 
-    async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
             const creds = await this.getCredentials();
-            if (!creds) return { success: false, latencyMs: 0 };
+            if (!creds) return { success: false, latencyMs: 0, message: 'Azure Foundry endpoint or API key is missing.' };
             const url = `${creds.endpoint}/openai/deployments?api-version=2024-02-01`;
             const res = await fetch(url, { headers: { 'api-key': creds.apiKey } });
-            return { success: res.ok, latencyMs: Date.now() - start };
+            if (!res.ok) {
+                return {
+                    success: false,
+                    latencyMs: Date.now() - start,
+                    message: `Azure Foundry returned HTTP ${res.status} when listing deployments.`,
+                };
+            }
+
+            const data = await res.json() as any;
+            const deployments = ((data.value as any[]) ?? []).map((item: any) => item.id as string);
+            if (!deployments.includes(this.selectedModel)) {
+                return {
+                    success: false,
+                    latencyMs: Date.now() - start,
+                    message: `Azure Foundry deployment "${this.selectedModel}" was not found at the configured endpoint.`,
+                };
+            }
+
+            return { success: true, latencyMs: Date.now() - start };
         } catch {
-            return { success: false, latencyMs: Date.now() - start };
+            return { success: false, latencyMs: Date.now() - start, message: 'Azure Foundry connection failed.' };
         }
     }
 }
@@ -309,7 +340,7 @@ class OllamaProvider implements AIProvider {
         return { content: data.message.content };
     }
 
-    async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
             const res = await fetch(`${this.host}/api/tags`);
@@ -378,7 +409,7 @@ class MistralProvider implements AIProvider {
         };
     }
 
-    async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
             const key = await this.getApiKey();
@@ -449,7 +480,7 @@ class GeminiProvider implements AIProvider {
         };
     }
 
-    async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
             const key = await this.getApiKey();
@@ -519,7 +550,7 @@ class GroqProvider implements AIProvider {
         };
     }
 
-    async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
             const key = await this.getApiKey();
@@ -604,7 +635,7 @@ class CustomProvider implements AIProvider {
         };
     }
 
-    async testConnection(): Promise<{ success: boolean; latencyMs: number }> {
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
         const start = Date.now();
         try {
             if (!this.baseUrl) return { success: false, latencyMs: 0 };

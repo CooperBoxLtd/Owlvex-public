@@ -105,7 +105,7 @@ function normalizeReferences(value: unknown): RemediationReference[] {
     }
 
     return value
-        .map(item => {
+        .map((item): RemediationReference | undefined => {
             const raw = (item && typeof item === 'object') ? item as Record<string, unknown> : {};
             const label = String(raw.label ?? '').trim();
             const kind = String(raw.kind ?? '').trim();
@@ -121,7 +121,7 @@ function normalizeReferences(value: unknown): RemediationReference[] {
                 section: String(raw.section ?? '').trim() || undefined,
             };
         })
-        .filter((item): item is RemediationReference => Boolean(item));
+        .filter((item): item is RemediationReference => item !== undefined);
 }
 
 function normalizeSeverity(value: unknown): CanonicalIssue['severity'] {

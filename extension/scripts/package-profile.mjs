@@ -105,6 +105,7 @@ const generatedProfileSource = `export const PROFILE = ${JSON.stringify({
   }
 }, null, 4)} as const;\n`;
 
+let exitCode = 0;
 try {
   fs.writeFileSync(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   fs.writeFileSync(profileSourcePath, generatedProfileSource, "utf8");
@@ -115,7 +116,8 @@ try {
     shell: true,
   });
   if (compile.status !== 0) {
-    process.exit(compile.status ?? 1);
+    exitCode = compile.status ?? 1;
+    throw new Error(`Compile failed for profile '${profileName}'`);
   }
 
   const pkg = spawnSync("npx", ["@vscode/vsce", "package", "--out", packagePath], {
@@ -124,11 +126,21 @@ try {
     shell: true,
   });
   if (pkg.status !== 0) {
-    process.exit(pkg.status ?? 1);
+    exitCode = pkg.status ?? 1;
+    throw new Error(`Packaging failed for profile '${profileName}'`);
   }
 
   console.log(`Built ${profileName} package at ${packagePath}`);
+} catch (error) {
+  if (!exitCode) {
+    exitCode = 1;
+  }
+  console.error(error instanceof Error ? error.message : String(error));
 } finally {
   fs.writeFileSync(packageJsonPath, originalManifestText, "utf8");
   fs.writeFileSync(profileSourcePath, originalProfileSource, "utf8");
+}
+
+if (exitCode !== 0) {
+  process.exit(exitCode);
 }
