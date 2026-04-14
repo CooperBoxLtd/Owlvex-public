@@ -506,6 +506,2531 @@
           }
         ]
       }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.ssrf.001",
+      "issue_id": "owlvex.issue.ssrf.001",
+      "title": "Canonical remediation for SSRF",
+      "canonical_fix_summary": "Constrain outbound requests to approved destinations, normalize and validate URLs before use, and block internal address ranges, metadata endpoints, and attacker-controlled protocols from request execution paths.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Treat request-supplied URLs as untrusted control data and route outbound access through allow-listed hosts or named integrations.",
+          "recommended_actions": [
+            "Resolve user choices to approved upstream services instead of fetching arbitrary URLs.",
+            "Validate protocol, hostname, and resolved IP before issuing the request and block internal ranges."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Bind external fetch behavior to trusted service definitions rather than direct request parameters or body values.",
+          "recommended_actions": [
+            "Parse and validate URLs before any outbound call and reject unexpected schemes or internal destinations.",
+            "Centralize outbound HTTP helpers so metadata and internal-network blocking is enforced consistently."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Move user-controlled fetch targets behind reviewed allow-lists and isolate outbound access behind a helper with hostname and IP validation.",
+          "recommended_actions": [
+            "Map user input to trusted integration identifiers instead of arbitrary URLs.",
+            "Block redirects or revalidation paths that can pivot an allowed hostname into an internal address."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Constrain outbound client calls through explicit service configuration and validate final destinations after DNS resolution and redirects.",
+          "recommended_actions": [
+            "Replace arbitrary URL fetch endpoints with named, approved upstream definitions.",
+            "Enforce protocol, host, and IP-range allow-lists in the HTTP client layer."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Keep request-derived URLs out of direct `HttpClient` execution and validate protocol, host, and resolved address in one reviewed outbound gateway.",
+          "recommended_actions": [
+            "Use server-side identifiers for integrations instead of raw URLs from the request.",
+            "Reject link-local, loopback, RFC1918, and metadata endpoints before outbound requests."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat SSRF remediation as a server-side responsibility in route handlers, server actions, or API services, not a client-side validation problem.",
+          "recommended_actions": [
+            "Apply allow-list and network-boundary checks in the server code that issues outbound requests.",
+            "Do not trust client-side URL validation as an SSRF control."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Test internal-address and metadata-endpoint payloads and confirm the server rejects them before any outbound request occurs.",
+        "Add regression tests for redirects, alternate IP encodings, and unexpected protocols.",
+        "Review outbound request helpers to confirm hostname and resolved-IP validation occur in one consistent path."
+      ],
+      "unsafe_alternatives": [
+        "Checking only for `http` or `https` while allowing arbitrary hosts.",
+        "Allow-listing hostnames without validating final resolved IPs or redirects.",
+        "Relying on client-side URL restrictions to keep server-side fetches safe."
+      ],
+      "references": [
+        {
+          "label": "OWASP Server Side Request Forgery Prevention Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-918 Server-Side Request Forgery",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-918"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Server Side Request Forgery Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-918 Server-Side Request Forgery",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-918"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.insecure_deserialization.001",
+      "issue_id": "owlvex.issue.insecure_deserialization.001",
+      "title": "Canonical remediation for insecure deserialization",
+      "canonical_fix_summary": "Avoid unsafe object deserializers for untrusted input, prefer data-only formats, and ensure serialized content is validated, signed, or constrained before any object materialization occurs.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Keep untrusted payloads in safe JSON-like structures and avoid flows that deserialize attacker-controlled objects into executable or privileged types.",
+          "recommended_actions": [
+            "Replace unsafe deserializers with JSON parsing plus schema validation.",
+            "Reject or sign serialized payloads before any trust boundary crossing."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Use Pydantic or equivalent validation on incoming payloads and keep untrusted data in plain validated structures rather than deserialized object graphs.",
+          "recommended_actions": [
+            "Remove unsafe pickle or binary object loading from request paths.",
+            "Constrain accepted payload types to reviewed schemas before processing."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Avoid deserializing untrusted serialized objects in views, background tasks, or session-like flows unless the payload is signed and schema-constrained.",
+          "recommended_actions": [
+            "Replace unsafe object loading with validated JSON or framework-safe serializers.",
+            "Reject user-controlled serialized blobs that can instantiate arbitrary object structures."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Disable unsafe polymorphic deserialization paths and restrict accepted classes or message converters to reviewed safe types.",
+          "recommended_actions": [
+            "Configure serializers to reject untrusted type metadata.",
+            "Bind request payloads to explicit DTOs instead of arbitrary object graphs."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use safe serializers with explicit type expectations and avoid binary or unrestricted object deserialization for untrusted input.",
+          "recommended_actions": [
+            "Remove unsafe binary formatter-style flows from user-controlled paths.",
+            "Constrain deserialization to known DTOs with validation before business logic."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat insecure deserialization as a server-side concern in API handlers, server actions, and session-processing code.",
+          "recommended_actions": [
+            "Keep client payloads in validated data-only formats.",
+            "Do not deserialize attacker-controlled server payloads into privileged objects without schema validation."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay malicious serialized payloads and confirm they are rejected before object creation or code execution paths.",
+        "Add tests proving only expected DTO or schema-bound types are accepted.",
+        "Review session, cache, queue, and file-import flows for the same unsafe deserialization pattern."
+      ],
+      "unsafe_alternatives": [
+        "Allowing unsafe object loaders because the payload is base64-encoded or compressed.",
+        "Checking a few fields after deserialization instead of constraining the deserializer itself.",
+        "Assuming internal APIs are safe enough to accept unrestricted serialized objects."
+      ],
+      "references": [
+        {
+          "label": "OWASP Deserialization Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-502 Deserialization of Untrusted Data",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-502"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Deserialization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-502 Deserialization of Untrusted Data",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-502"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.weak_auth_policy.001",
+      "issue_id": "owlvex.issue.weak_auth_policy.001",
+      "title": "Canonical remediation for weak authentication policy",
+      "canonical_fix_summary": "Require strong credential policy, brute-force resistance, and multifactor or hardened identity controls where appropriate, and centralize authentication enforcement so weak defaults are not scattered across routes or services.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Enforce password policy, login throttling, lockout, and optional MFA in one reviewed authentication layer instead of route-by-route drift.",
+          "recommended_actions": [
+            "Apply rate limiting and password policy checks at account creation and login.",
+            "Prefer hardened identity providers or shared auth middleware over bespoke route-level checks."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Centralize credential and login policy in dependencies or auth services, including throttling, MFA hooks, and password strength enforcement.",
+          "recommended_actions": [
+            "Reject weak passwords during registration and reset flows.",
+            "Add login throttling or challenge escalation on repeated failures."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Use Django authentication controls or a hardened identity provider to enforce password rules, throttling, and MFA consistently.",
+          "recommended_actions": [
+            "Enable strong password validators and rate-limiting around login endpoints.",
+            "Keep sensitive auth decisions inside one reviewed backend or provider integration."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Use Spring Security policies for password controls, lockout, MFA integration, and request throttling around authentication endpoints.",
+          "recommended_actions": [
+            "Centralize login, password, and MFA policy in the security configuration.",
+            "Add brute-force resistance and review any weak fallback or development-only auth path."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use ASP.NET Identity or an equivalent reviewed auth system to enforce password, lockout, MFA, and challenge policy consistently.",
+          "recommended_actions": [
+            "Enable lockout and strong password requirements in the identity configuration.",
+            "Avoid duplicating auth policy in controllers where drift can create weaker paths."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat weak authentication remediation as a server and identity-plane change; client UI can support it but should not define the security policy.",
+          "recommended_actions": [
+            "Enforce password and MFA rules in the backend or identity provider.",
+            "Do not rely on client-only password strength hints or login throttling."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Test weak-password registration, repeated failed logins, and MFA-required flows to confirm policy enforcement is consistent.",
+        "Add regression tests for lockout or throttling behavior on sensitive auth endpoints.",
+        "Review admin, password-reset, and alternate login flows for weaker bypass paths."
+      ],
+      "unsafe_alternatives": [
+        "Checking password strength only in the client.",
+        "Adding rate limiting to one login endpoint while leaving other auth paths unprotected.",
+        "Treating optional MFA banners as equivalent to enforced MFA policy."
+      ],
+      "references": [
+        {
+          "label": "OWASP Authentication Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-521 Weak Password Requirements",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-521"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Authentication Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-521 Weak Password Requirements",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-521"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.csrf_missing_token.001",
+      "issue_id": "owlvex.issue.csrf_missing_token.001",
+      "title": "Canonical remediation for missing CSRF protection",
+      "canonical_fix_summary": "Protect state-changing browser requests with anti-CSRF tokens or equivalent same-site defenses, and ensure sensitive actions cannot be triggered cross-origin by ambient browser credentials alone.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Apply CSRF protection middleware or equivalent token checks on state-changing routes that rely on cookies or browser session state.",
+          "recommended_actions": [
+            "Issue and validate per-session or per-request CSRF tokens on unsafe methods.",
+            "Set same-site cookie policy appropriately and keep token validation in one middleware path."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Require anti-CSRF tokens or equivalent cookie-bound state protections on browser-authenticated mutating endpoints.",
+          "recommended_actions": [
+            "Validate a CSRF token alongside session cookies on unsafe requests.",
+            "Use same-site and origin checks as defense-in-depth, not as the only control."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Use Django's CSRF middleware correctly on all state-changing views and avoid exempting routes without a reviewed alternative.",
+          "recommended_actions": [
+            "Keep CSRF middleware enabled on browser-authenticated forms and endpoints.",
+            "Review any exempted route and replace it with token or origin validation where possible."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Keep Spring Security CSRF protections enabled for browser-authenticated flows and scope any exemptions narrowly.",
+          "recommended_actions": [
+            "Protect state-changing endpoints with CSRF tokens when cookies are used for auth.",
+            "Review disabled or exempted routes for alternative request-integrity controls."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use antiforgery protections on cookie-authenticated mutating endpoints and keep exemptions rare and reviewed.",
+          "recommended_actions": [
+            "Require antiforgery tokens for state-changing browser requests.",
+            "Combine same-site cookie settings with token validation rather than relying on either alone."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat CSRF as a server-validated request-integrity control even if the client renders the forms or API calls.",
+          "recommended_actions": [
+            "Send and validate antiforgery tokens on browser-authenticated mutating requests.",
+            "Do not treat hidden fields or frontend route guards as sufficient CSRF protection by themselves."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Attempt a cross-site form or request trigger and confirm the state-changing action is rejected without a valid token.",
+        "Add tests proving mutating routes fail when cookie-authenticated requests omit or forge the anti-CSRF token.",
+        "Review same-site, origin-check, and token behavior across all browser-authenticated state-changing flows."
+      ],
+      "unsafe_alternatives": [
+        "Relying only on referer checks or client-side JavaScript restrictions.",
+        "Disabling CSRF middleware because the route is called by fetch or SPA code.",
+        "Treating hidden form fields without server validation as CSRF protection."
+      ],
+      "references": [
+        {
+          "label": "OWASP Cross-Site Request Forgery Prevention Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-352 Cross-Site Request Forgery",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-352"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross-Site Request Forgery Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-352 Cross-Site Request Forgery",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-352"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.insecure_cors.001",
+      "issue_id": "owlvex.issue.insecure_cors.001",
+      "title": "Canonical remediation for insecure CORS",
+      "canonical_fix_summary": "Restrict cross-origin access to explicit trusted origins, methods, and headers, and never combine wildcard or overly broad origin policy with credentialed responses.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Configure CORS middleware with an explicit origin allow-list and keep credentialed requests limited to trusted callers.",
+          "recommended_actions": [
+            "Replace wildcard origin policy with a reviewed allow-list.",
+            "Reject `Access-Control-Allow-Credentials` on broad or untrusted origin policy."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Use CORS middleware with exact trusted origins and avoid permissive wildcard settings on sensitive APIs.",
+          "recommended_actions": [
+            "Set explicit allowed origins, methods, and headers.",
+            "Do not enable credentials for arbitrary or wildcard origins."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Constrain CORS configuration to trusted origins and keep credentialed browser access narrow and reviewed.",
+          "recommended_actions": [
+            "Use an explicit allow-list for cross-origin callers.",
+            "Review environment-specific settings so development permissiveness does not leak into production."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Apply narrow cross-origin policy in controller or global security config and keep credentialed origins explicitly enumerated.",
+          "recommended_actions": [
+            "Define exact allowed origins and methods rather than permissive patterns.",
+            "Separate public-read cross-origin scenarios from authenticated credentialed APIs."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use named CORS policies with explicit trusted origins and avoid combining credentials with broad origin patterns.",
+          "recommended_actions": [
+            "Replace permissive default CORS policy with reviewed named policies.",
+            "Apply the narrowest policy necessary for each endpoint group."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat insecure CORS as a server/API policy problem; client code may reveal usage patterns but should not define the security boundary.",
+          "recommended_actions": [
+            "Fix the API's CORS policy rather than trusting browser-side restrictions.",
+            "Review which origins genuinely need authenticated cross-origin access."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Test requests from untrusted origins and confirm sensitive responses no longer include permissive CORS headers.",
+        "Verify credentialed cross-origin requests succeed only for explicit trusted origins.",
+        "Review environment-specific configuration to ensure development wildcard settings are not active in production."
+      ],
+      "unsafe_alternatives": [
+        "Keeping wildcard origins while allowing credentials.",
+        "Using broad regex or suffix matches without reviewing origin ownership risk.",
+        "Treating client-side fetch configuration as a substitute for API-side CORS policy."
+      ],
+      "references": [
+        {
+          "label": "OWASP Cross Origin Resource Sharing Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-942 Permissive Cross-domain Policy with Untrusted Domains",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-942"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross Origin Resource Sharing Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-942 Permissive Cross-domain Policy with Untrusted Domains",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-942"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.unrestricted_file_upload.001",
+      "issue_id": "owlvex.issue.unrestricted_file_upload.001",
+      "title": "Canonical remediation for unrestricted file upload",
+      "canonical_fix_summary": "Constrain uploads by type, size, content validation, and storage boundary, and ensure uploaded files cannot become executable, directly trusted, or broadly accessible without review.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Validate upload type, size, and content server-side before storage, and keep uploads outside executable or public-by-default paths.",
+          "recommended_actions": [
+            "Allow-list accepted MIME types and extensions, but also inspect content where practical.",
+            "Store uploads outside the web root and rename them to server-generated identifiers."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Treat uploaded files as untrusted content and enforce type, size, scanning, and storage controls before any downstream use.",
+          "recommended_actions": [
+            "Reject oversized or unexpected file types before writing them to durable storage.",
+            "Keep upload processing isolated from direct execution or templating paths."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Constrain file uploads with validation, storage isolation, and safe serving policy so user content cannot become executable or directly trusted.",
+          "recommended_actions": [
+            "Use reviewed validators and storage backends for allowed file classes only.",
+            "Serve uploads through controlled views or storage policies rather than raw executable paths."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Validate multipart uploads strictly and isolate stored content from executable application paths and permissive content serving.",
+          "recommended_actions": [
+            "Allow-list extensions and content types with size limits and content checks.",
+            "Keep uploaded files in non-executable storage locations with generated names."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Apply strict file validation, storage isolation, and controlled serving for uploaded content before any file is accepted or exposed.",
+          "recommended_actions": [
+            "Validate size, extension, and content expectations server-side.",
+            "Store files outside executable directories and use generated names or identifiers."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat file upload protection as an API and storage concern; client-side accept filters are convenience only, not the security boundary.",
+          "recommended_actions": [
+            "Validate uploads again in the server route or upstream API regardless of client hints.",
+            "Keep uploaded content out of executable or directly trusted server paths."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Attempt to upload disallowed file types, oversized files, and content mismatches and confirm the server rejects them.",
+        "Verify accepted uploads are stored outside executable or public-by-default paths with generated identifiers.",
+        "Review downstream processing flows for antivirus, image parsing, archive extraction, and direct file serving behavior."
+      ],
+      "unsafe_alternatives": [
+        "Checking extensions only without validating size, content, or storage location.",
+        "Trusting client-side file filters as the main control.",
+        "Saving uploads in directly executable or publicly served application directories."
+      ],
+      "references": [
+        {
+          "label": "OWASP File Upload Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-434 Unrestricted Upload of File with Dangerous Type",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-434"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP File Upload Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-434 Unrestricted Upload of File with Dangerous Type",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-434"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.mass_assignment.001",
+      "issue_id": "owlvex.issue.mass_assignment.001",
+      "title": "Canonical remediation for mass assignment",
+      "canonical_fix_summary": "Bind client input only to explicit allow-listed fields or DTOs, and prevent request payloads from directly controlling privileged, hidden, or integrity-sensitive model attributes.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Map request bodies to explicit DTOs or allow-listed objects before persisting them to domain models.",
+          "recommended_actions": [
+            "Pick only approved fields from the request body instead of spreading or assigning the full object.",
+            "Keep role, status, ownership, and other privileged attributes out of generic update binding."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Use explicit request models for writable fields and keep internal or privileged attributes out of public input schemas.",
+          "recommended_actions": [
+            "Separate public write DTOs from internal persistence models.",
+            "Reject extra or unexpected fields instead of silently binding them."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Bind only approved fields in forms, serializers, and model update flows and avoid exposing privileged model attributes through generic request mapping.",
+          "recommended_actions": [
+            "Set explicit writable fields in forms or serializers.",
+            "Keep ownership, permission, and status fields server-controlled."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Bind request payloads into explicit DTOs rather than entities and control which fields can be updated through reviewed service logic.",
+          "recommended_actions": [
+            "Use request DTOs with only approved writable fields.",
+            "Map privileged or integrity-sensitive attributes inside the service layer, not from the client payload."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use explicit view models or request contracts and avoid binding arbitrary request fields directly into domain entities.",
+          "recommended_actions": [
+            "Restrict model binding to approved properties only.",
+            "Set sensitive attributes server-side after authorization and business checks."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat mass-assignment protection as a server schema and binding concern, not a client form-shape guarantee.",
+          "recommended_actions": [
+            "Validate and map writable fields again in the server action or API route.",
+            "Do not assume hidden or omitted form fields stay safe once a request is attacker-controlled."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Attempt to submit privileged or hidden fields in the request payload and confirm they are rejected or ignored safely.",
+        "Add regression tests proving only approved writable fields affect persisted state.",
+        "Review create, update, patch, and bulk-import flows for generic model binding patterns."
+      ],
+      "unsafe_alternatives": [
+        "Hiding fields in the client while continuing to bind the full request object on the server.",
+        "Filtering a few dangerous fields but still allowing arbitrary extras.",
+        "Binding directly into persistence entities and hoping authorization later will correct it."
+      ],
+      "references": [
+        {
+          "label": "OWASP Mass Assignment Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-915 Improperly Controlled Modification of Dynamically-Determined Object Attributes",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-915"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Mass Assignment Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-915 Improperly Controlled Modification of Dynamically-Determined Object Attributes",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-915"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.open_redirect.001",
+      "issue_id": "owlvex.issue.open_redirect.001",
+      "title": "Canonical remediation for open redirect",
+      "canonical_fix_summary": "Replace attacker-controlled redirect targets with allow-listed route names or trusted destinations, and ensure user input cannot directly choose arbitrary external navigation targets.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Resolve redirect destinations from server-side route identifiers or a strict allow-list instead of passing through user-provided URLs.",
+          "recommended_actions": [
+            "Map request parameters to known-safe redirect targets rather than raw URLs.",
+            "Validate any remaining external redirect against an explicit allow-list before issuing it."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Treat redirect targets as controlled application state and avoid building response redirects directly from request data.",
+          "recommended_actions": [
+            "Translate user choices into trusted internal routes or approved destinations.",
+            "Reject arbitrary external redirect parameters unless they match a reviewed allow-list."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Use named routes or safe redirect helpers and keep `next`-style parameters constrained to trusted local destinations.",
+          "recommended_actions": [
+            "Validate redirect parameters against allowed hosts or internal paths only.",
+            "Prefer route names and server-side decision logic over user-supplied URLs."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Resolve redirects from server-side route or state decisions and reject arbitrary destination URLs from request parameters.",
+          "recommended_actions": [
+            "Use known-safe internal redirect targets where possible.",
+            "Allow-list any external destinations that genuinely need to be reachable."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use local redirect helpers and explicit host validation rather than redirecting to request-controlled destinations.",
+          "recommended_actions": [
+            "Prefer local route or return-url helpers that enforce trusted destinations.",
+            "Reject or normalize any external redirect parameter that is not explicitly approved."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat open redirects as a server routing and trust-boundary issue; client navigation hints do not replace server validation.",
+          "recommended_actions": [
+            "Validate redirect targets in the server handler or middleware that performs the redirect.",
+            "Avoid trusting query-string navigation targets without an allow-list."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Attempt to supply an arbitrary external redirect target and confirm the application rejects it or routes to a safe default.",
+        "Add tests for local-only redirect enforcement, allowed-host logic, and malicious external URLs.",
+        "Review login, logout, payment, and post-action return flows for the same redirect pattern."
+      ],
+      "unsafe_alternatives": [
+        "Checking only for a missing protocol while still allowing attacker-controlled hosts.",
+        "Trying to strip dangerous substrings from a redirect URL instead of validating the full destination.",
+        "Assuming client-side link construction prevents server-side redirect abuse."
+      ],
+      "references": [
+        {
+          "label": "OWASP Unvalidated Redirects and Forwards Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-601 URL Redirection to Untrusted Site",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-601"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Unvalidated Redirects and Forwards Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-601 URL Redirection to Untrusted Site",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-601"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.xxe.001",
+      "issue_id": "owlvex.issue.xxe.001",
+      "title": "Canonical remediation for XXE",
+      "canonical_fix_summary": "Disable external entity resolution and unsafe DTD processing in XML parsers that handle untrusted input, and keep XML handling constrained to reviewed parsers and safe configuration defaults.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Avoid unsafe XML parsing libraries or parser defaults that allow external entities and DTD expansion on user-controlled input.",
+          "recommended_actions": [
+            "Disable external entity resolution and DTD processing explicitly.",
+            "Move untrusted XML handling behind one reviewed parser configuration."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Constrain XML parsing to safe libraries and parser settings that reject external entities and dangerous XML features.",
+          "recommended_actions": [
+            "Disable external entity and DTD handling for all request-derived XML.",
+            "Prefer data-only formats when XML is not required by the integration."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Treat untrusted XML as a high-risk format and keep parsing behind safe library configuration that disables external entities.",
+          "recommended_actions": [
+            "Use hardened parser settings or safe XML libraries for all inbound XML paths.",
+            "Review file import, SSO, and webhook-style XML handlers for unsafe defaults."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Configure XML parsers, transformers, and marshallers to disable external entities and DTD processing across the stack.",
+          "recommended_actions": [
+            "Apply secure parser configuration centrally rather than per-controller drift.",
+            "Audit JAXB, SAX, DOM, and transformer flows for unsafe entity resolution."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use secure XML reader settings that prohibit DTD processing and external resource resolution for untrusted XML.",
+          "recommended_actions": [
+            "Apply safe `XmlReaderSettings` or equivalent defaults across XML entry points.",
+            "Avoid parser fallbacks that silently re-enable dangerous XML features."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat XXE as a server-side parser configuration issue in APIs and background processing, not a client-side validation problem.",
+          "recommended_actions": [
+            "Fix XML parser configuration in the backend route or service that consumes the payload.",
+            "Do not trust client content restrictions as the XML security boundary."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay XML payloads with external entities and confirm the parser rejects them or treats them as inert text.",
+        "Add tests covering DTD-enabled, external-entity, and local-file resolution payloads.",
+        "Review every XML entry point, including file import and background jobs, for the same parser configuration."
+      ],
+      "unsafe_alternatives": [
+        "Filtering a few entity strings while leaving parser entity resolution enabled.",
+        "Securing one XML endpoint while other parsers in the same service keep unsafe defaults.",
+        "Assuming trusted transport makes unsafe XML parser settings acceptable."
+      ],
+      "references": [
+        {
+          "label": "OWASP XML External Entity Prevention Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-611 Improper Restriction of XML External Entity Reference",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-611"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP XML External Entity Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-611 Improper Restriction of XML External Entity Reference",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-611"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.weak_crypto.001",
+      "issue_id": "owlvex.issue.weak_crypto.001",
+      "title": "Canonical remediation for weak cryptography",
+      "canonical_fix_summary": "Replace broken or deprecated algorithms with modern approved primitives and secure modes, and centralize cryptographic choices so insecure defaults cannot linger in isolated code paths.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Use modern Node crypto primitives and reviewed library defaults instead of deprecated hashes, ciphers, or weak modes.",
+          "recommended_actions": [
+            "Replace MD5, SHA1, DES, RC4, and similar legacy primitives with approved alternatives.",
+            "Prefer authenticated encryption modes and reviewed password-hashing functions where applicable."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Use maintained cryptographic libraries with explicit modern algorithms and avoid custom or legacy crypto choices in request paths.",
+          "recommended_actions": [
+            "Replace deprecated primitives with modern hash, encryption, or password storage algorithms.",
+            "Centralize crypto configuration so insecure library defaults are not scattered."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Keep cryptographic operations on framework-safe defaults or reviewed libraries and avoid introducing legacy algorithms into application code.",
+          "recommended_actions": [
+            "Replace unsafe hashes and ciphers in custom code or integrations.",
+            "Review token signing, password storage, and encryption helpers for outdated algorithm selection."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Use approved modern algorithms through reviewed JCA/JCE or framework-safe configuration and avoid custom or deprecated primitives.",
+          "recommended_actions": [
+            "Replace broken or legacy ciphers and hashes with approved current options.",
+            "Standardize cryptographic configuration across services to prevent downgrade paths."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use modern .NET cryptographic APIs and approved algorithms, and remove compatibility fallbacks that preserve weak primitives.",
+          "recommended_actions": [
+            "Replace legacy hash and cipher usage with approved alternatives.",
+            "Keep encryption and signature configuration in one reviewed layer rather than ad hoc call sites."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat weak cryptography as a server and platform concern in token handling, encryption services, and backend APIs rather than a client-only decision.",
+          "recommended_actions": [
+            "Apply strong algorithms in the server code or identity system backing the client flow.",
+            "Do not rely on client-side crypto choices to compensate for weak server-side primitives."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Review the final code path and configuration to confirm deprecated algorithms and modes are no longer present.",
+        "Add tests or checks that assert the expected modern algorithms are selected in security-sensitive paths.",
+        "Review compatibility or migration code to ensure it does not silently re-enable weak cryptography."
+      ],
+      "unsafe_alternatives": [
+        "Wrapping a weak primitive in more code instead of replacing it.",
+        "Keeping deprecated algorithms for convenience without hard migration boundaries.",
+        "Changing one call site while leaving the same weak algorithm active elsewhere in the stack."
+      ],
+      "references": [
+        {
+          "label": "OWASP Cryptographic Storage Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-327 Use of a Broken or Risky Cryptographic Algorithm",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-327"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cryptographic Storage Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-327 Use of a Broken or Risky Cryptographic Algorithm",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-327"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.insecure_randomness.001",
+      "issue_id": "owlvex.issue.insecure_randomness.001",
+      "title": "Canonical remediation for insecure randomness",
+      "canonical_fix_summary": "Use a cryptographically secure source of randomness for security-sensitive values such as tokens, keys, reset links, and nonces, and prevent predictable PRNG output from influencing trust decisions.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Use Node's cryptographically secure randomness APIs for tokens, identifiers, and secret material instead of predictable pseudo-random sources.",
+          "recommended_actions": [
+            "Replace `Math.random()` and similar sources in security-sensitive paths.",
+            "Centralize token and nonce generation in one reviewed helper backed by secure randomness."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Use secure randomness libraries or platform APIs for reset tokens, secrets, and other trust-bearing values.",
+          "recommended_actions": [
+            "Replace predictable PRNG output in authentication or session flows.",
+            "Keep token generation behind one reviewed secure helper."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Use framework-safe or secure platform randomness for security-sensitive values and avoid predictable custom generators.",
+          "recommended_actions": [
+            "Replace non-cryptographic random sources in token, reset, and invite flows.",
+            "Review custom helpers for predictable output or reuse."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Use secure random generation for authentication, session, and cryptographic support values rather than general-purpose PRNGs.",
+          "recommended_actions": [
+            "Replace predictable token generation with secure random APIs.",
+            "Standardize secure randomness use in one reviewed utility layer."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use cryptographically secure random APIs for all trust-bearing tokens and secrets and remove predictable random generation from security flows.",
+          "recommended_actions": [
+            "Replace general-purpose random classes in security-sensitive contexts.",
+            "Keep token and nonce generation centralized and reviewed."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat secure randomness for trust-bearing values as a server concern; client-generated randomness should not define authentication or authorization truth.",
+          "recommended_actions": [
+            "Generate sensitive tokens and secrets on the server using secure randomness.",
+            "Do not rely on client-side pseudo-random generation for security-critical values."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Review the final token or secret generation path and confirm it uses a cryptographically secure randomness source.",
+        "Add tests or assertions around helper selection so predictable PRNGs are not reintroduced.",
+        "Audit adjacent invite, reset, session, and nonce generation flows for the same weakness."
+      ],
+      "unsafe_alternatives": [
+        "Keeping `Math.random()` or equivalent in security-sensitive code because the value looks long enough.",
+        "Hashing predictable randomness and treating it as secure.",
+        "Using secure randomness in one token flow while other trust-bearing values stay predictable."
+      ],
+      "references": [
+        {
+          "label": "OWASP Cryptographic Storage Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-330 Use of Insufficiently Random Values",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-330"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cryptographic Storage Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-330 Use of Insufficiently Random Values",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-330"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.nosql_injection.001",
+      "issue_id": "owlvex.issue.nosql_injection.001",
+      "title": "Canonical remediation for NoSQL injection",
+      "canonical_fix_summary": "Constrain query structure to server-defined fields and operators, validate client input against strict schemas, and prevent attacker-controlled objects from directly shaping NoSQL query logic.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Build NoSQL queries from explicit allow-listed fields and operators rather than passing through request-derived filter objects.",
+          "recommended_actions": [
+            "Reject untrusted operators such as `$where` or unexpected nested filter structures.",
+            "Map request values into reviewed query builders instead of raw query objects."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Bind input through explicit schemas and construct NoSQL filters from approved fields rather than deserialized request objects.",
+          "recommended_actions": [
+            "Reject arbitrary operator injection and unexpected filter keys.",
+            "Keep database query construction inside one reviewed server-side helper layer."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Constrain document or search-style query construction to approved fields and avoid passing user-controlled operators into backend query APIs.",
+          "recommended_actions": [
+            "Validate filter payloads against strict schemas before query construction.",
+            "Prevent request bodies from directly shaping persistence-layer query objects."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Construct NoSQL queries from reviewed DTO fields and block direct operator or query-object injection from request data.",
+          "recommended_actions": [
+            "Allow-list supported filters and operators explicitly.",
+            "Keep raw query-object construction out of controllers and request mappers."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Map request input into explicit query DTOs and build NoSQL filters from approved fields and operators only.",
+          "recommended_actions": [
+            "Reject arbitrary operator keys and nested attacker-controlled query objects.",
+            "Centralize NoSQL query construction in one reviewed data-access layer."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat NoSQL injection remediation as a server query-construction problem, not a client filter-shaping problem.",
+          "recommended_actions": [
+            "Validate and rebuild filters in the server handler or API service.",
+            "Do not trust client-generated query objects as safe database input."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay malicious operator payloads such as `$where` or unexpected nested filters and confirm the server rejects or neutralizes them.",
+        "Add tests proving only approved filter fields and operators reach the NoSQL query builder.",
+        "Review search, list, admin, and reporting endpoints for the same raw filter-object pattern."
+      ],
+      "unsafe_alternatives": [
+        "Filtering only one dangerous operator while still allowing arbitrary query-object structure.",
+        "Casting attacker-controlled objects to a different type without rebuilding the query safely.",
+        "Relying on the client to shape a safe filter object."
+      ],
+      "references": [
+        {
+          "label": "OWASP NoSQL Security Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-943 Improper Neutralization of Special Elements in Data Query Logic",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-943"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP NoSQL Security Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-943 Improper Neutralization of Special Elements in Data Query Logic",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-943"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.ldap_injection.001",
+      "issue_id": "owlvex.issue.ldap_injection.001",
+      "title": "Canonical remediation for LDAP injection",
+      "canonical_fix_summary": "Escape or parameterize untrusted LDAP filter input and construct directory queries through safe APIs that keep attacker-controlled values separate from LDAP filter syntax.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Escape request-derived directory values before they reach LDAP filter strings and keep filter structure server-controlled.",
+          "recommended_actions": [
+            "Use safe LDAP escaping helpers on all untrusted filter values.",
+            "Build filters from reviewed templates rather than concatenated request data."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Treat LDAP filter values as untrusted data and escape or bind them before any directory query is issued.",
+          "recommended_actions": [
+            "Keep LDAP filter syntax server-defined and inject only escaped values.",
+            "Centralize directory-query construction in one reviewed helper."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Escape untrusted LDAP input and keep directory search filters out of raw string concatenation paths.",
+          "recommended_actions": [
+            "Use directory-safe escaping or parameterization for all user-derived values.",
+            "Review authentication and account-search flows for concatenated LDAP filters."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Construct LDAP filters through reviewed templates or helpers and avoid injecting request data directly into filter syntax.",
+          "recommended_actions": [
+            "Escape all untrusted values before filter construction.",
+            "Keep directory-query structure separate from attacker-controlled input."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use safe directory query construction and escape request-derived LDAP values before they reach the search filter.",
+          "recommended_actions": [
+            "Build directory filters from server-controlled templates and escaped values.",
+            "Review authentication, lookup, and admin search flows for raw filter concatenation."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat LDAP injection as a server-side directory query issue in auth and lookup services rather than a client validation issue.",
+          "recommended_actions": [
+            "Escape and validate directory input in the backend service that issues LDAP queries.",
+            "Do not assume client restrictions keep directory search values safe."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay LDAP metacharacter payloads and confirm the filter remains structurally safe and semantically constrained.",
+        "Add tests proving user input is escaped or bound before reaching the LDAP query layer.",
+        "Review auth, directory search, and account-management flows for the same raw filter construction pattern."
+      ],
+      "unsafe_alternatives": [
+        "Stripping a few special characters while leaving filter syntax attacker-influenced.",
+        "Escaping one field but continuing to concatenate other request-derived LDAP fragments.",
+        "Relying on UI restrictions to prevent malicious directory query input."
+      ],
+      "references": [
+        {
+          "label": "OWASP LDAP Injection Prevention Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-90 Improper Neutralization of Special Elements used in an LDAP Query",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-90"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP LDAP Injection Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-90 Improper Neutralization of Special Elements used in an LDAP Query",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-90"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.hardcoded_api_key.001",
+      "issue_id": "owlvex.issue.hardcoded_api_key.001",
+      "title": "Remove hardcoded API keys and move them into managed secret storage",
+      "canonical_fix_summary": "Eliminate hardcoded API keys from source control, load them from managed secret storage or deployment-time configuration, and rotate any exposed credentials immediately.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Load third-party API keys from environment or secret-management integrations during startup and keep them out of route handlers and checked-in config files.",
+          "recommended_actions": [
+            "Read keys from deployment-managed secrets and fail startup if required credentials are missing.",
+            "Rotate any key that was previously committed and update calling services to use the new secret source."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Inject API keys through settings or secret providers rather than embedding them in routers, dependencies, or module constants.",
+          "recommended_actions": [
+            "Use configuration classes or secret stores to load API keys at runtime.",
+            "Remove committed keys from code, sample files, and notebooks, then rotate them."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Keep API keys in environment-backed settings or a managed secret backend instead of hardcoding them in settings modules, views, or utility files.",
+          "recommended_actions": [
+            "Load keys through settings that are populated from deployment secrets.",
+            "Review admin commands, integrations, and Celery tasks for copied or fallback credentials."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Bind API credentials from secure configuration sources and keep them out of Java constants, YAML defaults, and example profiles committed to the repo.",
+          "recommended_actions": [
+            "Use environment-backed properties or a secret manager for runtime injection.",
+            "Rotate exposed credentials and update any profile or bootstrap config that embedded the old values."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use configuration providers such as environment variables, user secrets, or managed secret stores rather than hardcoded API keys in services and appsettings files.",
+          "recommended_actions": [
+            "Bind secrets from secure configuration at startup and avoid checked-in credential defaults.",
+            "Rotate previously exposed keys and audit deployment slots or test configs for duplicates."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Never embed sensitive API keys in browser-delivered bundles; keep privileged keys on the server and proxy requests through controlled backend routes when needed.",
+          "recommended_actions": [
+            "Move any privileged key usage to server-only code or backend services.",
+            "Rotate leaked keys and ensure public client configuration contains only non-sensitive publishable tokens."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Search the repository and build artifacts to confirm the old key is no longer present in source, configs, or bundles.",
+        "Verify the application still loads the credential correctly from managed configuration in each target environment.",
+        "Confirm the exposed key has been rotated or revoked and that downstream integrations use the replacement."
+      ],
+      "unsafe_alternatives": [
+        "Base64-encoding or lightly obfuscating the key while still committing it to the repository.",
+        "Moving the key into a checked-in config file or client bundle and treating that as remediation.",
+        "Keeping the compromised key active after removing it from source."
+      ],
+      "references": [
+        {
+          "label": "OWASP Secrets Management Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-798 Use of Hard-coded Credentials",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-798"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-798 Use of Hard-coded Credentials",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.hardcoded_password.001",
+      "issue_id": "owlvex.issue.hardcoded_password.001",
+      "title": "Remove hardcoded passwords and replace them with managed authentication secrets",
+      "canonical_fix_summary": "Remove hardcoded passwords from code and configuration, replace them with managed secrets or delegated authentication flows, and rotate any password that may have been exposed.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Keep database and service passwords in secret-managed runtime configuration instead of source files, route handlers, or scripts.",
+          "recommended_actions": [
+            "Load credentials from environment or secret providers and fail closed when they are missing.",
+            "Rotate any password that was committed and update integration tests to use safe local fixtures."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Inject passwords through settings or secret backends rather than embedding them in modules, dependency wiring, or startup code.",
+          "recommended_actions": [
+            "Move credentials into deployment-managed secrets and reference them via runtime configuration.",
+            "Rotate exposed passwords and review notebooks, test files, and sample configs for copies."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Avoid hardcoded service or admin passwords in settings, commands, fixtures, and management utilities; source them from secret-backed settings instead.",
+          "recommended_actions": [
+            "Use environment-backed settings or a secret manager for credential loading.",
+            "Review superuser bootstrap scripts and integration helpers for embedded passwords."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Remove embedded passwords from properties, Java constants, and bootstrap code, and bind them from secure configuration at runtime.",
+          "recommended_actions": [
+            "Use secret-backed property sources instead of committing credentials in configuration files.",
+            "Rotate previously exposed passwords and update deployment manifests to consume the new secret source."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Keep passwords in secure configuration providers or external secret stores rather than source files, connection strings, or test defaults.",
+          "recommended_actions": [
+            "Bind credentials from environment or managed secrets during startup.",
+            "Rotate committed passwords and verify local development uses safe non-production secrets."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Do not place passwords or privileged login secrets in frontend code; move authenticated operations to server-only routes or backend services.",
+          "recommended_actions": [
+            "Remove any password-like values from browser code and environment files that are exposed to the client.",
+            "Rotate leaked credentials and redesign flows that depended on client-held shared secrets."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Search source, history-relevant config, and deployment manifests to confirm the old password is no longer present.",
+        "Verify the application authenticates correctly using the managed secret source in each environment.",
+        "Confirm the exposed password has been rotated or invalidated and cannot be used anymore."
+      ],
+      "unsafe_alternatives": [
+        "Renaming the variable or moving the password into another committed file.",
+        "Replacing the password with a reversible encoding while still shipping it with the application.",
+        "Keeping the compromised password active after removing it from the main code path."
+      ],
+      "references": [
+        {
+          "label": "OWASP Secrets Management Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-259 Use of Hard-coded Password",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-259"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-259 Use of Hard-coded Password",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-259"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.hardcoded_token.001",
+      "issue_id": "owlvex.issue.hardcoded_token.001",
+      "title": "Remove hardcoded tokens and reissue them through controlled secret delivery",
+      "canonical_fix_summary": "Replace hardcoded bearer tokens, session tokens, and integration tokens with managed secret delivery, and revoke or rotate any token that was exposed in source or build artifacts.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Keep service tokens in secret-backed configuration and inject them into integrations at runtime instead of embedding them in route code or utility modules.",
+          "recommended_actions": [
+            "Load tokens from managed secrets and centralize access in a small configuration layer.",
+            "Revoke committed tokens and update integration clients to read the replacement from secure config."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Source tokens from runtime settings or secret providers rather than module-level constants, dependencies, or test helpers that ship with the app.",
+          "recommended_actions": [
+            "Move token values into secret-backed settings and avoid checked-in defaults.",
+            "Rotate leaked tokens and review async workers or webhook clients for duplicate storage."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Remove embedded tokens from settings, integrations, management commands, and background jobs, and retrieve them from secret-managed configuration.",
+          "recommended_actions": [
+            "Use environment-backed settings or a secret backend for token retrieval.",
+            "Revoke exposed tokens and update scheduled tasks and third-party integrations to use the new source."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Keep integration tokens out of committed properties and Java code, and bind them from secure property sources or secret managers at runtime.",
+          "recommended_actions": [
+            "Use environment-backed configuration or secret stores to inject tokens.",
+            "Rotate any leaked token and remove copies from profiles, examples, and bootstrap code."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use configuration providers or managed secret stores for token delivery instead of hardcoded constants, appsettings values, or client classes.",
+          "recommended_actions": [
+            "Read tokens from secure configuration during startup or service creation.",
+            "Revoke exposed tokens and scan deployment settings and test data for residual copies."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Do not place privileged tokens in frontend code or public environment variables; keep token-bearing integrations on the server or backend edge.",
+          "recommended_actions": [
+            "Move privileged API calls to server-only handlers and protect tokens in server-side secret storage.",
+            "Revoke leaked tokens and verify no secret token is exposed in client bundles or browser storage."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Search the repository, generated bundles, and environment templates to confirm the old token is gone.",
+        "Verify integrations still function when the token is loaded from managed configuration.",
+        "Confirm the exposed token has been revoked or rotated and cannot be used successfully."
+      ],
+      "unsafe_alternatives": [
+        "Keeping the token in a checked-in environment file or sample configuration.",
+        "Masking part of the token while continuing to ship the usable secret with the application.",
+        "Removing the token from source but leaving the compromised token active."
+      ],
+      "references": [
+        {
+          "label": "OWASP Secrets Management Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-798 Use of Hard-coded Credentials",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-798"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-798 Use of Hard-coded Credentials",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.hardcoded_secret.001",
+      "issue_id": "owlvex.issue.hardcoded_secret.001",
+      "title": "Replace hardcoded secrets with managed secret distribution and rotation",
+      "canonical_fix_summary": "Move generic hardcoded secrets such as signing keys, shared secrets, and service credentials into managed secret storage, remove them from code and artifacts, and rotate any exposed values.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Keep app secrets such as signing keys and integration credentials in environment or secret stores rather than source files and middleware definitions.",
+          "recommended_actions": [
+            "Load secrets during startup from a managed provider and keep access centralized.",
+            "Rotate committed secrets and review tests, scripts, and example configs for reused values."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Read signing keys and shared secrets from runtime settings or a secret manager instead of constants in modules, dependencies, or startup code.",
+          "recommended_actions": [
+            "Use secret-backed settings for runtime injection and fail startup when critical secrets are missing.",
+            "Rotate any exposed secret and audit workers, task queues, and examples for copies."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Keep `SECRET_KEY`-style values and other shared secrets out of committed settings and move them to secret-backed configuration sources.",
+          "recommended_actions": [
+            "Load framework and integration secrets from environment-backed settings or secret managers.",
+            "Rotate exposed secrets and invalidate any sessions, signatures, or tokens derived from them if required."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Bind signing keys and shared secrets from secure property sources rather than embedding them in code, property defaults, or sample profiles.",
+          "recommended_actions": [
+            "Use external secret stores or environment-backed properties for secret injection.",
+            "Rotate leaked secrets and review any signed-token or crypto flows that depended on the compromised value."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Source application secrets from secure configuration providers instead of hardcoded constants, checked-in settings, or test bootstrap files.",
+          "recommended_actions": [
+            "Use managed secret delivery for signing keys and shared credentials.",
+            "Rotate compromised secrets and review derived tokens, cookies, or signatures for invalidation needs."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Never expose sensitive shared secrets to browser code; keep secret-bearing logic on the server and inject values only into server-side runtime configuration.",
+          "recommended_actions": [
+            "Move secret-dependent operations to server-only code paths.",
+            "Rotate any exposed secret and confirm no usable value remains in client bundles, source maps, or public env files."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Search source, generated assets, and deployment templates to confirm the secret value no longer appears.",
+        "Verify the application starts and operates correctly using the managed secret source.",
+        "Confirm the compromised secret has been rotated and any dependent trust artifacts have been reviewed or invalidated."
+      ],
+      "unsafe_alternatives": [
+        "Moving the secret into another committed file or public environment variable.",
+        "Using reversible obfuscation instead of real secret management.",
+        "Leaving the leaked secret valid after removing it from the codebase."
+      ],
+      "references": [
+        {
+          "label": "OWASP Secrets Management Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-798 Use of Hard-coded Credentials",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-798"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-798 Use of Hard-coded Credentials",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-798"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.idor.001",
+      "issue_id": "owlvex.issue.idor.001",
+      "title": "Enforce object-level authorization on every resource access path",
+      "canonical_fix_summary": "Apply server-side object-level authorization checks on every read, update, delete, and action path so users can access only resources they are explicitly allowed to use.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Authorize each object lookup and mutation in route handlers and service layers instead of trusting route parameters, hidden fields, or client filtering.",
+          "recommended_actions": [
+            "Bind resource access to the authenticated principal before returning or mutating data.",
+            "Review direct ID-based endpoints and nested resource actions for missing ownership or entitlement checks."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Perform object-level authorization in dependencies or service logic before using path, query, or body identifiers to fetch or change records.",
+          "recommended_actions": [
+            "Check that the current principal is allowed to access the target object before any business action proceeds.",
+            "Review read, update, delete, and export flows that accept user-controlled identifiers."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Enforce per-object authorization in views, DRF permissions, and querysets rather than assuming model exposure or URL structure is safe.",
+          "recommended_actions": [
+            "Filter querysets by the current user or tenant and verify ownership before returning objects.",
+            "Review detail views, form posts, and admin-like actions for unscoped primary-key access."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Apply object-level access control in controllers and services before performing repository lookups or state changes driven by request identifiers.",
+          "recommended_actions": [
+            "Tie resource access to the authenticated subject or granted authorities before use.",
+            "Review endpoint methods that accept IDs or references and reach straight into repositories."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Check per-resource authorization in controllers, handlers, and services before acting on route or payload identifiers.",
+          "recommended_actions": [
+            "Enforce ownership, tenant, or policy checks before returning or modifying the target resource.",
+            "Review API endpoints and Razor or MVC actions that trust user-supplied IDs."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat IDOR as a backend authorization problem and ensure API routes or backing services enforce object access regardless of what IDs the client can send.",
+          "recommended_actions": [
+            "Keep authorization checks on the server for all object fetch and mutation paths.",
+            "Do not rely on hidden IDs, disabled controls, or client route guarding as the primary protection."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Attempt to access peer or cross-tenant object identifiers and confirm the server denies unauthorized access.",
+        "Add automated tests covering read, update, delete, and action endpoints with both authorized and unauthorized principals.",
+        "Review logs and business workflows to ensure object-level checks happen before side effects."
+      ],
+      "unsafe_alternatives": [
+        "Relying on unguessable IDs without server-side authorization checks.",
+        "Filtering object lists in the UI while leaving direct object endpoints unprotected.",
+        "Checking authorization after a state-changing action has already occurred."
+      ],
+      "references": [
+        {
+          "label": "OWASP Authorization Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-639 Authorization Bypass Through User-Controlled Key",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-639"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Authorization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-639 Authorization Bypass Through User-Controlled Key",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-639"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.sensitive_logging.001",
+      "issue_id": "owlvex.issue.sensitive_logging.001",
+      "title": "Stop logging sensitive data and sanitize observability output",
+      "canonical_fix_summary": "Remove secrets, tokens, credentials, and other sensitive values from logs, traces, and error telemetry, and apply structured redaction so observability output remains useful without leaking protected data.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Redact sensitive request fields, headers, and downstream responses before they reach log middleware, error handlers, or trace exporters.",
+          "recommended_actions": [
+            "Add structured redaction for secrets, auth headers, tokens, and personal data in logger configuration.",
+            "Review error handlers, debug logs, and third-party instrumentation for unsafe payload logging."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Keep request bodies, auth material, and exception details out of application logs unless they are explicitly sanitized and minimally scoped.",
+          "recommended_actions": [
+            "Configure logging and exception handling to redact or omit sensitive fields.",
+            "Review middleware, dependency debugging, and background-task logs for raw payload output."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Redact secrets and personal data from request logging, admin actions, and exception telemetry instead of dumping raw request or model content.",
+          "recommended_actions": [
+            "Use logging filters to strip credentials, tokens, and sensitive form fields.",
+            "Review custom middleware, signals, and audit logs for unsanitized user or credential data."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Use structured logging with redaction rules so headers, tokens, request bodies, and exception payloads do not leak sensitive values.",
+          "recommended_actions": [
+            "Configure logging frameworks and interceptors to mask secrets and personal data.",
+            "Review debug-level logging, filters, and actuator-style endpoints for accidental disclosure."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Apply logging filters and structured redaction to prevent credentials, tokens, and personal data from reaching logs, traces, or error telemetry.",
+          "recommended_actions": [
+            "Mask sensitive fields in middleware and logger enrichers before emission.",
+            "Review exception handlers, model dumps, and request logging for unsafe serialization."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Avoid logging secrets, tokens, or sensitive user data in client telemetry or server-rendered route logs, and keep browser diagnostics free of privileged values.",
+          "recommended_actions": [
+            "Redact sensitive values before sending client telemetry or server-side route logs.",
+            "Review console logs, error reporting, and analytics payloads for credential or personal-data leakage."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Exercise sensitive flows and confirm logs, traces, and error telemetry do not contain secrets or protected data.",
+        "Add tests or log snapshots proving redaction occurs for known sensitive fields and headers.",
+        "Review retention and downstream log sinks to ensure historical leakage is addressed where feasible."
+      ],
+      "unsafe_alternatives": [
+        "Relying on log access controls alone while still emitting raw sensitive values.",
+        "Masking only one field while related tokens, headers, or payload fragments remain exposed.",
+        "Using debug logging in production for sensitive flows without redaction."
+      ],
+      "references": [
+        {
+          "label": "OWASP Logging Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-532 Insertion of Sensitive Information into Log File",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-532"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Logging Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-532 Insertion of Sensitive Information into Log File",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-532"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.audit_gap.001",
+      "issue_id": "owlvex.issue.audit_gap.001",
+      "title": "Add trustworthy audit events for security-relevant actions",
+      "canonical_fix_summary": "Emit structured, tamper-aware audit events for security-relevant actions such as authentication changes, privilege changes, administrative actions, and sensitive data access, and route them to a monitored audit trail.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Add structured audit events around auth, admin, and data-sensitive actions in middleware or service boundaries rather than relying on ad hoc console logging.",
+          "recommended_actions": [
+            "Capture actor, action, target, outcome, and timestamp in an audit-specific sink.",
+            "Review admin routes, role changes, credential events, and export flows for missing audit coverage."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Record audit events in service logic or dependencies for privileged actions, account changes, and sensitive record access using a dedicated audit schema.",
+          "recommended_actions": [
+            "Emit structured audit records with consistent fields and outcome metadata.",
+            "Review async tasks, auth flows, and admin endpoints for important actions that currently leave no trail."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Use explicit audit logging for admin actions, permission changes, auth events, and high-risk data access rather than depending only on generic application logs.",
+          "recommended_actions": [
+            "Create structured audit records with actor, target, action, and result details.",
+            "Review admin, DRF, signals, and management commands for missing audit coverage."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Emit structured audit events from controllers or services for security-relevant actions and route them to an auditable sink separate from noisy application logs.",
+          "recommended_actions": [
+            "Capture who did what, to which resource, when, and with what result.",
+            "Review role changes, authentication flows, administrative APIs, and sensitive exports for missing events."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Add structured audit events in handlers, controllers, and services for privileged operations and sensitive access paths, and store them in a monitored audit trail.",
+          "recommended_actions": [
+            "Emit actor, action, target, and outcome details in an audit-specific sink.",
+            "Review auth, admin, policy, and data-export flows for important actions that currently are not recorded."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat audit gaps as a server-side responsibility: API routes and backend services should record privileged actions, not the browser alone.",
+          "recommended_actions": [
+            "Emit audit events from server actions, API routes, or backing services for sensitive operations.",
+            "Do not rely on client analytics or console logs as the authoritative audit trail."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Trigger representative security-relevant actions and confirm structured audit events are emitted with the expected fields.",
+        "Verify audit records are stored or forwarded to the intended monitored sink and are distinguishable from ordinary app logs.",
+        "Review failure paths and denied actions to ensure important negative outcomes are also captured where policy requires."
+      ],
+      "unsafe_alternatives": [
+        "Relying only on generic debug or access logs without structured audit semantics.",
+        "Recording audit events only on success while omitting denied or failed high-risk actions.",
+        "Keeping audit data solely in client telemetry or ephemeral console output."
+      ],
+      "references": [
+        {
+          "label": "OWASP Logging Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-778 Insufficient Logging",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-778"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Logging Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-778 Insufficient Logging",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-778"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.xss_stored.001",
+      "issue_id": "owlvex.issue.xss_stored.001",
+      "title": "Neutralize stored XSS with contextual output encoding and safe rendering",
+      "canonical_fix_summary": "Prevent stored XSS by treating persisted user-controlled content as untrusted at render time, applying context-appropriate encoding or sanitization, and avoiding unsafe HTML rendering APIs unless content is explicitly sanitized for that sink.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Encode stored content when rendering templates or API-driven HTML and sanitize any user-authored rich text before it reaches an HTML sink.",
+          "recommended_actions": [
+            "Use templating features that escape by default and review any raw HTML rendering helpers.",
+            "Apply a reviewed HTML sanitization step for stored rich text before rendering it to users."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Treat persisted content as untrusted whenever it is returned to templates or frontend consumers that may render HTML, and sanitize rich text for the actual sink.",
+          "recommended_actions": [
+            "Keep templates and response generation on escaping-by-default paths.",
+            "Review stored-content rendering endpoints and admin previews for raw HTML injection."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Rely on Django's autoescaping and reserve `safe`-style rendering for content that has been intentionally sanitized for the target context.",
+          "recommended_actions": [
+            "Remove unsafe template filters or flags that bypass escaping for stored content.",
+            "Sanitize user-authored HTML before rendering and review admin previews and email templates."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Keep server-side rendering on escaping-by-default paths and sanitize persisted rich text before passing it to HTML-capable views or downstream clients.",
+          "recommended_actions": [
+            "Avoid raw HTML insertion helpers for stored content unless a trusted sanitization step has already occurred.",
+            "Review MVC views, email generation, and content-preview endpoints for unsafe rendering."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use autoencoding Razor or equivalent safe rendering paths and sanitize stored rich text before exposing it to HTML-capable sinks.",
+          "recommended_actions": [
+            "Remove raw HTML helpers for untrusted stored content unless it is explicitly sanitized for the sink.",
+            "Review admin UIs, previews, and email templates for persisted content rendered without encoding."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Render stored content as text by default and avoid `dangerouslySetInnerHTML` or equivalent unsafe sink usage unless content has gone through a reviewed HTML sanitization pipeline.",
+          "recommended_actions": [
+            "Keep persisted content on text-rendering paths where possible.",
+            "Sanitize rich text on the server or trusted processing layer before any HTML injection point is used."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay stored XSS payloads through creation and viewing flows and confirm they render harmlessly to all viewers.",
+        "Add tests proving stored user content is encoded or sanitized before it reaches HTML-capable sinks.",
+        "Review preview, export, email, and admin-rendering paths for the same unsafe content pattern."
+      ],
+      "unsafe_alternatives": [
+        "Blocking a few tags or strings while still allowing attacker-controlled HTML to reach the sink.",
+        "Sanitizing on input only and assuming every later rendering context is safe.",
+        "Using client-side filtering as the main protection while server-rendered or alternate viewers stay vulnerable."
+      ],
+      "references": [
+        {
+          "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-79 Improper Neutralization of Input During Web Page Generation",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-79"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-79 Improper Neutralization of Input During Web Page Generation",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-79"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.verbose_error_disclosure.001",
+      "issue_id": "owlvex.issue.verbose_error_disclosure.001",
+      "title": "Reduce verbose error disclosure while preserving diagnosability",
+      "canonical_fix_summary": "Return generic client-facing errors for untrusted callers, keep stack traces and internal diagnostics out of responses, and route detailed failure data to protected logs or telemetry instead.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Use centralized error middleware to return stable, non-sensitive responses while keeping stack traces and internals in protected server logs only.",
+          "recommended_actions": [
+            "Replace raw exception serialization with generic client error bodies.",
+            "Review development flags and debug middleware so production does not expose stack traces or config details."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Configure exception handlers to return minimal client-facing messages and keep traceback, dependency internals, and validation specifics out of production responses.",
+          "recommended_actions": [
+            "Use generic error schemas for untrusted clients and send details to protected logs.",
+            "Review debug settings and framework defaults that may leak tracebacks or internal model details."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Disable production debug behavior and keep template, stack, and settings details out of user-visible error pages and API responses.",
+          "recommended_actions": [
+            "Ensure production uses safe error handlers and generic server-error responses.",
+            "Review custom exception pages, DRF error handlers, and admin tools for leaked internals."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Return controlled error payloads from exception handling and prevent stack traces, bean details, or configuration metadata from reaching untrusted callers.",
+          "recommended_actions": [
+            "Use centralized exception mapping with minimal response content.",
+            "Review actuator, error pages, and debug settings for accidental internal disclosure."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use production-safe exception handling so clients receive generic errors while detailed stack and environment information stays in protected telemetry.",
+          "recommended_actions": [
+            "Configure middleware and exception filters to avoid returning raw exception details.",
+            "Review development exception pages, API problem details, and logging enrichers for oversharing."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Keep server and route errors generic for users and avoid exposing stack traces, env details, or backend messages in rendered pages and API responses.",
+          "recommended_actions": [
+            "Use controlled error boundaries and API route handlers that avoid leaking internals.",
+            "Review server-rendering failures, route handlers, and client error overlays so production responses stay minimal."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Trigger representative failures and confirm responses do not reveal stack traces, internal paths, config values, or sensitive implementation details.",
+        "Verify detailed diagnostics are still available in protected logs or telemetry for operators.",
+        "Review production configuration to ensure debug or developer exception modes are disabled."
+      ],
+      "unsafe_alternatives": [
+        "Hiding only the message text while still returning stack traces or internal object dumps.",
+        "Conditionally exposing detailed errors based on easily spoofed request headers or query parameters.",
+        "Relying on client-side handling alone while backend APIs continue to leak internal exceptions."
+      ],
+      "references": [
+        {
+          "label": "OWASP Error Handling Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-209 Generation of Error Message Containing Sensitive Information",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-209"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Error Handling Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-209 Generation of Error Message Containing Sensitive Information",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-209"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.prototype_pollution.001",
+      "issue_id": "owlvex.issue.prototype_pollution.001",
+      "title": "Prevent prototype pollution by constraining object merge and property paths",
+      "canonical_fix_summary": "Stop untrusted input from modifying prototype chains or special object properties by validating merge keys, using safe object creation patterns, and avoiding dangerous recursive merge behavior on attacker-controlled data.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Validate object keys before merging request data and avoid unsafe deep-merge helpers that can write to `__proto__`, `constructor`, or `prototype` paths.",
+          "recommended_actions": [
+            "Use allow-listed properties and safe object creation when shaping request data.",
+            "Review body parsing, config merge helpers, and utility libraries for attacker-controlled recursive merges."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Keep request data on validated schema paths and avoid dynamic object updates or merge helpers that let untrusted keys reach internal object structures.",
+          "recommended_actions": [
+            "Validate incoming fields against explicit models and reject unexpected property names.",
+            "Review helper functions that recursively merge dict-like input into application objects."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Constrain request-derived object updates and avoid dynamic merge helpers or deserialization paths that let attacker-chosen keys alter internal object behavior.",
+          "recommended_actions": [
+            "Use explicit field allow-lists for object construction and updates.",
+            "Review custom JSON merge utilities, form cleaning shortcuts, and admin helpers for dangerous property handling."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Restrict dynamic property binding and avoid mapping or merge utilities that let untrusted input alter object prototypes or special internal fields.",
+          "recommended_actions": [
+            "Allow-list bindable properties and reject unexpected nested keys.",
+            "Review JSON mapping, patch endpoints, and utility merges for unsafe recursive behavior."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Limit request-driven property binding and avoid unsafe merge logic that lets attacker-controlled property paths mutate unexpected object state.",
+          "recommended_actions": [
+            "Use explicit DTOs and allow-listed property updates instead of generic object merging.",
+            "Review patch handlers, JSON merge helpers, and reflection-based utilities for dangerous key handling."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Validate and constrain client-side and server-side object merges fed by untrusted JSON, especially in state helpers and API route processing.",
+          "recommended_actions": [
+            "Reject dangerous property names and avoid deep-merging arbitrary user objects into shared state or config.",
+            "Review route handlers, state hydration, and utility libraries for prototype-write behavior."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay payloads containing `__proto__`, `constructor`, and similar special keys and confirm application behavior is unaffected.",
+        "Add tests proving unexpected keys are rejected or ignored before merge or binding.",
+        "Review recursive merge and dynamic update helpers across the codebase for the same unsafe pattern."
+      ],
+      "unsafe_alternatives": [
+        "Blocking only one special key while leaving equivalent prototype-write paths available.",
+        "Depending solely on library version upgrades without validating how untrusted objects are merged in local code.",
+        "Sanitizing top-level keys while nested attacker-controlled objects still reach dangerous merge logic."
+      ],
+      "references": [
+        {
+          "label": "Prototype Pollution Prevention Cheat Sheet",
+          "kind": "reference",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-1321 Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution')",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-1321"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "Prototype Pollution Prevention Cheat Sheet",
+            "kind": "reference",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-1321 Improperly Controlled Modification of Object Prototype Attributes ('Prototype Pollution')",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-1321"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.regex_dos.001",
+      "issue_id": "owlvex.issue.regex_dos.001",
+      "title": "Eliminate catastrophic backtracking in attacker-influenced regular expressions",
+      "canonical_fix_summary": "Replace vulnerable regular expressions and usage patterns that allow catastrophic backtracking with bounded, safe patterns or non-regex parsing approaches, especially when the input is attacker-controlled.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Review regexes used in request validation, routing helpers, and content parsing, and replace vulnerable patterns with bounded alternatives.",
+          "recommended_actions": [
+            "Remove nested repetition and ambiguous backtracking from attacker-facing regexes.",
+            "Apply input length limits and safe parsing strategies where regex complexity remains hard to bound."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Use safe validation patterns for attacker-controlled input and avoid overly complex regexes in request handling, filtering, and parsing helpers.",
+          "recommended_actions": [
+            "Simplify vulnerable expressions or replace them with parser logic that has predictable runtime.",
+            "Bound input sizes for expensive parsing paths that still use regexes."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Audit regexes in URL routing, form validation, and text parsing to ensure attacker-controlled input cannot trigger catastrophic matching behavior.",
+          "recommended_actions": [
+            "Simplify ambiguous expressions and prefer explicit parsing for complex formats.",
+            "Apply reasonable size limits to request fields that still require regex validation."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Avoid risky regular expressions in request processing, validation, and content filtering when attackers can influence the input size or structure.",
+          "recommended_actions": [
+            "Refactor vulnerable patterns into safer equivalents or dedicated parsers.",
+            "Bound input length on regex-backed validation and parsing paths."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Use safer patterns or explicit parsers for attacker-influenced input and configure regex execution safeguards where supported.",
+          "recommended_actions": [
+            "Replace catastrophic expressions and avoid user-controlled complex matching paths.",
+            "Use timeouts and input limits as defense in depth, not the only remediation."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Keep expensive regex validation out of attacker-controlled client and server paths, and replace risky patterns with bounded validation or parsing logic.",
+          "recommended_actions": [
+            "Simplify vulnerable regexes in route handlers, validators, and UI parsing helpers.",
+            "Bound input size and avoid trusting client-side validation as the sole protection."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Benchmark or fuzz known worst-case inputs and confirm the regex path no longer exhibits pathological runtime.",
+        "Add tests covering maliciously long or adversarial input strings for the affected pattern.",
+        "Review similar regexes in validators, routers, and parsers for the same backtracking structure."
+      ],
+      "unsafe_alternatives": [
+        "Keeping the vulnerable regex and relying only on request rate limiting or WAF rules.",
+        "Adding input size limits without fixing a catastrophic pattern that still triggers at realistic sizes.",
+        "Switching to another complex regex with similar ambiguous repetition behavior."
+      ],
+      "references": [
+        {
+          "label": "OWASP Input Validation Cheat Sheet",
+          "kind": "cheat-sheet",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-1333 Inefficient Regular Expression Complexity",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-1333"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Input Validation Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-1333 Inefficient Regular Expression Complexity",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-1333"
+          }
+        ]
+      }
+    },
+    {
+      "schema_version": "owlvex.remediation.v1",
+      "id": "owlvex.remediation.template_injection.001",
+      "issue_id": "owlvex.issue.template_injection.001",
+      "title": "Prevent template injection by keeping untrusted input out of template code paths",
+      "canonical_fix_summary": "Do not treat untrusted input as template code, template names, or expression fragments; keep template structure server-controlled, pass untrusted data only as plain data, and use sandboxed or safe rendering options where relevant.",
+      "framework_variants": [
+        {
+          "framework": "Express",
+          "summary": "Keep template names, template source, and expression construction server-controlled in view rendering paths, and pass user content only as data to escaping-by-default templates.",
+          "recommended_actions": [
+            "Remove any dynamic template compilation or raw helper evaluation fed by request input.",
+            "Review view engines, email templates, and admin preview features for untrusted template fragments."
+          ]
+        },
+        {
+          "framework": "FastAPI",
+          "summary": "Do not let request data choose template source or expression content, and keep rendered templates on escaping-by-default, server-controlled paths.",
+          "recommended_actions": [
+            "Pass user input only as plain data into templates rather than evaluating it as template syntax.",
+            "Review dynamic rendering, previews, and notification templates for attacker-controlled fragments."
+          ]
+        },
+        {
+          "framework": "Django",
+          "summary": "Keep Django template structure and filter usage server-controlled, and avoid rendering attacker-supplied template strings or unsafe template engines.",
+          "recommended_actions": [
+            "Remove dynamic template compilation fed by user input.",
+            "Review preview tools, CMS-style components, and email rendering for unsafe template evaluation."
+          ]
+        },
+        {
+          "framework": "Spring",
+          "summary": "Avoid feeding untrusted input into template names, expression language fragments, or dynamic rendering features, and keep template selection constrained.",
+          "recommended_actions": [
+            "Use server-controlled template routing and safe model binding for user data.",
+            "Review server-side rendering, email generation, and preview endpoints for template-code injection."
+          ]
+        },
+        {
+          "framework": ".NET",
+          "summary": "Keep view selection and template structure under server control, and do not compile or evaluate attacker-controlled template content or expressions.",
+          "recommended_actions": [
+            "Pass user values as data only and avoid dynamic template execution paths.",
+            "Review Razor generation, email templates, and admin preview features for template-source injection."
+          ]
+        },
+        {
+          "framework": "React/Next",
+          "summary": "Treat template injection as a server-rendering and dynamic content issue: keep JSX, template structure, and render logic server- or build-controlled rather than user-supplied.",
+          "recommended_actions": [
+            "Do not evaluate user input as component code, template fragments, or rich expression syntax.",
+            "Review server actions, CMS rendering, and preview tooling for unsafe dynamic evaluation."
+          ]
+        }
+      ],
+      "validation_steps": [
+        "Replay template-injection payloads and confirm user input is rendered as inert data rather than executed template logic.",
+        "Add tests proving template names, expressions, and source remain server-controlled for the affected path.",
+        "Review preview, notification, and CMS-style rendering features for similar dynamic evaluation patterns."
+      ],
+      "unsafe_alternatives": [
+        "Filtering a few template metacharacters while still evaluating user-influenced template fragments.",
+        "Switching template engines without removing the underlying dynamic evaluation behavior.",
+        "Relying on client-side restrictions while server-side rendering paths still accept unsafe template input."
+      ],
+      "references": [
+        {
+          "label": "OWASP Server Side Template Injection Prevention Guidance",
+          "kind": "reference",
+          "publisher": "OWASP"
+        },
+        {
+          "label": "CWE-1336 Improper Neutralization of Special Elements Used in a Template Engine",
+          "kind": "taxonomy",
+          "publisher": "MITRE",
+          "document_id": "CWE-1336"
+        }
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-14T00:00:00Z",
+        "last_verified_at": "2026-04-14T00:00:00Z",
+        "sources": [
+          {
+            "label": "OWASP Server Side Template Injection Prevention Guidance",
+            "kind": "reference",
+            "publisher": "OWASP"
+          },
+          {
+            "label": "CWE-1336 Improper Neutralization of Special Elements Used in a Template Engine",
+            "kind": "taxonomy",
+            "publisher": "MITRE",
+            "document_id": "CWE-1336"
+          }
+        ]
+      }
     }
   ]
 }
