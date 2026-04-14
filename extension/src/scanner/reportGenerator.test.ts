@@ -61,7 +61,7 @@ describe('reportGenerator', () => {
         };
     }
 
-    it('writes a canonical-first report with code snippets and framework mappings', async () => {
+    it('writes a compact report with canonical overview, per-file findings, and code snippets', async () => {
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(
             Buffer.from([
                 'export async function findUser(db, username) {',
@@ -99,30 +99,23 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Injection & Execution: 1 finding(s)');
         expect(written).toContain('## Canonical Findings');
         expect(written).toContain('| example.js | 4.2 | 1 | 1 finding(s), led by a high-impact/medium-likelihood Unsanitized SQL query construction (7/10 risk). Primary issue family: Injection & Execution. |');
-        expect(written).toContain('- Owlvex issue: `owlvex.issue.sql_injection.001`');
-        expect(written).toContain('- Issue family: Injection & Execution');
-        expect(written).toContain('- Category: unresolved');
-        expect(written).toContain('- Impact: HIGH');
-        expect(written).toContain('- Likelihood: MEDIUM');
-        expect(written).toContain('- Contextual risk: 7/10');
-        expect(written).toContain('- Likelihood reasons: Dynamic SQL uses user-controlled input directly.');
+        expect(written).toContain('| Unsanitized SQL query construction | HIGH | MEDIUM | 7 | 1 | 1 |');
+        expect(written).toContain('## Findings By File');
+        expect(written).toContain('### example.js');
+        expect(written).toContain('- Score: 4.2/10');
         expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
+        expect(written).toContain('| Unsanitized SQL query construction | impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
+        expect(written).toContain('- Location: `example.js` at L3-4');
+        expect(written).toContain('- Risk: HIGH impact / MEDIUM likelihood / 7/10');
+        expect(written).toContain('- Why it matters: User input is concatenated into a query.');
+        expect(written).toContain('- What to change: Use parameterized queries or prepared statements and validate input at trust boundaries.');
+        expect(written).toContain('- Safe pattern: Use parameterized queries.');
+        expect(written).toContain('- Why likely: Dynamic SQL uses user-controlled input directly.');
         expect(written).toContain('- Matched signals: CWE:CWE-89, sql injection');
-        expect(written).toContain('- Recommended fix: Use parameterized queries or prepared statements and validate input at trust boundaries.');
-        expect(written).toContain('- Remediation sources: OWASP SQL Injection Prevention Cheat Sheet');
-        expect(written).toContain('- Model implementation note: Use parameterized queries.');
-        expect(written).toContain('## Detailed Findings by Owlvex Issue');
-        expect(written).toContain('- Issue family: Injection & Execution');
-        expect(written).toContain('#### File-level evidence');
-        expect(written).toContain('- `example.js` at L3-4');
-        expect(written).toContain('  Impact: HIGH');
-        expect(written).toContain('  Likelihood: MEDIUM');
-        expect(written).toContain('  Contextual risk: 7/10');
-        expect(written).toContain('  Original framework match: OWASP');
-        expect(written).toContain('  Recommended remediation: Use parameterized queries or prepared statements and validate input at trust boundaries.');
+        expect(written).toContain('- Sources: OWASP SQL Injection Prevention Cheat Sheet');
         expect(written).toContain('## Framework Correlation View');
         expect(written).toContain('- `owlvex.issue.sql_injection.001` in `example.js` at L3');
-        expect(written).toContain('  Code involved in the reasoning:');
+        expect(written).toContain('- Code involved in the reasoning:');
         expect(written).toContain("SELECT * FROM users WHERE username = '${username}'");
     });
 
@@ -151,6 +144,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- No framework-mapped findings were returned.');
         expect(written).toContain('No findings were returned.');
         expect(written).toContain('| clean.js | 9.5 | 0 | No findings detected. |');
+        expect(written).toContain('## Findings By File');
         expect(written).toContain('## Scan Errors');
         expect(written).toContain('- clean.js: model timeout');
     });
@@ -296,10 +290,10 @@ describe('reportGenerator', () => {
         await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
-        expect(written).toContain('- Framework-specific guidance (Express): Use placeholders and values arrays in your database client.');
-        expect(written).toContain('- Recommended actions: Replace string-built SQL with placeholders. | Allow-list dynamic sort fields.');
-        expect(written).toContain('- Validation steps: Replay the injection payload and confirm it is treated as data.');
-        expect(written).toContain('- Unsafe alternatives to avoid: Manual quote escaping.');
-        expect(written).toContain('  Framework-specific guidance (Express): Use placeholders and values arrays in your database client.');
+        expect(written).toContain('- Safe pattern: Use placeholders and values arrays in your database client.');
+        expect(written).toContain('- Suggested steps: Replace string-built SQL with placeholders. | Allow-list dynamic sort fields.');
+        expect(written).toContain('- Validate with: Replay the injection payload and confirm it is treated as data.');
+        expect(written).toContain('- Avoid: Manual quote escaping.');
+        expect(written).toContain('## Findings By File');
     });
 });

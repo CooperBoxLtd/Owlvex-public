@@ -111,14 +111,28 @@ function summarizeFileResult(result: ScanResult): string {
     ].filter(Boolean).join(' ');
 }
 
-// ---------------------------------------------------------------------------
-// Report composition helpers
-// ---------------------------------------------------------------------------
+function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
+    return [
+        `impact ${finding.severity.toLowerCase()}`,
+        `likelihood ${getFindingLikelihood(finding).toLowerCase()}`,
+        `risk ${finding.riskScore ?? 'n/a'}/10`,
+    ].join(' | ');
+}
 
-/**
- * Generates an analyst-facing attack surface assessment paragraph.
- * Derived entirely from finding data — deterministic, no inference.
- */
+function buildSafePatternLine(
+    remediation: ReturnType<typeof getCanonicalRemediation>,
+): string | undefined {
+    if (remediation.frameworkVariant?.summary) {
+        return remediation.frameworkVariant.summary;
+    }
+
+    if (remediation.modelNote) {
+        return remediation.modelNote;
+    }
+
+    return undefined;
+}
+
 function buildAttackSurfaceAssessment(
     totalFindings: number,
     deterministicCount: number,
@@ -132,7 +146,7 @@ function buildAttackSurfaceAssessment(
     if (totalFindings === 0) {
         out.push(
             'No vulnerabilities were identified in this scan. ' +
-            'This does not guarantee the codebase is free of security issues — ' +
+            'This does not guarantee the codebase is free of security issues - ' +
             'the scan covers the patterns and frameworks active during this run.',
         );
         out.push('');
@@ -156,7 +170,7 @@ function buildAttackSurfaceAssessment(
     if (deterministicCount > 0) {
         out.push(
             `**${deterministicCount} ${deterministicCount === 1 ? 'finding was' : 'findings were'} confirmed ` +
-            `by deterministic structural analysis** — these are invariant violations in the code structure, ` +
+            `by deterministic structural analysis** - these are invariant violations in the code structure, ` +
             `not probabilistic inferences. Each carries 100% confidence and requires no additional validation ` +
             `before escalation.`,
         );
@@ -175,9 +189,6 @@ function buildAttackSurfaceAssessment(
     return out;
 }
 
-/**
- * Builds a compact table of all deterministic findings for prominent display.
- */
 function buildDeterministicPanel(
     items: Array<{ file: string; finding: ScanResult['findings'][number] }>,
 ): string[] {
@@ -191,17 +202,17 @@ function buildDeterministicPanel(
         '## Deterministic Detections',
         '',
         'These findings were produced by rule-based structural analysis. ' +
-        'Each represents a confirmed code-level invariant violation — not a heuristic match.',
+        'Each represents a confirmed code-level invariant violation - not a heuristic match.',
         '',
         '| Rule | Issue | File | Line | Severity |',
         '| :--- | :--- | :--- | ---: | :--- |',
     ];
 
     for (const item of sorted) {
-        const rule = item.finding.ruleCode || '—';
+        const rule = item.finding.ruleCode || '-';
         const title = escapeMarkdown(item.finding.canonicalTitle || item.finding.title);
         out.push(
-            `| ⚡ \`${rule}\` | ${title} | \`${item.file}\` | ${item.finding.line} | **${item.finding.severity}** |`,
+            `| Deterministic \`${rule}\` | ${title} | \`${item.file}\` | ${item.finding.line} | **${item.finding.severity}** |`,
         );
     }
 
@@ -230,7 +241,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         (item.result.warnings ?? []).map(warning => ({
             file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
             warning,
-        }))
+        })),
     );
     const packModes = new Map<string, number>();
     for (const item of snapshot.results) {
@@ -257,15 +268,6 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             return b.result.findings.length - a.result.findings.length;
         })
         .slice(0, 10);
-
-    const topFindings = snapshot.results
-        .flatMap(item => item.result.findings.map(finding => ({
-            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
-            finding,
-            packContext: item.result.packContext,
-        })))
-        .sort((a, b) => severityRank(b.finding.severity) - severityRank(a.finding.severity))
-        .slice(0, 25);
 
     const findingsByFramework = snapshot.results
         .flatMap(item => item.result.findings.map(finding => ({
@@ -303,6 +305,17 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             return acc;
         }, new Map<string, Array<{ file: string; finding: ScanResult['findings'][number]; packContext?: ScanResult['packContext'] }>>());
 
+    const findingsByFile = snapshot.results
+        .map(item => ({
+            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
+            result: item.result,
+            packContext: item.result.packContext,
+        }))
+        .sort((a, b) => {
+            if (a.result.score !== b.result.score) return a.result.score - b.result.score;
+            return b.result.findings.length - a.result.findings.length;
+        });
+
     const allFindingItems = snapshot.results.flatMap(item =>
         item.result.findings.map(finding => ({
             file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
@@ -310,17 +323,16 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             packContext: item.result.packContext,
         })),
     );
-    const deterministicItems = allFindingItems.filter(
-        item => item.finding.provenance === 'deterministic',
-    );
+    const deterministicItems = allFindingItems.filter(item => item.finding.provenance === 'deterministic');
     const topFamilies = [...findingsByFamily.entries()]
         .sort((a, b) => b[1].length - a[1].length)
         .slice(0, 3)
         .map(([label]) => label)
-        .filter(l => l !== 'Unclassified');
+        .filter(label => label !== 'Unclassified');
 
     const totalFindings = snapshot.results.reduce(
-        (total, item) => total + item.result.findings.length, 0,
+        (total, item) => total + item.result.findings.length,
+        0,
     );
 
     const lines: string[] = [
@@ -334,7 +346,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         '',
         `- Files scanned: ${snapshot.results.length}`,
         `- Files with findings: ${snapshot.results.filter(item => item.result.findings.length > 0).length}`,
-        `- Total findings: ${snapshot.results.reduce((total, item) => total + item.result.findings.length, 0)}`,
+        `- Total findings: ${totalFindings}`,
         `- Average score: ${averageScore.toFixed(1)}/10`,
         `- Deterministic findings: ${deterministicItems.length}`,
         `- Intelligence source coverage: ${packCoverageSummary}`,
@@ -422,129 +434,89 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
     );
 
     if (findingsByCanonicalIssue.size) {
-        for (const [issueKey, items] of [...findingsByCanonicalIssue.entries()]
+        lines.push('| Issue | Impact | Likelihood | Risk | Occurrences | Files |');
+        lines.push('| --- | --- | --- | ---: | ---: | ---: |');
+        for (const [, items] of [...findingsByCanonicalIssue.entries()]
             .sort((a, b) => riskRank(b[1][0].finding) - riskRank(a[1][0].finding))
             .slice(0, 25)) {
             const sample = items[0].finding;
-            const packContext = items[0].packContext;
-            const remediation = getCanonicalRemediation(sample);
-            const isDeterministic = sample.provenance === 'deterministic';
-            const provenanceLabel = isDeterministic
-                ? `⚡ Deterministic (rule: \`${sample.ruleCode || '—'}\`) — structural invariant, confidence 100%`
-                : `🤖 AI-assisted — confidence ${Math.round((sample.resolverConfidence ?? sample.confidence) * 100)}%`;
-
-            lines.push(`### ${sample.severity}: ${sample.canonicalTitle || sample.title}`);
-            lines.push(`- Owlvex issue: \`${sample.canonicalId || issueKey}\``);
-            lines.push(`- Detection: ${provenanceLabel}`);
-            if (sample.canonicalFamilyLabel || sample.canonicalFamily) {
-                lines.push(`- Issue family: ${sample.canonicalFamilyLabel || sample.canonicalFamily}`);
-            }
-            lines.push(`- Category: ${sample.canonicalCategory || 'unresolved'}`);
-            lines.push(`- Impact: ${sample.severity}`);
-            lines.push(`- Likelihood: ${getFindingLikelihood(sample)}`);
-            lines.push(`- Contextual risk: ${sample.riskScore ?? 'n/a'}/10`);
-            lines.push(`- Occurrences: ${items.length}`);
-            lines.push(`- Files affected: ${new Set(items.map(item => item.file)).size}`);
-            lines.push(`- Intelligence source: ${describeRulePackRuntime(packContext)}`);
-            if (!isDeterministic) {
-                lines.push(`- Confidence: ${Math.round((sample.resolverConfidence ?? sample.confidence) * 100)}%`);
-            }
-            const sampleStride = getFindingStride(sample);
-            if (sampleStride.length) {
-                lines.push(`- STRIDE: ${sampleStride.join(', ')}`);
-            }
-            const sampleSignals = getFindingSignals(sample);
-            if (sampleSignals.length) {
-                lines.push(`- Matched signals: ${sampleSignals.join(', ')}`);
-            }
-            const sampleLikelihoodReasons = getFindingLikelihoodReasons(sample);
-            if (sampleLikelihoodReasons.length) {
-                lines.push(`- Likelihood reasons: ${sampleLikelihoodReasons.join(' | ')}`);
-            }
-            const mappingSummary = formatMappings(sample.mappings);
-            if (mappingSummary) {
-                lines.push(`- Framework mappings: ${mappingSummary}`);
-            }
-            lines.push(`- Summary: ${sample.explanation || 'No explanation returned.'}`);
-            lines.push(`- Threat: ${sample.threat || 'No threat description returned.'}`);
-            lines.push(`- Recommended fix: ${remediation.remediation}`);
-            if (remediation.frameworkVariant) {
-                lines.push(`- Framework-specific guidance (${remediation.frameworkVariant.framework}): ${remediation.frameworkVariant.summary}`);
-                if (remediation.frameworkVariant.recommendedActions.length) {
-                    lines.push(`- Recommended actions: ${remediation.frameworkVariant.recommendedActions.join(' | ')}`);
-                }
-            }
-            if (remediation.validationSteps.length) {
-                lines.push(`- Validation steps: ${remediation.validationSteps.join(' | ')}`);
-            }
-            if (remediation.unsafeAlternatives.length) {
-                lines.push(`- Unsafe alternatives to avoid: ${remediation.unsafeAlternatives.join(' | ')}`);
-            }
-            if (remediation.refs.length) {
-                lines.push(`- Remediation sources: ${remediation.refs.join(', ')}`);
-            }
-            if (remediation.modelNote) {
-                lines.push(`- Model implementation note: ${remediation.modelNote}`);
-            }
-            lines.push('');
+            lines.push(
+                `| ${escapeMarkdown(sample.canonicalTitle || sample.title)} | ${sample.severity} | ${getFindingLikelihood(sample)} | ${sample.riskScore ?? 'n/a'} | ${items.length} | ${new Set(items.map(item => item.file)).size} |`,
+            );
         }
+        lines.push('');
     } else {
         lines.push('No findings were returned.');
         lines.push('');
     }
 
-    lines.push('## Detailed Findings by Owlvex Issue', '');
+    lines.push('## Findings By File', '');
 
-    if (findingsByCanonicalIssue.size) {
-        for (const [issueKey, items] of findingsByCanonicalIssue.entries()) {
-            const sample = items[0].finding;
-            lines.push(`### ${sample.canonicalTitle || sample.title}`);
+    if (findingsByFile.some(item => item.result.findings.length)) {
+        for (const item of findingsByFile.filter(entry => entry.result.findings.length)) {
+            lines.push(`### ${item.file}`);
             lines.push('');
-            if (sample.canonicalFamilyLabel || sample.canonicalFamily) {
-                lines.push(`- Issue family: ${sample.canonicalFamilyLabel || sample.canonicalFamily}`);
+            lines.push(`- Score: ${item.result.score.toFixed(1)}/10`);
+            lines.push(`- Findings: ${item.result.findings.length}`);
+            lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
+            lines.push(`- Intelligence source: ${describeRulePackRuntime(item.packContext)}`);
+            lines.push('');
+            lines.push('| Finding | Score Factors | Detection |');
+            lines.push('| --- | --- | --- |');
+            for (const finding of item.result.findings.slice().sort((left, right) => riskRank(right) - riskRank(left))) {
+                lines.push(
+                    `| ${escapeMarkdown(finding.canonicalTitle || finding.title)} | ${escapeMarkdown(summarizeFindingRow(finding))} | ${finding.provenance === 'deterministic' ? `Deterministic \`${finding.ruleCode || 'n/a'}\`` : `AI ${Math.round((finding.resolverConfidence ?? finding.confidence) * 100)}%`} |`,
+                );
             }
-            lines.push(`- Occurrences: ${items.length}`);
-            lines.push(`- Files affected: ${new Set(items.map(item => item.file)).size}`);
-            lines.push(`- Typical impact: ${sample.severity}`);
-            lines.push(`- Typical likelihood: ${getFindingLikelihood(sample)}`);
-            lines.push(`- Typical contextual risk: ${sample.riskScore ?? 'n/a'}/10`);
             lines.push('');
-            lines.push('#### File-level evidence');
-            lines.push('');
-            for (const item of items.sort((a, b) => riskRank(b.finding) - riskRank(a.finding))) {
-                const snippet = await readCodeSnippet(root, item.file, item.finding.line, item.finding.lineEnd);
-                const remediation = getCanonicalRemediation(item.finding);
-                lines.push(`- \`${item.file}\` at L${item.finding.line}${item.finding.lineEnd !== item.finding.line ? `-${item.finding.lineEnd}` : ''}`);
-                lines.push(`  Impact: ${item.finding.severity}`);
-                lines.push(`  Likelihood: ${getFindingLikelihood(item.finding)}`);
-                lines.push(`  Contextual risk: ${item.finding.riskScore ?? 'n/a'}/10`);
-                lines.push(`  Confidence: ${Math.round((item.finding.resolverConfidence ?? item.finding.confidence) * 100)}%`);
-                lines.push(`  Original framework match: ${item.finding.framework}`);
-                lines.push(`  Original rule code: ${item.finding.ruleCode || 'n/a'}`);
-                lines.push(`  Reasoning: ${item.finding.explanation || 'No explanation returned.'}`);
-                lines.push(`  Threat: ${item.finding.threat || 'No threat description returned.'}`);
-                const likelihoodReasons = getFindingLikelihoodReasons(item.finding);
-                if (likelihoodReasons.length) {
-                    lines.push(`  Likelihood reasons: ${likelihoodReasons.join(' | ')}`);
+
+            for (const finding of item.result.findings.slice().sort((left, right) => riskRank(right) - riskRank(left))) {
+                const snippet = await readCodeSnippet(root, item.file, finding.line, finding.lineEnd);
+                const remediation = getCanonicalRemediation(finding);
+                const safePattern = buildSafePatternLine(remediation);
+                const likelihoodReasons = getFindingLikelihoodReasons(finding);
+                const mappingSummary = formatMappings(finding.mappings);
+                const stride = getFindingStride(finding);
+                const signals = getFindingSignals(finding);
+                lines.push(`#### ${finding.canonicalTitle || finding.title}`);
+                lines.push(`- Location: \`${item.file}\` at L${finding.line}${finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`);
+                lines.push(`- Risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
+                lines.push(`- Why it matters: ${finding.explanation || 'No explanation returned.'}`);
+                lines.push(`- What to change: ${remediation.remediation}`);
+                if (safePattern) {
+                    lines.push(`- Safe pattern: ${safePattern}`);
                 }
-                lines.push(`  Recommended remediation: ${remediation.remediation}`);
                 if (remediation.frameworkVariant) {
-                    lines.push(`  Framework-specific guidance (${remediation.frameworkVariant.framework}): ${remediation.frameworkVariant.summary}`);
                     if (remediation.frameworkVariant.recommendedActions.length) {
-                        lines.push(`  Recommended actions: ${remediation.frameworkVariant.recommendedActions.join(' | ')}`);
+                        lines.push(`- Suggested steps: ${remediation.frameworkVariant.recommendedActions.join(' | ')}`);
                     }
                 }
                 if (remediation.validationSteps.length) {
-                    lines.push(`  Validation steps: ${remediation.validationSteps.join(' | ')}`);
+                    lines.push(`- Validate with: ${remediation.validationSteps.join(' | ')}`);
                 }
                 if (remediation.unsafeAlternatives.length) {
-                    lines.push(`  Unsafe alternatives to avoid: ${remediation.unsafeAlternatives.join(' | ')}`);
+                    lines.push(`- Avoid: ${remediation.unsafeAlternatives.join(' | ')}`);
                 }
-                if (remediation.modelNote) {
-                    lines.push(`  Model implementation note: ${remediation.modelNote}`);
+                if (likelihoodReasons.length) {
+                    lines.push(`- Why likely: ${likelihoodReasons.join(' | ')}`);
+                }
+                if (finding.threat) {
+                    lines.push(`- Threat: ${finding.threat}`);
+                }
+                if (mappingSummary) {
+                    lines.push(`- Mappings: ${mappingSummary}`);
+                }
+                if (stride.length) {
+                    lines.push(`- STRIDE: ${stride.join(', ')}`);
+                }
+                if (signals.length) {
+                    lines.push(`- Matched signals: ${signals.join(', ')}`);
+                }
+                if (remediation.refs.length) {
+                    lines.push(`- Sources: ${remediation.refs.join(', ')}`);
                 }
                 if (snippet) {
-                    lines.push('  Code involved in the reasoning:');
+                    lines.push('- Code involved in the reasoning:');
                     lines.push('```text');
                     lines.push(escapeCodeFence(snippet));
                     lines.push('```');
@@ -608,21 +580,6 @@ async function readCodeSnippet(root: vscode.Uri, relativeFile: string, line: num
             .join('\n');
     } catch {
         return '';
-    }
-}
-
-function severityToScoreImpact(severity: string): string {
-    switch (severity) {
-        case 'CRITICAL':
-            return 'Very high negative impact';
-        case 'HIGH':
-            return 'High negative impact';
-        case 'MEDIUM':
-            return 'Moderate negative impact';
-        case 'LOW':
-            return 'Low negative impact';
-        default:
-            return 'Unspecified impact';
     }
 }
 

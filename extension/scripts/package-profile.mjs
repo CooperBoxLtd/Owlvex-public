@@ -55,6 +55,7 @@ const commandIdMap = {
   "owlvex.testAIConnection": `${profile.commandPrefix}.testAIConnection`,
   "owlvex.enterLicence": `${profile.commandPrefix}.enterLicence`,
   "owlvex.compareScans": `${profile.commandPrefix}.compareScans`,
+  "owlvex.reviewRiskCalibration": `${profile.commandPrefix}.reviewRiskCalibration`,
 };
 
 manifest.contributes.commands = manifest.contributes.commands.map((command) => ({
@@ -102,6 +103,7 @@ const generatedProfileSource = `export const PROFILE = ${JSON.stringify({
     testAI: `${profile.commandPrefix}.testAIConnection`,
     enterLicence: `${profile.commandPrefix}.enterLicence`,
     compareScans: `${profile.commandPrefix}.compareScans`,
+    reviewRiskCalibration: `${profile.commandPrefix}.reviewRiskCalibration`,
     revealLine: `${profile.commandPrefix}.revealLine`,
     chatFocus: `${profile.chatViewId}.focus`
   }
