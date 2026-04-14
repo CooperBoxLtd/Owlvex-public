@@ -333,4 +333,73 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.warnings[0]).toMatch(/AI provider unavailable/i);
         expect(global.fetch).toHaveBeenCalledTimes(1);
     });
+
+    it('suppresses conflicting AI findings when a deterministic IDOR finding already covers the region', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 3.5,
+                    summary: 'AI added an extra issue.',
+                    findings: [
+                        {
+                            id: 'ai-1',
+                            line: 1,
+                            line_end: 6,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'OWASP-A03',
+                            title: 'Command Injection',
+                            explanation: 'Incorrect AI overcall for the same function.',
+                            threat: 'Arbitrary command execution.',
+                            fix: 'Sanitize shell input.',
+                            confidence: 0.61,
+                            issue_id: 'owlvex.issue.code_injection.eval.001',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\01-idor-unsafe.js',
+            getText: () => `async function getDocument(currentUser, docId, db) {
+    const doc = await db.query(
+        'SELECT * FROM documents WHERE id = ?',
+        [docId],
+    );
+    return doc;
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].ruleCode).toBe('AC-001');
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.idor.001');
+        expect(result.findings[0].canonicalFamilyLabel).toBe('Access Control & Authorization');
+    });
 });

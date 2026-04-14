@@ -95,6 +95,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('## Issue Family Coverage');
         expect(written).toContain('- Injection & Execution: 1 finding(s)');
         expect(written).toContain('## Canonical Findings');
+        expect(written).toContain('| example.js | 4.2 | 1 | 1 finding(s), led by a high-severity Unsanitized SQL query construction. Primary issue family: Injection & Execution. |');
         expect(written).toContain('- Owlvex issue: `owlvex.issue.sql_injection.001`');
         expect(written).toContain('- Issue family: Injection & Execution');
         expect(written).toContain('- Category: unresolved');
@@ -139,6 +140,7 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- No framework-mapped findings were returned.');
         expect(written).toContain('No findings were returned.');
+        expect(written).toContain('| clean.js | 9.5 | 0 | No findings detected. |');
         expect(written).toContain('## Scan Errors');
         expect(written).toContain('- clean.js: model timeout');
     });
@@ -165,6 +167,33 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Scan warnings: 1');
         expect(written).toContain('## Scan Warnings');
         expect(written).toContain('- warn.js: Failed to record scan: Internal Server Error');
+    });
+
+    it('uses warning-aware summaries for clean files instead of degraded raw scan prose', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        const snapshot = {
+            targetLabel: 'src/probes/degraded-clean.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\degraded-clean.js'),
+                    result: buildResult({
+                        score: 10,
+                        summary: 'No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.',
+                        findings: [],
+                        metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                        warnings: ['AI provider unavailable: Azure Foundry error: 429'],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('| degraded-clean.js | 10.0 | 0 | No findings detected. Scan completed with provider/backend warnings. |');
+        expect(written).not.toContain('| degraded-clean.js | 10.0 | 0 | No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results. |');
     });
 
     it('normalizes string-based stride and matched signals without crashing', async () => {

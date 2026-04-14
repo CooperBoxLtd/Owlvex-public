@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { LicenceManager } from '../licence/licenceManager';
 import { ProviderRegistry } from '../providers/registry';
-import { CanonicalMappings, resolveIssue } from '../frameworks/issueResolver';
+import { CanonicalMappings, getCanonicalIssueById, resolveIssue } from '../frameworks/issueResolver';
 import { buildGroundedRemediationPromptContext } from '../frameworks/remediationResolver';
 import { getIssueFamilyDefinition } from '../frameworks/issueCatalog';
 import { DeterministicScanner } from './deterministicScanner';
@@ -85,6 +85,73 @@ function normalizeMappings(value: any): CanonicalMappings | undefined {
     };
 }
 
+function buildDeterministicGroundingContext(findings: Finding[]): string {
+    if (!findings.length) {
+        return 'No deterministic findings were proven for this file. AI may analyze uncovered regions, but it must stay evidence-based.';
+    }
+
+    return [
+        'Deterministic findings already proven for this file:',
+        ...findings.map((finding, index) => {
+            const family = finding.canonicalFamilyLabel || finding.canonicalFamily || 'Unclassified';
+            return `${index + 1}. line ${finding.line}-${finding.lineEnd} | ${finding.ruleCode} | ${finding.title} | canonical=${finding.canonicalId ?? 'unknown'} | family=${family}`;
+        }),
+        'Do not emit a second competing finding for the same code region.',
+        'If a deterministic finding exists for a region, only enrich it consistently or stay silent for that region.',
+    ].join('\n');
+}
+
+function findingsOverlap(left: Finding, right: Finding): boolean {
+    const leftStart = Math.min(left.line, left.lineEnd ?? left.line);
+    const leftEnd = Math.max(left.line, left.lineEnd ?? left.line);
+    const rightStart = Math.min(right.line, right.lineEnd ?? right.line);
+    const rightEnd = Math.max(right.line, right.lineEnd ?? right.line);
+
+    return leftStart <= (rightEnd + 2) && rightStart <= (leftEnd + 2);
+}
+
+function sameCanonicalRegion(det: Finding, ai: Finding): boolean {
+    return findingsOverlap(det, ai)
+        || (!!det.canonicalId && det.canonicalId === ai.canonicalId)
+        || (!!det.ruleCode && det.ruleCode === ai.ruleCode && findingsOverlap(det, ai));
+}
+
+function conflictsWithDeterministic(det: Finding, ai: Finding): boolean {
+    if (!sameCanonicalRegion(det, ai)) {
+        return false;
+    }
+
+    if (det.canonicalId && ai.canonicalId && det.canonicalId === ai.canonicalId) {
+        return true;
+    }
+
+    if (det.ruleCode && ai.ruleCode && det.ruleCode === ai.ruleCode) {
+        return true;
+    }
+
+    if (det.canonicalFamily && ai.canonicalFamily && det.canonicalFamily !== ai.canonicalFamily) {
+        return true;
+    }
+
+    if (det.canonicalFamilyLabel && ai.canonicalFamilyLabel && det.canonicalFamilyLabel !== ai.canonicalFamilyLabel) {
+        return true;
+    }
+
+    return true;
+}
+
+function mergeDeterministicAndAiFindings(deterministicFindings: Finding[], aiFindings: Finding[]): Finding[] {
+    if (!deterministicFindings.length) {
+        return aiFindings;
+    }
+
+    const filteredAiFindings = aiFindings.filter(ai =>
+        !deterministicFindings.some(det => conflictsWithDeterministic(det, ai)),
+    );
+
+    return [...deterministicFindings, ...filteredAiFindings];
+}
+
 export class ScanEngine {
     private readonly deterministicScanner = new DeterministicScanner();
     private readonly licenceValidationCache = new Map<string, Promise<void>>();
@@ -149,7 +216,7 @@ export class ScanEngine {
         try {
             aiResponse = await provider.complete({
                 systemPrompt,
-                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, and matched_signals if you can determine them.\nUse grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.\nDeterministic findings are confirmed structural violations. AI-only findings should stay evidence-based and avoid overclaiming.\n${groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : ''}\nCode:\n\n${code}`,
+                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, and matched_signals if you can determine them.\nUse grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.\nDeterministic findings are confirmed structural violations. AI-only findings should stay evidence-based and avoid overclaiming.\n${buildDeterministicGroundingContext(deterministicFindings)}\n${groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : ''}\nCode:\n\n${code}`,
                 model: provider.selectedModel,
                 temperature: 0.1,
             });
@@ -217,12 +284,7 @@ export class ScanEngine {
         // Deterministic findings lead — they are high-confidence and zero-cost.
         // Deduplicate by canonicalId + line to avoid doubling up when the AI
         // also found the same issue at the same location.
-        const aiOnlyFindings = parsed.findings.filter(ai =>
-            !deterministicFindings.some(det =>
-                det.canonicalId === ai.canonicalId && det.line === ai.line,
-            ),
-        );
-        const allFindings = [...deterministicFindings, ...aiOnlyFindings];
+        const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, parsed.findings);
         const mergedMetrics = {
             critical: allFindings.filter(f => f.severity === 'CRITICAL').length,
             high: allFindings.filter(f => f.severity === 'HIGH').length,
@@ -442,6 +504,21 @@ export class ScanEngine {
     }
 
     private _resolveCanonicalFinding(finding: Finding): Finding {
+        if (finding.canonicalId) {
+            const canonicalIssue = getCanonicalIssueById(finding.canonicalId);
+            if (canonicalIssue) {
+                return {
+                    ...finding,
+                    canonicalTitle: canonicalIssue.title,
+                    canonicalCategory: canonicalIssue.category,
+                    canonicalFamily: canonicalIssue.family,
+                    canonicalFamilyLabel: getIssueFamilyDefinition(canonicalIssue.family)?.label,
+                    stride: finding.stride ?? canonicalIssue.stride,
+                    mappings: finding.mappings ?? canonicalIssue.mappings,
+                };
+            }
+        }
+
         const resolved = resolveIssue(finding);
         if (!resolved) {
             return finding;

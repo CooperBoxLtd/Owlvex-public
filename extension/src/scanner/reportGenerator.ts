@@ -80,6 +80,28 @@ function getCanonicalRemediation(finding: ScanResult['findings'][number]): {
     return resolveRemediationForFinding(finding);
 }
 
+function summarizeFileResult(result: ScanResult): string {
+    if (!result.findings.length) {
+        return (result.warnings ?? []).length
+            ? 'No findings detected. Scan completed with provider/backend warnings.'
+            : 'No findings detected.';
+    }
+
+    const highestSeverityFinding = [...result.findings]
+        .sort((left, right) => severityRank(right.severity) - severityRank(left.severity))[0];
+
+    const severityText = highestSeverityFinding.severity.toLowerCase();
+    const title = highestSeverityFinding.canonicalTitle || highestSeverityFinding.title || 'finding';
+    const family = highestSeverityFinding.canonicalFamilyLabel || highestSeverityFinding.canonicalFamily;
+    const additionalCount = result.findings.length - 1;
+
+    return [
+        `${result.findings.length} finding(s), led by a ${severityText}-severity ${title}.`,
+        family ? `Primary issue family: ${family}.` : '',
+        additionalCount > 0 ? `${additionalCount} additional finding(s) also detected.` : '',
+    ].filter(Boolean).join(' ');
+}
+
 // ---------------------------------------------------------------------------
 // Report composition helpers
 // ---------------------------------------------------------------------------
@@ -369,7 +391,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             riskyFiles.length
                 ? riskyFiles.map(item => {
                     const relative = path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath);
-                    return `| ${escapeMarkdown(relative)} | ${item.result.score.toFixed(1)} | ${item.result.findings.length} | ${escapeMarkdown(item.result.summary || 'No summary returned')} |`;
+                    return `| ${escapeMarkdown(relative)} | ${item.result.score.toFixed(1)} | ${item.result.findings.length} | ${escapeMarkdown(summarizeFileResult(item.result))} |`;
                 })
                 : ['| No files were scanned successfully | - | - | - |']
         ),
