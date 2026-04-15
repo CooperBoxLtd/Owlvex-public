@@ -43,6 +43,7 @@ export interface ScanResult {
     score: number;
     summary: string;
     findings: Finding[];
+    frameworks?: string[];
     positives: string[];
     metrics: { critical: number; high: number; medium: number; low: number };
     durationMs: number;
@@ -444,6 +445,7 @@ export class ScanEngine {
             score: calculatedScore,
             summary,
             findings: allFindings,
+            frameworks,
             positives: parsed.positives,
             metrics: mergedMetrics,
             durationMs,
@@ -472,6 +474,7 @@ export class ScanEngine {
             score,
             summary,
             findings: deterministicFindings,
+            frameworks: vscode.workspace.getConfiguration(PROFILE.configSection).get<string[]>('frameworks', ['OWASP']),
             positives: [],
             metrics,
             durationMs: 0,

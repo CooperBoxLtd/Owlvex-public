@@ -532,6 +532,145 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toBe('Good morning! I am ready to help.');
     });
 
+    it('adds a Review fix action to scan-backed file results', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    uri: target ?? vscode.Uri.file('d:\\repo\\src\\userRepo.js'),
+                    result: {
+                        score: 6.3,
+                        findings: [{
+                            id: 'finding-sql',
+                            line: 3,
+                            lineEnd: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            ruleCode: 'SQ-001',
+                            title: 'SQL Injection',
+                            explanation: 'Dynamic SQL is built from user input.',
+                            threat: 'Data exposure.',
+                            fix: 'Use parameterized queries.',
+                            confidence: 0.9,
+                            provenance: 'ai',
+                            likelihood: 'HIGH',
+                            riskScore: 9,
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: '1 finding(s) detected.',
+                    },
+                };
+            }
+
+            return undefined;
+        });
+
+        await (provider as any).handleUserMessage('scan this file');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Next step: use Review fix to open a side-by-side remediation diff.');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Review fix', kind: 'generateFixPreview', path: 'd:\\repo\\src\\userRepo.js' }),
+            expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
+        ]));
+    });
+
+    it('can open a review diff from an action that targets a scanned file path', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: [
+                '```js',
+                'const safeRedirect = allowList(req.query.next);',
+                'return res.redirect(safeRedirect);',
+                '```',
+            ].join('\n'),
+        });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
+        const previewUri = { fsPath: 'untitled:redirect-fix.js', scheme: 'untitled', toString: () => 'untitled:redirect-fix.js' };
+        (vscode.window.activeTextEditor as any) = undefined;
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
+            if (input?.language === 'javascript') {
+                return { uri: previewUri };
+            }
+            return {
+                uri: targetUri,
+                languageId: 'javascript',
+                getText: () => [
+                    'function go(req, res) {',
+                    '  return res.redirect(req.query.next);',
+                    '}',
+                ].join('\n'),
+            };
+        });
+
+        (provider as any).messages.push({
+            role: 'assistant',
+            content: 'Scan completed.',
+            kind: 'scan',
+            actions: [{
+                id: 'review-fix-redirect',
+                label: 'Review fix',
+                kind: 'generateFixPreview',
+                path: targetUri.fsPath,
+                finding: {
+                    id: 'finding-open-redirect',
+                    line: 2,
+                    lineEnd: 2,
+                    severity: 'MEDIUM',
+                    framework: 'OWASP',
+                    ruleCode: 'A01-REDIRECT',
+                    title: 'Open Redirect',
+                    explanation: 'Untrusted destination reaches redirect.',
+                    threat: 'Phishing.',
+                    fix: 'Allow-list destinations.',
+                    confidence: 0.88,
+                    provenance: 'ai',
+                    likelihood: 'HIGH',
+                    riskScore: 7,
+                },
+            }],
+        });
+
+        await (provider as any).handleMessageAction((provider as any).messages.length - 1, 'review-fix-redirect');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            'vscode.diff',
+            targetUri,
+            previewUri,
+            expect.stringContaining('Fix Preview - Open Redirect'),
+        );
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Review fix ready for');
+    });
+
     it('applies a generated fix preview only when the file is unchanged', async () => {
         const complete = jest.fn().mockResolvedValue({
             content: '```js\nconst safe = true;\n```',

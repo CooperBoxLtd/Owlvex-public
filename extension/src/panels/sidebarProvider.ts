@@ -3,6 +3,7 @@ import { ScanResult, Finding } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 import { getRulePackModeLabel } from '../packs/packRuntime';
 import { resolveRemediationForFinding } from '../frameworks/remediationResolver';
+import { formatFrameworkSummary } from '../frameworks/catalog';
 
 function getFindingLikelihood(finding: Finding): string {
     return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
@@ -63,6 +64,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                     `Score: ${this.lastResult.score.toFixed(1)}/10`,
                     [
                         `${this.lastResult.findings.length} finding(s) | ${this.lastResult.model} | ${getRulePackModeLabel(this.lastResult.packContext)}`,
+                        this.lastResult.frameworks?.length
+                            ? `Frameworks in scope: ${formatFrameworkSummary(this.lastResult.frameworks)}`
+                            : '',
                         topRiskFinding
                             ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
                             : '',

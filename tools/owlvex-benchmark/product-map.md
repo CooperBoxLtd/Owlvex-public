@@ -116,6 +116,8 @@ Run `npm run benchmark:status` from `extension/` to verify current gate state.
 
 The demo proves three claims in sequence: the engine proves violations (not guesses), it stays silent when code is correct, and findings translate into language a CTO or security lead can act on.
 
+Additional AI-only demo fixtures now exist for uncovered classes such as open redirect and missing CSRF protection. These are useful for demonstrating model-assisted coverage, but they are not part of the deterministic trust claim.
+
 ---
 
 ## Milestones

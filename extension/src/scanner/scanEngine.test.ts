@@ -559,4 +559,148 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].riskScore).toBe(7);
         expect(result.summary).toBe('1 finding(s) detected, led by 1 medium-severity issue(s). Highest contextual risk: medium impact x high likelihood = 7/10. Issue families: Identity & Auth Failures.');
     });
+
+    it('preserves AI-only findings for issue classes not covered by the deterministic engine yet', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 6.4,
+                    summary: 'Potential open redirect detected.',
+                    findings: [
+                        {
+                            id: 'ai-open-redirect-1',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A01-REDIRECT',
+                            title: 'Open Redirect',
+                            explanation: 'User-controlled destination is passed directly into a redirect call.',
+                            threat: 'Attackers can steer users to attacker-controlled pages.',
+                            fix: 'Allow-list redirect destinations.',
+                            confidence: 0.88,
+                            issue_id: 'owlvex.issue.open_redirect.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The redirect destination comes straight from request input.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\redirect.js',
+            getText: () => `function go(req, res) {
+    return res.redirect(req.query.next);
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('ai');
+        expect(result.findings[0].confidence).toBe(0.88);
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.open_redirect.001');
+        expect(result.findings[0].canonicalFamilyLabel).toBe('Security Misconfiguration & Platform Hardening');
+        expect(result.findings[0].likelihood).toBe('HIGH');
+        expect(result.score).toBe(7.8);
+    });
+
+    it('keeps AI-only CSRF findings distinct from deterministic coverage', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 4.5,
+                    summary: 'Missing CSRF protection detected.',
+                    findings: [
+                        {
+                            id: 'ai-csrf-1',
+                            line: 1,
+                            line_end: 6,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-CSRF',
+                            title: 'Missing CSRF protection',
+                            explanation: 'A state-changing browser request is accepted without a CSRF token check.',
+                            threat: 'Attackers can trick an authenticated browser into performing an unwanted action.',
+                            fix: 'Require anti-CSRF tokens or same-site protections.',
+                            confidence: 0.84,
+                            issue_id: 'owlvex.issue.csrf_missing_token.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The request mutates account data and no CSRF token validation is visible.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\csrf.js',
+            getText: () => `function updateEmail(req, res, db) {
+    db.query(
+        'UPDATE users SET email = ? WHERE id = ?',
+        [req.body.email, req.session.userId],
+    );
+    res.json({ ok: true });
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('ai');
+        expect(result.findings[0].confidence).toBe(0.84);
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.csrf_missing_token.001');
+        expect(result.findings[0].canonicalFamilyLabel).toBe('Access Control & Authorization');
+        expect(result.findings[0].likelihood).toBe('HIGH');
+        expect(result.score).toBe(6.3);
+    });
 });

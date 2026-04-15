@@ -13,6 +13,10 @@ The benchmark tool answers one question:
 
 It is not a model benchmark. It is a deterministic correctness gate.
 
+For model-assisted issue classes that are **not** part of the deterministic release gate yet, see:
+
+- `tools/owlvex-benchmark/ai-evals/`
+
 ---
 
 ## Layout
@@ -67,6 +71,8 @@ The live extension scanner currently implements additional conditional rules as 
 - `SM-002` debug mode without production guard
 
 Benchmark coverage for the conditional-rules group is currently partial, with `sm002` already gated and the others still to be lifted into the benchmark tool.
+
+AI-only coverage examples are tracked separately and are intentionally **not** counted toward the deterministic suite totals.
 
 ---
 

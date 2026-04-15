@@ -32,7 +32,7 @@ Investor-style framing:
 
 - The problem: code ships faster than traditional security review can keep up.
 - The wedge: a security scanner embedded directly in the developer workflow.
-- The differentiation: deterministic-first reasoning, bring-your-own-model, framework-aware reporting.
+- The differentiation: deterministic-first reasoning, bring-your-own-model, framework-aware interpretation and reporting.
 - The expansion path: scan comparison, review-first remediation diffs, team policy, CI/CD, compliance packs, multi-provider review.
 
 ---
@@ -127,7 +127,21 @@ This is the mechanism that defines what Owlvex can claim with certainty. No dete
 
 ## Framework-Aware Scanning
 
-Framework selection influences prompt construction, severity filtering, and output structure. Supported frameworks: OWASP, STRIDE, MITRE ATT&CK, CWE, Clean Code, NIST, PCI-DSS, HIPAA.
+Framework selection influences prompt construction, issue interpretation, canonical mappings, and output structure. Supported frameworks: OWASP, STRIDE, MITRE ATT&CK, CWE, Clean Code, NIST, PCI-DSS, HIPAA.
+
+Owlvex itself remains the primary detection and reasoning engine:
+
+- deterministic findings are grounded in Owlvex structural rules and benchmark-backed invariants
+- AI findings are grounded in code context, Owlvex canonical issues, and the selected framework scope
+- selected frameworks act as a lens over findings, not as independent first-class scan engines
+
+In practical terms, framework selection currently means:
+
+- what external mappings should be shown
+- what threat-model or compliance vocabulary should be emphasized
+- what prompt context should shape AI-assisted reasoning
+
+It does **not** mean that every selected framework becomes its own separate source of detection truth.
 
 The longer-term direction is a canonical security knowledge model: one internal issue schema with one mapping layer to external frameworks. Reference: [KNOWLEDGE_MODEL.md](KNOWLEDGE_MODEL.md) and [ISSUE_EXPANSION_ROADMAP.md](ISSUE_EXPANSION_ROADMAP.md).
 
@@ -167,6 +181,15 @@ The simplest demo path uses `tools/demo/`:
 - `04-debug-safe.js` -> no findings
 - `05-tenant-isolation-unsafe.js` -> deterministic multi-tenant isolation finding
 
+Additional AI-only demo fixtures:
+
+- `16-open-redirect-unsafe.js` -> AI-only open redirect coverage example
+- `17-open-redirect-safe.js` -> safe companion for redirect handling
+- `18-csrf-unsafe.js` -> AI-only CSRF coverage example
+- `19-csrf-safe.js` -> safe companion for CSRF handling
+- `20-cors-unsafe.js` -> AI-only permissive CORS coverage example
+- `21-cors-safe.js` -> safe companion for CORS handling
+
 Demo script: [tools/demo/DEMO-SCRIPT.md](../tools/demo/DEMO-SCRIPT.md)
 
 ---
@@ -189,3 +212,4 @@ The deterministic engine is the differentiation. It turns the product from "a sc
 - One active AI provider per scan
 - AI scan quality is probabilistic; only deterministic findings carry certainty claims
 - Large folder scans can be slow on smaller local models
+- Framework selection is currently a reasoning and reporting lens, not a fully independent framework-native detection engine

@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "suite": "owlvex-ai-evals",
+  "description": "Lightweight AI-only evaluation lane for issue classes outside the deterministic gate.",
+  "cases": [
+    {
+      "id": "ai-open-redirect-unsafe",
+      "file": "tools/demo/16-open-redirect-unsafe.js",
+      "expected": {
+        "verdict": "ai-finding",
+        "preferred_issue_ids": ["owlvex.issue.open_redirect.001"],
+        "preferred_provenance": "ai"
+      }
+    },
+    {
+      "id": "ai-open-redirect-safe",
+      "file": "tools/demo/17-open-redirect-safe.js",
+      "expected": {
+        "verdict": "clean-or-advisory",
+        "must_not_include_issue_ids": ["owlvex.issue.open_redirect.001"]
+      }
+    },
+    {
+      "id": "ai-csrf-unsafe",
+      "file": "tools/demo/18-csrf-unsafe.js",
+      "expected": {
+        "verdict": "ai-finding",
+        "preferred_issue_ids": ["owlvex.issue.csrf_missing_token.001"],
+        "preferred_provenance": "ai"
+      }
+    },
+    {
+      "id": "ai-csrf-safe",
+      "file": "tools/demo/19-csrf-safe.js",
+      "expected": {
+        "verdict": "clean-or-advisory",
+        "must_not_include_issue_ids": ["owlvex.issue.csrf_missing_token.001"]
+      }
+    },
+    {
+      "id": "ai-cors-unsafe",
+      "file": "tools/demo/20-cors-unsafe.js",
+      "expected": {
+        "verdict": "ai-finding",
+        "preferred_labels": ["cors", "cross origin resource sharing"],
+        "preferred_provenance": "ai"
+      }
+    },
+    {
+      "id": "ai-cors-safe",
+      "file": "tools/demo/21-cors-safe.js",
+      "expected": {
+        "verdict": "clean-or-advisory",
+        "must_not_include_labels": ["cors misconfiguration", "overly permissive cors"]
+      }
+    }
+  ]
+}

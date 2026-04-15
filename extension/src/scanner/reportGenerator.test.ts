@@ -14,6 +14,7 @@ describe('reportGenerator', () => {
             scanId: 'scan-1',
             score: 4.2,
             summary: 'High risk issue found.',
+            frameworks: ['OWASP', 'STRIDE', 'CWE', 'MITRE', 'NIST'],
             findings: [
                 {
                     id: 'finding-1',
@@ -92,10 +93,12 @@ describe('reportGenerator', () => {
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('# Owlvex Vulnerability Scan Report');
+        expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source coverage: Fresh Packs: 1');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- Score: 4.2/10');
+        expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('| Unsanitized SQL query construction | impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
@@ -290,6 +293,32 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Validate with: Replay the injection payload and confirm it is treated as data.');
         expect(written).toContain('- Avoid: Manual quote escaping.');
         expect(written).toContain('## Findings By File');
+    });
+
+    it('filters mappings and STRIDE to the frameworks selected for the scan', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+        const snapshot = {
+            targetLabel: 'src/probes/clean-code-only.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\clean-code-only.js'),
+                    result: buildResult({
+                        frameworks: ['CLEANCODE'],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).not.toContain('- Mappings:');
+        expect(written).not.toContain('- STRIDE:');
+        expect(written).toContain('- Frameworks in scope: CLEANCODE 2024-curated');
+        expect(written).toContain('- Sources: OWASP SQL Injection Prevention Cheat Sheet');
     });
 
 });

@@ -4,6 +4,7 @@ import { resolveRemediationForFinding } from '../frameworks/remediationResolver'
 import { describeRulePackRuntime, getRulePackModeLabel } from '../packs/packRuntime';
 import { ScanResult } from './scanEngine';
 import { FolderScanSummary } from './workspaceScanner';
+import { formatFrameworkSummary } from '../frameworks/catalog';
 
 export interface ReportEntry {
     uri: vscode.Uri;
@@ -30,18 +31,28 @@ function escapeCodeFence(value: string): string {
     return value.replace(/```/g, '``\\`');
 }
 
-function formatMappings(mappings?: NonNullable<ScanResult['findings'][number]['mappings']>): string {
+function normalizeFrameworkCodes(frameworks?: string[]): Set<string> {
+    return new Set((frameworks ?? []).map(value => String(value).trim().toUpperCase()).filter(Boolean));
+}
+
+function formatMappings(
+    mappings: NonNullable<ScanResult['findings'][number]['mappings']> | undefined,
+    frameworks?: string[],
+): string {
     if (!mappings) return '';
 
+    const enabled = normalizeFrameworkCodes(frameworks);
+    const showAllSecurityMappings = enabled.size === 0;
+
     return ([
-        ['CWE', mappings.cwe],
-        ['OWASP', mappings.owasp],
-        ['API OWASP', mappings.apiOwasp],
-        ['ATT&CK', mappings.attack],
-        ['CAPEC', mappings.capec],
-        ['NIST', mappings.nist],
-    ] as Array<[string, string[]]>)
-        .filter(([, values]) => values?.length)
+        ['CWE', mappings.cwe, enabled.has('CWE') || showAllSecurityMappings],
+        ['OWASP', mappings.owasp, enabled.has('OWASP') || showAllSecurityMappings],
+        ['API OWASP', mappings.apiOwasp, enabled.has('OWASP') || showAllSecurityMappings],
+        ['ATT&CK', mappings.attack, enabled.has('MITRE') || showAllSecurityMappings],
+        ['CAPEC', mappings.capec, enabled.has('MITRE') || enabled.has('CWE') || showAllSecurityMappings],
+        ['NIST', mappings.nist, enabled.has('NIST') || showAllSecurityMappings],
+    ] as Array<[string, string[], boolean]>)
+        .filter(([, values, allowed]) => allowed && values?.length)
         .map(([label, values]) => `${label}: ${values.join(', ')}`)
         .join(' | ');
 }
@@ -61,7 +72,12 @@ function normalizeList(value: unknown): string[] {
     return [];
 }
 
-function getFindingStride(finding: ScanResult['findings'][number]): string[] {
+function getFindingStride(finding: ScanResult['findings'][number], frameworks?: string[]): string[] {
+    const enabled = normalizeFrameworkCodes(frameworks);
+    if (enabled.size > 0 && !enabled.has('STRIDE')) {
+        return [];
+    }
+
     return normalizeList(finding.stride);
 }
 
@@ -350,6 +366,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Average score: ${averageScore.toFixed(1)}/10`,
         `- Deterministic findings: ${deterministicItems.length}`,
         `- Intelligence source coverage: ${packCoverageSummary}`,
+        `- Frameworks in scope: ${formatFrameworkSummary([...new Set(snapshot.results.flatMap(item => item.result.frameworks ?? []))])}`,
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         '',
@@ -363,6 +380,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push('');
             lines.push(`- Score: ${item.result.score.toFixed(1)}/10`);
             lines.push(`- Findings: ${item.result.findings.length}`);
+            lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
             lines.push(`- Intelligence source: ${describeRulePackRuntime(item.packContext)}`);
             lines.push('');
@@ -380,8 +398,8 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 const remediation = getCanonicalRemediation(finding);
                 const safePattern = buildSafePatternLine(remediation);
                 const likelihoodReasons = getFindingLikelihoodReasons(finding);
-                const mappingSummary = formatMappings(finding.mappings);
-                const stride = getFindingStride(finding);
+                const mappingSummary = formatMappings(finding.mappings, item.result.frameworks);
+                const stride = getFindingStride(finding, item.result.frameworks);
                 const signals = getFindingSignals(finding);
                 lines.push(`#### ${finding.canonicalTitle || finding.title}`);
                 lines.push(`- Location: \`${item.file}\` at L${finding.line}${finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`);

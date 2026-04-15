@@ -472,6 +472,31 @@ function severityRank(severity: string): number {
     }
 }
 
+function buildReviewFixAction(finding: Finding, targetPath?: string): ChatMessageAction {
+    return {
+        id: `generate-fix-preview-${finding.id ?? finding.line}`,
+        label: 'Review fix',
+        kind: 'generateFixPreview',
+        finding,
+        path: targetPath,
+    };
+}
+
+function getTopActionableFindingResult(
+    items: Array<{ uri?: vscode.Uri; result?: ScanResult }>,
+): { finding: Finding; targetPath?: string } | undefined {
+    const candidates = items.flatMap(item =>
+        (item.result?.findings ?? []).map(finding => ({
+            finding,
+            targetPath: item.uri?.fsPath,
+        })),
+    );
+
+    return candidates
+        .slice()
+        .sort((left, right) => riskRank(right.finding) - riskRank(left.finding))[0];
+}
+
 function getProviderSetupHint(providerId: string): string {
     switch (providerId) {
         case 'azure-foundry':
@@ -588,10 +613,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         );
     }
 
-    async generateFixPreview(finding: Finding): Promise<void> {
+    async generateFixPreview(finding: Finding, targetPath?: string): Promise<void> {
         this.latestActionableFinding = finding;
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
+        let document = vscode.window.activeTextEditor?.document;
+        if (targetPath) {
+            const targetUri = vscode.Uri.file(targetPath);
+            if (!document || document.uri.fsPath !== targetUri.fsPath) {
+                document = await vscode.workspace.openTextDocument(targetUri);
+            }
+        }
+
+        if (!document) {
             vscode.window.showWarningMessage('Open the relevant file before generating a fix preview.');
             return;
         }
@@ -628,27 +660,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 userMessage: [
                     `Generate a fix preview for this finding in the current file.`,
                     discussionContext.promptContext,
-                    `Current file contents:\n${editor.document.getText()}`,
+                    `Current file contents:\n${document.getText()}`,
                 ].join('\n\n'),
                 model: provider.selectedModel,
                 temperature: 0.1,
             });
 
-            const patched = extractPatchedFileContent(response.content || '', editor.document.getText());
+            const patched = extractPatchedFileContent(response.content || '', document.getText());
             const previewDoc = await vscode.workspace.openTextDocument({
-                language: editor.document.languageId,
+                language: document.languageId,
                 content: patched,
             });
             await vscode.commands.executeCommand(
                 'vscode.diff',
-                editor.document.uri,
+                document.uri,
                 previewDoc.uri,
                 `${PROFILE.displayLabel}: Fix Preview - ${finding.canonicalTitle || finding.title}`,
             );
 
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
-                content: `Review fix ready for ${vscode.workspace.asRelativePath(editor.document.uri, false)}. A side-by-side diff is open and the original file is unchanged until you apply it.`,
+                content: `Review fix ready for ${vscode.workspace.asRelativePath(document.uri, false)}. A side-by-side diff is open and the original file is unchanged until you apply it.`,
                 kind: 'advisory',
                 actions: [
                     {
@@ -664,8 +696,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 ],
             };
             this.pendingFixPreview = {
-                targetPath: editor.document.uri.fsPath,
-                originalText: editor.document.getText(),
+                targetPath: document.uri.fsPath,
+                originalText: document.getText(),
                 patchedText: patched,
                 title: finding.canonicalTitle || finding.title,
             };
@@ -828,6 +860,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (!result?.completed) {
                 return { handled: true, response: 'Folder scan did not complete.', kind: 'scan' };
             }
+            const topActionable = getTopActionableFindingResult(result.results ?? []);
+            this.latestActionableFinding = topActionable?.finding;
+            const actions: ChatMessageAction[] = [];
+            if (topActionable) {
+                actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
+            }
+            actions.push({
+                id: 'explain-score-scan-folder-intent',
+                label: 'Explain score',
+                kind: 'explainScore',
+            });
             return {
                 handled: true,
                 response: [
@@ -835,6 +878,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `Total findings: ${result.totalFindings}`,
                     ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                         .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                    topActionable ? `Next step: Review fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
                     result.results.some((item: any) => item.result.warnings.length)
                         ? `Scan warnings: ${result.results.reduce((total: number, item: any) => total + item.result.warnings.length, 0)}`
                         : 'No scan warnings were reported.',
@@ -843,6 +887,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         : 'No scan errors were reported.',
                 ].join('\n'),
                 kind: 'scan',
+                actions,
             };
         }
 
@@ -857,6 +902,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (!result?.completed) {
                 return { handled: true, response: 'Selected-files scan did not complete.', kind: 'scan' };
             }
+            const topActionable = getTopActionableFindingResult(result.results ?? []);
+            this.latestActionableFinding = topActionable?.finding;
+            const actions: ChatMessageAction[] = [];
+            if (topActionable) {
+                actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
+            }
+            actions.push({
+                id: 'explain-score-scan-selected-intent',
+                label: 'Explain score',
+                kind: 'explainScore',
+            });
             return {
                 handled: true,
                 response: [
@@ -864,16 +920,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `Total findings: ${result.totalFindings}`,
                     ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                         .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                    topActionable ? `Next step: Review fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
                     result.errors.length
                         ? `Scan errors: ${result.errors.length}`
                         : 'No scan errors were reported.',
                 ].join('\n'),
                 kind: 'scan',
-                actions: [{
-                    id: 'explain-score-scan-folder-intent',
-                    label: 'Explain score',
-                    kind: 'explainScore',
-                }],
+                actions,
             };
         }
 
@@ -888,6 +941,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (!result?.completed) {
                 return { handled: true, response: 'Open-editors scan did not complete.', kind: 'scan' };
             }
+            const topActionable = getTopActionableFindingResult(result.results ?? []);
+            this.latestActionableFinding = topActionable?.finding;
+            const actions: ChatMessageAction[] = [];
+            if (topActionable) {
+                actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
+            }
+            actions.push({
+                id: 'explain-score-scan-open-editors-intent',
+                label: 'Explain score',
+                kind: 'explainScore',
+            });
             return {
                 handled: true,
                 response: [
@@ -895,16 +959,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `Total findings: ${result.totalFindings}`,
                     ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                         .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                    topActionable ? `Next step: Review fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
                     result.errors.length
                         ? `Scan errors: ${result.errors.length}`
                         : 'No scan errors were reported.',
                 ].join('\n'),
                 kind: 'scan',
-                actions: [{
-                    id: 'explain-score-scan-selected-intent',
-                    label: 'Explain score',
-                    kind: 'explainScore',
-                }],
+                actions,
             };
         }
 
@@ -1027,7 +1088,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action.kind === 'generateFixPreview' && action.finding) {
-            await this.generateFixPreview(action.finding);
+            await this.generateFixPreview(action.finding, action.path);
             return;
         }
 
@@ -1458,16 +1519,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         const finding = suggestedFinding ?? this.latestActionableFinding ?? this.getLatestReportFinding();
-        if (!finding || !vscode.window.activeTextEditor) {
+        const targetPath = vscode.window.activeTextEditor?.document.uri.fsPath;
+        if (!finding || !targetPath) {
             return undefined;
         }
 
-        return [{
-            id: `generate-fix-preview-${finding.id ?? finding.line}`,
-            label: 'Review fix',
-            kind: 'generateFixPreview',
-            finding,
-        }];
+        return [buildReviewFixAction(finding, targetPath)];
     }
 
     private async handleScanFileIntent(intent: ChatLocalIntent): Promise<LocalActionResult> {
@@ -1496,18 +1553,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.latestActionableFinding = result.result.findings
             .slice()
             .sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+        const actions: ChatMessageAction[] = [{
+            id: 'explain-score-scan-file-intent',
+            label: 'Explain score',
+            kind: 'explainScore',
+        }];
+        if (this.latestActionableFinding && result.uri) {
+            actions.unshift(buildReviewFixAction(this.latestActionableFinding, result.uri.fsPath));
+        }
         return {
             handled: true,
             response: [
                 `File scan completed for ${relativePath}.`,
                 ...buildScanSummaryLines(result.result),
+                this.latestActionableFinding ? 'Next step: use Review fix to open a side-by-side remediation diff.' : '',
             ].join('\n'),
             kind: 'scan',
-            actions: [{
-                id: 'explain-score-scan-file-intent',
-                label: 'Explain score',
-                kind: 'explainScore',
-            }],
+            actions,
         };
     }
 

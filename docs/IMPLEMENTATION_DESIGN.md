@@ -92,6 +92,7 @@ It owns:
 - requesting rule/config/prompt data from backend
 - invoking the customer-selected model provider
 - merging deterministic and AI findings
+- treating Owlvex canonical issues and local reasoning as the primary decision boundary
 - rendering findings, diagnostics, reports, comparisons, and advisory chat guidance
 - proposing review-first remediation diffs when a user asks Owlvex to help change code
 - expanding AI context beyond the active file when the finding or remediation depends on nearby project structure
@@ -138,6 +139,9 @@ It must remain:
 - explainable
 - benchmark-gated
 - separate from heuristic AI output
+
+The deterministic engine is the primary detection truth for covered behaviors.
+External frameworks may classify or map its output, but they must not silently redefine whether a structurally proven finding exists.
 
 ### 4.4 AI Provider Layer
 
@@ -240,6 +244,8 @@ The product must distinguish clearly between:
 
 - deterministic findings
 - AI findings
+- Owlvex-native detection truth
+- external framework interpretation
 
 Required properties on surfaced findings:
 
@@ -253,6 +259,8 @@ Users must be able to tell:
 
 - what is proven
 - what is inferred
+- what comes from Owlvex reasoning
+- what comes from framework mapping, threat-modeling, or compliance interpretation
 
 Output surfaces should stay intentionally distinct:
 
@@ -265,6 +273,13 @@ AI-assisted reasoning should use progressive context expansion:
 - file-only context is the fast default path
 - when imports, helper resolution, framework wiring, or data flow cross file boundaries, the extension should gather nearby project context before presenting stronger AI conclusions or remediation proposals
 - higher-risk or ambiguous remediation guidance should prefer expanded context over isolated single-file guesses
+
+Framework selection semantics should remain explicit:
+
+- Owlvex is the scan engine and canonical issue source of truth
+- selected frameworks shape prompt context, mappings, output labels, and interpretation
+- framework selection should not be described as if OWASP, CWE, STRIDE, NIST, PCI DSS, and Clean Code are interchangeable scan engines
+- if future work introduces framework-specific gating, it must be an explicit product decision with user-visible semantics rather than an implicit side effect
 
 ## 9. Security and Privacy Requirements
 
@@ -333,6 +348,7 @@ The architecture is being followed correctly if all of the following are true:
 - AI calls are provider-direct from extension
 - benchmark gate remains green for covered axes
 - product UI distinguishes deterministic from AI findings
+- product UI and docs distinguish Owlvex detection truth from framework interpretation
 - backend APIs remain metadata/control-plane oriented
 - any future code-edit flow remains local/review-first and does not require source upload to Owlvex backend
 - AI-assisted reasoning can expand beyond the active file when project context is necessary for trustworthy conclusions
@@ -349,6 +365,7 @@ When implementing against this design:
 6. preserve explicit provenance in user-facing outputs
 7. if implementing remediation edits, make them review-first and approval-gated rather than silent auto-edits
 8. do not assume the active file is sufficient AI context when imports, shared helpers, or framework wiring clearly affect the conclusion
+9. do not treat external frameworks as interchangeable detection engines unless the product contract is deliberately being changed and documented
 
 If a requested change would violate the source-code boundary or the local-execution model, stop and call that out explicitly.
 

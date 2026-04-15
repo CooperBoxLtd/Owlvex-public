@@ -4,6 +4,9 @@
 
 Owlvex should not treat OWASP, CWE, STRIDE, ATT&CK, CAPEC, and NIST as separate scanners.
 
+Owlvex should also not present those frameworks as if they are interchangeable detection engines.
+They are external taxonomies, threat-models, or control lenses that attach to an Owlvex-native issue model.
+
 It should treat them as inputs to a single canonical issue model.
 
 That model gives Owlvex:
@@ -22,6 +25,12 @@ That model gives Owlvex:
 5. `OWASP` provides risk framing and developer familiarity
 6. `CAPEC` and `ATT&CK` provide attacker-path context
 7. `NIST` and other control sets provide compliance mappings
+
+This means the decision boundary stays Owlvex-native:
+
+- Owlvex determines whether a finding exists
+- frameworks help classify, explain, map, and report that finding
+- changing selected frameworks should change interpretation scope more readily than detection truth
 
 ## Canonical Objects
 
