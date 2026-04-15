@@ -3,6 +3,7 @@ import * as crypto from 'crypto';
 import { LicenceManager } from '../licence/licenceManager';
 import { ProviderRegistry } from '../providers/registry';
 import { CanonicalMappings, getCanonicalIssueById, resolveIssue } from '../frameworks/issueResolver';
+import { buildAiIssueGroundingPromptContext, buildGroundedFrameworkPromptContext } from '../frameworks/frameworkGrounding';
 import { buildGroundedRemediationPromptContext } from '../frameworks/remediationResolver';
 import { getIssueFamilyDefinition } from '../frameworks/issueCatalog';
 import { DeterministicScanner } from './deterministicScanner';
@@ -416,11 +417,23 @@ export class ScanEngine {
         const start = Date.now();
 
         let aiResponse;
-        const groundedRemediationContext = buildGroundedRemediationPromptContext();
+        const groundedFrameworkContext = buildGroundedFrameworkPromptContext(frameworks);
+        const groundedRemediationContext = buildGroundedRemediationPromptContext(
+            deterministicFindings
+                .map(finding => finding.canonicalId)
+                .filter((value): value is string => Boolean(value)),
+        );
+        const groundedAiIssueContext = buildAiIssueGroundingPromptContext(
+            code,
+            frameworks,
+            deterministicFindings
+                .map(finding => finding.canonicalId)
+                .filter((value): value is string => Boolean(value)),
+        );
         try {
             aiResponse = await this._completeWithRateLimitHandling(provider, {
                 systemPrompt,
-                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, matched_signals, likelihood, likelihood_reasons, and plain_language_fix if you can determine them.\nFor plain_language_fix, explain the fix in simple everyday language in 1-2 sentences. Focus on what the developer should stop doing and what safe pattern should replace it.\nTreat severity as impact. Use likelihood only for exploitability in this specific code context, and keep it evidence-based: LOW, MEDIUM, or HIGH.\nUse grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.\nDeterministic findings are confirmed structural violations. AI-only findings should stay evidence-based and avoid overclaiming.\n${buildDeterministicGroundingContext(deterministicFindings)}\n${groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : ''}\nCode:\n\n${code}`,
+                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, matched_signals, likelihood, likelihood_reasons, and plain_language_fix if you can determine them.\nFor plain_language_fix, explain the fix in simple everyday language in 1-2 sentences. Focus on what the developer should stop doing and what safe pattern should replace it.\nTreat severity as impact. Use likelihood only for exploitability in this specific code context, and keep it evidence-based: LOW, MEDIUM, or HIGH.\nUse grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.\nDeterministic findings are confirmed structural violations. AI-only findings should stay evidence-based and avoid overclaiming.\n${buildDeterministicGroundingContext(deterministicFindings)}\n${groundedFrameworkContext ? `\n${groundedFrameworkContext}\n` : ''}${groundedAiIssueContext ? `\n${groundedAiIssueContext}\n` : ''}${groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : ''}\nCode:\n\n${code}`,
                 model: provider.selectedModel,
                 temperature: 0.1,
             });

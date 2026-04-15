@@ -90,6 +90,17 @@ The control plane. Handles:
 
 Must not require raw source code in order to perform its role. Lives in `backend/`.
 
+### Grounded Data Packs
+
+Owlvex now maintains versioned local grounded-data assets that can later become signed rule-pack artifacts. Current pack families include:
+
+- canonical issue and mapping packs under `docs/data/issues/`
+- curated framework blobs under `docs/data/frameworks/`
+- raw upstream framework source mirrors under `docs/data/framework-sources/`
+- curated OWASP cheat sheet guidance under `docs/data/cheatsheets/`
+
+These packs are intended to make the AI lane more data-backed over time, especially for framework-guided interpretation and remediation guidance.
+
 ### Deterministic Benchmark Tool
 
 Lives under `tools/owlvex-benchmark/`. Provides:
@@ -99,6 +110,7 @@ Lives under `tools/owlvex-benchmark/`. Provides:
 - conditional-rules coverage in the aggregate deterministic gate
 - aggregate gate: `19/19` suites and `82/82` cases passing
 - confidence and status reporting
+- separate AI eval tooling for uncovered issue classes that are not part of the deterministic release gate
 
 This is the mechanism that defines what Owlvex can claim with certainty. No deterministic rule ships without benchmark coverage.
 
@@ -147,6 +159,8 @@ In practical terms, framework selection currently means:
 - what external mappings should be shown
 - what threat-model or compliance vocabulary should be emphasized
 - what prompt context should shape AI-assisted reasoning, especially for AI-only findings
+- what curated framework-pack and cheat-sheet guidance can be injected into AI scan and remediation prompts
+- what bounded candidate issues the AI lane should prefer before inventing a new label
 
 It does **not** mean that every selected framework becomes its own separate source of detection truth.
 
@@ -196,6 +210,12 @@ Additional AI-only demo fixtures:
 - `19-csrf-safe.js` -> safe companion for CSRF handling
 - `20-cors-unsafe.js` -> AI-only permissive CORS coverage example
 - `21-cors-safe.js` -> safe companion for CORS handling
+- `22-ssrf-unsafe.js` -> AI-only SSRF coverage example
+- `23-ssrf-safe.js` -> safe companion for SSRF handling
+- `24-jwt-validation-unsafe.js` -> AI-only weak JWT validation coverage example
+- `25-jwt-validation-safe.js` -> safe companion for JWT validation
+- `26-deserialization-unsafe.py` -> AI-only insecure deserialization coverage example
+- `27-deserialization-safe.py` -> safe companion for deserialization handling
 
 Demo script: [tools/demo/DEMO-SCRIPT.md](../tools/demo/DEMO-SCRIPT.md)
 
@@ -220,3 +240,4 @@ The deterministic engine is the differentiation. It turns the product from "a sc
 - AI scan quality is probabilistic; only deterministic findings carry certainty claims
 - Large folder scans can be slow on smaller local models
 - Framework selection is currently a reasoning and reporting lens, not a fully independent framework-native detection engine
+- Curated framework and cheat-sheet packs are now used in runtime prompt construction, but the AI lane still needs deeper issue-targeted grounding coverage and more eval cases before it can be called fully mature

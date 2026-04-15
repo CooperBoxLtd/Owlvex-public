@@ -52,6 +52,7 @@ function parseFrameworks(markdown) {
 function parseReport(markdown) {
   const lines = markdown.split(/\r?\n/);
   const findingsByFile = new Map();
+  const frameworksInScope = parseFrameworks(markdown);
   let currentFile = null;
   let currentFinding = null;
   let inDetectionTable = false;
@@ -68,6 +69,11 @@ function parseReport(markdown) {
     if (!currentFile || !currentFinding) {
       currentFinding = null;
       return;
+    }
+
+    if (Array.isArray(currentFinding.detailLines)) {
+      currentFinding.detailText = currentFinding.detailLines.join('\n').trim();
+      delete currentFinding.detailLines;
     }
 
     const bucket = ensureFile(currentFile);
@@ -123,6 +129,7 @@ function parseReport(markdown) {
         severity: '',
         likelihood: '',
         riskScore: null,
+        detailLines: [],
       };
       ensureFile(currentFile).push(entry);
       continue;
@@ -146,6 +153,7 @@ function parseReport(markdown) {
         severity: '',
         likelihood: '',
         riskScore: null,
+        detailLines: [],
       };
       if (!existing) {
         const list = ensureFile(currentFile);
@@ -172,12 +180,18 @@ function parseReport(markdown) {
       if (cweMatch?.[1]) {
         currentFinding.cwe = cweMatch[1].trim();
       }
-      continue;
+    }
+
+    if (Array.isArray(currentFinding.detailLines)) {
+      currentFinding.detailLines.push(line);
     }
   }
 
   pushCurrentFinding();
-  return findingsByFile;
+  return {
+    frameworksInScope,
+    findingsByFile,
+  };
 }
 
 function verdictFromFindings(findings) {
@@ -253,7 +267,28 @@ function matchesProvenance(findings, expectedProvenance) {
   return findings.some((finding) => normalizeText(finding.provenance) === normalizeText(expectedProvenance));
 }
 
-function scoreCase(caseDefinition, findings) {
+function matchesFrameworkScope(actualFrameworks, expectedFrameworks) {
+  const actual = new Set((actualFrameworks ?? []).map(normalizeText));
+  return expectedFrameworks.every((framework) => actual.has(normalizeText(framework)));
+}
+
+function includesText(findings, snippets) {
+  const haystack = findings
+    .map((finding) => normalizeText(finding.detailText))
+    .join('\n');
+
+  return snippets.some((snippet) => haystack.includes(normalizeText(snippet)));
+}
+
+function excludesText(findings, snippets) {
+  const haystack = findings
+    .map((finding) => normalizeText(finding.detailText))
+    .join('\n');
+
+  return snippets.every((snippet) => !haystack.includes(normalizeText(snippet)));
+}
+
+function scoreCase(caseDefinition, findings, frameworksInScope) {
   const expected = caseDefinition.expected;
   const checks = [
     {
@@ -297,10 +332,32 @@ function scoreCase(caseDefinition, findings) {
     });
   }
 
+  if (expected.frameworks_in_scope) {
+    checks.push({
+      name: 'frameworks_in_scope',
+      passed: matchesFrameworkScope(frameworksInScope, expected.frameworks_in_scope),
+    });
+  }
+
+  if (expected.must_include_text) {
+    checks.push({
+      name: 'must_include_text',
+      passed: includesText(findings, expected.must_include_text),
+    });
+  }
+
+  if (expected.must_not_include_text) {
+    checks.push({
+      name: 'must_not_include_text',
+      passed: excludesText(findings, expected.must_not_include_text),
+    });
+  }
+
   return {
     id: caseDefinition.id,
     file: caseDefinition.file,
     verdict: verdictFromFindings(findings),
+    frameworksInScope,
     findings,
     passed: checks.every((check) => check.passed),
     passedChecks: checks.filter((check) => check.passed).length,
@@ -345,8 +402,8 @@ async function main() {
 
   const results = manifest.cases.map((caseDefinition) => {
     const basename = path.basename(caseDefinition.file);
-    const findings = parsedReport.get(basename) ?? [];
-    return scoreCase(caseDefinition, findings);
+    const findings = parsedReport.findingsByFile.get(basename) ?? [];
+    return scoreCase(caseDefinition, findings, parsedReport.frameworksInScope);
   });
 
   const summary = {
@@ -355,7 +412,7 @@ async function main() {
     report: path.relative(repoRoot, reportPath).replaceAll('\\', '/'),
     run: {
       model: modelArg,
-      frameworks: parseFrameworks(reportRaw),
+      frameworks: parsedReport.frameworksInScope,
     },
     passed: results.every((result) => result.passed),
     totalCases: results.length,

@@ -787,4 +787,363 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].likelihood).toBe('HIGH');
         expect(result.score).toBe(6.3);
     });
+
+    it('keeps AI-only SSRF findings distinct from deterministic coverage', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 4.5,
+                    summary: 'Possible SSRF detected.',
+                    findings: [
+                        {
+                            id: 'ai-ssrf-1',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A10-SSRF',
+                            title: 'Server-side request forgery',
+                            explanation: 'A server-side HTTP request is made to a URL controlled by the user.',
+                            threat: 'Attackers can pivot requests into internal services or metadata endpoints.',
+                            fix: 'Allow only trusted outbound hosts and block internal address ranges.',
+                            confidence: 0.83,
+                            issue_id: 'owlvex.issue.ssrf.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The outbound fetch destination is taken directly from request input.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\ssrf.js',
+            getText: () => `async function fetchAvatar(req, res, fetch) {
+    const response = await fetch(req.query.url);
+    const body = await response.text();
+    res.send(body);
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('ai');
+        expect(result.findings[0].confidence).toBe(0.83);
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.ssrf.001');
+        expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
+        expect(result.findings[0].likelihood).toBe('HIGH');
+        expect(result.score).toBe(6.3);
+    });
+
+    it('keeps AI-only weak JWT validation findings distinct from deterministic coverage', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 4.5,
+                    summary: 'Weak JWT validation detected.',
+                    findings: [
+                        {
+                            id: 'ai-jwt-1',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A07-JWT',
+                            title: 'Weak JWT validation',
+                            explanation: 'JWT claims are decoded without a signature verification step.',
+                            threat: 'Attackers can forge or tamper with tokens and impersonate other users.',
+                            fix: 'Verify the token signature, algorithm, issuer, and audience explicitly.',
+                            confidence: 0.82,
+                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The code decodes the token and no verification call is visible.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\jwt.js',
+            getText: () => `function readClaims(token, jwt) {
+    return jwt.decode(token);
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('ai');
+        expect(result.findings[0].confidence).toBe(0.82);
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.weak_jwt_validation.001');
+        expect(result.findings[0].canonicalFamilyLabel).toBe('Identity & Auth Failures');
+        expect(result.findings[0].likelihood).toBe('HIGH');
+        expect(result.score).toBe(6.3);
+    });
+
+    it('keeps AI-only insecure deserialization findings distinct from deterministic coverage', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 4.5,
+                    summary: 'Insecure deserialization detected.',
+                    findings: [
+                        {
+                            id: 'ai-deser-1',
+                            line: 4,
+                            line_end: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A08-DESER',
+                            title: 'Insecure deserialization',
+                            explanation: 'A pickle payload from the request is deserialized directly.',
+                            threat: 'Attackers can trigger malicious object materialization or code execution paths.',
+                            fix: 'Replace unsafe deserialization with safe data-only parsing and validation.',
+                            confidence: 0.81,
+                            issue_id: 'owlvex.issue.insecure_deserialization.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The request body is passed into pickle.loads without validation or signing.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'python',
+            fileName: 'd:\\repo\\deser.py',
+            getText: () => `import pickle
+
+def load_profile(request):
+    return pickle.loads(request.body)
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('ai');
+        expect(result.findings[0].confidence).toBe(0.81);
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.insecure_deserialization.001');
+        expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
+        expect(result.findings[0].likelihood).toBe('HIGH');
+        expect(result.score).toBe(6.3);
+    });
+
+    it('injects curated framework and cheat-sheet grounding into the AI request', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: (key: string, defaultValue?: any) => {
+                switch (key) {
+                    case 'apiUrl':
+                        return 'https://api.example.test';
+                    case 'frameworks':
+                        return ['OWASP', 'CWE'];
+                    case 'severityThreshold':
+                        return 'MEDIUM';
+                    case 'teamContext':
+                        return '';
+                    default:
+                        return defaultValue;
+                }
+            },
+        });
+
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP', 'CWE'] },
+            }),
+        } as any;
+        const complete = jest.fn().mockResolvedValue({
+            content: JSON.stringify({
+                score: 8,
+                summary: 'ok',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+            }),
+            tokenCount: 42,
+        });
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\cmd.js',
+            getText: () => 'exec(`cat ${file}`);',
+        } as any;
+
+        await engine.scanDocument(doc);
+
+        const userMessage = complete.mock.calls[0][0].userMessage as string;
+        expect(userMessage).toContain('Grounded framework guidance:');
+        expect(userMessage).toContain('Selected frameworks for this scan: OWASP, CWE');
+        expect(userMessage).toContain('OWASP: OWASP Top 10 (2021)');
+        expect(userMessage).toContain('CWE: Common Weakness Enumeration');
+        expect(userMessage).toContain('Grounded remediation guidance:');
+        expect(userMessage).toContain('owlvex.issue.command_injection.001:');
+        expect(userMessage).toContain('Cheat sheet guidance: OWASP OS Command Injection Defense Cheat Sheet:');
+    });
+
+    it('injects bounded candidate issue grounding for AI-only classes suggested by the code', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: (key: string, defaultValue?: any) => {
+                switch (key) {
+                    case 'apiUrl':
+                        return 'https://api.example.test';
+                    case 'frameworks':
+                        return ['OWASP', 'CWE'];
+                    case 'severityThreshold':
+                        return 'MEDIUM';
+                    case 'teamContext':
+                        return '';
+                    default:
+                        return defaultValue;
+                }
+            },
+        });
+
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP', 'CWE'] },
+            }),
+        } as any;
+        const complete = jest.fn().mockResolvedValue({
+            content: JSON.stringify({
+                score: 8,
+                summary: 'ok',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+            }),
+            tokenCount: 42,
+        });
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\cors.js',
+            getText: () => [
+                'function enableCors(app) {',
+                '  app.use((req, res, next) => {',
+                "    res.setHeader('Access-Control-Allow-Origin', '*');",
+                "    res.setHeader('Access-Control-Allow-Credentials', 'true');",
+                '    next();',
+                '  });',
+                '}',
+            ].join('\n'),
+        } as any;
+
+        await engine.scanDocument(doc);
+
+        const userMessage = complete.mock.calls[0][0].userMessage as string;
+        expect(userMessage).toContain('Grounded candidate issues for AI-only analysis:');
+        expect(userMessage).toContain('owlvex.issue.insecure_cors.001 | Overly permissive CORS policy');
+        expect(userMessage).toContain('Signals matched in code: cors, access-control-allow-origin');
+        expect(userMessage).toContain('Cheat-sheet guidance: OWASP Cross Origin Resource Sharing Cheat Sheet');
+    });
 });

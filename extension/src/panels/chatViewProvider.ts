@@ -3,7 +3,8 @@ import * as path from 'path';
 import { ProviderRegistry } from '../providers/registry';
 import { collectScannableFiles } from '../scanner/workspaceScanner';
 import { formatFrameworkSummary } from '../frameworks/catalog';
-import { resolveRemediationForFinding } from '../frameworks/remediationResolver';
+import { getGroundedCheatSheetLabelsForIssueIds, resolveRemediationForFinding } from '../frameworks/remediationResolver';
+import { getGroundedFrameworkLabels } from '../frameworks/frameworkGrounding';
 import type { Finding, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 
@@ -271,6 +272,8 @@ export function buildFindingContextSummary(options: {
     hasActiveSnippet: boolean;
     nearbyContext?: string;
     hasLatestReportContext: boolean;
+    groundedFrameworks?: string[];
+    groundedCheatSheets?: string[];
 }): string {
     const sources: string[] = [];
     if (options.hasActiveSnippet) {
@@ -284,6 +287,14 @@ export function buildFindingContextSummary(options: {
 
     if (options.hasLatestReportContext) {
         sources.push('- Latest report summary context');
+    }
+
+    if (options.groundedFrameworks?.length) {
+        sources.push(`- Curated framework pack: ${options.groundedFrameworks.join(', ')}`);
+    }
+
+    if (options.groundedCheatSheets?.length) {
+        sources.push(`- Curated cheat-sheet pack: ${options.groundedCheatSheets.join(', ')}`);
     }
 
     return [
@@ -1165,6 +1176,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const snippet = this.buildActiveSnippetForFinding(finding);
         const nearbyContext = editor ? await buildNearbyProjectContext(editor.document, finding) : undefined;
         const latestReportContext = buildLatestReportPromptContext(this.storage);
+        const groundedFrameworks = getGroundedFrameworkLabels(this.getFrameworks());
+        const groundedCheatSheets = finding.canonicalId
+            ? getGroundedCheatSheetLabelsForIssueIds([finding.canonicalId]).slice(0, 2)
+            : [];
         const sourceActions: ChatMessageAction[] = [];
 
         if (editor) {
@@ -1202,6 +1217,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 hasActiveSnippet: Boolean(snippet),
                 nearbyContext,
                 hasLatestReportContext: Boolean(latestReportContext),
+                groundedFrameworks,
+                groundedCheatSheets,
             }),
             sourceActions,
         };

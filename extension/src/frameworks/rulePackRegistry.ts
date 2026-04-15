@@ -1,4 +1,6 @@
 import { CanonicalIssue, CanonicalMappings, ISSUE_CATALOG } from './issueCatalog';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 interface RulePackIssueArtifact {
     issues?: Array<Record<string, unknown>>;
@@ -52,6 +54,10 @@ let effectiveCatalog: CanonicalIssue[] = ISSUE_CATALOG;
 let effectiveIssueIndex: Map<string, CanonicalIssue> = new Map(ISSUE_CATALOG.map(issue => [issue.id, issue]));
 let dynamicMappingIndex: Map<string, DynamicFrameworkMappingMatch> = new Map();
 let effectiveRemediationIndex: Map<string, CanonicalRemediation> = new Map();
+
+function repoDocsPath(...segments: string[]): string {
+    return path.resolve(__dirname, '../../../docs', ...segments);
+}
 
 function normalizeStringList(value: unknown): string[] {
     if (!Array.isArray(value)) {
@@ -196,6 +202,28 @@ function buildDynamicRemediationEntry(rawEntry: Record<string, unknown>): Canoni
     };
 }
 
+function loadBundledRemediationCatalog(): Map<string, CanonicalRemediation> {
+    try {
+        const raw = fs.readFileSync(
+            repoDocsPath('data', 'remediation', 'owlvex-remediation-pack.v1.json'),
+            'utf8',
+        );
+        const remediationPack = JSON.parse(raw) as RulePackRemediationArtifact;
+        const index = new Map<string, CanonicalRemediation>();
+
+        for (const rawEntry of remediationPack.entries ?? []) {
+            const entry = buildDynamicRemediationEntry(rawEntry);
+            if (entry) {
+                index.set(entry.issueId, entry);
+            }
+        }
+
+        return index;
+    } catch {
+        return new Map<string, CanonicalRemediation>();
+    }
+}
+
 function mappingKey(frameworkCode: string, externalId: string): string {
     return `${frameworkCode.trim().toUpperCase()}::${externalId.trim().toUpperCase()}`;
 }
@@ -259,7 +287,7 @@ export function configureRulePackRuntime(
 
     effectiveIssueIndex = new Map(effectiveCatalog.map(issue => [issue.id, issue]));
     dynamicMappingIndex = new Map();
-    effectiveRemediationIndex = new Map();
+    effectiveRemediationIndex = loadBundledRemediationCatalog();
 
     for (const mapping of mappingPack?.mappings ?? []) {
         const issueId = String(mapping.issue_id ?? '').trim();
@@ -298,7 +326,7 @@ export function resetRulePackRuntime(): void {
     effectiveCatalog = ISSUE_CATALOG;
     effectiveIssueIndex = new Map(ISSUE_CATALOG.map(issue => [issue.id, issue]));
     dynamicMappingIndex = new Map();
-    effectiveRemediationIndex = new Map();
+    effectiveRemediationIndex = loadBundledRemediationCatalog();
 }
 
 export function getEffectiveIssueCatalog(): CanonicalIssue[] {
@@ -324,3 +352,5 @@ export function getEffectiveRemediationByIssueId(issueId: string): CanonicalReme
 export function getEffectiveRemediationCatalog(): CanonicalRemediation[] {
     return [...effectiveRemediationIndex.values()];
 }
+
+resetRulePackRuntime();

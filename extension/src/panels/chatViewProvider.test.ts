@@ -253,12 +253,16 @@ describe('parseChatIntent', () => {
                 'Imported via: ./db/queries',
             ].join('\n'),
             hasLatestReportContext: true,
+            groundedFrameworks: ['OWASP Top 10 (2021)', 'Common Weakness Enumeration'],
+            groundedCheatSheets: ['OWASP SQL Injection Prevention Cheat Sheet'],
         });
 
         expect(summary).toContain('Context sources used for "SQL Injection":');
         expect(summary).toContain('- Active file snippet around the finding');
         expect(summary).toContain('- Nearby file: src/db/queries.js');
         expect(summary).toContain('- Latest report summary context');
+        expect(summary).toContain('- Curated framework pack: OWASP Top 10 (2021), Common Weakness Enumeration');
+        expect(summary).toContain('- Curated cheat-sheet pack: OWASP SQL Injection Prevention Cheat Sheet');
     });
 
     it('starts a fresh chat by default and offers restoring the previous one', () => {

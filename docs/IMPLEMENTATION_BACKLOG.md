@@ -167,6 +167,73 @@ Make Owlvex grounded data auditable so we can prove curated intelligence is base
 - pack release fails when provenance requirements are not met
 - Owlvex can distinguish source-backed curated guidance from unverified draft content
 
+## Workstream 2B: Framework Source And Cheat Sheet Curation
+
+### Goal
+
+Turn external framework references into Owlvex-owned curated blobs that can ground AI prompts and remediation guidance more directly.
+
+### Tasks
+
+- maintain raw upstream framework mirrors under `docs/data/framework-sources/`
+- maintain curated framework blobs under `docs/data/frameworks/`
+- maintain curated cheat-sheet metadata under `docs/data/cheatsheets/`
+- keep provenance and licensing notes explicit for mirrored vs reference-only sources
+- define refresh scripts and a review workflow for source updates
+- avoid using raw framework text dumps directly in prompts; prefer compact curated derivatives
+
+### Likely Files
+
+- [docs/data/framework-sources](D:/Dev/repos/CodeScanner/docs/data/framework-sources)
+- [docs/data/frameworks](D:/Dev/repos/CodeScanner/docs/data/frameworks)
+- [docs/data/cheatsheets](D:/Dev/repos/CodeScanner/docs/data/cheatsheets)
+- [tools/download-framework-sources.mjs](D:/Dev/repos/CodeScanner/tools/download-framework-sources.mjs)
+- [tools/build-owasp-cheatsheet-pack.mjs](D:/Dev/repos/CodeScanner/tools/build-owasp-cheatsheet-pack.mjs)
+
+### Acceptance Criteria
+
+- Owlvex has a versioned local source mirror for the key machine-readable framework inputs
+- framework and cheat-sheet guidance is available as curated JSON blobs rather than only raw HTML/XLSX/ZIP sources
+- reference-only sources are marked honestly where bulk mirroring is blocked or deferred
+- the curation pipeline is reproducible from scripts, not just manual edits
+
+## Workstream 2C: Runtime Grounding From Curated Packs
+
+### Goal
+
+Use the newly curated framework and cheat-sheet packs in the actual AI prompt path so runtime behavior becomes more grounded and less dependent on model memory.
+
+### Tasks
+
+- load framework blob guidance into prompt construction based on selected frameworks
+- load relevant cheat-sheet guidance into remediation prompt context based on issue identity
+- keep injected prompt context compact and issue-targeted
+- add tests proving prompt construction changes when framework scope changes
+- add tests proving remediation guidance can cite curated cheat-sheet actions without dumping raw source text
+
+### Likely Files
+
+- [scanEngine.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/scanEngine.ts)
+- [remediationResolver.ts](D:/Dev/repos/CodeScanner/extension/src/frameworks/remediationResolver.ts)
+- [rulePackRegistry.ts](D:/Dev/repos/CodeScanner/extension/src/frameworks/rulePackRegistry.ts)
+- [docs/data/frameworks](D:/Dev/repos/CodeScanner/docs/data/frameworks)
+- [docs/data/cheatsheets](D:/Dev/repos/CodeScanner/docs/data/cheatsheets)
+
+### Acceptance Criteria
+
+- AI prompt construction uses curated framework guidance, not just framework names
+- remediation prompts can use curated cheat-sheet guidance where relevant
+- runtime output stays compact, provenance-aware, and validation-gated
+- framework-guided AI behavior becomes more explainable and repeatable across runs
+
+### Current Status
+
+- selected framework scope is now injected from the curated framework blob at runtime
+- deterministic-linked remediation now carries curated cheat-sheet guidance into the AI prompt path
+- AI finding discussions surface framework-pack and cheat-sheet-pack provenance in the chat UI
+- AI evals can now check framework scope and wording guardrails from generated reports
+- next step is deeper issue-targeted grounding for AI-only findings and broader eval coverage for uncovered classes
+
 ## Workstream 3: Product Output Alignment
 
 ### Goal

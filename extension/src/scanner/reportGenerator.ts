@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { resolveRemediationForFinding } from '../frameworks/remediationResolver';
+import { getGroundedCheatSheetLabelsForIssueIds, resolveRemediationForFinding } from '../frameworks/remediationResolver';
 import { describeRulePackRuntime, getRulePackModeLabel } from '../packs/packRuntime';
 import { ScanResult } from './scanEngine';
 import { FolderScanSummary } from './workspaceScanner';
@@ -437,6 +437,15 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 }
                 if (remediation.refs.length) {
                     lines.push(`- Sources: ${remediation.refs.join(', ')}`);
+                }
+                if (finding.provenance === 'ai') {
+                    const aiGroundingSources = [
+                        'Curated framework pack',
+                        ...(finding.canonicalId ? getGroundedCheatSheetLabelsForIssueIds([finding.canonicalId]).slice(0, 2) : []),
+                    ];
+                    if (aiGroundingSources.length) {
+                        lines.push(`- AI grounding: ${aiGroundingSources.join(' | ')}`);
+                    }
                 }
                 if (snippet) {
                     lines.push('- Code involved in the reasoning:');

@@ -43,7 +43,9 @@
       "expected": {
         "verdict": "ai-finding",
         "preferred_labels": ["cors", "cross origin resource sharing"],
-        "preferred_provenance": "ai"
+        "preferred_provenance": "ai",
+        "must_include_text": ["review the effective browser and api behavior"],
+        "must_not_include_text": ["confirmed data-exfiltration path"]
       }
     },
     {
@@ -52,6 +54,57 @@
       "expected": {
         "verdict": "clean-or-advisory",
         "must_not_include_labels": ["cors misconfiguration", "overly permissive cors"]
+      }
+    },
+    {
+      "id": "ai-ssrf-unsafe",
+      "file": "tools/demo/22-ssrf-unsafe.js",
+      "expected": {
+        "verdict": "ai-finding",
+        "preferred_issue_ids": ["owlvex.issue.ssrf.001"],
+        "preferred_provenance": "ai"
+      }
+    },
+    {
+      "id": "ai-ssrf-safe",
+      "file": "tools/demo/23-ssrf-safe.js",
+      "expected": {
+        "verdict": "clean-or-advisory",
+        "must_not_include_issue_ids": ["owlvex.issue.ssrf.001"]
+      }
+    },
+    {
+      "id": "ai-jwt-validation-unsafe",
+      "file": "tools/demo/24-jwt-validation-unsafe.js",
+      "expected": {
+        "verdict": "ai-finding",
+        "preferred_issue_ids": ["owlvex.issue.weak_jwt_validation.001"],
+        "preferred_provenance": "ai"
+      }
+    },
+    {
+      "id": "ai-jwt-validation-safe",
+      "file": "tools/demo/25-jwt-validation-safe.js",
+      "expected": {
+        "verdict": "clean-or-advisory",
+        "must_not_include_issue_ids": ["owlvex.issue.weak_jwt_validation.001"]
+      }
+    },
+    {
+      "id": "ai-deserialization-unsafe",
+      "file": "tools/demo/26-deserialization-unsafe.py",
+      "expected": {
+        "verdict": "ai-finding",
+        "preferred_issue_ids": ["owlvex.issue.insecure_deserialization.001"],
+        "preferred_provenance": "ai"
+      }
+    },
+    {
+      "id": "ai-deserialization-safe",
+      "file": "tools/demo/27-deserialization-safe.py",
+      "expected": {
+        "verdict": "clean-or-advisory",
+        "must_not_include_issue_ids": ["owlvex.issue.insecure_deserialization.001"]
       }
     }
   ]

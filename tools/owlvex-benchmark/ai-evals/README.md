@@ -19,13 +19,27 @@ Current starter cases:
 - `tools/demo/19-csrf-safe.js`
 - `tools/demo/20-cors-unsafe.js`
 - `tools/demo/21-cors-safe.js`
+- `tools/demo/22-ssrf-unsafe.js`
+- `tools/demo/23-ssrf-safe.js`
+- `tools/demo/24-jwt-validation-unsafe.js`
+- `tools/demo/25-jwt-validation-safe.js`
+- `tools/demo/26-deserialization-unsafe.py`
+- `tools/demo/27-deserialization-safe.py`
 
 The contract for this lane is:
 
 - unsafe fixtures should be expected to produce `provenance: 'ai'`
 - safe fixtures should bias toward no findings or low-severity advisory output
 - confidence must remain explicit
+- wording guardrails can be checked for sensitive classes like CORS
+- framework scope can be asserted when a report is generated under a known framework selection
 - these cases must never be counted as deterministic benchmark coverage
+
+Manifest cases can also assert:
+
+- `frameworks_in_scope`
+- `must_include_text`
+- `must_not_include_text`
 
 Run the lane against a generated Owlvex markdown report from `extension/`:
 

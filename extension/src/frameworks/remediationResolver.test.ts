@@ -98,9 +98,11 @@ describe('remediationResolver', () => {
             },
         );
 
-        const context = buildGroundedRemediationPromptContext();
+        const context = buildGroundedRemediationPromptContext(['owlvex.issue.sql_injection.001']);
         expect(context).toContain('owlvex.issue.sql_injection.001: Use parameter binding.');
         expect(context).toContain('Frameworks: Express: Use placeholders and values arrays.');
+        expect(context).toContain('Cheat sheet guidance: OWASP SQL Injection Prevention Cheat Sheet:');
+        expect(context).toContain('Actions: Use prepared statements or ORM-safe bindings.');
         expect(context).toContain('Validate: Replay SQL metacharacter payloads.');
         expect(context).toContain('Avoid: Manual quote escaping.');
     });

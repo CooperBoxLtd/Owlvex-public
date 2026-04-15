@@ -104,11 +104,12 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Risk: HIGH impact / MEDIUM likelihood / 7/10');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
-        expect(written).toContain('- What to change: Use parameterized queries or prepared statements and validate input at trust boundaries.');
+        expect(written).toContain('- What to change: Separate query structure from untrusted data with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Safe pattern: Use parameterized queries.');
         expect(written).toContain('- Why likely: Dynamic SQL uses user-controlled input directly.');
         expect(written).toContain('- Matched signals: CWE:CWE-89, sql injection');
         expect(written).toContain('- Sources: OWASP SQL Injection Prevention Cheat Sheet');
+        expect(written).toContain('- AI grounding: Curated framework pack | OWASP SQL Injection Prevention Cheat Sheet');
         expect(written).toContain('- Code involved in the reasoning:');
         expect(written).toContain("SELECT * FROM users WHERE username = '${username}'");
         expect(written).not.toContain('## Intelligence Source');
