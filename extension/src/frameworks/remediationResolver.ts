@@ -1,13 +1,13 @@
 import type { Finding } from '../scanner/scanEngine';
 import { getCanonicalIssueById } from './issueResolver';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import {
     CanonicalRemediation,
     RemediationFrameworkVariant,
     getEffectiveRemediationByIssueId,
     getEffectiveRemediationCatalog,
 } from './rulePackRegistry';
+import { resolveRuntimeDataPath } from './runtimeDataPath';
 
 export interface ResolvedRemediation {
     remediation: string;
@@ -37,17 +37,13 @@ function normalizeFramework(value: string | undefined): string {
     return String(value ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase();
 }
 
-function repoDocsPath(...segments: string[]): string {
-    return path.resolve(__dirname, '../../../docs', ...segments);
-}
-
 function loadCuratedCheatSheetPack(): CuratedCheatSheetPack {
     if (cachedCheatSheetPack) {
         return cachedCheatSheetPack;
     }
 
     const raw = fs.readFileSync(
-        repoDocsPath('data', 'cheatsheets', 'owlvex.owasp-cheatsheets.2026.1.json'),
+        resolveRuntimeDataPath(__dirname, 'cheatsheets', 'owlvex.owasp-cheatsheets.2026.1.json'),
         'utf8',
     );
     cachedCheatSheetPack = JSON.parse(raw) as CuratedCheatSheetPack;

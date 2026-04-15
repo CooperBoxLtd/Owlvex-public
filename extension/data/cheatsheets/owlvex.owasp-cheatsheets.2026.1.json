@@ -1,0 +1,927 @@
+{
+  "schema_version": "owlvex.cheatsheet-pack.v1",
+  "pack_id": "owlvex.owasp-cheatsheets.2026.1",
+  "title": "Owlvex Curated OWASP Cheat Sheet Pack 2026.1",
+  "description": "Curated OWASP Cheat Sheet Series metadata, source blob references, and issue/remediation links for grounded AI remediation guidance.",
+  "generated_at": "2026-04-15T14:20:00Z",
+  "entries": [
+    {
+      "id": "owlvex.cheatsheet.authentication.cheat.sheet",
+      "label": "OWASP Authentication Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Authentication_Cheat_Sheet.html",
+      "focus": "Authentication policy, credential handling, and brute-force resistance.",
+      "common_actions": [
+        "Require strong verification rules.",
+        "Add lockout or rate limits on auth paths."
+      ],
+      "avoid": [
+        "Treating the UI as the security boundary."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.weak_auth_policy.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.weak_auth_policy.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Authentication Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.authorization.cheat.sheet",
+      "label": "OWASP Authorization Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Authorization_Cheat_Sheet.html",
+      "focus": "Server-side authorization enforcement and privilege boundaries.",
+      "common_actions": [
+        "Enforce explicit policy checks.",
+        "Scope every sensitive action to the authenticated principal."
+      ],
+      "avoid": [
+        "Assuming authentication alone is enough authorization."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.idor.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.idor.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Authorization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.cross.origin.resource.sharing.cheat.sheet",
+      "label": "OWASP Cross Origin Resource Sharing Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Cross_Origin_Resource_Sharing_Cheat_Sheet.html",
+      "focus": "Trusted-origin allow-lists, credential use, and browser-enforced cross-origin boundaries.",
+      "common_actions": [
+        "Allow only explicit origins.",
+        "Review credentialed requests separately from public resources."
+      ],
+      "avoid": [
+        "Using wildcard origin settings on sensitive APIs."
+      ],
+      "source_note": "Nearest official OWASP cheat sheet source is the REST Security Cheat Sheet CORS guidance.",
+      "issue_ids": [
+        "owlvex.issue.insecure_cors.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.insecure_cors.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross Origin Resource Sharing Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/REST_Security_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.cross.site.scripting.prevention.cheat.sheet",
+      "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+      "focus": "Context-aware output encoding, templating safety, and safe DOM rendering.",
+      "common_actions": [
+        "Encode for the output context.",
+        "Prefer safe templating APIs over raw HTML insertion."
+      ],
+      "avoid": [
+        "Relying on a single generic sanitizer for every context."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.xss_reflected.001",
+        "owlvex.issue.xss_stored.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.xss_reflected.001",
+        "owlvex.remediation.xss_stored.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross Site Scripting Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.cross.site.request.forgery.prevention.cheat.sheet",
+      "label": "OWASP Cross-Site Request Forgery Prevention Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html",
+      "focus": "CSRF tokens, same-site controls, and state-changing browser requests.",
+      "common_actions": [
+        "Require anti-CSRF tokens on state changes.",
+        "Use same-site protections where appropriate."
+      ],
+      "avoid": [
+        "Assuming authentication cookies alone prevent CSRF."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.csrf_missing_token.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.csrf_missing_token.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cross-Site Request Forgery Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.cryptographic.storage.cheat.sheet",
+      "label": "OWASP Cryptographic Storage Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Cryptographic_Storage_Cheat_Sheet.html",
+      "focus": "Safe cryptographic primitives, modes, IVs, and secret storage decisions.",
+      "common_actions": [
+        "Use modern authenticated encryption.",
+        "Generate unique IVs/nonces with secure randomness."
+      ],
+      "avoid": [
+        "Using deprecated algorithms or insecure modes."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.weak_crypto.001",
+        "owlvex.issue.insecure_randomness.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.weak_crypto.001",
+        "owlvex.remediation.insecure_randomness.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Cryptographic Storage Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.deserialization.cheat.sheet",
+      "label": "OWASP Deserialization Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Deserialization_Cheat_Sheet.html",
+      "focus": "Unsafe object reconstruction, gadget chains, and untrusted serialized input.",
+      "common_actions": [
+        "Use safe formats and strict schemas.",
+        "Reject untrusted object graphs or type hints."
+      ],
+      "avoid": [
+        "Deserializing attacker-controlled payloads into rich object models."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.insecure_deserialization.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.insecure_deserialization.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Deserialization Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.error.handling.cheat.sheet",
+      "label": "OWASP Error Handling Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Error_Handling_Cheat_Sheet.html",
+      "focus": "Generic client errors, protected diagnostics, and internal-only debug detail.",
+      "common_actions": [
+        "Return generic error messages.",
+        "Keep stack traces and internals out of public responses."
+      ],
+      "avoid": [
+        "Leaking exception detail to untrusted callers."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.verbose_error_disclosure.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.verbose_error_disclosure.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Error Handling Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Error_Handling_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.file.upload.cheat.sheet",
+      "label": "OWASP File Upload Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/File_Upload_Cheat_Sheet.html",
+      "focus": "Upload validation, storage isolation, and content handling safety.",
+      "common_actions": [
+        "Restrict file types and size.",
+        "Store uploads outside executable paths."
+      ],
+      "avoid": [
+        "Trusting file extensions alone."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.unrestricted_file_upload.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.unrestricted_file_upload.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP File Upload Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.input.validation.cheat.sheet",
+      "label": "OWASP Input Validation Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Input_Validation_Cheat_Sheet.html",
+      "focus": "Allow-listing, bounded inputs, and rejecting attacker-controlled malformed data early.",
+      "common_actions": [
+        "Validate structure and size at boundaries.",
+        "Prefer allow-lists to weak deny-lists."
+      ],
+      "avoid": [
+        "Relying on partial regex checks as complete safety controls."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.regex_dos.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.regex_dos.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Input Validation Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.json.web.token.for.java.cheat.sheet",
+      "label": "OWASP JSON Web Token Cheat Sheet for Java",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html",
+      "focus": "JWT verification, algorithm restrictions, claims validation, and token handling pitfalls.",
+      "common_actions": [
+        "Verify issuer, audience, expiry, and allowed algorithms.",
+        "Reject unsigned or weakly validated tokens."
+      ],
+      "avoid": [
+        "Trusting token presence without full verification."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.weak_jwt_validation.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.weak_jwt_validation.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP JSON Web Token Cheat Sheet for Java",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.ldap.injection.prevention.cheat.sheet",
+      "label": "OWASP LDAP Injection Prevention Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html",
+      "focus": "Safe directory query construction and escaping of LDAP filters.",
+      "common_actions": [
+        "Use safe LDAP APIs.",
+        "Escape filter input and constrain query structure."
+      ],
+      "avoid": [
+        "Concatenating user input into LDAP filters."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.ldap_injection.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.ldap_injection.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP LDAP Injection Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.logging.cheat.sheet",
+      "label": "OWASP Logging Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Logging_Cheat_Sheet.html",
+      "focus": "Operational logging without sensitive-data leakage or log injection.",
+      "common_actions": [
+        "Log only necessary operational data.",
+        "Sanitize user-controlled log fields."
+      ],
+      "avoid": [
+        "Logging secrets, tokens, or raw control characters."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.sensitive_logging.001",
+        "owlvex.issue.audit_gap.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.sensitive_logging.001",
+        "owlvex.remediation.audit_gap.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Logging Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.mass.assignment.cheat.sheet",
+      "label": "OWASP Mass Assignment Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Mass_Assignment_Cheat_Sheet.html",
+      "focus": "Binding controls, DTOs, and explicit field allow-lists for object updates.",
+      "common_actions": [
+        "Use DTOs or explicit allow-lists.",
+        "Keep privileged fields off public bind paths."
+      ],
+      "avoid": [
+        "Binding request bodies directly into domain objects."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.mass_assignment.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.mass_assignment.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Mass Assignment Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.nosql.security.cheat.sheet",
+      "label": "OWASP NoSQL Security Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/NoSQL_Security_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/NoSQL_Security_Cheat_Sheet.html",
+      "focus": "Operator injection, query object validation, and safe NoSQL filtering.",
+      "common_actions": [
+        "Validate query objects strictly.",
+        "Prevent client-controlled operators from reaching filters."
+      ],
+      "avoid": [
+        "Passing raw query objects from clients into the database layer."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.nosql_injection.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.nosql_injection.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP NoSQL Security Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/NoSQL_Security_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.os.command.injection.defense.cheat.sheet",
+      "label": "OWASP OS Command Injection Defense Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html",
+      "focus": "Removing shell-string execution and validating any required process arguments.",
+      "common_actions": [
+        "Replace shell execution with safe APIs.",
+        "Allow-list every remaining argument."
+      ],
+      "avoid": [
+        "Escaping a few shell characters while keeping string-built commands."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.command_injection.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.command_injection.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP OS Command Injection Defense Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.path.traversal.cheat.sheet",
+      "label": "OWASP Path Traversal Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Symfony_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Path_Traversal_Cheat_Sheet.html",
+      "focus": "Filesystem boundary enforcement, safe base paths, and path normalization.",
+      "common_actions": [
+        "Resolve against a fixed base path.",
+        "Reject traversal outside allowed roots."
+      ],
+      "avoid": [
+        "Stripping ../ without canonical boundary checks."
+      ],
+      "source_note": "Nearest official OWASP cheat sheet source is the Symfony Cheat Sheet directory traversal guidance.",
+      "issue_ids": [
+        "owlvex.issue.path_traversal.001"
+      ],
+      "remediation_entry_ids": [],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Path Traversal Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Symfony_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.prototype.pollution.prevention.cheat.sheet",
+      "label": "OWASP Prototype Pollution Prevention Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html",
+      "focus": "Dangerous object keys, safe merge behavior, and defensive schema validation.",
+      "common_actions": [
+        "Reject __proto__-style keys.",
+        "Use safe merge utilities and strict schemas."
+      ],
+      "avoid": [
+        "Blindly deep-merging untrusted objects."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.prototype_pollution.001"
+      ],
+      "remediation_entry_ids": [],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Prototype Pollution Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Prototype_Pollution_Prevention_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.secrets.management.cheat.sheet",
+      "label": "OWASP Secrets Management Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Secrets_Management_Cheat_Sheet.html",
+      "focus": "Secret storage, rotation, retrieval, and avoiding credentials in source or logs.",
+      "common_actions": [
+        "Move secrets to a manager or environment injection.",
+        "Rotate exposed secrets quickly."
+      ],
+      "avoid": [
+        "Hardcoding long-lived credentials in code or config."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.hardcoded_api_key.001",
+        "owlvex.issue.hardcoded_password.001",
+        "owlvex.issue.hardcoded_token.001",
+        "owlvex.issue.hardcoded_secret.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.hardcoded_api_key.001",
+        "owlvex.remediation.hardcoded_password.001",
+        "owlvex.remediation.hardcoded_token.001",
+        "owlvex.remediation.hardcoded_secret.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Secrets Management Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.server.side.request.forgery.prevention.cheat.sheet",
+      "label": "OWASP Server Side Request Forgery Prevention Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html",
+      "focus": "Outbound request validation, destination allow-lists, and internal network protection.",
+      "common_actions": [
+        "Allow-list reachable destinations.",
+        "Constrain protocols, redirects, and internal address access."
+      ],
+      "avoid": [
+        "Fetching arbitrary attacker-supplied URLs from server-side code."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.ssrf.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.ssrf.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Server Side Request Forgery Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.server.side.template.injection.prevention.cheat.sheet",
+      "label": "OWASP Server Side Template Injection Prevention guidance",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Server_Side_Template_Injection_Prevention_Cheat_Sheet.html",
+      "focus": "Trusted template boundaries, untrusted expressions, and safe rendering patterns.",
+      "common_actions": [
+        "Treat templates as trusted assets only.",
+        "Keep user data as data, not executable template syntax."
+      ],
+      "avoid": [
+        "Evaluating attacker-controlled template expressions."
+      ],
+      "source_note": "Nearest official OWASP cheat sheet source is the Cross Site Scripting Prevention Cheat Sheet template-injection guidance.",
+      "issue_ids": [
+        "owlvex.issue.template_injection.001"
+      ],
+      "remediation_entry_ids": [],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Server Side Template Injection Prevention guidance",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.sql.injection.prevention.cheat.sheet",
+      "label": "OWASP SQL Injection Prevention Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html",
+      "focus": "Parameterized execution, allow-listed structural tokens, and safe query construction.",
+      "common_actions": [
+        "Use prepared statements or ORM-safe bindings.",
+        "Allow-list dynamic query structure separately from values."
+      ],
+      "avoid": [
+        "Building SQL by concatenating user input."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.sql_injection.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.sql_injection.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP SQL Injection Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.unvalidated.redirects.and.forwards.cheat.sheet",
+      "label": "OWASP Unvalidated Redirects and Forwards Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html",
+      "focus": "Redirect destination allow-lists and server-side route resolution.",
+      "common_actions": [
+        "Allow-list destinations or route names.",
+        "Resolve redirects on the server instead of trusting raw URLs."
+      ],
+      "avoid": [
+        "Redirecting directly to user-supplied URLs."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.open_redirect.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.open_redirect.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP Unvalidated Redirects and Forwards Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/Unvalidated_Redirects_and_Forwards_Cheat_Sheet.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.cheatsheet.xml.external.entity.prevention.cheat.sheet",
+      "label": "OWASP XML External Entity Prevention Cheat Sheet",
+      "framework": "OWASP",
+      "series": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html",
+      "raw_blob_ref": "docs/data/framework-sources/raw/owasp-cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html",
+      "focus": "Safe XML parser configuration, entity resolution control, and DTD hardening.",
+      "common_actions": [
+        "Disable external entities and DTD processing.",
+        "Use hardened parser defaults for untrusted XML."
+      ],
+      "avoid": [
+        "Parsing attacker-controlled XML with entity resolution enabled."
+      ],
+      "source_note": null,
+      "issue_ids": [
+        "owlvex.issue.xxe.001"
+      ],
+      "remediation_entry_ids": [
+        "owlvex.remediation.xxe.001"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:20:00Z",
+        "sources": [
+          {
+            "label": "OWASP XML External Entity Prevention Cheat Sheet",
+            "kind": "cheat-sheet",
+            "publisher": "OWASP",
+            "url": "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html"
+          }
+        ]
+      }
+    }
+  ]
+}

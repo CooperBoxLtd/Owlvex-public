@@ -257,6 +257,102 @@ function sanitizeAiFinding(finding: Finding): Finding {
     return finding;
 }
 
+function hasExecutableDeserializationPrimitive(code: string): boolean {
+    return /\b(yaml\.load|deserialize\s*\(|unserialize\s*\(|pickle\.loads|BinaryFormatter|ObjectInputStream)\b/i.test(code);
+}
+
+function hasUnguardedDebugActivation(code: string): boolean {
+    const hasDebugActivation = /\bapp\s*\.\s*(?:set\s*\(\s*['"]debug['"]\s*,\s*true\s*\)|enable\s*\(\s*['"]debug['"]\s*\))/i.test(code);
+    if (!hasDebugActivation) {
+        return false;
+    }
+
+    const hasGuardedActivation = /if\s*\(\s*[^)]*(?:NODE_ENV|APP_ENV)\s*(?:!==?|===?)\s*['"](?:production|prod)['"][^)]*\)\s*\{[\s\S]{0,400}?\bapp\s*\.\s*(?:set\s*\(\s*['"]debug['"]\s*,\s*true\s*\)|enable\s*\(\s*['"]debug['"]\s*\))/i.test(code);
+    return !hasGuardedActivation;
+}
+
+function getLineWindow(code: string, line: number, radius = 5): string {
+    const lines = code.split(/\r?\n/);
+    const start = Math.max(0, line - 1 - radius);
+    const end = Math.min(lines.length, line + radius);
+    return lines.slice(start, end).join('\n');
+}
+
+function hasScopedResourceConstraint(snippet: string): boolean {
+    return /\b(?:ownerId|tenantId|organizationId|orgId|workspaceId|accountId|companyId)\b[\s\S]{0,120}===/i.test(snippet)
+        && /\b(?:id|docId|documentId|recordId)\b[\s\S]{0,120}===/i.test(snippet);
+}
+
+function hasAllowlistedOutboundFetch(snippet: string): boolean {
+    return /\bisAllowedOutboundUrl\s*\(/i.test(snippet)
+        && /\bfetch\s*\(/i.test(snippet)
+        && /\breturn\s+res\s*\.\s*status\s*\(\s*400\s*\)/i.test(snippet);
+}
+
+function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
+    const snippet = getLineWindow(code, finding.line, 6);
+    const localSnippet = getLineWindow(code, finding.line, 1);
+    const normalizedText = `${finding.title}\n${finding.explanation}\n${finding.canonicalId ?? ''}`;
+
+    if (finding.canonicalId === 'owlvex.issue.insecure_deserialization.001') {
+        return !hasExecutableDeserializationPrimitive(code);
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.debug_mode_production.001') {
+        return !hasUnguardedDebugActivation(code);
+    }
+
+    if ((finding.canonicalId === 'owlvex.issue.idor.001'
+        || finding.canonicalId === 'owlvex.issue.tenant_isolation_missing.001'
+        || finding.canonicalId === 'owlvex.issue.broken_function_level_authorization.001'
+        || /broken access control|authorization/i.test(normalizedText))
+        && hasScopedResourceConstraint(localSnippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.ssrf.001' && hasAllowlistedOutboundFetch(snippet)) {
+        return true;
+    }
+
+    return false;
+}
+
+function suppressUnsupportedAiFindings(code: string, findings: Finding[]): Finding[] {
+    return findings.filter(finding => {
+        if (finding.provenance !== 'ai') {
+            return true;
+        }
+
+        return !shouldSuppressAiFinding(code, finding);
+    });
+}
+
+function dedupeOverlappingAiFindings(findings: Finding[]): Finding[] {
+    const sorted = [...findings].sort((left, right) => {
+        const leftConfidence = left.confidence ?? 0;
+        const rightConfidence = right.confidence ?? 0;
+        return rightConfidence - leftConfidence
+            || left.line - right.line
+            || (left.canonicalId ?? '').localeCompare(right.canonicalId ?? '');
+    });
+
+    const kept: Finding[] = [];
+    for (const finding of sorted) {
+        const isDuplicate = kept.some(existing =>
+            existing.provenance === 'ai'
+            && finding.provenance === 'ai'
+            && !!existing.canonicalId
+            && existing.canonicalId === finding.canonicalId
+            && findingsOverlap(existing, finding),
+        );
+        if (!isDuplicate) {
+            kept.push(finding);
+        }
+    }
+
+    return kept.sort((left, right) => left.line - right.line || (left.lineEnd ?? left.line) - (right.lineEnd ?? right.line));
+}
+
 function buildDeterministicGroundingContext(findings: Finding[]): string {
     if (!findings.length) {
         return 'No deterministic findings were proven for this file. AI may analyze uncovered regions, but it must stay evidence-based.';
@@ -464,11 +560,16 @@ export class ScanEngine {
         // Deterministic findings lead — they are high-confidence and zero-cost.
         // Deduplicate by canonicalId + line to avoid doubling up when the AI
         // also found the same issue at the same location.
-        const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, parsed.findings)
+        const filteredAiFindings = dedupeOverlappingAiFindings(
+            suppressUnsupportedAiFindings(code, parsed.findings),
+        );
+        const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, filteredAiFindings)
             .map(finding => enrichFindingRisk(finding));
         const mergedMetrics = buildMetrics(allFindings);
         const calculatedScore = calculateScoreFromFindings(allFindings);
-        const summary = summarizeFindings(allFindings, parsed.summary);
+        const summary = allFindings.length
+            ? summarizeFindings(allFindings, parsed.summary)
+            : 'No findings detected.';
         let scanId = crypto.randomUUID();
         const warnings: string[] = [];
 
@@ -554,7 +655,7 @@ export class ScanEngine {
         provider: { complete(req: { systemPrompt: string; userMessage: string; model: string; temperature: number }): Promise<any> },
         req: { systemPrompt: string; userMessage: string; model: string; temperature: number },
     ): Promise<any> {
-        const maxAttempts = 3;
+        const maxAttempts = 4;
 
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             try {
@@ -565,7 +666,7 @@ export class ScanEngine {
                 }
 
                 const retryAfterMs = extractRetryAfterMs(error);
-                const backoffMs = retryAfterMs ?? (1500 * (2 ** (attempt - 1)));
+                const backoffMs = retryAfterMs ?? (2000 * (2 ** (attempt - 1)));
                 await sleep(backoffMs);
             }
         }

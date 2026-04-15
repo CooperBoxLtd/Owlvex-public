@@ -277,11 +277,11 @@
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
+    "@vscode/vsce": "^2.22.0",
     "eslint": "^8.0.0",
     "jest": "^29.7.0",
     "ts-jest": "^29.2.0",
-    "typescript": "^5.3.0",
-    "@vscode/vsce": "^2.22.0"
+    "typescript": "^5.3.0"
   },
   "jest": {
     "preset": "ts-jest",
@@ -299,9 +299,5 @@
       "src/**/*.ts",
       "!src/__mocks__/**"
     ]
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^0.32.0",
-    "openai": "^4.70.0"
   }
 }

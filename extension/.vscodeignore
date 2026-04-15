@@ -5,6 +5,8 @@ coverage/**
 dist/**
 node_modules/.cache/**
 out/test/**
+out/**/*.test.js
+out/**/__mocks__/**
 src/**/*.test.ts
 src/**/__mocks__/**
 src/**

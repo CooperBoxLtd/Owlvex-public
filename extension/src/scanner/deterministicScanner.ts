@@ -381,6 +381,9 @@ const LOG_CALL_START_RE =
 const PII_FIELD_IN_LOG_RE =
     /\b(?:password|ssn|socialSecurityNumber|dateOfBirth|creditCard|cardNumber|cvv|accessToken|refreshToken|privateKey|secretKey|apiSecret)\b/;
 
+const SAFE_LOG_REDACTION_RE =
+    /\b(password|ssn|socialSecurityNumber|dateOfBirth|creditCard|cardNumber|cvv|accessToken|refreshToken|privateKey|secretKey|apiSecret)\s*:\s*(?:[^,}\n]*?['"`]\[(?:REDACTED|MASKED)\]['"`][^,}\n]*)/gi;
+
 function scanPiiLoggingSinks(source: string): InternalFinding[] {
     // Heuristic gate — only scan when a PII field name appears anywhere in the source.
     if (!PII_CONTEXT_SIGNALS.some(s => source.includes(s))) { return []; }
@@ -393,7 +396,8 @@ function scanPiiLoggingSinks(source: string): InternalFinding[] {
         // The last character of the match is '(' — that is the open paren.
         const openParen = match.index + match[0].length - 1;
         const args = extractArgsAfterParen(source, openParen);
-        const piiMatch = PII_FIELD_IN_LOG_RE.exec(args);
+        const scrubbedArgs = args.replace(SAFE_LOG_REDACTION_RE, '');
+        const piiMatch = PII_FIELD_IN_LOG_RE.exec(scrubbedArgs);
         if (!piiMatch) { continue; }
 
         found.push({

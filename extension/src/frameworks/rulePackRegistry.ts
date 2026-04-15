@@ -1,6 +1,6 @@
 import { CanonicalIssue, CanonicalMappings, ISSUE_CATALOG } from './issueCatalog';
 import * as fs from 'node:fs';
-import * as path from 'node:path';
+import { resolveRuntimeDataPath } from './runtimeDataPath';
 
 interface RulePackIssueArtifact {
     issues?: Array<Record<string, unknown>>;
@@ -54,10 +54,6 @@ let effectiveCatalog: CanonicalIssue[] = ISSUE_CATALOG;
 let effectiveIssueIndex: Map<string, CanonicalIssue> = new Map(ISSUE_CATALOG.map(issue => [issue.id, issue]));
 let dynamicMappingIndex: Map<string, DynamicFrameworkMappingMatch> = new Map();
 let effectiveRemediationIndex: Map<string, CanonicalRemediation> = new Map();
-
-function repoDocsPath(...segments: string[]): string {
-    return path.resolve(__dirname, '../../../docs', ...segments);
-}
 
 function normalizeStringList(value: unknown): string[] {
     if (!Array.isArray(value)) {
@@ -205,7 +201,7 @@ function buildDynamicRemediationEntry(rawEntry: Record<string, unknown>): Canoni
 function loadBundledRemediationCatalog(): Map<string, CanonicalRemediation> {
     try {
         const raw = fs.readFileSync(
-            repoDocsPath('data', 'remediation', 'owlvex-remediation-pack.v1.json'),
+            resolveRuntimeDataPath(__dirname, 'remediation', 'owlvex-remediation-pack.v1.json'),
             'utf8',
         );
         const remediationPack = JSON.parse(raw) as RulePackRemediationArtifact;

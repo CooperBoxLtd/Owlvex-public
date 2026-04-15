@@ -7,6 +7,7 @@ jest.mock('fs/promises');
 describe('workspaceScanner', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath ?? String(uri));
         (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (uri: any) => ({
             uri,
             fileName: uri.fsPath,
@@ -84,6 +85,30 @@ describe('workspaceScanner', () => {
         expect(summary.errors).toEqual(['bad.js: provider timeout']);
         expect(summary.results).toHaveLength(1);
         expect(summary.totalFindings).toBe(1);
+    });
+
+    it('returns failed status when every selected file errors', async () => {
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Selected Files');
+
+        const scanEngine = {
+            scanDocument: jest
+                .fn()
+                .mockRejectedValueOnce(new Error('provider timeout'))
+                .mockRejectedValueOnce(new Error('provider timeout')),
+        };
+
+        const summary = await scanSelectedFiles({
+            files: [vscode.Uri.file('d:\\repo\\src\\one.js'), vscode.Uri.file('d:\\repo\\src\\two.js')],
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(summary.status).toBe('failed');
+        expect(summary.completed).toBe(0);
+        expect(summary.errors).toEqual([
+            'd:\\repo\\src\\one.js: provider timeout',
+            'd:\\repo\\src\\two.js: provider timeout',
+        ]);
     });
 
     it('supports multi-select file picking', async () => {
@@ -244,6 +269,75 @@ describe('workspaceScanner', () => {
         expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything());
         expect(setTimeoutSpy).toHaveBeenCalled();
         expect(summary.results).toHaveLength(3);
+        setTimeoutSpy.mockRestore();
+    });
+
+    it('uses adaptive cooldowns when provider rate limits repeat across files', async () => {
+        (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
+            if (currentPath.endsWith('repo')) {
+                return [
+                    { name: 'first.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'second.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'third.js', isDirectory: () => false, isFile: () => true },
+                ];
+            }
+            return [];
+        });
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Folder');
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+
+        const scanEngine = {
+            scanDocument: jest
+                .fn()
+                .mockResolvedValueOnce({
+                    scanId: 'scan-1',
+                    score: 8,
+                    summary: 'first',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: ['AI provider unavailable: Azure Foundry error: 429 retry-after: 7'],
+                })
+                .mockResolvedValueOnce({
+                    scanId: 'scan-2',
+                    score: 8,
+                    summary: 'second',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: ['AI provider unavailable: Azure Foundry error: 429'],
+                })
+                .mockResolvedValueOnce({
+                    scanId: 'scan-3',
+                    score: 9,
+                    summary: 'third',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 11,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: [],
+                }),
+        };
+
+        await scanFolder({
+            root: vscode.Uri.file('d:\\repo'),
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 7000);
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
         setTimeoutSpy.mockRestore();
     });
 });

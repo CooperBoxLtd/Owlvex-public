@@ -501,7 +501,7 @@ describe('ScanEngine.scanDocument caching', () => {
 
         const result = await engine.scanDocument(doc);
 
-        expect(result.summary).toBe('ok');
+        expect(result.summary).toBe('No findings detected.');
         expect(provider.complete).toHaveBeenCalledTimes(3);
         setTimeoutSpy.mockRestore();
     });
@@ -1000,6 +1000,373 @@ def load_profile(request):
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
         expect(result.findings[0].likelihood).toBe('HIGH');
         expect(result.score).toBe(6.3);
+    });
+
+    it('suppresses AI-only insecure deserialization findings for data-only json parsing', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 7.5,
+                    summary: 'Insecure deserialization detected.',
+                    findings: [
+                        {
+                            id: 'ai-deser-fp-1',
+                            line: 4,
+                            line_end: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A08-DESER',
+                            title: 'Insecure deserialization',
+                            explanation: 'User-controlled JSON is deserialized directly.',
+                            threat: 'Unexpected data may be parsed from request input.',
+                            fix: 'Validate JSON before loading it.',
+                            confidence: 0.9,
+                            issue_id: 'owlvex.issue.insecure_deserialization.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['The request body is parsed directly from user input.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'python',
+            fileName: 'd:\\repo\\deser-safe.py',
+            getText: () => `import json
+
+def load_profile(request):
+    payload = json.loads(request.body)
+    return {
+        "name": payload.get("name"),
+        "role": payload.get("role"),
+    }
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(10);
+        expect(result.summary).toContain('No findings');
+    });
+
+    it('suppresses AI-only debug-mode findings when debug activation is properly guarded', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.5,
+                    summary: 'Debug mode enabled in production.',
+                    findings: [
+                        {
+                            id: 'ai-debug-fp-1',
+                            line: 16,
+                            line_end: 16,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'SM-002',
+                            title: 'Debug mode enabled in production',
+                            explanation: 'Debug mode is controlled by environment and may be misconfigured.',
+                            threat: 'Debug details could leak if config drifts.',
+                            fix: 'Disable debug mode in production.',
+                            confidence: 0.9,
+                            issue_id: 'owlvex.issue.debug_mode_production.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['Debug mode is present in the file.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\04-debug-safe.js',
+            getText: () => `const express = require('express');
+const app = express();
+
+if (process.env.NODE_ENV !== 'production') {
+    app.set('debug', true);
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(10);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only access-control findings when the helper enforces tenant scoping', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 2.0,
+                    summary: 'Broken access control detected.',
+                    findings: [
+                        {
+                            id: 'ai-idor-safe-1',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-IDOR',
+                            title: 'Broken Access Control in getDocumentForTenant',
+                            explanation: 'The helper returns a document without enough access control checks.',
+                            threat: 'Attackers could access another document.',
+                            fix: 'Add tenant validation.',
+                            confidence: 0.9,
+                            issue_id: 'owlvex.issue.idor.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['Resource access is derived from caller input.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\db.js',
+            getText: () => `function getDocumentForTenant(id, tenantId) {
+  return documents.find((doc) => doc.id === id && doc.tenantId === tenantId);
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(10);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only SSRF findings when an outbound URL allowlist check gates fetch', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 5.0,
+                    summary: 'Possible SSRF detected.',
+                    findings: [
+                        {
+                            id: 'ai-ssrf-safe-1',
+                            line: 3,
+                            line_end: 8,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A10-SSRF',
+                            title: 'Potential incomplete validation in fetch-safe endpoint',
+                            explanation: 'The URL validation helper may not be sufficient before fetch.',
+                            threat: 'Attackers may reach internal services.',
+                            fix: 'Tighten outbound URL validation.',
+                            confidence: 0.7,
+                            issue_id: 'owlvex.issue.ssrf.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['User input still flows into fetch.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\integrations.js',
+            getText: () => `router.get('/fetch-safe', async (req, res) => {
+  if (!isAllowedOutboundUrl(req.query.url)) {
+    return res.status(400).json({ error: 'outbound_url_blocked' });
+  }
+
+  const response = await fetch(req.query.url);
+  const body = await response.text();
+  res.json({ ok: true, body });
+});
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(10);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('deduplicates overlapping AI findings for the same canonical issue', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 1.0,
+                    summary: 'SQL injection detected.',
+                    findings: [
+                        {
+                            id: 'ai-sqli-1',
+                            line: 2,
+                            line_end: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A03-SQLI',
+                            title: 'Unsanitized SQL query construction',
+                            explanation: 'User input is concatenated into SQL.',
+                            threat: 'Attackers can inject SQL.',
+                            fix: 'Use parameterized queries.',
+                            confidence: 0.62,
+                            issue_id: 'owlvex.issue.sql_injection.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['Input is concatenated into a query string.'],
+                        },
+                        {
+                            id: 'ai-sqli-2',
+                            line: 3,
+                            line_end: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A03-SQLI',
+                            title: 'Unsafe SQL query in findUsersByEmailUnsafe',
+                            explanation: 'The same SQL string is built with direct interpolation.',
+                            threat: 'Attackers can inject SQL.',
+                            fix: 'Use parameterized queries.',
+                            confidence: 1,
+                            issue_id: 'owlvex.issue.sql_injection.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The same sink is described twice.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 2, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\db.js',
+            getText: () => `function findUsersByEmailUnsafe(email) {
+  return {
+    sql: \`SELECT id, email FROM users WHERE email = '\${email}'\`,
+  };
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.sql_injection.001');
+        expect(result.findings[0].confidence).toBe(1);
     });
 
     it('injects curated framework and cheat-sheet grounding into the AI request', async () => {

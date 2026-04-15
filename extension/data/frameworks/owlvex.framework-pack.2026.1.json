@@ -1,0 +1,518 @@
+{
+  "schema_version": "owlvex.framework-pack.v1",
+  "pack_id": "owlvex.framework-pack.2026.1",
+  "title": "Owlvex Curated Framework Pack 2026.1",
+  "description": "Curated framework catalog and prompt-oriented guidance derived from official upstream sources and Owlvex-authored interpretations.",
+  "generated_at": "2026-04-15T14:05:00Z",
+  "frameworks": [
+    {
+      "code": "OWASP",
+      "name": "OWASP Top 10",
+      "version": "2021",
+      "kind": "dataset",
+      "category": "security",
+      "source_type": "hybrid",
+      "description": "Developer-facing application security risk framing used for AI prioritization, output vocabulary, and issue mapping.",
+      "selectable": true,
+      "maturity": "ga",
+      "docs_url": "https://owasp.org/Top10/2021/",
+      "license_notes": "Official OWASP project content; use curated derivatives in prompts rather than dumping raw project text.",
+      "upstream_dataset_version": "Top10-2021",
+      "owlvex_profile_id": "owlvex.framework.owasp.2026.1"
+    },
+    {
+      "code": "API-OWASP",
+      "name": "OWASP API Security Top 10",
+      "version": "2023",
+      "kind": "dataset",
+      "category": "security",
+      "source_type": "hybrid",
+      "description": "API-specific risk framing for uncovered AI findings and remediation language around API misuse and authorization boundaries.",
+      "selectable": true,
+      "maturity": "beta",
+      "docs_url": "https://owasp.org/API-Security/editions/2023/en/0x00-header/",
+      "license_notes": "Official OWASP API Security content is CC BY-SA; use compact curated summaries and mappings.",
+      "upstream_dataset_version": "API-Top10-2023",
+      "owlvex_profile_id": "owlvex.framework.api-owasp.2026.1"
+    },
+    {
+      "code": "CWE",
+      "name": "Common Weakness Enumeration",
+      "version": "4.18",
+      "kind": "dataset",
+      "category": "security",
+      "source_type": "official",
+      "description": "Weakness taxonomy backbone used for canonical issue identity and stable mapping output.",
+      "selectable": true,
+      "maturity": "ga",
+      "docs_url": "https://cwe.mitre.org/data/downloads.html",
+      "license_notes": "Official MITRE export mirrored locally for curation and lookup.",
+      "upstream_dataset_version": "cwec_latest.xml.zip",
+      "owlvex_profile_id": "owlvex.framework.cwe.2026.1"
+    },
+    {
+      "code": "MITRE",
+      "name": "MITRE ATT&CK",
+      "version": "enterprise-current",
+      "kind": "dataset",
+      "category": "security",
+      "source_type": "official",
+      "description": "Attacker behavior and technique mapping used as a secondary context layer for exploit path framing.",
+      "selectable": true,
+      "maturity": "beta",
+      "docs_url": "https://github.com/mitre-attack/attack-stix-data",
+      "license_notes": "Official STIX data mirrored locally; prompts should use compact technique references, not the full bundle.",
+      "upstream_dataset_version": "enterprise-attack.json",
+      "owlvex_profile_id": "owlvex.framework.mitre.2026.1"
+    },
+    {
+      "code": "NIST",
+      "name": "NIST SP 800-53",
+      "version": "Rev. 5",
+      "kind": "control-set",
+      "category": "compliance",
+      "source_type": "official",
+      "description": "Control-set mapping layer for policy and compliance-oriented interpretation of security findings.",
+      "selectable": true,
+      "maturity": "beta",
+      "docs_url": "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads",
+      "license_notes": "Official derivative spreadsheet mirrored locally for curated control mapping use.",
+      "upstream_dataset_version": "NIST_SP-800-53_rev5-derived-OSCAL.xlsx",
+      "owlvex_profile_id": "owlvex.framework.nist.2026.1"
+    },
+    {
+      "code": "HIPAA",
+      "name": "HIPAA Security Rule",
+      "version": "reference-current",
+      "kind": "control-set",
+      "category": "compliance",
+      "source_type": "hybrid",
+      "description": "Healthcare security and privacy compliance lens used as a curated reference profile pending a more complete mirrored source import.",
+      "selectable": true,
+      "maturity": "experimental",
+      "docs_url": "https://www.hhs.gov/hipaa/for-professionals/security/index.html",
+      "license_notes": "Currently reference-backed only in this repo because automated fetch was blocked.",
+      "upstream_dataset_version": "reference-only",
+      "owlvex_profile_id": "owlvex.framework.hipaa.2026.1"
+    },
+    {
+      "code": "PCIDSS",
+      "name": "PCI DSS",
+      "version": "4.0.1",
+      "kind": "control-set",
+      "category": "compliance",
+      "source_type": "hybrid",
+      "description": "Payment security compliance lens used for curated requirement mapping and stricter handling of credential, logging, and segmentation issues.",
+      "selectable": true,
+      "maturity": "experimental",
+      "docs_url": "https://www.pcisecuritystandards.org/standards/pci-dss/",
+      "license_notes": "Use Owlvex-authored summaries and requirement identifiers rather than mirroring standard text wholesale.",
+      "upstream_dataset_version": "reference-only",
+      "owlvex_profile_id": "owlvex.framework.pcidss.2026.1"
+    },
+    {
+      "code": "CLEANCODE",
+      "name": "Clean Code",
+      "version": "2024-curated",
+      "kind": "profile",
+      "category": "quality",
+      "source_type": "curated",
+      "description": "Owlvex-authored code quality lens for maintainability, readability, and defensive engineering hygiene.",
+      "selectable": true,
+      "maturity": "beta",
+      "license_notes": "Owlvex-curated profile; no single upstream canonical dataset.",
+      "upstream_dataset_version": "owlvex-curated-2024",
+      "owlvex_profile_id": "owlvex.framework.cleancode.2026.1"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "owlvex.framework.owasp.2026.1",
+      "framework_code": "OWASP",
+      "title": "OWASP Top 10 Risk Framing",
+      "purpose": "Use OWASP as a concise application security lens for AI-only findings and report phrasing.",
+      "prompt_guidance": [
+        "Prefer OWASP category labels only when the code evidence supports the mapped risk area.",
+        "Use OWASP to explain the class of weakness, not as proof by itself.",
+        "Keep remediation practical and developer-facing rather than compliance-heavy."
+      ],
+      "report_focus": [
+        "application risk area",
+        "developer-friendly explanation",
+        "short remediation summary"
+      ],
+      "allowed_mapping_fields": [
+        "owasp",
+        "cwe",
+        "stride"
+      ],
+      "ai_usage_rules": [
+        "OWASP may shape vocabulary and prioritization more strongly for AI findings than for deterministic findings.",
+        "Do not widen severity just because a weakness falls under a prominent OWASP category."
+      ],
+      "source_blob_refs": [
+        "docs/data/framework-sources/raw/owasp/top10-2021.html",
+        "docs/data/cheatsheets/owlvex.owasp-cheatsheets.2026.1.json"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:05:00Z",
+        "sources": [
+          {
+            "label": "OWASP Top 10 2021",
+            "kind": "dataset",
+            "publisher": "OWASP",
+            "url": "https://owasp.org/Top10/2021/"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.framework.api-owasp.2026.1",
+      "framework_code": "API-OWASP",
+      "title": "OWASP API Security Risk Framing",
+      "purpose": "Focus AI findings on API misuse, object-level authorization, and API-specific exposure patterns.",
+      "prompt_guidance": [
+        "Prefer API-specific labels when the code or endpoint behavior is clearly API-facing.",
+        "Emphasize object-level authorization, authentication, inventory, and excessive data exposure where relevant.",
+        "Avoid forcing API Top 10 labels onto generic non-API code."
+      ],
+      "report_focus": [
+        "API boundary",
+        "caller trust model",
+        "data exposure shape"
+      ],
+      "allowed_mapping_fields": [
+        "api_owasp",
+        "owasp",
+        "cwe",
+        "stride"
+      ],
+      "ai_usage_rules": [
+        "Use API OWASP for uncovered AI-only issues when endpoint semantics matter.",
+        "Do not emit API OWASP mappings for clearly non-API local code unless the surrounding context justifies it."
+      ],
+      "source_blob_refs": [
+        "docs/data/framework-sources/raw/owasp/api-security-top10-2023.html",
+        "docs/data/cheatsheets/owlvex.owasp-cheatsheets.2026.1.json"
+      ],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:05:00Z",
+        "sources": [
+          {
+            "label": "OWASP API Security Top 10 2023",
+            "kind": "dataset",
+            "publisher": "OWASP",
+            "url": "https://owasp.org/API-Security/editions/2023/en/0x00-header/"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.framework.cwe.2026.1",
+      "framework_code": "CWE",
+      "title": "CWE Weakness Backbone",
+      "purpose": "Use CWE as the primary weakness taxonomy for stable canonical issue identity and mapping.",
+      "prompt_guidance": [
+        "Resolve AI findings to the closest precise CWE when the code evidence supports it.",
+        "Prefer no CWE mapping over a weak or speculative one.",
+        "Use CWE identifiers to stabilize cross-run comparison and issue normalization."
+      ],
+      "report_focus": [
+        "weakness identity",
+        "stable taxonomy",
+        "cross-framework bridge"
+      ],
+      "allowed_mapping_fields": [
+        "cwe"
+      ],
+      "ai_usage_rules": [
+        "CWE should be the strongest structured taxonomy field for AI findings.",
+        "If AI emits malformed CWE values, Owlvex should fall back to curated canonical mappings."
+      ],
+      "source_blob_refs": [
+        "docs/data/framework-sources/raw/cwe/cwec_latest.xml.zip",
+        "docs/data/framework-sources/raw/cwe/1000.csv.zip"
+      ],
+      "provenance": {
+        "source_type": "official",
+        "curation_method": "derived",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:05:00Z",
+        "sources": [
+          {
+            "label": "CWE XML latest export",
+            "kind": "dataset",
+            "publisher": "MITRE",
+            "url": "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
+          },
+          {
+            "label": "CWE CSV export",
+            "kind": "dataset",
+            "publisher": "MITRE",
+            "url": "https://cwe.mitre.org/data/csv/1000.csv.zip"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.framework.mitre.2026.1",
+      "framework_code": "MITRE",
+      "title": "MITRE ATT&CK Adversary Context",
+      "purpose": "Use ATT&CK as a secondary attacker-behavior lens, not as the primary proof of a code weakness.",
+      "prompt_guidance": [
+        "Use ATT&CK only when the exploit path or technique mapping is reasonably clear from the code.",
+        "Prefer compact technique identifiers and names over long tactic narratives.",
+        "Do not use ATT&CK to inflate certainty for code-local findings."
+      ],
+      "report_focus": [
+        "attacker behavior",
+        "exploit path context",
+        "secondary correlation"
+      ],
+      "allowed_mapping_fields": [
+        "attack",
+        "capec"
+      ],
+      "ai_usage_rules": [
+        "ATT&CK should enrich exploit context, not replace weakness identification.",
+        "Leave ATT&CK empty when the code alone does not support a believable technique correlation."
+      ],
+      "source_blob_refs": [
+        "docs/data/framework-sources/raw/attack/index.json",
+        "docs/data/framework-sources/raw/attack/enterprise-attack.json"
+      ],
+      "provenance": {
+        "source_type": "official",
+        "curation_method": "derived",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:05:00Z",
+        "sources": [
+          {
+            "label": "MITRE ATT&CK STIX repository",
+            "kind": "dataset",
+            "publisher": "MITRE",
+            "url": "https://github.com/mitre-attack/attack-stix-data"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.framework.nist.2026.1",
+      "framework_code": "NIST",
+      "title": "NIST SP 800-53 Control Mapping",
+      "purpose": "Use NIST as a control-set interpretation layer for policy and compliance-aware reporting.",
+      "prompt_guidance": [
+        "Use NIST mappings to support governance and control language, not to prove the finding exists.",
+        "Prefer specific control IDs where the mapping is already curated in Owlvex issue data.",
+        "Keep NIST output concise and avoid turning developer reports into audit prose."
+      ],
+      "report_focus": [
+        "control implication",
+        "policy relevance",
+        "governance context"
+      ],
+      "allowed_mapping_fields": [
+        "nist"
+      ],
+      "ai_usage_rules": [
+        "NIST should be secondary to code-grounded explanation and remediation.",
+        "If NIST mappings are absent or weak, fall back to canonical issue mappings rather than generating speculative controls."
+      ],
+      "source_blob_refs": [
+        "docs/data/framework-sources/raw/nist/NIST_SP-800-53_rev5-derived-OSCAL.xlsx"
+      ],
+      "provenance": {
+        "source_type": "official",
+        "curation_method": "derived",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:05:00Z",
+        "sources": [
+          {
+            "label": "NIST SP 800-53 Rev. 5 downloads",
+            "kind": "dataset",
+            "publisher": "NIST",
+            "url": "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.framework.hipaa.2026.1",
+      "framework_code": "HIPAA",
+      "title": "HIPAA Security Rule Reference Lens",
+      "purpose": "Use HIPAA as a narrow healthcare compliance lens for data protection, access control, and auditability findings.",
+      "prompt_guidance": [
+        "Treat HIPAA as a compliance interpretation layer, especially around protected health information handling.",
+        "Use HIPAA language sparingly and only when the code context plausibly touches healthcare data handling.",
+        "Prefer broader security explanations first, then add HIPAA relevance as a secondary note."
+      ],
+      "report_focus": [
+        "protected data handling",
+        "access safeguards",
+        "auditability"
+      ],
+      "allowed_mapping_fields": [
+        "nist"
+      ],
+      "ai_usage_rules": [
+        "HIPAA is currently a curated reference profile in Owlvex, not a fully mirrored dataset.",
+        "Do not present HIPAA output as exhaustive legal compliance analysis."
+      ],
+      "source_blob_refs": [],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:05:00Z",
+        "sources": [
+          {
+            "label": "HIPAA Security Rule",
+            "kind": "regulation",
+            "publisher": "HHS",
+            "url": "https://www.hhs.gov/hipaa/for-professionals/security/index.html"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.framework.pcidss.2026.1",
+      "framework_code": "PCIDSS",
+      "title": "PCI DSS Reference Lens",
+      "purpose": "Use PCI DSS as a payment security interpretation layer for credential handling, logging, segmentation, and hardening issues.",
+      "prompt_guidance": [
+        "Use PCI DSS only as a secondary requirement lens when the code context relates to payment processing or cardholder data handling.",
+        "Prefer requirement identifiers or concise control implications over long standard prose.",
+        "Keep remediation code-first; treat PCI language as supporting context."
+      ],
+      "report_focus": [
+        "payment data risk",
+        "security requirement relevance",
+        "operational hardening"
+      ],
+      "allowed_mapping_fields": [
+        "owasp",
+        "cwe",
+        "nist"
+      ],
+      "ai_usage_rules": [
+        "PCI DSS is currently a curated reference profile in Owlvex, not a fully mirrored standard text pack.",
+        "Do not imply formal PCI compliance certification from code-local findings."
+      ],
+      "source_blob_refs": [],
+      "provenance": {
+        "source_type": "hybrid",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:05:00Z",
+        "sources": [
+          {
+            "label": "PCI DSS standards page",
+            "kind": "standard",
+            "publisher": "PCI Security Standards Council",
+            "url": "https://www.pcisecuritystandards.org/standards/pci-dss/"
+          }
+        ]
+      }
+    },
+    {
+      "id": "owlvex.framework.cleancode.2026.1",
+      "framework_code": "CLEANCODE",
+      "title": "Owlvex Clean Code Profile",
+      "purpose": "Use a curated engineering-quality lens for maintainability, readability, and safer implementation hygiene.",
+      "prompt_guidance": [
+        "Use Clean Code to explain maintainability and defensive engineering improvements distinctly from security proof.",
+        "Do not suppress real security findings just because Clean Code is selected alone.",
+        "Prefer precise code-change advice over abstract style criticism."
+      ],
+      "report_focus": [
+        "readability",
+        "maintainability",
+        "defensive engineering"
+      ],
+      "allowed_mapping_fields": [],
+      "ai_usage_rules": [
+        "Clean Code should change explanation style more than finding truth.",
+        "Use it as an adjacent quality lens, not as a substitute security taxonomy."
+      ],
+      "source_blob_refs": [],
+      "provenance": {
+        "source_type": "curated",
+        "curation_method": "manual",
+        "review_status": "reviewed",
+        "reviewed_by": "owlvex-security",
+        "reviewed_at": "2026-04-15T14:05:00Z",
+        "sources": [
+          {
+            "label": "Owlvex curated engineering quality profile",
+            "kind": "curated-profile",
+            "publisher": "Owlvex"
+          }
+        ]
+      }
+    }
+  ],
+  "source_blobs": [
+    {
+      "id": "blob.cwe.xml.latest",
+      "framework_code": "CWE",
+      "path": "docs/data/framework-sources/raw/cwe/cwec_latest.xml.zip",
+      "format": "zip",
+      "role": "taxonomy-source"
+    },
+    {
+      "id": "blob.cwe.csv.1000",
+      "framework_code": "CWE",
+      "path": "docs/data/framework-sources/raw/cwe/1000.csv.zip",
+      "format": "zip",
+      "role": "taxonomy-source"
+    },
+    {
+      "id": "blob.attack.index",
+      "framework_code": "MITRE",
+      "path": "docs/data/framework-sources/raw/attack/index.json",
+      "format": "json",
+      "role": "dataset-index"
+    },
+    {
+      "id": "blob.attack.enterprise",
+      "framework_code": "MITRE",
+      "path": "docs/data/framework-sources/raw/attack/enterprise-attack.json",
+      "format": "json",
+      "role": "attacker-technique-source"
+    },
+    {
+      "id": "blob.owasp.top10.2021",
+      "framework_code": "OWASP",
+      "path": "docs/data/framework-sources/raw/owasp/top10-2021.html",
+      "format": "html",
+      "role": "risk-framing-source"
+    },
+    {
+      "id": "blob.owasp.api.2023",
+      "framework_code": "API-OWASP",
+      "path": "docs/data/framework-sources/raw/owasp/api-security-top10-2023.html",
+      "format": "html",
+      "role": "api-risk-framing-source"
+    },
+    {
+      "id": "blob.nist.800-53.rev5",
+      "framework_code": "NIST",
+      "path": "docs/data/framework-sources/raw/nist/NIST_SP-800-53_rev5-derived-OSCAL.xlsx",
+      "format": "xlsx",
+      "role": "control-mapping-source"
+    }
+  ]
+}

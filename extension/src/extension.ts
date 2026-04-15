@@ -34,7 +34,7 @@ interface ScanFileCommandResult {
 }
 
 interface ScanWorkspaceCommandResult {
-    status: 'completed' | 'cancelled' | 'empty';
+    status: 'completed' | 'cancelled' | 'empty' | 'failed';
     root?: vscode.Uri;
     completed: number;
     totalFindings: number;
@@ -43,7 +43,7 @@ interface ScanWorkspaceCommandResult {
 }
 
 interface ScanSelectedFilesCommandResult {
-    status: 'completed' | 'cancelled' | 'empty';
+    status: 'completed' | 'cancelled' | 'empty' | 'failed';
     files?: vscode.Uri[];
     completed: number;
     totalFindings: number;
@@ -52,7 +52,7 @@ interface ScanSelectedFilesCommandResult {
 }
 
 interface ScanOpenEditorsCommandResult {
-    status: 'completed' | 'cancelled' | 'empty';
+    status: 'completed' | 'cancelled' | 'empty' | 'failed';
     files?: vscode.Uri[];
     completed: number;
     totalFindings: number;
@@ -61,7 +61,7 @@ interface ScanOpenEditorsCommandResult {
 }
 
 interface ReportCommandResult {
-    status: 'completed' | 'cancelled' | 'empty';
+    status: 'completed' | 'cancelled' | 'empty' | 'failed';
     reportUri?: vscode.Uri;
     averageScore?: number;
     providers?: string;
@@ -644,12 +644,14 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand(PROFILE.commands.scanSelectedFiles, async (requestedUris?: vscode.Uri[] | vscode.Uri): Promise<ScanSelectedFilesCommandResult> => {
-            const normalizedRequested = Array.isArray(requestedUris)
-                ? requestedUris
-                : requestedUris
-                    ? [requestedUris]
-                    : undefined;
+        vscode.commands.registerCommand(PROFILE.commands.scanSelectedFiles, async (requestedUris?: vscode.Uri[] | vscode.Uri, selectedUris?: vscode.Uri[]): Promise<ScanSelectedFilesCommandResult> => {
+            const normalizedRequested = Array.isArray(selectedUris) && selectedUris.length
+                ? selectedUris
+                : Array.isArray(requestedUris)
+                    ? requestedUris
+                    : requestedUris
+                        ? [requestedUris]
+                        : undefined;
             const fileUris = normalizedRequested?.length ? normalizedRequested : await pickScanFiles();
             if (!fileUris?.length) {
                 return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
@@ -695,6 +697,10 @@ export function activate(context: vscode.ExtensionContext) {
                     });
                     vscode.window.showInformationMessage(
                         `${PROFILE.displayLabel}: Scanned ${enrichedResults.length} selected file(s) with ${totalFindings} finding(s)${summary.errors.length ? ` (${summary.errors.length} error(s))` : ''}`
+                    );
+                } else if (summary.status === 'failed') {
+                    vscode.window.showErrorMessage(
+                        `${PROFILE.displayLabel}: Selected-files scan failed for all ${fileUris.length} file(s). ${summary.errors.length} error(s) were captured.`
                     );
                 } else if (summary.status === 'empty') {
                     vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No supported source files were selected.`);
@@ -1374,20 +1380,22 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand(PROFILE.commands.reviewRiskCalibration, async () => {
-            const storedScans = Array.from(scanStore.values());
-            if (!storedScans.length) {
+        vscode.commands.registerCommand(PROFILE.commands.reviewRiskCalibration, async (records?: StoredScanRecord[]) => {
+            const scopedScans = Array.isArray(records) && records.length
+                ? records.map(item => normalizeStoredScanRecord(item))
+                : Array.from(scanStore.values());
+            if (!scopedScans.length) {
                 vscode.window.showWarningMessage('Owlvex: Run at least one scan before reviewing risk calibration.');
                 return { status: 'empty', count: 0 };
             }
 
-            const report = buildRiskCalibrationReport(storedScans);
+            const report = buildRiskCalibrationReport(scopedScans);
             const document = await vscode.workspace.openTextDocument({
                 language: 'markdown',
                 content: report,
             });
             await vscode.window.showTextDocument(document, { preview: false });
-            return { status: 'completed', count: storedScans.length };
+            return { status: 'completed', count: scopedScans.length };
         })
     );
 

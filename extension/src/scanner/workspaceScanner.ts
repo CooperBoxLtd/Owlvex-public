@@ -27,6 +27,23 @@ const EXCLUDED_DIRS = new Set([
 ]);
 
 const RATE_LIMIT_COOLDOWN_MS = 5000;
+const MAX_RATE_LIMIT_COOLDOWN_MS = 60000;
+
+function extractRetryAfterMsFromWarnings(warnings: string[] = []): number | undefined {
+    for (const warning of warnings) {
+        const retryAfterSecondsMatch = warning.match(/retry-after:\s*(\d+(?:\.\d+)?)/i);
+        if (retryAfterSecondsMatch) {
+            return Math.max(0, Math.ceil(Number(retryAfterSecondsMatch[1]) * 1000));
+        }
+
+        const retryAfterMsMatch = warning.match(/retry-after-ms:\s*(\d+)/i);
+        if (retryAfterMsMatch) {
+            return Math.max(0, Number(retryAfterMsMatch[1]));
+        }
+    }
+
+    return undefined;
+}
 
 async function sleep(ms: number): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, ms));
@@ -116,7 +133,7 @@ export interface FolderScanFileResult {
 }
 
 export interface FolderScanSummary {
-    status: 'completed' | 'cancelled' | 'empty';
+    status: 'completed' | 'cancelled' | 'empty' | 'failed';
     completed: number;
     totalFindings: number;
     errors: string[];
@@ -192,6 +209,7 @@ async function scanUris(options: {
     const results: FolderScanFileResult[] = [];
     let cancelled = false;
     let cooldownUntil = 0;
+    let consecutiveRateLimitHits = 0;
 
     await vscode.window.withProgress(
         {
@@ -225,7 +243,16 @@ async function scanUris(options: {
                     const doc = await vscode.workspace.openTextDocument(uri);
                     const result = await options.scanEngine.scanDocument(doc);
                     if ((result.warnings ?? []).some(warning => /\b429\b|rate limit/i.test(warning))) {
-                        cooldownUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+                        consecutiveRateLimitHits += 1;
+                        const providerRetryAfterMs = extractRetryAfterMsFromWarnings(result.warnings);
+                        const adaptiveCooldownMs = Math.min(
+                            MAX_RATE_LIMIT_COOLDOWN_MS,
+                            RATE_LIMIT_COOLDOWN_MS * (2 ** Math.max(0, consecutiveRateLimitHits - 1)),
+                        );
+                        cooldownUntil = Date.now() + Math.max(adaptiveCooldownMs, providerRetryAfterMs ?? 0);
+                    } else {
+                        consecutiveRateLimitHits = 0;
+                        cooldownUntil = 0;
                     }
                     options.diagnostics.applyFindings(doc, result.findings);
                     totalFindings += result.findings.length;
@@ -239,7 +266,11 @@ async function scanUris(options: {
     );
 
     return {
-        status: cancelled ? 'cancelled' : 'completed',
+        status: cancelled
+            ? 'cancelled'
+            : completed === 0 && errors.length > 0
+                ? 'failed'
+                : 'completed',
         completed,
         totalFindings,
         errors,

@@ -5,6 +5,7 @@ import { collectScannableFiles } from '../scanner/workspaceScanner';
 import { formatFrameworkSummary } from '../frameworks/catalog';
 import { getGroundedCheatSheetLabelsForIssueIds, resolveRemediationForFinding } from '../frameworks/remediationResolver';
 import { getGroundedFrameworkLabels } from '../frameworks/frameworkGrounding';
+import type { StoredScanRecord } from '../scanner/calibrationReview';
 import type { Finding, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 
@@ -27,6 +28,7 @@ interface ChatMessageAction {
     path?: string;
     line?: number;
     finding?: Finding;
+    calibrationRecords?: StoredScanRecord[];
 }
 
 interface EditorContext {
@@ -138,7 +140,8 @@ function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions):
         return true;
     }
 
-    return /\b(scan|report|finding|findings|issue|issues|result|results|score|scores|risk|risks|vulnerab|warning|remediation|fix|patch|secure|safe)\b/i.test(prompt);
+    return /\b(latest|last|previous|recent)\b.*\b(scan|report|finding|findings|issue|issues|result|results|score|scores|risk|risks|warning|warnings)\b/i.test(prompt)
+        || /\b(scan|report|finding|findings|issue|issues|result|results|score|scores|risk|risks|warning|warnings)\b.*\b(latest|last|previous|recent)\b/i.test(prompt);
 }
 
 function buildScoreBreakdown(result: ScanResult): string {
@@ -200,6 +203,24 @@ function buildScanSummaryLines(result: ScanResult): string[] {
             : 'No scan warnings were reported.',
         `Summary: ${result.summary || 'No summary returned.'}`,
     ];
+}
+
+function buildCalibrationRecords(results: Array<{ uri: vscode.Uri; result: ScanResult }>): StoredScanRecord[] {
+    return results.map(item => ({
+        scanId: item.result.scanId,
+        result: item.result,
+        targetLabel: vscode.workspace.asRelativePath(item.uri, false),
+        scannedAt: new Date().toISOString(),
+    }));
+}
+
+function buildExplainScoreAction(id: string, results: Array<{ uri: vscode.Uri; result: ScanResult }>): ChatMessageAction {
+    return {
+        id,
+        label: 'Explain score',
+        kind: 'explainScore',
+        calibrationRecords: buildCalibrationRecords(results),
+    };
 }
 
 function buildLatestReportPromptContext(storage: vscode.Memento): EditorContext | undefined {
@@ -868,6 +889,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (result?.status === 'empty') {
                 return { handled: true, response: 'No supported source files were found in the selected folder.', kind: 'scan' };
             }
+            if (result?.status === 'failed') {
+                return {
+                    handled: true,
+                    response: `Folder scan failed for all files.\nFiles scanned: 0\nTotal findings: 0\nScan errors: ${result.errors.length}`,
+                    kind: 'scan',
+                };
+            }
             if (!result?.completed) {
                 return { handled: true, response: 'Folder scan did not complete.', kind: 'scan' };
             }
@@ -877,11 +905,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (topActionable) {
                 actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
             }
-            actions.push({
-                id: 'explain-score-scan-folder-intent',
-                label: 'Explain score',
-                kind: 'explainScore',
-            });
+            actions.push(buildExplainScoreAction('explain-score-scan-folder-intent', result.results ?? []));
             return {
                 handled: true,
                 response: [
@@ -910,6 +934,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (result?.status === 'empty') {
                 return { handled: true, response: 'No supported source files were selected.', kind: 'scan' };
             }
+            if (result?.status === 'failed') {
+                return {
+                    handled: true,
+                    response: `Selected-files scan failed for all files.\nFiles scanned: 0\nTotal findings: 0\nScan errors: ${result.errors.length}`,
+                    kind: 'scan',
+                };
+            }
             if (!result?.completed) {
                 return { handled: true, response: 'Selected-files scan did not complete.', kind: 'scan' };
             }
@@ -919,11 +950,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (topActionable) {
                 actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
             }
-            actions.push({
-                id: 'explain-score-scan-selected-intent',
-                label: 'Explain score',
-                kind: 'explainScore',
-            });
+            actions.push(buildExplainScoreAction('explain-score-scan-selected-intent', result.results ?? []));
             return {
                 handled: true,
                 response: [
@@ -949,6 +976,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (result?.status === 'empty') {
                 return { handled: true, response: 'No supported open editors were available to scan.', kind: 'scan' };
             }
+            if (result?.status === 'failed') {
+                return {
+                    handled: true,
+                    response: `Open-editors scan failed for all files.\nFiles scanned: 0\nTotal findings: 0\nScan errors: ${result.errors.length}`,
+                    kind: 'scan',
+                };
+            }
             if (!result?.completed) {
                 return { handled: true, response: 'Open-editors scan did not complete.', kind: 'scan' };
             }
@@ -958,11 +992,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (topActionable) {
                 actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
             }
-            actions.push({
-                id: 'explain-score-scan-open-editors-intent',
-                label: 'Explain score',
-                kind: 'explainScore',
-            });
+            actions.push(buildExplainScoreAction('explain-score-scan-open-editors-intent', result.results ?? []));
             return {
                 handled: true,
                 response: [
@@ -1006,6 +1036,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 kind: 'scan',
             };
         }
+        if (result?.status === 'failed') {
+            return {
+                handled: true,
+                response: `Report creation failed because every scanned file errored.\nFiles scanned: 0\nTotal findings: 0\nScan errors: ${result.summary?.errors.length ?? 0}`,
+                kind: 'scan',
+            };
+        }
 
         const relativeReportPath = vscode.workspace.asRelativePath(result.reportUri, false);
         return {
@@ -1023,9 +1060,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             ].join('\n'),
             kind: 'scan',
             actions: [{
-                id: 'explain-score-report-intent',
-                label: 'Explain score',
-                kind: 'explainScore',
+                ...buildExplainScoreAction('explain-score-report-intent', result.summary.results ?? []),
             }],
         };
     }
@@ -1104,7 +1139,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action.kind === 'explainScore') {
-            await vscode.commands.executeCommand(PROFILE.commands.reviewRiskCalibration);
+            await vscode.commands.executeCommand(PROFILE.commands.reviewRiskCalibration, action.calibrationRecords);
             this.messages.push({
                 role: 'assistant',
                 content: 'Opened the score review so you can inspect how overall score and top-risk findings relate.',
@@ -1322,11 +1357,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             ...buildScanSummaryLines(result.result),
                         ].join('\n')
                         : 'File scan did not complete.',
-                    actions: result?.status === 'completed' ? [{
-                        id: 'explain-score-file',
-                        label: 'Explain score',
-                        kind: 'explainScore',
-                    }] : undefined,
+                    actions: result?.status === 'completed' && result?.result && result?.uri
+                        ? [buildExplainScoreAction('explain-score-file', [{ uri: result.uri, result: result.result }])]
+                        : undefined,
                 };
             } else if (action === 'scanSelectedFiles') {
                 const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanSelectedFiles);
@@ -1355,14 +1388,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                                 ? `Scan errors: ${result.errors.length}`
                                 : 'No scan errors were reported.',
                         ].join('\n')
+                        : result?.status === 'failed'
+                            ? [
+                                `Selected-files scan failed for all files.`,
+                                `Files scanned: 0`,
+                                `Total findings: 0`,
+                                `Issue families: unresolved`,
+                                `Scan errors: ${result.errors.length}`,
+                            ].join('\n')
                         : result?.status === 'empty'
                             ? 'No supported source files were selected.'
                             : 'Selected-files scan was cancelled.',
-                    actions: result?.status === 'completed' ? [{
-                        id: 'explain-score-selected',
-                        label: 'Explain score',
-                        kind: 'explainScore',
-                    }] : undefined,
+                    actions: result?.status === 'completed'
+                        ? [buildExplainScoreAction('explain-score-selected', result.results ?? [])]
+                        : undefined,
                 };
             } else if (action === 'scanOpenEditors') {
                 const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanOpenEditors);
@@ -1391,14 +1430,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                                 ? `Scan errors: ${result.errors.length}`
                                 : 'No scan errors were reported.',
                         ].join('\n')
+                        : result?.status === 'failed'
+                            ? [
+                                `Open-editors scan failed for all files.`,
+                                `Files scanned: 0`,
+                                `Total findings: 0`,
+                                `Issue families: unresolved`,
+                                `Scan errors: ${result.errors.length}`,
+                            ].join('\n')
                         : result?.status === 'empty'
                             ? 'No supported open editors were available to scan.'
                             : 'Open-editors scan was cancelled.',
-                    actions: result?.status === 'completed' ? [{
-                        id: 'explain-score-open-editors',
-                        label: 'Explain score',
-                        kind: 'explainScore',
-                    }] : undefined,
+                    actions: result?.status === 'completed'
+                        ? [buildExplainScoreAction('explain-score-open-editors', result.results ?? [])]
+                        : undefined,
                 };
             } else if (action === 'scanFolder') {
                 const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspace);
@@ -1430,14 +1475,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                                 ? `Scan errors: ${result.errors.length}`
                                 : 'No scan errors were reported.',
                         ].join('\n')
+                        : result?.status === 'failed'
+                            ? [
+                                `Folder scan failed for all files.`,
+                                `Files scanned: 0`,
+                                `Total findings: 0`,
+                                `Issue families: unresolved`,
+                                `Scan errors: ${result.errors.length}`,
+                            ].join('\n')
                         : result?.status === 'empty'
                             ? 'No supported source files were found in the selected folder.'
                             : 'Folder scan was cancelled.',
-                    actions: result?.status === 'completed' ? [{
-                        id: 'explain-score-folder',
-                        label: 'Explain score',
-                        kind: 'explainScore',
-                    }] : undefined,
+                    actions: result?.status === 'completed'
+                        ? [buildExplainScoreAction('explain-score-folder', result.results ?? [])]
+                        : undefined,
                 };
             } else if (action === 'scanReport') {
                 const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspaceReport);
@@ -1467,14 +1518,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                                 : 'No scan warnings were reported.',
                             `Report: ${vscode.workspace.asRelativePath(result.reportUri, false)}`,
                         ].join('\n')
+                        : result?.status === 'failed'
+                            ? [
+                                `Report creation failed because every scanned file errored.`,
+                                `Files scanned: 0`,
+                                `Total findings: 0`,
+                                `Issue families: unresolved`,
+                                `Scan errors: ${result.summary?.errors.length ?? 0}`,
+                            ].join('\n')
                         : result?.status === 'empty'
                             ? 'Report creation could not continue because no supported files were found.'
                             : 'Report creation was cancelled.',
-                    actions: result?.status === 'completed' ? [{
-                        id: 'explain-score-report',
-                        label: 'Explain score',
-                        kind: 'explainScore',
-                    }] : undefined,
+                    actions: result?.status === 'completed'
+                        ? [buildExplainScoreAction('explain-score-report', result.summary?.results ?? [])]
+                        : undefined,
                 };
             } else {
                 this.messages[this.messages.length - 1] = {
@@ -1535,7 +1592,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return undefined;
         }
 
-        const finding = suggestedFinding ?? this.latestActionableFinding ?? this.getLatestReportFinding();
+        const finding = suggestedFinding ?? this.latestActionableFinding;
         const targetPath = vscode.window.activeTextEditor?.document.uri.fsPath;
         if (!finding || !targetPath) {
             return undefined;
@@ -1570,11 +1627,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.latestActionableFinding = result.result.findings
             .slice()
             .sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
-        const actions: ChatMessageAction[] = [{
-            id: 'explain-score-scan-file-intent',
-            label: 'Explain score',
-            kind: 'explainScore',
-        }];
+        const actions: ChatMessageAction[] = result.uri
+            ? [buildExplainScoreAction('explain-score-scan-file-intent', [{ uri: result.uri, result: result.result }])]
+            : [];
         if (this.latestActionableFinding && result.uri) {
             actions.unshift(buildReviewFixAction(this.latestActionableFinding, result.uri.fsPath));
         }

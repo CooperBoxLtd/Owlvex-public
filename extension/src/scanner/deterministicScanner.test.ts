@@ -468,6 +468,19 @@ function loginHandler(password, db) {
         const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'DP-001');
         expect(findings).toHaveLength(0);
     });
+
+    it('does NOT flag explicitly redacted sensitive fields in structured logs', () => {
+        const source = `
+function logAuthEvent(logger, session, password) {
+  logger.info('login_attempt', {
+    userId: session.userId,
+    tenantId: session.tenantId,
+    password: password ? '[REDACTED]' : undefined
+  });
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'DP-001');
+        expect(findings).toHaveLength(0);
+    });
 });
 
 // ---------------------------------------------------------------------------

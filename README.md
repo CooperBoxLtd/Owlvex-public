@@ -113,6 +113,7 @@ backend/          Licence and billing backend (FastAPI)
 tools/
   owlvex-benchmark/   Deterministic correctness gate (19 suites)
   demo/               Demo fixtures and script
+  demo-app/           Small intentionally vulnerable web app for full-repo scans
 ```
 
 ## Build Direction

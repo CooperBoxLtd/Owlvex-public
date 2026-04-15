@@ -425,7 +425,7 @@ describe('parseChatIntent', () => {
         ]));
     });
 
-    it('offers generate fix preview after a fix-oriented advisory request', async () => {
+    it('does not offer generate fix preview from a stale latest report finding', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'Use a parameterized query.' });
         (vscode.window.activeTextEditor as any) = {
             document: {
@@ -479,9 +479,7 @@ describe('parseChatIntent', () => {
 
         await (provider as any).handleUserMessage('Please give me the safe fix for this');
 
-        expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual([
-            expect.objectContaining({ label: 'Review fix', kind: 'generateFixPreview' }),
-        ]);
+        expect((provider as any).messages[(provider as any).messages.length - 1].actions).toBeUndefined();
     });
 
     it('does not inject the latest report into a fresh greeting', async () => {
@@ -534,6 +532,59 @@ describe('parseChatIntent', () => {
         expect(request.systemPrompt).toContain('Latest report: none');
         expect(request.userMessage).toContain('Latest report context: none');
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toBe('Good morning! I am ready to help.');
+    });
+
+    it('does not reuse the latest report finding for fix actions in a fresh chat', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'Share the code you want to change.' });
+        (vscode.window.activeTextEditor as any) = {
+            document: {
+                uri: vscode.Uri.file('d:\\repo\\src\\app.js'),
+                languageId: 'javascript',
+                getText: () => 'console.log("hello");',
+            },
+            selection: { isEmpty: true },
+        };
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => key === `${PROFILE.storagePrefix}.lastReportSnapshot`
+                ? {
+                    targetLabel: 'tools/demo',
+                    results: [{
+                        result: {
+                            findings: [{
+                                id: 'finding-stale',
+                                line: 9,
+                                severity: 'HIGH',
+                                title: 'Stale finding',
+                                explanation: 'Should not be reused after New Chat.',
+                                fix: 'Ignore me.',
+                            }],
+                        },
+                    }],
+                }
+                : defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('please fix this');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.actions).toBeUndefined();
+        const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Latest report: none');
+        expect(request.userMessage).toContain('Latest report context: none');
     });
 
     it('adds a Review fix action to scan-backed file results', async () => {

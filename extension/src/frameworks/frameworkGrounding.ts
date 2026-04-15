@@ -1,8 +1,8 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import { getIssueFamilyDefinition } from './issueCatalog';
 import { getGroundedCheatSheetGuidanceForIssueIds } from './remediationResolver';
 import { getEffectiveIssueCatalog } from './rulePackRegistry';
+import { resolveRuntimeDataPath } from './runtimeDataPath';
 
 interface FrameworkPackFramework {
     code: string;
@@ -30,10 +30,6 @@ interface FrameworkPack {
 
 let cachedFrameworkPack: FrameworkPack | undefined;
 
-function repoDocsPath(...segments: string[]): string {
-    return path.resolve(__dirname, '../../../docs', ...segments);
-}
-
 function normalizeFrameworkCode(value: string | undefined): string {
     return String(value ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase();
 }
@@ -44,7 +40,7 @@ function loadFrameworkPack(): FrameworkPack {
     }
 
     const raw = fs.readFileSync(
-        repoDocsPath('data', 'frameworks', 'owlvex.framework-pack.2026.1.json'),
+        resolveRuntimeDataPath(__dirname, 'frameworks', 'owlvex.framework-pack.2026.1.json'),
         'utf8',
     );
     cachedFrameworkPack = JSON.parse(raw) as FrameworkPack;
