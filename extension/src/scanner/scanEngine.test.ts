@@ -182,6 +182,90 @@ describe('ScanEngine._parseAIResponse', () => {
         expect(result.findings[0].matchedSignals).toEqual(['CWE:CWE-89', 'sql injection']);
     });
 
+    it('drops malformed mapping entries so canonical mappings can fill the gap', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                mappings: {
+                    cwe: 'CWE-89, nope',
+                    owasp: 'A03:2021, random-tag',
+                    api_owasp: 'API8:2023, nonsense',
+                    attack: 'T1190, BAD',
+                    capec: 'CAPEC-66, ???',
+                    nist: 'SI-10, not-a-control',
+                },
+            }],
+        };
+        const result = engine.parse(JSON.stringify(payload));
+        expect(result.findings[0].mappings).toEqual({
+            cwe: ['CWE-89'],
+            owasp: ['A03:2021'],
+            apiOwasp: ['API8:2023'],
+            attack: ['T1190'],
+            capec: ['CAPEC-66'],
+            nist: ['SI-10'],
+        });
+    });
+
+    it('normalizes shorthand STRIDE values from the model', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                stride: 'T, E, tampering',
+            }],
+        };
+        const result = engine.parse(JSON.stringify(payload));
+        expect(result.findings[0].stride).toEqual(['Tampering', 'Elevation of Privilege']);
+    });
+
+    it('drops malformed STRIDE values and falls back to canonical metadata', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                stride: 'bogus, ???',
+            }],
+        };
+        const result = engine.parse(JSON.stringify(payload));
+        expect(result.findings[0].stride).toEqual(['Tampering', 'Information Disclosure']);
+    });
+
+    it('softens insecure CORS wording to avoid overclaiming exploitability', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                severity: 'HIGH',
+                title: 'Overly permissive CORS policy',
+                explanation: 'This can lead to unauthorized access and data exfiltration.',
+                threat: 'Attackers can steal sensitive data from any origin.',
+                fix: '',
+                plain_language_fix: '',
+                issue_id: 'owlvex.issue.insecure_cors.001',
+                stride: 'E',
+                mappings: { cwe: 'bad-value' },
+            }],
+        };
+        const result = engine.parse(JSON.stringify(payload));
+        expect(result.findings[0].explanation).toMatch(/broader than it should be/i);
+        expect(result.findings[0].explanation).toMatch(/invalid or inconsistently enforced by browsers/i);
+        expect(result.findings[0].threat).toMatch(/may be able to abuse/i);
+        expect(result.findings[0].threat).toMatch(/before treating this as a confirmed data-exfiltration path/i);
+        expect(result.findings[0].fix).toBe('Restrict CORS origins, methods, and credential use to explicit trusted callers only.');
+        expect(result.findings[0].plainLanguageFix).toBe('Do not allow every origin by default. Keep the CORS policy narrow and list only the trusted sites that should call this endpoint.');
+        expect(result.findings[0].stride).toEqual(['Elevation of Privilege']);
+        expect(result.findings[0].mappings).toEqual({
+            cwe: ['CWE-942'],
+            owasp: ['A05:2021'],
+            apiOwasp: [],
+            attack: [],
+            capec: [],
+            nist: ['SC-7'],
+        });
+    });
+
     it('parses likelihood and likelihood reasons when the model provides them', () => {
         const payload = {
             ...validPayload,

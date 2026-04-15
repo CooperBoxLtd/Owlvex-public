@@ -88,6 +88,16 @@ npm run benchmark:deterministic    # from extension/
 npm run benchmark:status
 ```
 
+**AI eval lane against a generated markdown report:**
+```bash
+npm run benchmark:ai-evals -- ../tools/demo/owlvex-scan-report-YYYYMMDD-HHMMSS.md model-tag
+```
+
+**AI eval status summary:**
+```bash
+npm run benchmark:ai-status
+```
+
 **Individual suites:**
 ```bash
 npm run benchmark:gr001            # execution-risk final decision

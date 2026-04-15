@@ -244,6 +244,8 @@
     "test": "jest --coverage",
     "corpus:test": "npm run compile && node ./out/frameworks/corpusRunner.js",
     "benchmark:import": "node ../tools/owlvex-benchmark/import-report.mjs",
+    "benchmark:ai-evals": "node ../tools/owlvex-benchmark/run-ai-evals.mjs",
+    "benchmark:ai-status": "node ../tools/owlvex-benchmark/ai-eval-status.mjs",
     "benchmark:run:ssh": "node ../tools/owlvex-benchmark/run-ollama-ssh.mjs",
     "benchmark:score": "node ../tools/owlvex-benchmark/score.mjs",
     "benchmark:gr001": "node ../tools/owlvex-benchmark/engine/gr001/run-gr001-corpus.mjs",

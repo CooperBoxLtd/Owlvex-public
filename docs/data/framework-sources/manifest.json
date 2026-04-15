@@ -1,0 +1,60 @@
+{
+  "schema_version": "owlvex.framework-sources.v1",
+  "generated_by": "tools/download-framework-sources.mjs",
+  "downloadable": [
+    {
+      "id": "cwe-xml-latest",
+      "framework": "CWE",
+      "url": "https://cwe.mitre.org/data/xml/cwec_latest.xml.zip"
+    },
+    {
+      "id": "cwe-csv-top-level",
+      "framework": "CWE",
+      "url": "https://cwe.mitre.org/data/csv/1000.csv.zip"
+    },
+    {
+      "id": "mitre-attack-index",
+      "framework": "MITRE ATT&CK",
+      "url": "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/index.json"
+    },
+    {
+      "id": "mitre-attack-enterprise",
+      "framework": "MITRE ATT&CK",
+      "url": "https://raw.githubusercontent.com/mitre-attack/attack-stix-data/master/enterprise-attack/enterprise-attack.json"
+    },
+    {
+      "id": "owasp-top10-2021",
+      "framework": "OWASP",
+      "url": "https://owasp.org/Top10/2021/"
+    },
+    {
+      "id": "owasp-api-top10-2023",
+      "framework": "OWASP API Security",
+      "url": "https://owasp.org/API-Security/editions/2023/en/0x00-header/"
+    },
+    {
+      "id": "nist-sp800-53-r5",
+      "framework": "NIST",
+      "url": "https://csrc.nist.gov/CSRC/media/Projects/risk-management/800-53%20Downloads/800-53r5/NIST_SP-800-53_rev5-derived-OSCAL.xlsx"
+    },
+    {
+      "id": "owasp-cheatsheet-series",
+      "framework": "OWASP Cheat Sheet Series",
+      "url": "https://cheatsheetseries.owasp.org/"
+    }
+  ],
+  "source_only": [
+    {
+      "id": "hipaa-security-rule",
+      "framework": "HIPAA",
+      "url": "https://www.hhs.gov/hipaa/for-professionals/security/index.html",
+      "reason": "Automated download blocked from this environment."
+    },
+    {
+      "id": "pci-dss-standard",
+      "framework": "PCI DSS",
+      "url": "https://www.pcisecuritystandards.org/standards/pci-dss/",
+      "reason": "Keep as source reference until a curated derivative import policy is defined."
+    }
+  ]
+}

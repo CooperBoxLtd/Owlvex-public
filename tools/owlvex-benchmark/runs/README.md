@@ -7,6 +7,7 @@ Generated run outputs are local working artifacts and should not be committed by
 ## Layout
 
 - `deterministic/`: timestamped and latest summaries for the deterministic execution-risk gate
+- `ai-evals/`: timestamped and latest summaries for the AI-only evaluation lane
 - model-specific result files can also live here when imported or generated from model runs
 
 Tracked files in this directory should generally be documentation only, such as this README.
@@ -31,6 +32,22 @@ These artifacts are useful for:
 - spotting regressions between commits
 - building release confidence history
 - comparing per-suite summaries without rerunning the full tool
+
+## AI Eval Artifacts
+
+`npm run benchmark:ai-evals -- <report.md> [model-tag]` writes:
+
+- `tools/owlvex-benchmark/runs/ai-evals/latest.json`
+- `tools/owlvex-benchmark/runs/ai-evals/latest.results.json`
+- `tools/owlvex-benchmark/runs/ai-evals/<timestamp>.json`
+- `tools/owlvex-benchmark/runs/ai-evals/<timestamp>.results.json`
+
+Use:
+
+- `latest.json` for compact AI-eval summaries
+- `latest.results.json` for per-case checks and debugging
+
+These artifacts are directional quality signals for AI-only coverage, not deterministic release evidence.
 
 ## Model Run Suggestions
 

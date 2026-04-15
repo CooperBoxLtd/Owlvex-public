@@ -173,19 +173,49 @@ function summarizeFindings(findings: Finding[], fallbackSummary: string): string
 
 function normalizeStringList(value: unknown): string[] | undefined {
     if (Array.isArray(value)) {
-        return value
+        const normalized = value
             .map(item => String(item).trim())
             .filter(Boolean);
+        return normalized.length ? [...new Set(normalized)] : undefined;
     }
 
     if (typeof value === 'string') {
-        return value
+        const normalized = value
             .split(/[,\n]/)
             .map(item => item.trim())
             .filter(Boolean);
+        return normalized.length ? [...new Set(normalized)] : undefined;
     }
 
     return undefined;
+}
+
+function normalizeStride(value: unknown): string[] | undefined {
+    const entries = normalizeStringList(value);
+    if (!entries?.length) {
+        return undefined;
+    }
+
+    const strideMap = new Map<string, string>([
+        ['S', 'Spoofing'],
+        ['SPOOFING', 'Spoofing'],
+        ['T', 'Tampering'],
+        ['TAMPERING', 'Tampering'],
+        ['R', 'Repudiation'],
+        ['REPUDIATION', 'Repudiation'],
+        ['I', 'Information Disclosure'],
+        ['INFORMATION DISCLOSURE', 'Information Disclosure'],
+        ['D', 'Denial of Service'],
+        ['DENIAL OF SERVICE', 'Denial of Service'],
+        ['E', 'Elevation of Privilege'],
+        ['ELEVATION OF PRIVILEGE', 'Elevation of Privilege'],
+    ]);
+
+    const normalized = entries
+        .map(entry => strideMap.get(entry.trim().toUpperCase()))
+        .filter((entry): entry is string => Boolean(entry));
+
+    return normalized.length ? [...new Set(normalized)] : undefined;
 }
 
 function normalizeMappings(value: any): CanonicalMappings | undefined {
@@ -193,14 +223,37 @@ function normalizeMappings(value: any): CanonicalMappings | undefined {
         return undefined;
     }
 
-    return {
-        cwe: normalizeStringList(value.cwe) ?? [],
-        owasp: normalizeStringList(value.owasp) ?? [],
-        apiOwasp: normalizeStringList(value.api_owasp ?? value.apiOwasp) ?? [],
-        attack: normalizeStringList(value.attack) ?? [],
-        capec: normalizeStringList(value.capec) ?? [],
-        nist: normalizeStringList(value.nist) ?? [],
+    const normalizeMappingEntries = (input: unknown, pattern: RegExp): string[] => {
+        return (normalizeStringList(input) ?? [])
+            .map(entry => entry.trim())
+            .filter(entry => pattern.test(entry));
     };
+
+    const mappings: CanonicalMappings = {
+        cwe: normalizeMappingEntries(value.cwe, /^CWE-\d+$/i),
+        owasp: normalizeMappingEntries(value.owasp, /^A\d{2}(?::\d{4})?$/i),
+        apiOwasp: normalizeMappingEntries(value.api_owasp ?? value.apiOwasp, /^API\d{1,2}(?::\d{4})?$/i),
+        attack: normalizeMappingEntries(value.attack, /^T\d{4}(?:\.\d{3})?$/i),
+        capec: normalizeMappingEntries(value.capec, /^CAPEC-\d+$/i),
+        nist: normalizeMappingEntries(value.nist, /^[A-Z]{1,4}-\d+(?:\(\d+\))?$/i),
+    };
+
+    const hasAnyMappings = Object.values(mappings).some(entries => entries.length > 0);
+    return hasAnyMappings ? mappings : undefined;
+}
+
+function sanitizeAiFinding(finding: Finding): Finding {
+    if (finding.canonicalId === 'owlvex.issue.insecure_cors.001') {
+        return {
+            ...finding,
+            explanation: 'The CORS policy is broader than it should be for a sensitive API path. This can expose cross-origin access in unintended ways, and some header combinations may be invalid or inconsistently enforced by browsers.',
+            threat: 'An attacker may be able to abuse an overly broad CORS policy or rely on misconfiguration around trusted origins. Review the effective browser and API behavior before treating this as a confirmed data-exfiltration path.',
+            fix: finding.fix || 'Restrict CORS origins, methods, and credential use to explicit trusted callers only.',
+            plainLanguageFix: finding.plainLanguageFix || 'Do not allow every origin by default. Keep the CORS policy narrow and list only the trusted sites that should call this endpoint.',
+        };
+    }
+
+    return finding;
 }
 
 function buildDeterministicGroundingContext(findings: Finding[]): string {
@@ -667,12 +720,14 @@ export class ScanEngine {
                     confidence: f.confidence ?? 0.8,
                     provenance: 'ai' as const,
                     canonicalId: f.issue_id,
-                    stride: normalizeStringList(f.stride),
+                    stride: normalizeStride(f.stride),
                     mappings: normalizeMappings(f.mappings),
                     matchedSignals: normalizeStringList(f.matched_signals),
                     likelihood: normalizeLikelihood(f.likelihood),
                     likelihoodReasons: normalizeStringList(f.likelihood_reasons ?? f.likelihoodReasons ?? f.context_reasons),
-                })).map((finding: Finding) => this._resolveCanonicalFinding(finding)),
+                }))
+                    .map((finding: Finding) => this._resolveCanonicalFinding(finding))
+                    .map((finding: Finding) => sanitizeAiFinding(finding)),
                 positives: data.positives ?? [],
                 metrics: data.metrics ?? { critical: 0, high: 0, medium: 0, low: 0 },
             };

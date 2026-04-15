@@ -26,3 +26,20 @@ The contract for this lane is:
 - safe fixtures should bias toward no findings or low-severity advisory output
 - confidence must remain explicit
 - these cases must never be counted as deterministic benchmark coverage
+
+Run the lane against a generated Owlvex markdown report from `extension/`:
+
+```bash
+npm run benchmark:ai-evals -- ../tools/demo/owlvex-scan-report-YYYYMMDD-HHMMSS.md model-tag
+```
+
+Artifacts are written to:
+
+- `tools/owlvex-benchmark/runs/ai-evals/latest.json`
+- `tools/owlvex-benchmark/runs/ai-evals/latest.results.json`
+
+Summarize the latest AI eval run:
+
+```bash
+npm run benchmark:ai-status
+```

@@ -135,11 +135,18 @@ Owlvex itself remains the primary detection and reasoning engine:
 - AI findings are grounded in code context, Owlvex canonical issues, and the selected framework scope
 - selected frameworks act as a lens over findings, not as independent first-class scan engines
 
+The intended split is:
+
+- deterministic findings are Owlvex-proven and should remain stable when framework selection changes
+- AI findings may follow the selected frameworks more directly for prioritization, vocabulary, mappings, and explanation style
+- framework choice should influence the AI lane more strongly than the deterministic lane
+- confidence scoring and validation still gate AI output even when frameworks shape the reasoning
+
 In practical terms, framework selection currently means:
 
 - what external mappings should be shown
 - what threat-model or compliance vocabulary should be emphasized
-- what prompt context should shape AI-assisted reasoning
+- what prompt context should shape AI-assisted reasoning, especially for AI-only findings
 
 It does **not** mean that every selected framework becomes its own separate source of detection truth.
 

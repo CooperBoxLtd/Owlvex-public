@@ -90,6 +90,7 @@ Contains:
 - cheat sheet references
 - category/family assignments
 - mapping metadata
+- linked cheat-sheet references or curated remediation-support metadata where available
 
 ### 5.2 Framework Pack
 
@@ -99,6 +100,8 @@ Contains:
 - framework versions
 - framework descriptions
 - entitlement visibility rules
+- prompt-oriented framework guidance for AI-assisted reasoning where appropriate
+- provenance and upstream source references for curated framework blobs
 
 ### 5.3 Policy Pack
 

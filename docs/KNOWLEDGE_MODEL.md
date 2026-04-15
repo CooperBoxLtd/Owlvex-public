@@ -32,6 +32,13 @@ This means the decision boundary stays Owlvex-native:
 - frameworks help classify, explain, map, and report that finding
 - changing selected frameworks should change interpretation scope more readily than detection truth
 
+For the AI lane, framework scope can be used more directly as reasoning guidance:
+
+- selected frameworks may influence which uncovered issue classes are emphasized
+- selected frameworks may influence remediation style, vocabulary, and correlation detail
+- AI output should still resolve back into Owlvex canonical issues where possible
+- AI framework guidance must not be mistaken for deterministic proof
+
 ## Canonical Objects
 
 Owlvex should standardize on three core artifacts:
@@ -71,6 +78,12 @@ The first concrete Owlvex rule pack now exists in:
 
 - `docs/data/issues/owlvex-issue-mappings.v1.json`
   Cross-framework mappings for the canonical issue pack
+
+- `docs/data/frameworks/owlvex.framework-pack.2026.1.json`
+  Curated framework blob pack with prompt-oriented guidance, upstream provenance, and source blob references
+
+- `docs/data/cheatsheets/owlvex.owasp-cheatsheets.2026.1.json`
+  Curated OWASP Cheat Sheet Series pack linked to Owlvex issues and remediation entries
 
 This gives Owlvex a practical starting point for:
 

@@ -155,6 +155,10 @@ Supported deployment modes:
 
 Owlvex does not require hosting the model itself.
 
+The AI lane is the flexible reasoning layer for issue classes that deterministic coverage does not prove.
+Selected frameworks may shape AI prioritization, classification, remediation style, and report vocabulary more directly than they shape deterministic findings.
+This must not blur provenance: AI output remains confidence-scored and distinct from Owlvex-proven findings.
+
 ## 5. Data Flow Rules
 
 ### 5.1 Allowed Flow
@@ -194,6 +198,9 @@ The target model is backend-served grounded intelligence with local execution.
 - prompt templates
 - signed or versioned rule metadata/config packs
 - release and benchmark metadata
+
+For AI-assisted scanning, backend-served prompt data may encode selected framework scope more directly than deterministic runtime data does.
+That is acceptable as long as Owlvex still owns the product contract around provenance, validation, and presentation.
 
 ### 6.2 What the extension should execute locally
 
@@ -247,6 +254,12 @@ The product must distinguish clearly between:
 - Owlvex-native detection truth
 - external framework interpretation
 
+Required interpretation rule:
+
+- deterministic findings remain Owlvex-grounded even when frameworks are selected
+- AI findings may be more framework-guided, especially for uncovered issue classes
+- changing framework scope should change AI emphasis more readily than deterministic truth
+
 Required properties on surfaced findings:
 
 - provenance
@@ -278,6 +291,7 @@ Framework selection semantics should remain explicit:
 
 - Owlvex is the scan engine and canonical issue source of truth
 - selected frameworks shape prompt context, mappings, output labels, and interpretation
+- selected frameworks may shape AI-only reasoning more strongly than deterministic findings
 - framework selection should not be described as if OWASP, CWE, STRIDE, NIST, PCI DSS, and Clean Code are interchangeable scan engines
 - if future work introduces framework-specific gating, it must be an explicit product decision with user-visible semantics rather than an implicit side effect
 
