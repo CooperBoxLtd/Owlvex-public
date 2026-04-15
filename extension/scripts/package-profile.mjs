@@ -46,6 +46,8 @@ if (manifest.contributes.configuration.properties[`${profile.configSection}.apiU
 
 const commandIdMap = {
   "owlvex.scanFile": `${profile.commandPrefix}.scanFile`,
+  "owlvex.scanSelectedFiles": `${profile.commandPrefix}.scanSelectedFiles`,
+  "owlvex.scanOpenEditors": `${profile.commandPrefix}.scanOpenEditors`,
   "owlvex.scanWorkspace": `${profile.commandPrefix}.scanWorkspace`,
   "owlvex.scanWorkspaceReport": `${profile.commandPrefix}.scanWorkspaceReport`,
   "owlvex.selectFrameworks": `${profile.commandPrefix}.selectFrameworks`,
@@ -57,6 +59,8 @@ const commandIdMap = {
   "owlvex.compareScans": `${profile.commandPrefix}.compareScans`,
   "owlvex.reviewRiskCalibration": `${profile.commandPrefix}.reviewRiskCalibration`,
   "owlvex.discussFinding": `${profile.commandPrefix}.discussFinding`,
+  "owlvex.generateFixPreview": `${profile.commandPrefix}.generateFixPreview`,
+  "owlvex.applyFixPreview": `${profile.commandPrefix}.applyFixPreview`,
 };
 
 manifest.contributes.commands = manifest.contributes.commands.map((command) => ({
@@ -64,6 +68,14 @@ manifest.contributes.commands = manifest.contributes.commands.map((command) => (
   command: commandIdMap[command.command] ?? command.command,
   title: command.title.replace(/^Owlvex/, profile.displayName),
 }));
+if (manifest.contributes.menus) {
+  for (const [menuId, entries] of Object.entries(manifest.contributes.menus)) {
+    manifest.contributes.menus[menuId] = entries.map((entry) => ({
+      ...entry,
+      command: commandIdMap[entry.command] ?? entry.command,
+    }));
+  }
+}
 
 if (manifest.contributes.viewsContainers?.activitybar?.[0]) {
   manifest.contributes.viewsContainers.activitybar[0].id = profile.viewContainerId;
@@ -95,6 +107,8 @@ const generatedProfileSource = `export const PROFILE = ${JSON.stringify({
   comparisonPanelId: profile.comparisonPanelId,
   commands: {
     scanFile: `${profile.commandPrefix}.scanFile`,
+    scanSelectedFiles: `${profile.commandPrefix}.scanSelectedFiles`,
+    scanOpenEditors: `${profile.commandPrefix}.scanOpenEditors`,
     scanWorkspace: `${profile.commandPrefix}.scanWorkspace`,
     scanWorkspaceReport: `${profile.commandPrefix}.scanWorkspaceReport`,
     selectFrameworks: `${profile.commandPrefix}.selectFrameworks`,
@@ -106,6 +120,8 @@ const generatedProfileSource = `export const PROFILE = ${JSON.stringify({
     compareScans: `${profile.commandPrefix}.compareScans`,
     reviewRiskCalibration: `${profile.commandPrefix}.reviewRiskCalibration`,
     discussFinding: `${profile.commandPrefix}.discussFinding`,
+    generateFixPreview: `${profile.commandPrefix}.generateFixPreview`,
+    applyFixPreview: `${profile.commandPrefix}.applyFixPreview`,
     revealLine: `${profile.commandPrefix}.revealLine`,
     chatFocus: `${profile.chatViewId}.focus`
   }

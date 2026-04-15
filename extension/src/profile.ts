@@ -15,6 +15,8 @@ export const PROFILE = {
     "comparisonPanelId": "owlvexComparison",
     "commands": {
         "scanFile": "owlvex.scanFile",
+        "scanSelectedFiles": "owlvex.scanSelectedFiles",
+        "scanOpenEditors": "owlvex.scanOpenEditors",
         "scanWorkspace": "owlvex.scanWorkspace",
         "scanWorkspaceReport": "owlvex.scanWorkspaceReport",
         "selectFrameworks": "owlvex.selectFrameworks",
@@ -26,6 +28,8 @@ export const PROFILE = {
         "compareScans": "owlvex.compareScans",
         "reviewRiskCalibration": "owlvex.reviewRiskCalibration",
         "discussFinding": "owlvex.discussFinding",
+        "generateFixPreview": "owlvex.generateFixPreview",
+        "applyFixPreview": "owlvex.applyFixPreview",
         "revealLine": "owlvex.revealLine",
         "chatFocus": "owlvex.chat.focus"
     }

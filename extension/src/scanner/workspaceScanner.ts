@@ -61,6 +61,22 @@ export async function pickScanFile(): Promise<vscode.Uri | undefined> {
     return picked?.[0];
 }
 
+export async function pickScanFiles(): Promise<vscode.Uri[] | undefined> {
+    const picked = await vscode.window.showOpenDialog({
+        canSelectFiles: true,
+        canSelectFolders: false,
+        canSelectMany: true,
+        openLabel: 'Scan Selected Files',
+        title: 'Select files to scan with Owlvex',
+        defaultUri: vscode.window.activeTextEditor?.document.uri ?? vscode.workspace.workspaceFolders?.[0]?.uri,
+        filters: {
+            'Source Files': ['ts', 'tsx', 'js', 'jsx', 'py', 'java', 'cs', 'go', 'rs', 'php', 'rb', 'cpp', 'c', 'h'],
+        },
+    });
+
+    return picked?.length ? picked : undefined;
+}
+
 export async function collectScannableFiles(root: vscode.Uri, limit = 500): Promise<vscode.Uri[]> {
     const files: vscode.Uri[] = [];
 
@@ -118,12 +134,55 @@ export async function scanFolder(options: {
         return { status: 'empty', completed: 0, totalFindings: 0, errors: [], results: [] };
     }
 
+    return scanUris({
+        files,
+        scanEngine: options.scanEngine,
+        diagnostics: options.diagnostics,
+        confirmLabel: 'Scan Folder',
+        confirmMessage: `Owlvex: Scan ${files.length} file(s) in ${path.basename(options.root.fsPath)}?`,
+        progressTitle: `Owlvex: Scanning ${path.basename(options.root.fsPath)}`,
+        getShortName: (uri) => path.relative(options.root.fsPath, uri.fsPath) || path.basename(uri.fsPath),
+    });
+}
+
+export async function scanSelectedFiles(options: {
+    files: vscode.Uri[];
+    scanEngine: ScanEngine;
+    diagnostics: { applyFindings(doc: vscode.TextDocument, findings: any[]): void };
+}): Promise<FolderScanSummary> {
+    if (!options.files.length) {
+        vscode.window.showInformationMessage('No supported source files were selected');
+        return { status: 'empty', completed: 0, totalFindings: 0, errors: [], results: [] };
+    }
+
+    return scanUris({
+        files: options.files,
+        scanEngine: options.scanEngine,
+        diagnostics: options.diagnostics,
+        confirmLabel: 'Scan Selected Files',
+        confirmMessage: `Owlvex: Scan ${options.files.length} selected file(s)?`,
+        progressTitle: 'Owlvex: Scanning selected files',
+        getShortName: (uri) => vscode.workspace.asRelativePath(uri, false) || path.basename(uri.fsPath),
+    });
+}
+
+async function scanUris(options: {
+    files: vscode.Uri[];
+    scanEngine: ScanEngine;
+    diagnostics: { applyFindings(doc: vscode.TextDocument, findings: any[]): void };
+    confirmLabel: string;
+    confirmMessage: string;
+    progressTitle: string;
+    getShortName: (uri: vscode.Uri) => string;
+}): Promise<FolderScanSummary> {
+    const files = options.files;
+
     const confirm = await vscode.window.showInformationMessage(
-        `Owlvex: Scan ${files.length} file(s) in ${path.basename(options.root.fsPath)}?`,
+        options.confirmMessage,
         { modal: true },
-        'Scan Folder',
+        options.confirmLabel,
     );
-    if (confirm !== 'Scan Folder') {
+    if (confirm !== options.confirmLabel) {
         return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
     }
 
@@ -137,7 +196,7 @@ export async function scanFolder(options: {
     await vscode.window.withProgress(
         {
             location: vscode.ProgressLocation.Notification,
-            title: `Owlvex: Scanning ${path.basename(options.root.fsPath)}`,
+            title: options.progressTitle,
             cancellable: true,
         },
         async (progress, token) => {
@@ -156,7 +215,7 @@ export async function scanFolder(options: {
                 }
 
                 const attemptedIndex = completed + errors.length + 1;
-                const shortName = path.relative(options.root.fsPath, uri.fsPath) || path.basename(uri.fsPath);
+                const shortName = options.getShortName(uri);
                 progress.report({
                     message: `${shortName} (${attemptedIndex}/${files.length})`,
                     increment: (1 / files.length) * 100,

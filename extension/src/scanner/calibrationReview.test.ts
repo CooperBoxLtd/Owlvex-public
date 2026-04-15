@@ -50,7 +50,8 @@ describe('buildRiskCalibrationReport', () => {
 
         expect(report).toContain('# Owlvex Risk Calibration Review');
         expect(report).toContain('| `tools/demo/10-cookie-unsafe.js` | 7.8 | 1 | Insecure Cookie: httpOnly Flag Missing (MEDIUM/HIGH -> 7/10) | Identity & Auth Failures |');
-        expect(report).toContain('- Score breakdown: 10.0 baseline - medium x high (2.25)');
+        expect(report).toContain('- Score drivers: Started at 10.0, then applied penalties from medium x high (-2.25).');
+        expect(report).toContain('- Score meaning: 7.8/10 is the overall target score after penalties, while 7/10 is the highest single-finding risk.');
         expect(report).toContain('| Insecure Cookie: httpOnly Flag Missing | MEDIUM | HIGH | 7 | Cookie name suggests session or auth state |');
     });
 });

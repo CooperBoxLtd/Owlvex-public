@@ -3,6 +3,14 @@ import { PROFILE } from '../profile';
 import type { ScanResult } from '../scanner/scanEngine';
 import { getRulePackModeLabel } from '../packs/packRuntime';
 
+function getAiConfidenceLabel(finding: ScanResult['findings'][number] | undefined): string | undefined {
+    if (!finding || finding.provenance !== 'ai') {
+        return undefined;
+    }
+
+    return `${Math.round((finding.resolverConfidence ?? finding.confidence ?? 0) * 100)}%`;
+}
+
 export class StatusBar {
     private readonly item: vscode.StatusBarItem;
 
@@ -37,7 +45,7 @@ export class StatusBar {
             `Model: ${result.model}`,
             `Intelligence: ${packLabel}`,
             topRiskFinding
-                ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${String(topRiskFinding.likelihood ?? 'MEDIUM').toUpperCase()} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
+                ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${String(topRiskFinding.likelihood ?? 'MEDIUM').toUpperCase()} | ${topRiskFinding.riskScore ?? 'n/a'}/10${getAiConfidenceLabel(topRiskFinding) ? ` | AI ${getAiConfidenceLabel(topRiskFinding)}` : ''}`
                 : '',
         ].filter(Boolean).join(' | ');
 

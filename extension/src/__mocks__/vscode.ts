@@ -23,8 +23,10 @@ export const workspace = {
         update: jest.fn(),
     })),
     onDidSaveTextDocument: jest.fn(),
+    textDocuments: [],
     findFiles: jest.fn(),
     openTextDocument: jest.fn(),
+    applyEdit: jest.fn(),
     asRelativePath: jest.fn((uri: any) => String(uri)),
     workspaceFolders: [],
     fs: {
@@ -98,6 +100,14 @@ export class Uri {
         return { fsPath: joined, toString: () => joined, scheme: 'file' };
     }
     static parse(value: string) { return { fsPath: value, toString: () => value, scheme: value.includes(':') ? 'file' : '' }; }
+}
+
+export class WorkspaceEdit {
+    entries: Array<{ uri: any; range: Range; text: string }> = [];
+
+    replace(uri: any, range: Range, text: string) {
+        this.entries.push({ uri, range, text });
+    }
 }
 
 export class EventEmitter {

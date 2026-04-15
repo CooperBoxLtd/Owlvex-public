@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as vscode from 'vscode';
-import { collectScannableFiles, scanFolder } from './workspaceScanner';
+import { collectScannableFiles, pickScanFiles, scanFolder, scanSelectedFiles } from './workspaceScanner';
 
 jest.mock('fs/promises');
 
@@ -86,6 +86,21 @@ describe('workspaceScanner', () => {
         expect(summary.totalFindings).toBe(1);
     });
 
+    it('supports multi-select file picking', async () => {
+        const first = vscode.Uri.file('d:\\repo\\src\\a.js');
+        const second = vscode.Uri.file('d:\\repo\\src\\b.js');
+        (vscode.window.showOpenDialog as jest.Mock).mockResolvedValue([first, second]);
+
+        const picked = await pickScanFiles();
+
+        expect(vscode.window.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+            canSelectFiles: true,
+            canSelectMany: true,
+            openLabel: 'Scan Selected Files',
+        }));
+        expect(picked).toEqual([first, second]);
+    });
+
     it('returns empty status when no supported files are found', async () => {
         (fs.readdir as jest.Mock).mockResolvedValue([]);
 
@@ -121,6 +136,41 @@ describe('workspaceScanner', () => {
 
         expect(summary.status).toBe('cancelled');
         expect(summary.completed).toBe(0);
+    });
+
+    it('scans an explicit list of selected files', async () => {
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Selected Files');
+        const scanEngine = {
+            scanDocument: jest
+                .fn()
+                .mockResolvedValue({
+                    scanId: 'scan-1',
+                    score: 8,
+                    summary: 'ok',
+                    findings: [{ line: 1 }],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 1 },
+                    durationMs: 10,
+                    model: 'qwen2.5:7b',
+                    provider: 'ollama',
+                    warnings: [],
+                }),
+        };
+
+        const summary = await scanSelectedFiles({
+            files: [vscode.Uri.file('d:\\repo\\src\\one.js'), vscode.Uri.file('d:\\repo\\src\\two.js')],
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(summary.status).toBe('completed');
+        expect(summary.completed).toBe(2);
+        expect(summary.totalFindings).toBe(2);
+        expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+            'Owlvex: Scan 2 selected file(s)?',
+            { modal: true },
+            'Scan Selected Files',
+        );
     });
 
     it('waits before scanning the next file after a provider rate limit warning', async () => {

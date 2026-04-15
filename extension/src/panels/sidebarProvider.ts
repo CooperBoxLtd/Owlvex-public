@@ -8,6 +8,14 @@ function getFindingLikelihood(finding: Finding): string {
     return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
 }
 
+function getAiConfidenceLabel(finding: Finding): string | undefined {
+    if (finding.provenance !== 'ai') {
+        return undefined;
+    }
+
+    return `${Math.round((finding.resolverConfidence ?? finding.confidence ?? 0) * 100)}%`;
+}
+
 function riskRank(finding: Finding): number {
     const severityRank = finding.severity === 'CRITICAL'
         ? 4
@@ -17,31 +25,6 @@ function riskRank(finding: Finding): number {
         ? 2
         : 1;
     return (finding.riskScore ?? 0) * 10 + severityRank;
-}
-
-function buildScoreBreakdown(findings: Finding[]): string {
-    if (!findings.length) {
-        return '10.0 baseline | no finding penalties';
-    }
-
-    const penalties = findings.map(finding => {
-        const basePenalty = finding.severity === 'CRITICAL'
-            ? 4
-            : finding.severity === 'HIGH'
-            ? 2.5
-            : finding.severity === 'MEDIUM'
-            ? 1.5
-            : 0.5;
-        const multiplier = getFindingLikelihood(finding) === 'HIGH'
-            ? 1.5
-            : getFindingLikelihood(finding) === 'LOW'
-            ? 0.75
-            : 1;
-        const adjustedPenalty = Number((basePenalty * multiplier).toFixed(2));
-        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (${adjustedPenalty})`;
-    });
-
-    return `10.0 baseline - ${penalties.join(' - ')}`;
 }
 
 export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
@@ -80,7 +63,6 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                     `Score: ${this.lastResult.score.toFixed(1)}/10`,
                     [
                         `${this.lastResult.findings.length} finding(s) | ${this.lastResult.model} | ${getRulePackModeLabel(this.lastResult.packContext)}`,
-                        `Breakdown: ${buildScoreBreakdown(this.lastResult.findings)}`,
                         topRiskFinding
                             ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
                             : '',
@@ -171,6 +153,16 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
             iconId: 'comment-discussion',
         },
         {
+            label: 'Review fix',
+            tooltip: 'Ask Owlvex to open a review-only code diff for this finding.',
+            command: {
+                command: PROFILE.commands.generateFixPreview,
+                title: 'Review fix',
+                arguments: [finding],
+            },
+            iconId: 'diff',
+        },
+        {
             label: `Risk: ${finding.severity}/${getFindingLikelihood(finding)} -> ${finding.riskScore ?? 'n/a'}/10`,
             tooltip: `Impact ${finding.severity}, likelihood ${getFindingLikelihood(finding)}, contextual risk ${finding.riskScore ?? 'n/a'}/10`,
         },
@@ -179,6 +171,14 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
             tooltip: remediation.remediation,
         },
     ];
+
+    const aiConfidence = getAiConfidenceLabel(finding);
+    if (aiConfidence) {
+        details.push({
+            label: `AI confidence: ${aiConfidence}`,
+            tooltip: `AI-reported confidence for this finding: ${aiConfidence}`,
+        });
+    }
 
     if ((finding.likelihoodReasons ?? []).length) {
         details.push({
@@ -264,7 +264,7 @@ class FindingItem extends vscode.TreeItem {
             // Tooltip: include provenance context
             this.tooltip = isDeterministic
                 ? `[Deterministic] ${finding.explanation}`
-                : finding.explanation;
+                : `[AI ${getAiConfidenceLabel(finding) ?? 'n/a'}] ${finding.explanation}`;
             // Navigate to line on click
             this.command = {
                 command: PROFILE.commands.revealLine,

@@ -26,6 +26,14 @@
         "title": "Owlvex: Scan Current File"
       },
       {
+        "command": "owlvex.scanSelectedFiles",
+        "title": "Owlvex: Scan Selected Files"
+      },
+      {
+        "command": "owlvex.scanOpenEditors",
+        "title": "Owlvex: Scan Open Editors"
+      },
+      {
         "command": "owlvex.scanWorkspace",
         "title": "Owlvex: Scan Workspace"
       },
@@ -68,6 +76,14 @@
       {
         "command": "owlvex.discussFinding",
         "title": "Owlvex: Discuss Finding"
+      },
+      {
+        "command": "owlvex.generateFixPreview",
+        "title": "Owlvex: Review Fix"
+      },
+      {
+        "command": "owlvex.applyFixPreview",
+        "title": "Owlvex: Apply Fix Preview"
       }
     ],
     "configuration": {
@@ -198,6 +214,20 @@
           "id": "owlvex.chat",
           "name": "AI Chat",
           "type": "webview"
+        }
+      ]
+    },
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "owlvex.scanFile",
+          "when": "resourceScheme == file",
+          "group": "navigation@50"
+        },
+        {
+          "command": "owlvex.scanSelectedFiles",
+          "when": "resourceScheme == file",
+          "group": "navigation@51"
         }
       ]
     }

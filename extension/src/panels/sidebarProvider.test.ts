@@ -78,7 +78,6 @@ describe('SidebarProvider', () => {
 
         const roots = provider.getChildren();
         expect(roots[0].label).toBe('Score: 4.2/10');
-        expect(String(roots[0].tooltip)).toContain('Breakdown: 10.0 baseline - high x high (3.75)');
         expect(String(roots[0].tooltip)).toContain('Top risk: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
         expect(severityNode).toBeTruthy();
@@ -92,6 +91,7 @@ describe('SidebarProvider', () => {
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toEqual(expect.arrayContaining([
             'Discuss this finding',
+            'Review fix',
             'Risk: HIGH/HIGH -> 8/10',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
             'Fix: Resolve user paths against a fixed base directory.',
@@ -102,5 +102,46 @@ describe('SidebarProvider', () => {
         const discussNode = detailNodes.find(node => node.label === 'Discuss this finding');
         expect(discussNode?.command?.command).toBe('owlvex.discussFinding');
         expect(discussNode?.command?.arguments?.[0]).toMatchObject({ id: 'finding-1', title: 'Path traversal' });
+        const fixPreviewNode = detailNodes.find(node => node.label === 'Review fix');
+        expect(fixPreviewNode?.command?.command).toBe('owlvex.generateFixPreview');
+        expect(fixPreviewNode?.command?.arguments?.[0]).toMatchObject({ id: 'finding-1', title: 'Path traversal' });
+    });
+
+    it('shows AI confidence for AI findings', () => {
+        const provider = new SidebarProvider();
+        provider.refresh({
+            scanId: 'scan-2',
+            score: 6.4,
+            summary: 'AI issue found.',
+            findings: [{
+                id: 'finding-ai-1',
+                line: 9,
+                lineEnd: 9,
+                severity: 'MEDIUM',
+                framework: 'OWASP',
+                ruleCode: 'OWASP-A03',
+                title: 'SQL Injection',
+                explanation: 'Dynamic SQL is built from user input.',
+                threat: 'Data exposure.',
+                fix: 'Use parameterized queries.',
+                confidence: 0.91,
+                provenance: 'ai',
+                likelihood: 'HIGH',
+                riskScore: 7,
+            }],
+            positives: [],
+            metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+            durationMs: 20,
+            model: 'test-model',
+            provider: 'test-provider',
+            warnings: [],
+        } as any);
+
+        const severityNode = provider.getChildren().find(item => item.kind === 'severity');
+        const findingNode = provider.getChildren(severityNode)[0];
+        expect(String(findingNode.tooltip)).toContain('[AI 91%] Dynamic SQL is built from user input.');
+
+        const detailNodes = provider.getChildren(findingNode);
+        expect(detailNodes.map(node => node.label)).toContain('AI confidence: 91%');
     });
 });

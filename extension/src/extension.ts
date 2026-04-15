@@ -8,7 +8,7 @@ import { StatusBar } from './ui/statusBar';
 import { SidebarProvider } from './panels/sidebarProvider';
 import { ChatViewProvider } from './panels/chatViewProvider';
 import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
-import { pickScanFile, pickScanRoot, scanFolder } from './scanner/workspaceScanner';
+import { pickScanFile, pickScanFiles, pickScanRoot, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
@@ -36,6 +36,24 @@ interface ScanFileCommandResult {
 interface ScanWorkspaceCommandResult {
     status: 'completed' | 'cancelled' | 'empty';
     root?: vscode.Uri;
+    completed: number;
+    totalFindings: number;
+    errors: string[];
+    results: Array<{ uri: vscode.Uri; result: ScanResult }>;
+}
+
+interface ScanSelectedFilesCommandResult {
+    status: 'completed' | 'cancelled' | 'empty';
+    files?: vscode.Uri[];
+    completed: number;
+    totalFindings: number;
+    errors: string[];
+    results: Array<{ uri: vscode.Uri; result: ScanResult }>;
+}
+
+interface ScanOpenEditorsCommandResult {
+    status: 'completed' | 'cancelled' | 'empty';
+    files?: vscode.Uri[];
     completed: number;
     totalFindings: number;
     errors: string[];
@@ -90,6 +108,24 @@ function normalizeStoredScanRecord(item: { scanId: string; result: ScanResult; t
         targetLabel: item.targetLabel,
         scannedAt: item.scannedAt,
     };
+}
+
+function collectOpenEditorUris(): vscode.Uri[] {
+    const seen = new Map<string, vscode.Uri>();
+    for (const document of vscode.workspace.textDocuments) {
+        if (document.uri.scheme !== 'file') {
+            continue;
+        }
+
+        const ext = path.extname(document.uri.fsPath).toLowerCase();
+        if (!['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cs', '.go', '.rs', '.php', '.rb', '.cpp', '.c', '.h'].includes(ext)) {
+            continue;
+        }
+
+        seen.set(document.uri.fsPath, document.uri);
+    }
+
+    return [...seen.values()];
 }
 
 function getFrameworkConfigurationTarget(): vscode.ConfigurationTarget {
@@ -456,6 +492,23 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.generateFixPreview, async (finding?: any) => {
+            if (!finding) {
+                await chatView.show();
+                return;
+            }
+
+            await chatView.generateFixPreview(finding);
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.applyFixPreview, async () => {
+            await chatView.applyPendingFixPreview();
+        })
+    );
+
     licenceMgr.validate(apiUrl).then(() => {
         statusBar.showIdle();
         void refreshRulePackRuntime();
@@ -585,6 +638,146 @@ export function activate(context: vscode.ExtensionContext) {
             } catch (error: any) {
                 statusBar.showError(error.message);
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} scan failed: ${error.message}`);
+                throw error;
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.scanSelectedFiles, async (requestedUris?: vscode.Uri[] | vscode.Uri): Promise<ScanSelectedFilesCommandResult> => {
+            const normalizedRequested = Array.isArray(requestedUris)
+                ? requestedUris
+                : requestedUris
+                    ? [requestedUris]
+                    : undefined;
+            const fileUris = normalizedRequested?.length ? normalizedRequested : await pickScanFiles();
+            if (!fileUris?.length) {
+                return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
+
+            statusBar.showScanning();
+            diagnostics.clear();
+            sidebar.clear();
+
+            try {
+                const summary = await scanSelectedFiles({
+                    files: fileUris,
+                    scanEngine,
+                    diagnostics,
+                });
+                const enrichedResults = summary.results.map(item => ({
+                    uri: item.uri,
+                    result: applyRulePackContext(item.result),
+                }));
+                const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
+                for (const item of enrichedResults) {
+                    storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
+                }
+                await persistScans();
+
+                if (enrichedResults.length) {
+                    const topResult = enrichedResults
+                        .slice()
+                        .sort((left, right) => right.result.score - left.result.score)[0];
+                    sidebar.refresh(topResult.result);
+                    statusBar.showResult(topResult.result);
+                    chatView.setLastScanTarget(`Selected files: ${enrichedResults.length} file(s)`);
+                } else {
+                    statusBar.showIdle();
+                }
+
+                if (summary.status === 'completed' && enrichedResults.length) {
+                    await persistLastReportSnapshot({
+                        targetLabel: `${enrichedResults.length} selected file(s)`,
+                        outputRoot: vscode.Uri.file(path.dirname(enrichedResults[0].uri.fsPath)),
+                        errors: summary.errors,
+                        results: enrichedResults,
+                    });
+                    vscode.window.showInformationMessage(
+                        `${PROFILE.displayLabel}: Scanned ${enrichedResults.length} selected file(s) with ${totalFindings} finding(s)${summary.errors.length ? ` (${summary.errors.length} error(s))` : ''}`
+                    );
+                } else if (summary.status === 'empty') {
+                    vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No supported source files were selected.`);
+                }
+
+                return {
+                    status: summary.status,
+                    files: fileUris,
+                    completed: summary.completed,
+                    totalFindings,
+                    errors: summary.errors,
+                    results: enrichedResults,
+                };
+            } catch (error: any) {
+                statusBar.showError(error.message);
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel} selected-files scan failed: ${error.message}`);
+                throw error;
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.scanOpenEditors, async (): Promise<ScanOpenEditorsCommandResult> => {
+            const fileUris = collectOpenEditorUris();
+            if (!fileUris.length) {
+                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No supported open editors were available to scan.`);
+                return { status: 'empty', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
+
+            statusBar.showScanning();
+            diagnostics.clear();
+            sidebar.clear();
+
+            try {
+                const summary = await scanSelectedFiles({
+                    files: fileUris,
+                    scanEngine,
+                    diagnostics,
+                });
+                const enrichedResults = summary.results.map(item => ({
+                    uri: item.uri,
+                    result: applyRulePackContext(item.result),
+                }));
+                const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
+                for (const item of enrichedResults) {
+                    storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
+                }
+                await persistScans();
+
+                if (enrichedResults.length) {
+                    const topResult = enrichedResults
+                        .slice()
+                        .sort((left, right) => right.result.score - left.result.score)[0];
+                    sidebar.refresh(topResult.result);
+                    statusBar.showResult(topResult.result);
+                    chatView.setLastScanTarget(`Open editors: ${enrichedResults.length} file(s)`);
+                    await persistLastReportSnapshot({
+                        targetLabel: `${enrichedResults.length} open editor(s)`,
+                        outputRoot: vscode.Uri.file(path.dirname(enrichedResults[0].uri.fsPath)),
+                        errors: summary.errors,
+                        results: enrichedResults,
+                    });
+                } else {
+                    statusBar.showIdle();
+                }
+
+                if (summary.status === 'completed' && enrichedResults.length) {
+                    vscode.window.showInformationMessage(
+                        `${PROFILE.displayLabel}: Scanned ${enrichedResults.length} open editor(s) with ${totalFindings} finding(s)${summary.errors.length ? ` (${summary.errors.length} error(s))` : ''}`
+                    );
+                }
+
+                return {
+                    status: summary.status,
+                    files: fileUris,
+                    completed: summary.completed,
+                    totalFindings,
+                    errors: summary.errors,
+                    results: enrichedResults,
+                };
+            } catch (error: any) {
+                statusBar.showError(error.message);
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel} open-editors scan failed: ${error.message}`);
                 throw error;
             }
         })
@@ -868,6 +1061,8 @@ export function activate(context: vscode.ExtensionContext) {
                 }
                 options.push(
                     { label: 'Scan selected file and create report', description: 'Pick a file, scan it, then create a report' },
+                    { label: 'Scan selected files and create report', description: 'Pick multiple files, scan them, then create a report' },
+                    { label: 'Scan open editors and create report', description: 'Scan currently open editors, then create a report' },
                     { label: 'Scan selected folder and create report', description: 'Pick a folder, scan it, then create a report' },
                 );
 
@@ -910,6 +1105,108 @@ export function activate(context: vscode.ExtensionContext) {
                     };
                     await persistLastReportSnapshot(snapshot);
                     chatView.setLastScanTarget(`Report file: ${snapshot.targetLabel}`);
+                    return {
+                        status: 'completed',
+                        ...(await createAndOpenReport(snapshot)),
+                    };
+                }
+
+                if (picked.label === 'Scan selected files and create report') {
+                    const fileUris = await pickScanFiles();
+                    if (!fileUris?.length) return { status: 'cancelled' };
+
+                    statusBar.showScanning();
+                    diagnostics.clear();
+                    sidebar.clear();
+
+                    const summary = await scanSelectedFiles({
+                        files: fileUris,
+                        scanEngine,
+                        diagnostics,
+                    });
+                    summary.results = summary.results.map(item => ({
+                        ...item,
+                        result: applyRulePackContext(item.result),
+                    }));
+
+                    for (const item of summary.results) {
+                        storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
+                    }
+                    await persistScans();
+
+                    if (!summary.completed) {
+                        statusBar.showIdle();
+                        return {
+                            status: summary.status,
+                            summary: {
+                                completed: summary.completed,
+                                totalFindings: summary.totalFindings,
+                                errors: summary.errors,
+                                results: summary.results,
+                            },
+                        };
+                    }
+
+                    const snapshot: ReportSnapshot = {
+                        targetLabel: `${summary.completed} selected file(s)`,
+                        outputRoot: vscode.Uri.file(path.dirname(summary.results[0].uri.fsPath)),
+                        errors: summary.errors,
+                        results: summary.results,
+                    };
+                    await persistLastReportSnapshot(snapshot);
+                    chatView.setLastScanTarget(`Report selected files: ${summary.completed} file(s)`);
+                    return {
+                        status: 'completed',
+                        ...(await createAndOpenReport(snapshot)),
+                    };
+                }
+
+                if (picked.label === 'Scan open editors and create report') {
+                    const fileUris = collectOpenEditorUris();
+                    if (!fileUris.length) {
+                        return { status: 'empty' };
+                    }
+
+                    statusBar.showScanning();
+                    diagnostics.clear();
+                    sidebar.clear();
+
+                    const summary = await scanSelectedFiles({
+                        files: fileUris,
+                        scanEngine,
+                        diagnostics,
+                    });
+                    summary.results = summary.results.map(item => ({
+                        ...item,
+                        result: applyRulePackContext(item.result),
+                    }));
+
+                    for (const item of summary.results) {
+                        storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
+                    }
+                    await persistScans();
+
+                    if (!summary.completed) {
+                        statusBar.showIdle();
+                        return {
+                            status: summary.status,
+                            summary: {
+                                completed: summary.completed,
+                                totalFindings: summary.totalFindings,
+                                errors: summary.errors,
+                                results: summary.results,
+                            },
+                        };
+                    }
+
+                    const snapshot: ReportSnapshot = {
+                        targetLabel: `${summary.completed} open editor(s)`,
+                        outputRoot: vscode.Uri.file(path.dirname(summary.results[0].uri.fsPath)),
+                        errors: summary.errors,
+                        results: summary.results,
+                    };
+                    await persistLastReportSnapshot(snapshot);
+                    chatView.setLastScanTarget(`Report open editors: ${summary.completed} file(s)`);
                     return {
                         status: 'completed',
                         ...(await createAndOpenReport(snapshot)),

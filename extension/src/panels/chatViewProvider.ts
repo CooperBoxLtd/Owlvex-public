@@ -14,6 +14,18 @@ interface ChatMessage {
     role: ChatRole;
     content: string;
     kind?: MessageKind;
+    actions?: ChatMessageAction[];
+}
+
+type ChatMessageActionKind = 'openSource' | 'applyFixPreview' | 'discardFixPreview' | 'generateFixPreview' | 'restorePreviousChat' | 'dismissMessage' | 'explainScore';
+
+interface ChatMessageAction {
+    id: string;
+    label: string;
+    kind: ChatMessageActionKind;
+    path?: string;
+    line?: number;
+    finding?: Finding;
 }
 
 interface EditorContext {
@@ -24,15 +36,35 @@ interface EditorContext {
 interface UserPromptOptions {
     displayedPrompt?: string;
     injectedContext?: string;
+    suggestedFinding?: Finding;
+}
+
+interface FindingDiscussionContext {
+    promptContext: string;
+    sourceSummary: string;
+}
+
+interface FindingContextBundle {
+    promptContext: string;
+    sourceSummary: string;
+    sourceActions: ChatMessageAction[];
+}
+
+interface PendingFixPreview {
+    targetPath: string;
+    originalText: string;
+    patchedText: string;
+    title: string;
 }
 
 interface LocalActionResult {
     handled: boolean;
     response?: string;
     kind?: MessageKind;
+    actions?: ChatMessageAction[];
 }
 
-type ChatActionKind = 'scanFile' | 'scanFolder' | 'scanReport' | 'reviewRiskCalibration';
+type ChatActionKind = 'scanFile' | 'scanSelectedFiles' | 'scanOpenEditors' | 'scanFolder' | 'scanReport' | 'reviewRiskCalibration';
 
 interface ChatLocalIntent {
     action: ChatActionKind;
@@ -84,13 +116,33 @@ function getFindingLikelihood(finding: Finding): string {
     return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
 }
 
+function buildDefaultChatMessages(): ChatMessage[] {
+    return [{
+        role: 'system',
+        content: 'Owlvex Assistant is ready. Ask about the repo, a vulnerability, remediation ideas, or what to scan next.',
+        kind: 'advisory',
+    }];
+}
+
 function riskRank(finding: Finding): number {
     return (finding.riskScore ?? 0) * 10 + severityRank(finding.severity);
 }
 
+function looksLikeFixRequest(prompt: string): boolean {
+    return /\b(fix|patch|replace|rewrite|safe version|secure version|implement|apply|remediate|solution)\b/i.test(prompt);
+}
+
+function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions): boolean {
+    if (options.injectedContext || options.suggestedFinding) {
+        return true;
+    }
+
+    return /\b(scan|report|finding|findings|issue|issues|result|results|score|scores|risk|risks|vulnerab|warning|remediation|fix|patch|secure|safe)\b/i.test(prompt);
+}
+
 function buildScoreBreakdown(result: ScanResult): string {
     if (!result.findings.length) {
-        return '10.0 baseline | no finding penalties';
+        return 'No penalties were applied, so the file kept the full 10.0 baseline.';
     }
 
     const parts = result.findings.map(finding => {
@@ -106,10 +158,10 @@ function buildScoreBreakdown(result: ScanResult): string {
             : getFindingLikelihood(finding) === 'LOW'
             ? 0.75
             : 1;
-        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (${Number((basePenalty * multiplier).toFixed(2))})`;
+        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (-${Number((basePenalty * multiplier).toFixed(2))})`;
     });
 
-    return `10.0 baseline - ${parts.join(' - ')}`;
+    return `Started at 10.0, then applied penalties from ${parts.join(', ')}.`;
 }
 
 export function buildGroundedRemediationHighlights(findings: Finding[], maxFindings = 2): string[] {
@@ -133,7 +185,6 @@ function buildScanSummaryLines(result: ScanResult): string[] {
         .sort((left, right) => riskRank(right) - riskRank(left))[0];
     return [
         `Score: ${result.score.toFixed(1)}/10`,
-        `Score breakdown: ${buildScoreBreakdown(result)}`,
         `Findings: ${result.findings.length}`,
         topRiskFinding
             ? `Top risk: ${topRiskFinding.title} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
@@ -201,6 +252,54 @@ export function buildFindingPromptContext(finding: Finding, snippet?: string): s
         snippet ? `Local code snippet:\n${snippet}` : 'Local code snippet: unavailable',
         'Help the user understand the issue in plain language, explain why the fix works, and show a safe replacement approach grounded in this finding.',
     ].filter(Boolean).join('\n');
+}
+
+function extractNearbyContextSources(context?: string): string[] {
+    if (!context) {
+        return [];
+    }
+
+    return context
+        .split(/\r?\n/)
+        .filter(line => line.startsWith('Nearby context file: '))
+        .map(line => line.replace('Nearby context file: ', '').trim())
+        .filter(Boolean);
+}
+
+export function buildFindingContextSummary(options: {
+    finding: Finding;
+    hasActiveSnippet: boolean;
+    nearbyContext?: string;
+    hasLatestReportContext: boolean;
+}): string {
+    const sources: string[] = [];
+    if (options.hasActiveSnippet) {
+        sources.push('- Active file snippet around the finding');
+    }
+
+    const nearbyFiles = extractNearbyContextSources(options.nearbyContext);
+    for (const file of nearbyFiles) {
+        sources.push(`- Nearby file: ${file}`);
+    }
+
+    if (options.hasLatestReportContext) {
+        sources.push('- Latest report summary context');
+    }
+
+    return [
+        `Context sources used for "${options.finding.canonicalTitle || options.finding.title}":`,
+        ...(sources.length ? sources : ['- Finding metadata only']),
+    ].join('\n');
+}
+
+export function extractPatchedFileContent(raw: string, originalText: string): string {
+    const trimmed = raw.trim();
+    const fenced = trimmed.match(/^```[a-zA-Z0-9_-]*\r?\n([\s\S]*?)\r?\n```$/);
+    if (fenced?.[1]) {
+        return fenced[1];
+    }
+
+    return trimmed || originalText;
 }
 
 function extractLocalImports(source: string): ImportedSymbolContext[] {
@@ -391,18 +490,35 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private view?: vscode.WebviewView;
     private readonly messages: ChatMessage[];
+    private pendingFixPreview?: PendingFixPreview;
+    private readonly restorableMessages?: ChatMessage[];
+    private latestActionableFinding?: Finding;
 
     constructor(
         private readonly registry: ProviderRegistry,
         private readonly storage: vscode.Memento,
     ) {
-        this.messages = this.storage.get<ChatMessage[]>(CHAT_STATE_KEY, [
-            {
+        this.restorableMessages = this.getRestorableMessages();
+        this.messages = buildDefaultChatMessages();
+        if (this.restorableMessages?.length) {
+            this.messages.push({
                 role: 'system',
-                content: 'Owlvex Assistant is ready. Ask about the repo, a vulnerability, remediation ideas, or what to scan next.',
+                content: `Previous chat available (${Math.max(0, this.restorableMessages.length - 1)} saved messages). A fresh session is open by default.`,
                 kind: 'advisory',
-            },
-        ]);
+                actions: [
+                    {
+                        id: 'restore-previous-chat',
+                        label: 'Restore previous chat',
+                        kind: 'restorePreviousChat',
+                    },
+                    {
+                        id: 'dismiss-restore-chat',
+                        label: 'Keep this fresh chat',
+                        kind: 'dismissMessage',
+                    },
+                ],
+            });
+        }
     }
 
     resolveWebviewView(view: vscode.WebviewView): void | Thenable<void> {
@@ -420,7 +536,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
 
             if (message?.type === 'chat:clear') {
-                this.messages.splice(1);
+                this.resetToFreshChat();
                 void this.persistState();
                 this.refresh();
             }
@@ -436,6 +552,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (message?.type === 'chat:action') {
                 await this.handleQuickAction(String(message.action ?? ''));
             }
+
+            if (message?.type === 'chat:messageAction') {
+                await this.handleMessageAction(Number(message.messageIndex ?? -1), String(message.actionId ?? ''));
+            }
         });
     }
 
@@ -449,20 +569,164 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     async discussFinding(finding: Finding): Promise<void> {
-        const editor = vscode.window.activeTextEditor;
-        const snippet = this.buildActiveSnippetForFinding(finding);
-        const nearbyContext = editor ? await buildNearbyProjectContext(editor.document, finding) : undefined;
+        this.latestActionableFinding = finding;
+        const discussionContext = await this.buildFindingContextBundle(finding);
         await this.show();
+        this.messages.push({
+            role: 'system',
+            content: discussionContext.sourceSummary,
+            kind: 'advisory',
+            actions: discussionContext.sourceActions,
+        });
         await this.handleUserMessage(
             `Discuss this finding: ${finding.canonicalTitle || finding.title} at line ${finding.line}. Explain what is wrong and how to fix it.`,
             {
                 displayedPrompt: `Discuss this finding: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
-                injectedContext: [
-                    buildFindingPromptContext(finding, snippet),
-                    nearbyContext ?? 'Nearby project context: none',
-                ].join('\n\n'),
+                injectedContext: discussionContext.promptContext,
+                suggestedFinding: finding,
             },
         );
+    }
+
+    async generateFixPreview(finding: Finding): Promise<void> {
+        this.latestActionableFinding = finding;
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showWarningMessage('Open the relevant file before generating a fix preview.');
+            return;
+        }
+
+        const discussionContext = await this.buildFindingContextBundle(finding);
+        await this.show();
+        this.messages.push({
+            role: 'system',
+            content: discussionContext.sourceSummary,
+            kind: 'advisory',
+            actions: discussionContext.sourceActions,
+        });
+        this.messages.push({
+            role: 'user',
+            content: `Review fix: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
+        });
+        this.messages.push({
+            role: 'assistant',
+            content: 'Preparing review fix diff...',
+            kind: 'advisory',
+        });
+        this.refresh();
+
+        try {
+            const provider = this.registry.getActive();
+            const response = await provider.complete({
+                systemPrompt: [
+                    'You are Owlvex Assistant, generating a review-only code fix preview.',
+                    'Return only the full updated file contents.',
+                    'Do not include explanation before or after the code.',
+                    'Preserve unrelated behavior and formatting where practical.',
+                    'Make the smallest safe change that addresses the finding.',
+                ].join('\n'),
+                userMessage: [
+                    `Generate a fix preview for this finding in the current file.`,
+                    discussionContext.promptContext,
+                    `Current file contents:\n${editor.document.getText()}`,
+                ].join('\n\n'),
+                model: provider.selectedModel,
+                temperature: 0.1,
+            });
+
+            const patched = extractPatchedFileContent(response.content || '', editor.document.getText());
+            const previewDoc = await vscode.workspace.openTextDocument({
+                language: editor.document.languageId,
+                content: patched,
+            });
+            await vscode.commands.executeCommand(
+                'vscode.diff',
+                editor.document.uri,
+                previewDoc.uri,
+                `${PROFILE.displayLabel}: Fix Preview - ${finding.canonicalTitle || finding.title}`,
+            );
+
+            this.messages[this.messages.length - 1] = {
+                role: 'assistant',
+                content: `Review fix ready for ${vscode.workspace.asRelativePath(editor.document.uri, false)}. A side-by-side diff is open and the original file is unchanged until you apply it.`,
+                kind: 'advisory',
+                actions: [
+                    {
+                        id: 'apply-fix-preview',
+                        label: 'Apply fix',
+                        kind: 'applyFixPreview',
+                    },
+                    {
+                        id: 'discard-fix-preview',
+                        label: 'Discard review',
+                        kind: 'discardFixPreview',
+                    },
+                ],
+            };
+            this.pendingFixPreview = {
+                targetPath: editor.document.uri.fsPath,
+                originalText: editor.document.getText(),
+                patchedText: patched,
+                title: finding.canonicalTitle || finding.title,
+            };
+        } catch (error: any) {
+            this.messages[this.messages.length - 1] = {
+                role: 'assistant',
+                content: `Fix preview failed: ${error.message}`,
+                kind: 'advisory',
+            };
+            this.pendingFixPreview = undefined;
+        }
+
+        void this.persistState();
+        this.refresh();
+    }
+
+    async applyPendingFixPreview(): Promise<void> {
+        if (!this.pendingFixPreview) {
+            vscode.window.showWarningMessage('Generate a fix preview before applying one.');
+            return;
+        }
+
+        const targetUri = vscode.Uri.file(this.pendingFixPreview.targetPath);
+        const document = await vscode.workspace.openTextDocument(targetUri);
+        const currentText = document.getText();
+        if (currentText !== this.pendingFixPreview.originalText) {
+            this.messages.push({
+                role: 'assistant',
+                content: 'The file changed after the fix preview was generated. Regenerate the preview before applying it.',
+                kind: 'advisory',
+            });
+            this.pendingFixPreview = undefined;
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        const edit = new vscode.WorkspaceEdit();
+        edit.replace(targetUri, this.createFullDocumentRange(currentText), this.pendingFixPreview.patchedText);
+        const applied = await vscode.workspace.applyEdit(edit);
+        if (!applied) {
+            this.messages.push({
+                role: 'assistant',
+                content: 'Owlvex could not apply the fix preview. The file was left unchanged.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        const updatedDocument = await vscode.workspace.openTextDocument(targetUri);
+        await vscode.window.showTextDocument(updatedDocument, { preview: false });
+        this.messages.push({
+            role: 'assistant',
+            content: `Applied the fix preview to ${vscode.workspace.asRelativePath(targetUri, false)}.`,
+            kind: 'advisory',
+        });
+        this.pendingFixPreview = undefined;
+        void this.persistState();
+        this.refresh();
     }
 
     private async handleUserMessage(prompt: string, options: UserPromptOptions = {}): Promise<void> {
@@ -483,6 +747,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ?? (localAction.response?.includes('Report:') || localAction.response?.includes('Score:')
                             ? 'scan'
                             : 'advisory'),
+                    actions: localAction.actions,
                 };
                 void this.persistState();
                 this.refresh();
@@ -496,7 +761,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 : 'No workspace folder is currently open.';
             const editorContext = this.buildEditorContext();
             const scanContext = this.buildScanContext();
-            const latestReportContext = buildLatestReportPromptContext(this.storage);
+            const latestReportContext = shouldUseLatestScanContext(trimmed, options)
+                ? buildLatestReportPromptContext(this.storage)
+                : undefined;
 
             const response = await provider.complete({
                 systemPrompt: [
@@ -526,6 +793,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'assistant',
                 content: response.content || 'No response returned.',
                 kind: 'advisory',
+                actions: this.buildFixFollowUpActions(trimmed, options.suggestedFinding),
             };
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
@@ -578,6 +846,68 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             };
         }
 
+        if (intent.action === 'scanSelectedFiles') {
+            const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanSelectedFiles);
+            if (result?.status === 'cancelled') {
+                return { handled: true, response: 'Selected-files scan was cancelled.', kind: 'scan' };
+            }
+            if (result?.status === 'empty') {
+                return { handled: true, response: 'No supported source files were selected.', kind: 'scan' };
+            }
+            if (!result?.completed) {
+                return { handled: true, response: 'Selected-files scan did not complete.', kind: 'scan' };
+            }
+            return {
+                handled: true,
+                response: [
+                    `Selected-files scan completed for ${result.completed} file(s).`,
+                    `Total findings: ${result.totalFindings}`,
+                    ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
+                        .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                    result.errors.length
+                        ? `Scan errors: ${result.errors.length}`
+                        : 'No scan errors were reported.',
+                ].join('\n'),
+                kind: 'scan',
+                actions: [{
+                    id: 'explain-score-scan-folder-intent',
+                    label: 'Explain score',
+                    kind: 'explainScore',
+                }],
+            };
+        }
+
+        if (intent.action === 'scanOpenEditors') {
+            const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanOpenEditors);
+            if (result?.status === 'cancelled') {
+                return { handled: true, response: 'Open-editors scan was cancelled.', kind: 'scan' };
+            }
+            if (result?.status === 'empty') {
+                return { handled: true, response: 'No supported open editors were available to scan.', kind: 'scan' };
+            }
+            if (!result?.completed) {
+                return { handled: true, response: 'Open-editors scan did not complete.', kind: 'scan' };
+            }
+            return {
+                handled: true,
+                response: [
+                    `Open-editors scan completed for ${result.completed} file(s).`,
+                    `Total findings: ${result.totalFindings}`,
+                    ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
+                        .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                    result.errors.length
+                        ? `Scan errors: ${result.errors.length}`
+                        : 'No scan errors were reported.',
+                ].join('\n'),
+                kind: 'scan',
+                actions: [{
+                    id: 'explain-score-scan-selected-intent',
+                    label: 'Explain score',
+                    kind: 'explainScore',
+                }],
+            };
+        }
+
         if (intent.action === 'reviewRiskCalibration') {
             const result = await vscode.commands.executeCommand<any>(PROFILE.commands.reviewRiskCalibration);
             return {
@@ -620,6 +950,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     : 'No scan errors were reported.',
             ].join('\n'),
             kind: 'scan',
+            actions: [{
+                id: 'explain-score-report-intent',
+                label: 'Explain score',
+                kind: 'explainScore',
+            }],
         };
     }
 
@@ -657,6 +992,73 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.refresh();
     }
 
+    private async handleMessageAction(messageIndex: number, actionId: string): Promise<void> {
+        const message = this.messages[messageIndex];
+        const action = message?.actions?.find(item => item.id === actionId);
+        if (!action) {
+            return;
+        }
+
+        if (action.kind === 'openSource' && action.path) {
+            const document = await vscode.workspace.openTextDocument(vscode.Uri.file(action.path));
+            const editor = await vscode.window.showTextDocument(document, { preview: false });
+            if (typeof action.line === 'number' && action.line > 0) {
+                const position = new vscode.Position(action.line - 1, 0);
+                editor.revealRange(new vscode.Range(position, position), vscode.TextEditorRevealType.InCenter);
+            }
+            return;
+        }
+
+        if (action.kind === 'applyFixPreview') {
+            await this.applyPendingFixPreview();
+            return;
+        }
+
+        if (action.kind === 'discardFixPreview') {
+            this.pendingFixPreview = undefined;
+            this.messages.push({
+                role: 'assistant',
+                content: 'Discarded the current fix review. The original file was left unchanged.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action.kind === 'generateFixPreview' && action.finding) {
+            await this.generateFixPreview(action.finding);
+            return;
+        }
+
+        if (action.kind === 'explainScore') {
+            await vscode.commands.executeCommand(PROFILE.commands.reviewRiskCalibration);
+            this.messages.push({
+                role: 'assistant',
+                content: 'Opened the score review so you can inspect how overall score and top-risk findings relate.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action.kind === 'restorePreviousChat') {
+            if (this.restorableMessages?.length) {
+                this.messages.splice(0, this.messages.length, ...this.restorableMessages);
+                void this.persistState();
+                this.refresh();
+            }
+            return;
+        }
+
+        if (action.kind === 'dismissMessage' && messageIndex >= 0) {
+            this.messages.splice(messageIndex, 1);
+            void this.persistState();
+            this.refresh();
+        }
+    }
+
     private buildActiveSnippetForFinding(finding: Finding): string | undefined {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -670,6 +1072,78 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             .slice(start, end)
             .map((text, index) => `${String(start + index + 1).padStart(4, ' ')} | ${text}`)
             .join('\n');
+    }
+
+    private createFullDocumentRange(text: string): vscode.Range {
+        const lines = text.split(/\r?\n/);
+        const endLine = Math.max(0, lines.length - 1);
+        const endCharacter = lines[endLine]?.length ?? 0;
+        return new vscode.Range(new vscode.Position(0, 0), new vscode.Position(endLine, endCharacter));
+    }
+
+    private async resolveWorkspaceRelativePath(relativePath: string): Promise<string | undefined> {
+        if (path.isAbsolute(relativePath)) {
+            const absoluteUri = vscode.Uri.file(relativePath);
+            if ((await tryReadWorkspaceFile(absoluteUri)) !== undefined) {
+                return absoluteUri.fsPath;
+            }
+        }
+
+        for (const folder of vscode.workspace.workspaceFolders ?? []) {
+            const candidate = vscode.Uri.joinPath(folder.uri, relativePath);
+            if ((await tryReadWorkspaceFile(candidate)) !== undefined) {
+                return candidate.fsPath;
+            }
+        }
+
+        return undefined;
+    }
+
+    private async buildFindingContextBundle(finding: Finding): Promise<FindingContextBundle> {
+        const editor = vscode.window.activeTextEditor;
+        const snippet = this.buildActiveSnippetForFinding(finding);
+        const nearbyContext = editor ? await buildNearbyProjectContext(editor.document, finding) : undefined;
+        const latestReportContext = buildLatestReportPromptContext(this.storage);
+        const sourceActions: ChatMessageAction[] = [];
+
+        if (editor) {
+            sourceActions.push({
+                id: `open-active-${finding.id ?? finding.line}`,
+                label: 'Open active file',
+                kind: 'openSource',
+                path: editor.document.uri.fsPath,
+                line: finding.line,
+            });
+        }
+
+        for (const [index, relativePath] of extractNearbyContextSources(nearbyContext).entries()) {
+            const absolutePath = await this.resolveWorkspaceRelativePath(relativePath);
+            if (!absolutePath) {
+                continue;
+            }
+
+            sourceActions.push({
+                id: `open-nearby-${index}`,
+                label: `Open ${relativePath}`,
+                kind: 'openSource',
+                path: absolutePath,
+            });
+        }
+
+        return {
+            promptContext: [
+                buildFindingPromptContext(finding, snippet),
+                nearbyContext ?? 'Nearby project context: none',
+                latestReportContext?.promptContext ?? 'Latest report context: none',
+            ].join('\n\n'),
+            sourceSummary: buildFindingContextSummary({
+                finding,
+                hasActiveSnippet: Boolean(snippet),
+                nearbyContext,
+                hasLatestReportContext: Boolean(latestReportContext),
+            }),
+            sourceActions,
+        };
     }
 
     private async handleSetModel(model: string): Promise<void> {
@@ -743,7 +1217,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.messages.push({
             role: 'system',
             content: `Running ${action}...`,
-            kind: action === 'scanFile' || action === 'scanFolder' || action === 'scanReport'
+            kind: action === 'scanFile' || action === 'scanSelectedFiles' || action === 'scanOpenEditors' || action === 'scanFolder' || action === 'scanReport'
                 ? 'scan'
                 : 'advisory',
         });
@@ -758,6 +1232,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     this.refresh();
                     return;
                 }
+                this.latestActionableFinding = result?.result?.findings
+                    ?.slice()
+                    ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     kind: 'scan',
@@ -767,6 +1244,83 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             ...buildScanSummaryLines(result.result),
                         ].join('\n')
                         : 'File scan did not complete.',
+                    actions: result?.status === 'completed' ? [{
+                        id: 'explain-score-file',
+                        label: 'Explain score',
+                        kind: 'explainScore',
+                    }] : undefined,
+                };
+            } else if (action === 'scanSelectedFiles') {
+                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanSelectedFiles);
+                if (result?.status === 'cancelled') {
+                    this.messages.pop();
+                    void this.persistState();
+                    this.refresh();
+                    return;
+                }
+                this.latestActionableFinding = result?.results
+                    ?.flatMap((item: any) => item.result.findings)
+                    ?.slice()
+                    ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.messages[this.messages.length - 1] = {
+                    role: 'assistant',
+                    kind: 'scan',
+                    content: result?.status === 'completed'
+                        ? [
+                            `Selected-files scan completed.`,
+                            `Files scanned: ${result.completed}`,
+                            `Total findings: ${result.totalFindings}`,
+                            summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
+                            ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
+                                .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                            result.errors.length
+                                ? `Scan errors: ${result.errors.length}`
+                                : 'No scan errors were reported.',
+                        ].join('\n')
+                        : result?.status === 'empty'
+                            ? 'No supported source files were selected.'
+                            : 'Selected-files scan was cancelled.',
+                    actions: result?.status === 'completed' ? [{
+                        id: 'explain-score-selected',
+                        label: 'Explain score',
+                        kind: 'explainScore',
+                    }] : undefined,
+                };
+            } else if (action === 'scanOpenEditors') {
+                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanOpenEditors);
+                if (result?.status === 'cancelled') {
+                    this.messages.pop();
+                    void this.persistState();
+                    this.refresh();
+                    return;
+                }
+                this.latestActionableFinding = result?.results
+                    ?.flatMap((item: any) => item.result.findings)
+                    ?.slice()
+                    ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.messages[this.messages.length - 1] = {
+                    role: 'assistant',
+                    kind: 'scan',
+                    content: result?.status === 'completed'
+                        ? [
+                            `Open-editors scan completed.`,
+                            `Files scanned: ${result.completed}`,
+                            `Total findings: ${result.totalFindings}`,
+                            summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
+                            ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
+                                .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                            result.errors.length
+                                ? `Scan errors: ${result.errors.length}`
+                                : 'No scan errors were reported.',
+                        ].join('\n')
+                        : result?.status === 'empty'
+                            ? 'No supported open editors were available to scan.'
+                            : 'Open-editors scan was cancelled.',
+                    actions: result?.status === 'completed' ? [{
+                        id: 'explain-score-open-editors',
+                        label: 'Explain score',
+                        kind: 'explainScore',
+                    }] : undefined,
                 };
             } else if (action === 'scanFolder') {
                 const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspace);
@@ -776,6 +1330,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     this.refresh();
                     return;
                 }
+                this.latestActionableFinding = result?.results
+                    ?.flatMap((item: any) => item.result.findings)
+                    ?.slice()
+                    ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     kind: 'scan',
@@ -797,6 +1355,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         : result?.status === 'empty'
                             ? 'No supported source files were found in the selected folder.'
                             : 'Folder scan was cancelled.',
+                    actions: result?.status === 'completed' ? [{
+                        id: 'explain-score-folder',
+                        label: 'Explain score',
+                        kind: 'explainScore',
+                    }] : undefined,
                 };
             } else if (action === 'scanReport') {
                 const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspaceReport);
@@ -806,6 +1369,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     this.refresh();
                     return;
                 }
+                this.latestActionableFinding = result?.summary?.results
+                    ?.flatMap((item: any) => item.result.findings)
+                    ?.slice()
+                    ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     kind: 'scan',
@@ -825,6 +1392,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         : result?.status === 'empty'
                             ? 'Report creation could not continue because no supported files were found.'
                             : 'Report creation was cancelled.',
+                    actions: result?.status === 'completed' ? [{
+                        id: 'explain-score-report',
+                        label: 'Explain score',
+                        kind: 'explainScore',
+                    }] : undefined,
                 };
             } else {
                 this.messages[this.messages.length - 1] = {
@@ -836,7 +1408,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
-                kind: action === 'scanFile' || action === 'scanFolder' || action === 'scanReport' ? 'scan' : 'advisory',
+                kind: action === 'scanFile' || action === 'scanSelectedFiles' || action === 'scanOpenEditors' || action === 'scanFolder' || action === 'scanReport' ? 'scan' : 'advisory',
                 content: `Action failed: ${error.message}`,
             };
         }
@@ -848,6 +1420,54 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private async persistState(): Promise<void> {
         const persisted = this.messages.slice(-MAX_PERSISTED_MESSAGES);
         await this.storage.update(CHAT_STATE_KEY, persisted);
+    }
+
+    private getRestorableMessages(): ChatMessage[] | undefined {
+        const archived = this.storage.get<ChatMessage[]>(CHAT_STATE_KEY, []);
+        if (!Array.isArray(archived) || archived.length <= 1) {
+            return undefined;
+        }
+
+        return archived;
+    }
+
+    private resetToFreshChat(): void {
+        this.messages.splice(0, this.messages.length, ...buildDefaultChatMessages());
+        this.pendingFixPreview = undefined;
+        this.latestActionableFinding = undefined;
+    }
+
+    private getLatestReportFinding(): Finding | undefined {
+        const raw = this.storage.get<any>(LAST_REPORT_SNAPSHOT_KEY);
+        if (!raw?.results?.length) {
+            return undefined;
+        }
+
+        const findings = (Array.isArray(raw.results) ? raw.results : [])
+            .flatMap((item: any) => item?.result?.findings ?? [])
+            .filter((item: any) => item && typeof item.line === 'number');
+
+        return findings
+            .slice()
+            .sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+    }
+
+    private buildFixFollowUpActions(prompt: string, suggestedFinding?: Finding): ChatMessageAction[] | undefined {
+        if (!looksLikeFixRequest(prompt)) {
+            return undefined;
+        }
+
+        const finding = suggestedFinding ?? this.latestActionableFinding ?? this.getLatestReportFinding();
+        if (!finding || !vscode.window.activeTextEditor) {
+            return undefined;
+        }
+
+        return [{
+            id: `generate-fix-preview-${finding.id ?? finding.line}`,
+            label: 'Review fix',
+            kind: 'generateFixPreview',
+            finding,
+        }];
     }
 
     private async handleScanFileIntent(intent: ChatLocalIntent): Promise<LocalActionResult> {
@@ -873,6 +1493,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const relativePath = result.uri
             ? vscode.workspace.asRelativePath(result.uri, false)
             : (intent.fileHint ?? 'the selected file');
+        this.latestActionableFinding = result.result.findings
+            .slice()
+            .sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
         return {
             handled: true,
             response: [
@@ -880,6 +1503,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 ...buildScanSummaryLines(result.result),
             ].join('\n'),
             kind: 'scan',
+            actions: [{
+                id: 'explain-score-scan-file-intent',
+                label: 'Explain score',
+                kind: 'explainScore',
+            }],
         };
     }
 
@@ -1249,6 +1877,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       background: color-mix(in srgb, var(--vscode-testing-iconPassed) 22%, transparent);
       color: var(--vscode-testing-iconPassed);
     }
+    .msg-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .msg-action {
+      border: 1px solid var(--vscode-button-border, var(--vscode-widget-border));
+      background: transparent;
+      color: var(--vscode-textLink-foreground);
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 11px;
+    }
     .msg.user {
       align-self: flex-end;
       max-width: 88%;
@@ -1320,6 +1962,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       <div class="meta compact" id="lastScan">Last scan target: none</div>
       <div class="primary-actions">
         <button class="chip" data-action="scanFile">Scan Current File</button>
+        <button class="chip" data-action="scanSelectedFiles">Scan Selected Files</button>
+        <button class="chip" data-action="scanOpenEditors">Scan Open Editors</button>
         <button class="chip" data-action="scanFolder">Scan Folder</button>
         <button class="chip" data-action="scanReport">Create Report</button>
       </div>
@@ -1355,7 +1999,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     <div class="composer">
       <textarea id="prompt" placeholder="Ask Owlvex about this repo, a vulnerability, or what to scan next."></textarea>
       <div class="actions">
-        <button class="secondary" id="clear">Clear</button>
+        <button class="secondary" id="clear">New Chat</button>
         <button class="primary" id="send">Send</button>
       </div>
     </div>
@@ -1418,7 +2062,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       modelEl.disabled = !state.providers.length;
 
       messagesEl.innerHTML = '';
-      for (const message of state.messages) {
+      for (const [index, message] of state.messages.entries()) {
         const div = document.createElement('div');
         div.className = 'msg ' + message.role;
         if (message.role !== 'user' && message.kind) {
@@ -1430,6 +2074,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const text = document.createElement('div');
         text.textContent = message.content;
         div.appendChild(text);
+        if (Array.isArray(message.actions) && message.actions.length) {
+          const actions = document.createElement('div');
+          actions.className = 'msg-actions';
+          for (const action of message.actions) {
+            const button = document.createElement('button');
+            button.className = 'msg-action';
+            button.textContent = action.label;
+            button.addEventListener('click', () => {
+              vscode.postMessage({ type: 'chat:messageAction', messageIndex: index, actionId: action.id });
+            });
+            actions.appendChild(button);
+          }
+          div.appendChild(actions);
+        }
         messagesEl.appendChild(div);
       }
       messagesEl.scrollTop = messagesEl.scrollHeight;
@@ -1468,7 +2126,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       });
     });
     promptEl.addEventListener('keydown', (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
         sendPrompt();
       }
     });
@@ -1497,6 +2156,14 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
 
     if (wantsScan && (wantsFolder || /\bscan folder\b/.test(normalized))) {
         return { action: 'scanFolder' };
+    }
+
+    if (wantsScan && /\b(selected files|selected file|multiple files|many files|few files)\b/.test(normalized)) {
+        return { action: 'scanSelectedFiles' };
+    }
+
+    if (wantsScan && /\b(open editors|open files|opened files|open tabs|current tabs)\b/.test(normalized)) {
+        return { action: 'scanOpenEditors' };
     }
 
     if (wantsScan && (wantsFile || Boolean(explicitFile))) {

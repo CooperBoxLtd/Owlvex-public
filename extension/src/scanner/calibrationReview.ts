@@ -37,7 +37,7 @@ function summarizeIssueFamilies(findings: Finding[]): string {
 
 function buildScoreBreakdown(findings: Finding[]): string {
     if (!findings.length) {
-        return '10.0 baseline | no finding penalties';
+        return 'No penalties were applied, so the file kept the full 10.0 baseline.';
     }
 
     const penalties = findings.map(finding => {
@@ -53,10 +53,19 @@ function buildScoreBreakdown(findings: Finding[]): string {
             : getFindingLikelihood(finding) === 'LOW'
             ? 0.75
             : 1;
-        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (${Number((basePenalty * multiplier).toFixed(2))})`;
+        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (-${Number((basePenalty * multiplier).toFixed(2))})`;
     });
 
-    return `10.0 baseline - ${penalties.join(' - ')}`;
+    return `Started at 10.0, then applied penalties from ${penalties.join(', ')}.`;
+}
+
+function buildScoreMeaning(result: ScanResult): string | undefined {
+    const topRisk = getTopRiskFinding(result.findings);
+    if (!topRisk) {
+        return undefined;
+    }
+
+    return `${result.score.toFixed(1)}/10 is the overall target score after penalties, while ${topRisk.riskScore ?? 'n/a'}/10 is the highest single-finding risk.`;
 }
 
 function formatTarget(record: StoredScanRecord): string {
@@ -136,7 +145,8 @@ export function buildRiskCalibrationReport(records: StoredScanRecord[]): string 
         lines.push(`- Scanned at: ${formatScannedAt(record)}`);
         lines.push(`- Provider/model: ${result.provider} / ${result.model}`);
         lines.push(`- Score: ${result.score.toFixed(1)}/10`);
-        lines.push(`- Score breakdown: ${buildScoreBreakdown(result.findings)}`);
+        lines.push(`- Score drivers: ${buildScoreBreakdown(result.findings)}`);
+        lines.push(`- Score meaning: ${buildScoreMeaning(result) ?? 'No findings, so the overall score stayed at the baseline.'}`);
         lines.push(`- Findings: ${result.findings.length}`);
         lines.push(`- Families: ${summarizeIssueFamilies(result.findings)}`);
         lines.push(topRisk

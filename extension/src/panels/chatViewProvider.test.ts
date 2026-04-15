@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
-import { buildFindingPromptContext, buildGroundedRemediationHighlights, buildNearbyProjectContext, parseChatIntent } from './chatViewProvider';
+import { ChatViewProvider, buildFindingContextSummary, buildFindingPromptContext, buildGroundedRemediationHighlights, buildNearbyProjectContext, extractPatchedFileContent, parseChatIntent } from './chatViewProvider';
 import { configureRulePackRuntime, resetRulePackRuntime } from '../frameworks/rulePackRegistry';
+import { PROFILE } from '../profile';
 
 describe('parseChatIntent', () => {
     beforeEach(() => {
@@ -40,6 +41,18 @@ describe('parseChatIntent', () => {
     it('routes folder scan requests to folder scanning', () => {
         expect(parseChatIntent('scan the workspace for issues')).toEqual({
             action: 'scanFolder',
+        });
+    });
+
+    it('routes selected-files scan requests to selected-files scanning', () => {
+        expect(parseChatIntent('scan selected files')).toEqual({
+            action: 'scanSelectedFiles',
+        });
+    });
+
+    it('routes open-editors scan requests to open-editors scanning', () => {
+        expect(parseChatIntent('scan open editors')).toEqual({
+            action: 'scanOpenEditors',
         });
     });
 
@@ -215,5 +228,430 @@ describe('parseChatIntent', () => {
         expect(context).toContain('Context prioritized around finding lines 4.');
         expect(context).toContain('validator.js');
         expect(context).not.toContain('unused.js');
+    });
+
+    it('builds a visible context source summary for finding discussions', () => {
+        const summary = buildFindingContextSummary({
+            finding: {
+                id: 'finding-1',
+                line: 4,
+                lineEnd: 4,
+                severity: 'HIGH',
+                framework: 'OWASP',
+                ruleCode: 'SQ-001',
+                title: 'SQL Injection',
+                explanation: 'User input reaches a query sink.',
+                threat: 'Data exposure.',
+                fix: 'Use parameterized queries.',
+                confidence: 0.9,
+                provenance: 'ai',
+            } as any,
+            hasActiveSnippet: true,
+            nearbyContext: [
+                'Nearby project context:',
+                'Nearby context file: src/db/queries.js',
+                'Imported via: ./db/queries',
+            ].join('\n'),
+            hasLatestReportContext: true,
+        });
+
+        expect(summary).toContain('Context sources used for "SQL Injection":');
+        expect(summary).toContain('- Active file snippet around the finding');
+        expect(summary).toContain('- Nearby file: src/db/queries.js');
+        expect(summary).toContain('- Latest report summary context');
+    });
+
+    it('starts a fresh chat by default and offers restoring the previous one', () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+            }),
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => key === `${PROFILE.storagePrefix}.chat.messages`
+                ? [
+                    { role: 'system', content: 'Owlvex Assistant is ready.', kind: 'advisory' },
+                    { role: 'user', content: 'Old question' },
+                    { role: 'assistant', content: 'Old answer', kind: 'advisory' },
+                ]
+                : defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        expect((provider as any).messages[0].content).toContain('Owlvex Assistant is ready.');
+        expect((provider as any).messages[1].content).toContain('Previous chat available');
+        expect((provider as any).messages[1].actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ kind: 'restorePreviousChat', label: 'Restore previous chat' }),
+            expect.objectContaining({ kind: 'dismissMessage', label: 'Keep this fresh chat' }),
+        ]));
+    });
+
+    it('extracts patched file content from fenced responses', () => {
+        const patched = extractPatchedFileContent([
+            '```js',
+            'const safe = true;',
+            '```',
+        ].join('\n'), 'const safe = false;');
+
+        expect(patched).toBe('const safe = true;');
+    });
+
+    it('opens a review-only diff preview for a generated fix', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: [
+                '```js',
+                'const query = "SELECT id FROM users WHERE name = ?";',
+                'db.query(query, [name]);',
+                '```',
+            ].join('\n'),
+        });
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        };
+        const storage = {
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                if (key === `${PROFILE.storagePrefix}.lastReportSnapshot`) {
+                    return {
+                        targetLabel: 'tools/demo',
+                        results: [{
+                            result: {
+                                findings: [{
+                                    canonicalTitle: 'SQL Injection',
+                                    line: 9,
+                                    severity: 'HIGH',
+                                    explanation: 'Dynamic SQL is built from user input.',
+                                    fix: 'Use parameterized queries.',
+                                }],
+                            },
+                        }],
+                    };
+                }
+
+                return defaultValue;
+            }),
+            update: jest.fn(),
+        };
+        const previewUri = { fsPath: 'untitled:fix-preview.js', scheme: 'untitled', toString: () => 'untitled:fix-preview.js' };
+        (vscode.workspace.workspaceFolders as any) = [{
+            uri: vscode.Uri.file('d:\\repo'),
+            name: 'repo',
+        }];
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            if (String(uri.fsPath).endsWith('src\\db.js')) {
+                return Buffer.from('export const db = { query() {} };');
+            }
+            throw new Error('not found');
+        });
+        (vscode.window.activeTextEditor as any) = {
+            document: {
+                uri: vscode.Uri.file('d:\\repo\\src\\userRepo.js'),
+                languageId: 'javascript',
+                getText: () => [
+                    "import { db } from './db';",
+                    'async function findUser(name) {',
+                    '  const query = `SELECT id FROM users WHERE name = \'${name}\'`;',
+                    '  return db.query(query);',
+                    '}',
+                ].join('\n'),
+            },
+            selection: {
+                isEmpty: true,
+            },
+        };
+        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({ uri: previewUri });
+
+        const provider = new ChatViewProvider(registry as any, storage as any);
+        await provider.generateFixPreview({
+            id: 'finding-1',
+            line: 3,
+            lineEnd: 4,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation: 'Dynamic SQL is built from user input.',
+            threat: 'Data exposure.',
+            fix: 'Use parameterized queries.',
+            confidence: 0.9,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+        } as any);
+
+        expect(complete).toHaveBeenCalledWith(expect.objectContaining({
+            model: 'owlvex-test-model',
+            systemPrompt: expect.stringContaining('Return only the full updated file contents.'),
+            userMessage: expect.stringContaining('Latest report findings: 1'),
+        }));
+        expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith({
+            language: 'javascript',
+            content: [
+                'const query = "SELECT id FROM users WHERE name = ?";',
+                'db.query(query, [name]);',
+            ].join('\n'),
+        });
+        expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(1, PROFILE.commands.chatFocus);
+        expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(
+            2,
+            'vscode.diff',
+            expect.anything(),
+            previewUri,
+            `${PROFILE.displayLabel}: Fix Preview - SQL Injection`,
+        );
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Review fix ready for');
+        expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: 'apply-fix-preview', label: 'Apply fix', kind: 'applyFixPreview' }),
+            expect.objectContaining({ id: 'discard-fix-preview', label: 'Discard review', kind: 'discardFixPreview' }),
+        ]));
+        expect((provider as any).messages[(provider as any).messages.length - 3].actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Open active file', kind: 'openSource', line: 3 }),
+            expect.objectContaining({ label: expect.stringContaining('db.js'), kind: 'openSource' }),
+        ]));
+    });
+
+    it('offers generate fix preview after a fix-oriented advisory request', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'Use a parameterized query.' });
+        (vscode.window.activeTextEditor as any) = {
+            document: {
+                uri: vscode.Uri.file('d:\\repo\\src\\userRepo.js'),
+                languageId: 'javascript',
+                getText: () => 'const sql = `SELECT * FROM users WHERE name = ${name}`;',
+            },
+            selection: { isEmpty: true },
+        };
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => key === `${PROFILE.storagePrefix}.lastReportSnapshot`
+                ? {
+                    targetLabel: 'tools/demo',
+                    results: [{
+                        result: {
+                            findings: [{
+                                id: 'finding-sql',
+                                line: 1,
+                                lineEnd: 1,
+                                severity: 'HIGH',
+                                framework: 'OWASP',
+                                ruleCode: 'SQL-001',
+                                title: 'SQL Injection',
+                                explanation: 'Dynamic SQL is built from user input.',
+                                threat: 'Data exposure.',
+                                fix: 'Use parameterized queries.',
+                                confidence: 0.9,
+                                provenance: 'ai',
+                                likelihood: 'HIGH',
+                                riskScore: 9,
+                            }],
+                        },
+                    }],
+                }
+                : defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('Please give me the safe fix for this');
+
+        expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual([
+            expect.objectContaining({ label: 'Review fix', kind: 'generateFixPreview' }),
+        ]);
+    });
+
+    it('does not inject the latest report into a fresh greeting', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'Good morning! I am ready to help.' });
+        (vscode.window.activeTextEditor as any) = {
+            document: {
+                uri: vscode.Uri.file('d:\\repo\\src\\app.js'),
+                languageId: 'javascript',
+                getText: () => 'console.log("hello");',
+            },
+            selection: { isEmpty: true },
+        };
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => key === `${PROFILE.storagePrefix}.lastReportSnapshot`
+                ? {
+                    targetLabel: 'tools/demo',
+                    results: [{
+                        result: {
+                            findings: [{
+                                id: 'finding-tenant',
+                                line: 5,
+                                severity: 'CRITICAL',
+                                title: 'Multi-Tenant Isolation Failure',
+                                explanation: 'Tenant scoping is missing.',
+                                fix: 'Scope queries by tenant.',
+                            }],
+                        },
+                    }],
+                }
+                : defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage("morning you're good ?");
+
+        const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Latest report: none');
+        expect(request.userMessage).toContain('Latest report context: none');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toBe('Good morning! I am ready to help.');
+    });
+
+    it('applies a generated fix preview only when the file is unchanged', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```js\nconst safe = true;\n```',
+        });
+        const originalText = 'const safe = false;';
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\target.js');
+        const previewUri = { fsPath: 'untitled:fix-preview.js', scheme: 'untitled', toString: () => 'untitled:fix-preview.js' };
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        };
+        const storage = {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        };
+        (vscode.window.activeTextEditor as any) = {
+            document: {
+                uri: targetUri,
+                languageId: 'javascript',
+                getText: () => originalText,
+            },
+            selection: {
+                isEmpty: true,
+            },
+        };
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
+            if (input?.language === 'javascript') {
+                return { uri: previewUri };
+            }
+            return {
+                uri: targetUri,
+                getText: () => originalText,
+            };
+        });
+        (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
+        (vscode.window.showTextDocument as jest.Mock).mockResolvedValue({ revealRange: jest.fn() });
+
+        const provider = new ChatViewProvider(registry as any, storage as any);
+        await provider.generateFixPreview({
+            id: 'finding-2',
+            line: 1,
+            lineEnd: 1,
+            severity: 'MEDIUM',
+            framework: 'OWASP',
+            ruleCode: 'GEN-001',
+            title: 'Unsafe toggle',
+            explanation: 'Unsafe value remains false.',
+            threat: 'Unexpected state.',
+            fix: 'Set the value safely.',
+            confidence: 0.9,
+            provenance: 'ai',
+            likelihood: 'MEDIUM',
+            riskScore: 5,
+        } as any);
+
+        await provider.applyPendingFixPreview();
+
+        expect(vscode.workspace.applyEdit).toHaveBeenCalledTimes(1);
+        const edit = (vscode.workspace.applyEdit as jest.Mock).mock.calls[0][0];
+        expect(edit.entries).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                uri: expect.objectContaining({ fsPath: 'd:\\repo\\src\\target.js' }),
+                text: 'const safe = true;',
+            }),
+        ]));
+        expect(vscode.window.showTextDocument).toHaveBeenCalledWith(expect.objectContaining({ uri: targetUri }), { preview: false });
+        expect((provider as any).pendingFixPreview).toBeUndefined();
+    });
+
+    it('opens a source action from a context summary message', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'Safe fix' });
+        const showTextDocument = jest.fn().mockResolvedValue({ revealRange: jest.fn() });
+        (vscode.window.showTextDocument as jest.Mock).mockImplementation(showTextDocument);
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        };
+        const storage = {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        };
+        const provider = new ChatViewProvider(registry as any, storage as any);
+        (provider as any).messages.push({
+            role: 'system',
+            content: 'Context sources used',
+            actions: [{
+                id: 'open-active',
+                label: 'Open active file',
+                kind: 'openSource',
+                path: 'd:\\repo\\src\\app.js',
+                line: 8,
+            }],
+        });
+        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({
+            uri: vscode.Uri.file('d:\\repo\\src\\app.js'),
+        });
+
+        await (provider as any).handleMessageAction((provider as any).messages.length - 1, 'open-active');
+
+        expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(expect.objectContaining({ fsPath: 'd:\\repo\\src\\app.js' }));
+        expect(showTextDocument).toHaveBeenCalled();
     });
 });
