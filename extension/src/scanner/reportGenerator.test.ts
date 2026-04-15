@@ -29,6 +29,7 @@ describe('reportGenerator', () => {
                     fix: 'Use parameterized queries.',
                     confidence: 0.93,
                     provenance: 'ai',
+                    confidenceTier: 'PLAUSIBLE',
                     canonicalId: 'owlvex.issue.sql_injection.001',
                     canonicalTitle: 'Unsanitized SQL query construction',
                     canonicalFamily: 'family.injection_execution',
@@ -95,14 +96,17 @@ describe('reportGenerator', () => {
         expect(written).toContain('# Owlvex Vulnerability Scan Report');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source coverage: Fresh Packs: 1');
+        expect(written).toContain('- Coverage posture: Full scan posture for current provider/runtime state');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- Score: 4.2/10');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
-        expect(written).toContain('| Unsanitized SQL query construction | impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
+        expect(written).toContain('- Coverage posture: Normal coverage for this file');
+        expect(written).toContain('| Unsanitized SQL query construction | tier plausible \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Risk: HIGH impact / MEDIUM likelihood / 7/10');
+        expect(written).toContain('- Confidence tier: PLAUSIBLE');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
         expect(written).toContain('- What to change: Separate query structure from untrusted data with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Safe pattern: Use parameterized queries.');
@@ -194,6 +198,7 @@ describe('reportGenerator', () => {
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Scan warnings: 1');
+        expect(written).toContain('- Coverage posture: Partial AI coverage in this scan');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Warnings');
         expect(written).not.toContain('No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.');

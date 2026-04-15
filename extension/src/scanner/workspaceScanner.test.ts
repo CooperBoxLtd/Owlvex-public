@@ -264,9 +264,9 @@ describe('workspaceScanner', () => {
         });
 
         expect(summary.status).toBe('completed');
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything());
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything());
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything());
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything(), undefined);
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything(), undefined);
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything(), undefined);
         expect(setTimeoutSpy).toHaveBeenCalled();
         expect(summary.results).toHaveLength(3);
         setTimeoutSpy.mockRestore();
@@ -339,5 +339,77 @@ describe('workspaceScanner', () => {
         expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 7000);
         expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
         setTimeoutSpy.mockRestore();
+    });
+
+    it('switches remaining files to deterministic-only mode after repeated 429 warnings', async () => {
+        (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
+            if (currentPath.endsWith('repo')) {
+                return [
+                    { name: 'first.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'second.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'third.js', isDirectory: () => false, isFile: () => true },
+                ];
+            }
+            return [];
+        });
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Folder');
+        jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+
+        const scanEngine = {
+            scanDocument: jest
+                .fn()
+                .mockResolvedValueOnce({
+                    scanId: 'scan-1',
+                    score: 8,
+                    summary: 'first',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: ['AI provider unavailable: Azure Foundry error: 429'],
+                })
+                .mockResolvedValueOnce({
+                    scanId: 'scan-2',
+                    score: 8,
+                    summary: 'second',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: ['AI provider unavailable: Azure Foundry error: 429'],
+                })
+                .mockResolvedValueOnce({
+                    scanId: 'scan-3',
+                    score: 10,
+                    summary: 'No findings detected.',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 0,
+                    model: 'owlvex-gpt54mini (deterministic-only)',
+                    provider: 'azure-foundry',
+                    warnings: ['AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.'],
+                }),
+        };
+
+        await scanFolder({
+            root: vscode.Uri.file('d:\\repo'),
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything(), undefined);
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything(), undefined);
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything(), {
+            forceDeterministicOnly: true,
+            deterministicOnlyReason: 'AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.',
+        });
     });
 });

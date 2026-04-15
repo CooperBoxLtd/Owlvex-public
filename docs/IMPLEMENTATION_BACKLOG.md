@@ -56,6 +56,17 @@ Every backlog item should preserve these invariants:
 4. Deterministic findings must remain benchmark-backed.
 5. Product-facing findings must preserve provenance.
 
+## Stabilization Execution Layer
+
+The current scanner-hardening phase is governed by [STABILIZATION_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/STABILIZATION_CONTRACT.md).
+
+Benchmark source-of-truth files for that phase:
+
+- [tools/demo/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo/EXPECTATIONS.md)
+- [tools/demo-app/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo-app/EXPECTATIONS.md)
+
+During stabilization, changes to AI normalization, report posture, confidence framing, and helper-context reasoning should be judged against those benchmark expectation files before broader issue-family expansion is considered.
+
 ## Workstream Map
 
 ```mermaid

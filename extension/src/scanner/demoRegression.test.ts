@@ -256,6 +256,22 @@ describe('Demo fixture regression coverage', () => {
                             likelihood: 'HIGH',
                             likelihood_reasons: ['The same sink is described twice.'],
                         },
+                        {
+                            id: 'db-log-misclass',
+                            line: 11,
+                            line_end: 15,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A09-LOG',
+                            title: 'Sensitive data exposed in logs',
+                            explanation: 'The document access functions do not implement logging or rate limiting.',
+                            threat: 'Attackers may abuse access without detection.',
+                            fix: 'Add logging and rate limiting.',
+                            confidence: 0.68,
+                            issue_id: 'owlvex.issue.sensitive_logging.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['The file lacks audit logging.'],
+                        },
                     ],
                     positives: [],
                     metrics: { critical: 1, high: 3, medium: 0, low: 0 },
@@ -285,6 +301,83 @@ describe('Demo fixture regression coverage', () => {
             'owlvex.issue.idor.001',
             'owlvex.issue.sql_injection.001',
         ]);
+    });
+
+    it('keeps only the real weak JWT validation issue in the demo-app token helper', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 0,
+                    summary: 'JWT issues detected.',
+                    findings: [
+                        {
+                            id: 'jwt-unsafe-decode',
+                            line: 9,
+                            line_end: 15,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A07-JWT',
+                            title: 'Weak JWT validation',
+                            explanation: 'The token payload is decoded without signature verification.',
+                            threat: 'Attackers can forge claims.',
+                            fix: 'Verify JWT signatures before trusting claims.',
+                            confidence: 1,
+                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The token is decoded directly from attacker-controlled input.'],
+                        },
+                        {
+                            id: 'jwt-manual-verify-overcall',
+                            line: 17,
+                            line_end: 35,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A07-JWT',
+                            title: 'Weak JWT validation',
+                            explanation: 'Manual HMAC verification is error-prone and may allow JWT bypass.',
+                            threat: 'Attackers may bypass token validation.',
+                            fix: 'Use a library for JWT verification.',
+                            confidence: 0.9,
+                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['Custom verification logic is used.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 2, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo-app\\src\\lib\\tokens.js',
+            'javascript',
+            readRepoFixture('demo-app', 'src', 'lib', 'tokens.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.weak_jwt_validation.001');
+        expect(result.findings[0].line).toBe(9);
     });
 
     it('keeps the allowlisted fetch-safe route clean under SSRF overclassification attempts', async () => {
@@ -337,6 +430,98 @@ describe('Demo fixture regression coverage', () => {
             'd:\\repo\\tools\\demo-app\\src\\routes\\integrations.js',
             'javascript',
             readRepoFixture('demo-app', 'src', 'routes', 'integrations.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('keeps the demo-app server shell clean from route-mount and localhost overclaims', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 3.3,
+                    summary: 'Multiple issues detected.',
+                    findings: [
+                        {
+                            id: 'server-http-overcall',
+                            line: 36,
+                            line_end: 38,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A02-TLS',
+                            title: 'Cleartext transmission of sensitive data over HTTP',
+                            explanation: 'The application listens on http://localhost:3030.',
+                            threat: 'Traffic could be intercepted.',
+                            fix: 'Use HTTPS.',
+                            confidence: 0.9,
+                            issue_id: 'owlvex.issue.http_over_https.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['HTTP is used in the startup log.'],
+                        },
+                        {
+                            id: 'server-csrf-overcall',
+                            line: 21,
+                            line_end: 27,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A05-CSRF',
+                            title: 'Missing CSRF protection on state-changing request',
+                            explanation: 'Mounted routes may expose state-changing endpoints without CSRF protection.',
+                            threat: 'Attackers could trick users into changing state.',
+                            fix: 'Add CSRF protection.',
+                            confidence: 0.8,
+                            issue_id: 'owlvex.issue.csrf_missing_token.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['State-changing routes are mounted here.'],
+                        },
+                        {
+                            id: 'server-log-overcall',
+                            line: 31,
+                            line_end: 34,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A09-LOG',
+                            title: 'Sensitive data exposed in logs',
+                            explanation: 'The displayName field is logged directly.',
+                            threat: 'Sensitive data may end up in logs.',
+                            fix: 'Avoid logging sensitive values.',
+                            confidence: 0.8,
+                            issue_id: 'owlvex.issue.sensitive_logging.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['User-controlled data appears in the file.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 2, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo-app\\src\\server.js',
+            'javascript',
+            readRepoFixture('demo-app', 'src', 'server.js'),
         );
 
         const result = await engine.scanDocument(doc);

@@ -28,6 +28,7 @@ const EXCLUDED_DIRS = new Set([
 
 const RATE_LIMIT_COOLDOWN_MS = 5000;
 const MAX_RATE_LIMIT_COOLDOWN_MS = 60000;
+const AI_BUDGET_FALLBACK_THRESHOLD = 2;
 
 function extractRetryAfterMsFromWarnings(warnings: string[] = []): number | undefined {
     for (const warning of warnings) {
@@ -210,6 +211,7 @@ async function scanUris(options: {
     let cancelled = false;
     let cooldownUntil = 0;
     let consecutiveRateLimitHits = 0;
+    let deterministicOnlyMode = false;
 
     await vscode.window.withProgress(
         {
@@ -241,7 +243,12 @@ async function scanUris(options: {
 
                 try {
                     const doc = await vscode.workspace.openTextDocument(uri);
-                    const result = await options.scanEngine.scanDocument(doc);
+                    const result = await options.scanEngine.scanDocument(doc, deterministicOnlyMode
+                        ? {
+                            forceDeterministicOnly: true,
+                            deterministicOnlyReason: 'AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.',
+                        }
+                        : undefined);
                     if ((result.warnings ?? []).some(warning => /\b429\b|rate limit/i.test(warning))) {
                         consecutiveRateLimitHits += 1;
                         const providerRetryAfterMs = extractRetryAfterMsFromWarnings(result.warnings);
@@ -250,6 +257,9 @@ async function scanUris(options: {
                             RATE_LIMIT_COOLDOWN_MS * (2 ** Math.max(0, consecutiveRateLimitHits - 1)),
                         );
                         cooldownUntil = Date.now() + Math.max(adaptiveCooldownMs, providerRetryAfterMs ?? 0);
+                        if (consecutiveRateLimitHits >= AI_BUDGET_FALLBACK_THRESHOLD) {
+                            deterministicOnlyMode = true;
+                        }
                     } else {
                         consecutiveRateLimitHits = 0;
                         cooldownUntil = 0;

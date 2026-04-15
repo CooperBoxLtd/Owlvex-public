@@ -25,6 +25,7 @@ export interface Finding {
     confidence: number;
     /** How this finding was produced. Deterministic findings have confidence = 1. */
     provenance?: 'deterministic' | 'ai';
+    confidenceTier?: 'PROVEN' | 'PLAUSIBLE';
     canonicalId?: string;
     canonicalTitle?: string;
     canonicalCategory?: string;
@@ -134,6 +135,7 @@ function enrichFindingRisk(finding: Finding): Finding {
     const likelihood = getFindingLikelihood(finding);
     return {
         ...finding,
+        confidenceTier: finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE',
         likelihood,
         riskScore: computeFindingRiskScore(finding.severity, likelihood),
     };
@@ -289,6 +291,26 @@ function hasAllowlistedOutboundFetch(snippet: string): boolean {
         && /\breturn\s+res\s*\.\s*status\s*\(\s*400\s*\)/i.test(snippet);
 }
 
+function hasLocalLogSink(snippet: string): boolean {
+    return /\b(?:console\.(?:log|info|warn|error|debug)|logger\.(?:info|warn|error|debug|trace|log)|log\.(?:info|warn|error|debug|trace))\s*\(/i.test(snippet);
+}
+
+function hasManualJwtVerification(snippet: string): boolean {
+    return /\bcreateHmac\s*\(/i.test(snippet)
+        && /\bsignature\s*!==\s*expected\b/i.test(snippet)
+        && /\bclaims\.(?:iss|aud)\b/i.test(snippet);
+}
+
+function isRouteMountShellSnippet(snippet: string): boolean {
+    return /\bapp\.use\s*\(\s*['"]\//i.test(snippet)
+        && !/\b(?:app|router)\.(?:post|put|patch|delete)\s*\(/i.test(snippet);
+}
+
+function isLocalhostStartupLog(snippet: string): boolean {
+    return /\bapp\.listen\s*\(\s*\d+/i.test(snippet)
+        && /localhost/i.test(snippet);
+}
+
 function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     const snippet = getLineWindow(code, finding.line, 6);
     const localSnippet = getLineWindow(code, finding.line, 1);
@@ -311,6 +333,22 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     }
 
     if (finding.canonicalId === 'owlvex.issue.ssrf.001' && hasAllowlistedOutboundFetch(snippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.sensitive_logging.001' && !hasLocalLogSink(localSnippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.weak_jwt_validation.001' && hasManualJwtVerification(snippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.csrf_missing_token.001' && isRouteMountShellSnippet(snippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.http_over_https.001' && isLocalhostStartupLog(snippet)) {
         return true;
     }
 

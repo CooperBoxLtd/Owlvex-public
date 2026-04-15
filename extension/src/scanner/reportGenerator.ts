@@ -127,8 +127,15 @@ function summarizeFileResult(result: ScanResult): string {
     ].filter(Boolean).join(' ');
 }
 
+function hasPartialAiCoverage(result: ScanResult): boolean {
+    return (result.warnings ?? []).some(warning =>
+        /deterministic-only|AI coverage intentionally paused|AI provider unavailable|\b429\b|rate limit/i.test(warning),
+    );
+}
+
 function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     return [
+        `tier ${(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')).toLowerCase()}`,
         `impact ${finding.severity.toLowerCase()}`,
         `likelihood ${getFindingLikelihood(finding).toLowerCase()}`,
         `risk ${finding.riskScore ?? 'n/a'}/10`,
@@ -369,6 +376,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Frameworks in scope: ${formatFrameworkSummary([...new Set(snapshot.results.flatMap(item => item.result.frameworks ?? []))])}`,
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
+        `- Coverage posture: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Full scan posture for current provider/runtime state'}`,
         '',
     ];
 
@@ -382,6 +390,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Findings: ${item.result.findings.length}`);
             lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
+            lines.push(`- Coverage posture: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal coverage for this file'}`);
             lines.push(`- Intelligence source: ${describeRulePackRuntime(item.packContext)}`);
             lines.push('');
             lines.push('| Finding | Score Factors | Detection |');
@@ -404,6 +413,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`#### ${finding.canonicalTitle || finding.title}`);
                 lines.push(`- Location: \`${item.file}\` at L${finding.line}${finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`);
                 lines.push(`- Risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
+                lines.push(`- Confidence tier: ${finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')}`);
                 lines.push(`- Why it matters: ${finding.explanation || 'No explanation returned.'}`);
                 lines.push(`- What to change: ${remediation.remediation}`);
                 if (safePattern) {

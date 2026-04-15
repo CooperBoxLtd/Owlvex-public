@@ -447,6 +447,7 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].confidenceTier).toBe('PROVEN');
         expect(result.warnings[0]).toMatch(/AI provider unavailable/i);
         expect(global.fetch).toHaveBeenCalledTimes(1);
     });
@@ -708,6 +709,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('ai');
         expect(result.findings[0].confidence).toBe(0.88);
+        expect(result.findings[0].confidenceTier).toBe('PLAUSIBLE');
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.open_redirect.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Security Misconfiguration & Platform Hardening');
         expect(result.findings[0].likelihood).toBe('HIGH');

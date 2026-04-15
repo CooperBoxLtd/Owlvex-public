@@ -17,6 +17,16 @@ function getAiConfidenceLabel(finding: Finding): string | undefined {
     return `${Math.round((finding.resolverConfidence ?? finding.confidence ?? 0) * 100)}%`;
 }
 
+function getConfidenceTierLabel(finding: Finding): string {
+    return finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE');
+}
+
+function hasPartialAiCoverage(result: ScanResult): boolean {
+    return (result.warnings ?? []).some(warning =>
+        /deterministic-only|AI coverage intentionally paused|AI provider unavailable|\b429\b|rate limit/i.test(warning),
+    );
+}
+
 function riskRank(finding: Finding): number {
     const severityRank = finding.severity === 'CRITICAL'
         ? 4
@@ -67,6 +77,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         this.lastResult.frameworks?.length
                             ? `Frameworks in scope: ${formatFrameworkSummary(this.lastResult.frameworks)}`
                             : '',
+                        hasPartialAiCoverage(this.lastResult)
+                            ? 'Coverage posture: partial AI coverage or deterministic-only fallback'
+                            : 'Coverage posture: normal',
                         topRiskFinding
                             ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
                             : '',
@@ -169,6 +182,10 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
         {
             label: `Risk: ${finding.severity}/${getFindingLikelihood(finding)} -> ${finding.riskScore ?? 'n/a'}/10`,
             tooltip: `Impact ${finding.severity}, likelihood ${getFindingLikelihood(finding)}, contextual risk ${finding.riskScore ?? 'n/a'}/10`,
+        },
+        {
+            label: `Confidence tier: ${getConfidenceTierLabel(finding)}`,
+            tooltip: `Owlvex confidence tier for this finding: ${getConfidenceTierLabel(finding)}`,
         },
         {
             label: `Fix: ${remediation.remediation}`,

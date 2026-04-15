@@ -59,6 +59,7 @@ describe('SidebarProvider', () => {
                 confidence: 0.9,
                 canonicalId: 'owlvex.issue.path_traversal.001',
                 provenance: 'deterministic',
+                confidenceTier: 'PROVEN',
                 likelihood: 'HIGH',
                 likelihoodReasons: ['User-controlled path reaches a filesystem boundary directly.'],
                 riskScore: 8,
@@ -78,6 +79,7 @@ describe('SidebarProvider', () => {
 
         const roots = provider.getChildren();
         expect(roots[0].label).toBe('Score: 4.2/10');
+        expect(String(roots[0].tooltip)).toContain('Coverage posture: normal');
         expect(String(roots[0].tooltip)).toContain('Top risk: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
         expect(severityNode).toBeTruthy();
@@ -93,6 +95,7 @@ describe('SidebarProvider', () => {
             'Discuss this finding',
             'Review fix',
             'Risk: HIGH/HIGH -> 8/10',
+            'Confidence tier: PROVEN',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
             'Fix: Resolve user paths against a fixed base directory.',
             'Validate: Replay ../ payloads and confirm rejection.',
@@ -126,6 +129,7 @@ describe('SidebarProvider', () => {
                 fix: 'Use parameterized queries.',
                 confidence: 0.91,
                 provenance: 'ai',
+                confidenceTier: 'PLAUSIBLE',
                 likelihood: 'HIGH',
                 riskScore: 7,
             }],
@@ -143,5 +147,25 @@ describe('SidebarProvider', () => {
 
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toContain('AI confidence: 91%');
+        expect(detailNodes.map(node => node.label)).toContain('Confidence tier: PLAUSIBLE');
+    });
+
+    it('surfaces partial coverage posture when warnings indicate degraded AI coverage', () => {
+        const provider = new SidebarProvider();
+        provider.refresh({
+            scanId: 'scan-3',
+            score: 10,
+            summary: 'No findings detected.',
+            findings: [],
+            positives: [],
+            metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+            durationMs: 0,
+            model: 'test-model',
+            provider: 'test-provider',
+            warnings: ['AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.'],
+        } as any);
+
+        const roots = provider.getChildren();
+        expect(String(roots[0].tooltip)).toContain('Coverage posture: partial AI coverage or deterministic-only fallback');
     });
 });
