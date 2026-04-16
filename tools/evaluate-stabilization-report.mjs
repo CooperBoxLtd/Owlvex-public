@@ -22,11 +22,29 @@ function parseMarkdownReport(markdown) {
 
     const file = headingMatch[1].trim();
     const findings = [];
+    let primaryScanMode;
+    let scanTierPosture;
+    let corroborationPosture;
 
     for (let inner = index + 1; inner < lines.length; inner += 1) {
       const line = lines[inner];
       if (/^###\s+/.test(line)) {
         break;
+      }
+
+      const primaryScanModeMatch = line.match(/^- Primary scan mode:\s+(.+)$/);
+      if (primaryScanModeMatch) {
+        primaryScanMode = primaryScanModeMatch[1].trim();
+      }
+
+      const scanTierPostureMatch = line.match(/^- Scan tier posture:\s+(.+)$/);
+      if (scanTierPostureMatch) {
+        scanTierPosture = scanTierPostureMatch[1].trim();
+      }
+
+      const corroborationPostureMatch = line.match(/^- Corroboration posture:\s+(.+)$/);
+      if (corroborationPostureMatch) {
+        corroborationPosture = corroborationPostureMatch[1].trim();
       }
 
       const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*.+\|\s*(?:AI|Deterministic)/);
@@ -35,7 +53,7 @@ function parseMarkdownReport(markdown) {
       }
     }
 
-    files.push({ file, findings });
+    files.push({ file, findings, primaryScanMode, scanTierPosture, corroborationPosture });
   }
 
   return { targetLabel, files };
@@ -58,12 +76,21 @@ function evaluateParsedReport(report, manifest) {
     requiredFindingsSatisfied: 0,
     forbiddenFindingsChecked: 0,
     forbiddenFindingsSatisfied: 0,
+    primaryScanModesChecked: 0,
+    primaryScanModesSatisfied: 0,
+    scanTierPostureChecks: 0,
+    scanTierPostureSatisfied: 0,
+    corroborationPostureChecks: 0,
+    corroborationPostureSatisfied: 0,
     totalFailures: 0,
   };
 
   for (const expectation of manifest.expectations) {
     const reportEntry = byFile.get(normalizeFile(expectation.file));
     const findingTitles = reportEntry?.findings ?? [];
+    const primaryScanMode = reportEntry?.primaryScanMode ?? 'none';
+    const scanTierPosture = reportEntry?.scanTierPosture ?? 'none';
+    const corroborationPosture = reportEntry?.corroborationPosture ?? 'none';
 
     if (expectation.expectedState === 'clean') {
       metrics.expectedCleanFiles += 1;
@@ -100,6 +127,33 @@ function evaluateParsedReport(report, manifest) {
         metrics.forbiddenFindingsSatisfied += 1;
       }
     }
+
+    if (expectation.requiredPrimaryScanMode) {
+      metrics.primaryScanModesChecked += 1;
+      if (primaryScanMode !== expectation.requiredPrimaryScanMode) {
+        failures.push(`${expectation.file}: expected primary scan mode ${expectation.requiredPrimaryScanMode} but found ${primaryScanMode}`);
+      } else {
+        metrics.primaryScanModesSatisfied += 1;
+      }
+    }
+
+    for (const expected of expectation.requiredScanTierPostureIncludes ?? []) {
+      metrics.scanTierPostureChecks += 1;
+      if (!scanTierPosture.toLowerCase().includes(expected.toLowerCase())) {
+        failures.push(`${expectation.file}: scan tier posture missing expected fragment ${expected}`);
+      } else {
+        metrics.scanTierPostureSatisfied += 1;
+      }
+    }
+
+    for (const expected of expectation.requiredCorroborationPostureIncludes ?? []) {
+      metrics.corroborationPostureChecks += 1;
+      if (!corroborationPosture.toLowerCase().includes(expected.toLowerCase())) {
+        failures.push(`${expectation.file}: corroboration posture missing expected fragment ${expected}`);
+      } else {
+        metrics.corroborationPostureSatisfied += 1;
+      }
+    }
   }
 
   metrics.totalFailures = failures.length;
@@ -124,6 +178,9 @@ function printMetrics(metrics) {
   console.log(`Clean expectations: ${metrics.cleanFilesSatisfied}/${metrics.expectedCleanFiles}`);
   console.log(`Required findings: ${metrics.requiredFindingsSatisfied}/${metrics.requiredFindingsChecked}`);
   console.log(`Forbidden findings respected: ${metrics.forbiddenFindingsSatisfied}/${metrics.forbiddenFindingsChecked}`);
+  console.log(`Primary scan modes: ${metrics.primaryScanModesSatisfied}/${metrics.primaryScanModesChecked}`);
+  console.log(`Scan tier posture checks: ${metrics.scanTierPostureSatisfied}/${metrics.scanTierPostureChecks}`);
+  console.log(`Corroboration posture checks: ${metrics.corroborationPostureSatisfied}/${metrics.corroborationPostureChecks}`);
   console.log(`Total failures: ${metrics.totalFailures}`);
 }
 

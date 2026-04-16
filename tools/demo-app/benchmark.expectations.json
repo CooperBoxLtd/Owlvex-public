@@ -23,7 +23,10 @@
       "file": "src\\lib\\logger.js",
       "requiredFindings": [
         "Sensitive data exposed in logs"
-      ]
+      ],
+      "requiredPrimaryScanMode": "STATIC",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
     {
       "file": "src\\lib\\urlPolicy.js",

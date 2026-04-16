@@ -60,6 +60,21 @@ printDelta(
   baselineDemo.metrics.forbiddenFindingsSatisfied + baselineDemoApp.metrics.forbiddenFindingsSatisfied,
   candidateDemo.metrics.forbiddenFindingsSatisfied + candidateDemoApp.metrics.forbiddenFindingsSatisfied,
 );
+printDelta(
+  'Primary scan modes satisfied',
+  baselineDemo.metrics.primaryScanModesSatisfied + baselineDemoApp.metrics.primaryScanModesSatisfied,
+  candidateDemo.metrics.primaryScanModesSatisfied + candidateDemoApp.metrics.primaryScanModesSatisfied,
+);
+printDelta(
+  'Scan tier posture checks satisfied',
+  baselineDemo.metrics.scanTierPostureSatisfied + baselineDemoApp.metrics.scanTierPostureSatisfied,
+  candidateDemo.metrics.scanTierPostureSatisfied + candidateDemoApp.metrics.scanTierPostureSatisfied,
+);
+printDelta(
+  'Corroboration posture checks satisfied',
+  baselineDemo.metrics.corroborationPostureSatisfied + baselineDemoApp.metrics.corroborationPostureSatisfied,
+  candidateDemo.metrics.corroborationPostureSatisfied + candidateDemoApp.metrics.corroborationPostureSatisfied,
+);
 console.log('');
 console.log(`Demo reports: ${baselineLabel}=${path.resolve(demoBaseline)} | ${candidateLabel}=${path.resolve(demoCandidate)}`);
 console.log(`Demo-app reports: ${baselineLabel}=${path.resolve(demoAppBaseline)} | ${candidateLabel}=${path.resolve(demoAppCandidate)}`);

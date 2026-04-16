@@ -1,14 +1,26 @@
 {
   "name": "demo-fixtures",
   "expectations": [
-    { "file": "01-idor-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "01-idor-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "STATIC",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "02-idor-safe.js", "expectedState": "clean" },
     { "file": "03-debug-unsafe.js", "expectedState": "finding" },
     { "file": "04-debug-safe.js", "expectedState": "clean" },
     { "file": "05-tenant-isolation-unsafe.js", "expectedState": "finding" },
     { "file": "06-sqli-unsafe.js", "expectedState": "finding" },
     { "file": "07-sqli-safe.js", "expectedState": "clean" },
-    { "file": "08-command-injection-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "08-command-injection-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "STATIC",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "09-command-injection-safe.js", "expectedState": "clean" },
     { "file": "10-cookie-unsafe.js", "expectedState": "finding" },
     { "file": "11-cookie-safe.js", "expectedState": "clean" },

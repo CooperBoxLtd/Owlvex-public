@@ -27,10 +27,42 @@ describe('stabilizationBenchmark', () => {
             {
                 file: '03-debug-unsafe.js',
                 findings: ['Debug mode or framework error detail enabled in production'],
+                primaryScanMode: undefined,
+                scanTierPosture: undefined,
+                corroborationPosture: undefined,
             },
             {
                 file: '04-debug-safe.js',
                 findings: ['Debug mode or framework error detail enabled in production'],
+                primaryScanMode: undefined,
+                scanTierPosture: undefined,
+                corroborationPosture: undefined,
+            },
+        ]);
+    });
+
+    it('parses file-level scan posture from markdown reports', () => {
+        const report = parseMarkdownReport([
+            '## Findings By File',
+            '',
+            '### src\\lib\\logger.js',
+            '',
+            '- Primary scan mode: STATIC',
+            '- Scan tier posture: static: 1',
+            '- Corroboration posture: proven: 1',
+            '',
+            '| Finding | Score Factors | Detection |',
+            '| --- | --- | --- |',
+            '| Sensitive data exposed in logs | tier proven \\| corroboration proven \\| impact high \\| likelihood high \\| risk 9/10 | Deterministic `DP-001` |',
+        ].join('\n'));
+
+        expect(report.files).toEqual([
+            {
+                file: 'src\\lib\\logger.js',
+                findings: ['Sensitive data exposed in logs'],
+                primaryScanMode: 'STATIC',
+                scanTierPosture: 'static: 1',
+                corroborationPosture: 'proven: 1',
             },
         ]);
     });
@@ -96,7 +128,50 @@ describe('stabilizationBenchmark', () => {
             requiredFindingsSatisfied: 2,
             forbiddenFindingsChecked: 1,
             forbiddenFindingsSatisfied: 1,
+            primaryScanModesChecked: 0,
+            primaryScanModesSatisfied: 0,
+            scanTierPostureChecks: 0,
+            scanTierPostureSatisfied: 0,
+            corroborationPostureChecks: 0,
+            corroborationPostureSatisfied: 0,
             totalFailures: 2,
         });
+    });
+
+    it('evaluates posture expectations against parsed reports', () => {
+        const report = parseMarkdownReport([
+            '## Findings By File',
+            '',
+            '### src\\lib\\logger.js',
+            '',
+            '- Primary scan mode: STATIC',
+            '- Scan tier posture: static: 1',
+            '- Corroboration posture: proven: 1',
+            '',
+            '| Finding | Score Factors | Detection |',
+            '| --- | --- | --- |',
+            '| Sensitive data exposed in logs | tier proven \\| corroboration proven \\| impact high \\| likelihood high \\| risk 9/10 | Deterministic `DP-001` |',
+        ].join('\n'));
+
+        const evaluation = evaluateParsedReport(report, {
+            name: 'demo-app',
+            expectations: [
+                {
+                    file: 'src\\lib\\logger.js',
+                    requiredFindings: ['Sensitive data exposed in logs'],
+                    requiredPrimaryScanMode: 'STATIC',
+                    requiredScanTierPostureIncludes: ['static: 1'],
+                    requiredCorroborationPostureIncludes: ['proven: 1'],
+                },
+            ],
+        });
+
+        expect(evaluation.passed).toBe(true);
+        expect(evaluation.metrics.primaryScanModesChecked).toBe(1);
+        expect(evaluation.metrics.primaryScanModesSatisfied).toBe(1);
+        expect(evaluation.metrics.scanTierPostureChecks).toBe(1);
+        expect(evaluation.metrics.scanTierPostureSatisfied).toBe(1);
+        expect(evaluation.metrics.corroborationPostureChecks).toBe(1);
+        expect(evaluation.metrics.corroborationPostureSatisfied).toBe(1);
     });
 });

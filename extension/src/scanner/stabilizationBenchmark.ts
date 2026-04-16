@@ -1,6 +1,9 @@
 export interface ParsedReportFile {
     file: string;
     findings: string[];
+    primaryScanMode?: string;
+    scanTierPosture?: string;
+    corroborationPosture?: string;
 }
 
 export interface ParsedReport {
@@ -13,6 +16,9 @@ export interface FileExpectation {
     expectedState?: 'clean' | 'finding';
     requiredFindings?: string[];
     forbiddenFindings?: string[];
+    requiredPrimaryScanMode?: string;
+    requiredScanTierPostureIncludes?: string[];
+    requiredCorroborationPostureIncludes?: string[];
 }
 
 export interface BenchmarkManifest {
@@ -41,6 +47,12 @@ export interface BenchmarkEvaluationMetrics {
     requiredFindingsSatisfied: number;
     forbiddenFindingsChecked: number;
     forbiddenFindingsSatisfied: number;
+    primaryScanModesChecked: number;
+    primaryScanModesSatisfied: number;
+    scanTierPostureChecks: number;
+    scanTierPostureSatisfied: number;
+    corroborationPostureChecks: number;
+    corroborationPostureSatisfied: number;
     totalFailures: number;
 }
 
@@ -64,11 +76,29 @@ export function parseMarkdownReport(markdown: string): ParsedReport {
 
         const file = headingMatch[1].trim();
         const findings: string[] = [];
+        let primaryScanMode: string | undefined;
+        let scanTierPosture: string | undefined;
+        let corroborationPosture: string | undefined;
 
         for (let inner = index + 1; inner < lines.length; inner += 1) {
             const line = lines[inner];
             if (/^###\s+/.test(line)) {
                 break;
+            }
+
+            const primaryScanModeMatch = line.match(/^- Primary scan mode:\s+(.+)$/);
+            if (primaryScanModeMatch) {
+                primaryScanMode = primaryScanModeMatch[1].trim();
+            }
+
+            const scanTierPostureMatch = line.match(/^- Scan tier posture:\s+(.+)$/);
+            if (scanTierPostureMatch) {
+                scanTierPosture = scanTierPostureMatch[1].trim();
+            }
+
+            const corroborationPostureMatch = line.match(/^- Corroboration posture:\s+(.+)$/);
+            if (corroborationPostureMatch) {
+                corroborationPosture = corroborationPostureMatch[1].trim();
             }
 
             const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*.+\|\s*(?:AI|Deterministic)/);
@@ -77,7 +107,7 @@ export function parseMarkdownReport(markdown: string): ParsedReport {
             }
         }
 
-        files.push({ file, findings });
+        files.push({ file, findings, primaryScanMode, scanTierPosture, corroborationPosture });
     }
 
     return { targetLabel, files };
@@ -96,6 +126,12 @@ export function evaluateParsedReport(report: ParsedReport, manifest: BenchmarkMa
         requiredFindingsSatisfied: 0,
         forbiddenFindingsChecked: 0,
         forbiddenFindingsSatisfied: 0,
+        primaryScanModesChecked: 0,
+        primaryScanModesSatisfied: 0,
+        scanTierPostureChecks: 0,
+        scanTierPostureSatisfied: 0,
+        corroborationPostureChecks: 0,
+        corroborationPostureSatisfied: 0,
         totalFailures: 0,
     };
 
@@ -103,6 +139,9 @@ export function evaluateParsedReport(report: ParsedReport, manifest: BenchmarkMa
         const normalizedFile = normalizeFile(expectation.file);
         const reportEntry = byFile.get(normalizedFile);
         const findingTitles = reportEntry?.findings ?? [];
+        const primaryScanMode = reportEntry?.primaryScanMode ?? 'none';
+        const scanTierPosture = reportEntry?.scanTierPosture ?? 'none';
+        const corroborationPosture = reportEntry?.corroborationPosture ?? 'none';
         let fileSatisfied = true;
 
         if (expectation.expectedState === 'clean' && findingTitles.length > 0) {
@@ -152,6 +191,45 @@ export function evaluateParsedReport(report: ParsedReport, manifest: BenchmarkMa
                 });
             } else {
                 metrics.forbiddenFindingsSatisfied += 1;
+            }
+        }
+
+        if (expectation.requiredPrimaryScanMode) {
+            metrics.primaryScanModesChecked += 1;
+            if (primaryScanMode !== expectation.requiredPrimaryScanMode) {
+                fileSatisfied = false;
+                failures.push({
+                    file: expectation.file,
+                    message: `expected primary scan mode ${expectation.requiredPrimaryScanMode} but found ${primaryScanMode}`,
+                });
+            } else {
+                metrics.primaryScanModesSatisfied += 1;
+            }
+        }
+
+        for (const expected of expectation.requiredScanTierPostureIncludes ?? []) {
+            metrics.scanTierPostureChecks += 1;
+            if (!scanTierPosture.toLowerCase().includes(expected.toLowerCase())) {
+                fileSatisfied = false;
+                failures.push({
+                    file: expectation.file,
+                    message: `scan tier posture missing expected fragment: ${expected}`,
+                });
+            } else {
+                metrics.scanTierPostureSatisfied += 1;
+            }
+        }
+
+        for (const expected of expectation.requiredCorroborationPostureIncludes ?? []) {
+            metrics.corroborationPostureChecks += 1;
+            if (!corroborationPosture.toLowerCase().includes(expected.toLowerCase())) {
+                fileSatisfied = false;
+                failures.push({
+                    file: expectation.file,
+                    message: `corroboration posture missing expected fragment: ${expected}`,
+                });
+            } else {
+                metrics.corroborationPostureSatisfied += 1;
             }
         }
 
