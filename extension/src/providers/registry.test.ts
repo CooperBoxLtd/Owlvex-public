@@ -19,6 +19,7 @@ describe('ProviderRegistry', () => {
             provider: 'openai',
             'foundry.endpoint': 'https://example.openai.azure.com',
             'foundry.model': 'owlvex-gpt4o',
+            'foundry.deployments': ['owlvex-gpt4o', 'owlvex-gpt54mini'],
         };
         updateMock = jest.fn(async (key: string, value: any) => {
             configState[key] = value;
@@ -165,6 +166,12 @@ describe('ProviderRegistry', () => {
         it('reads selected deployment name from configuration', () => {
             const provider = registry.getProvider('azure-foundry')!;
             expect(provider.selectedModel).toBe('owlvex-gpt4o');
+        });
+
+        it('lists configured deployment names for Azure Foundry model switching', async () => {
+            const provider = registry.getProvider('azure-foundry')!;
+            const models = await provider.listModels();
+            expect(models).toEqual(['owlvex-gpt4o', 'owlvex-gpt54mini']);
         });
 
         it('persists selected deployment name back to configuration', async () => {

@@ -267,7 +267,7 @@ describe('workspaceScanner', () => {
         expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything(), undefined);
         expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything(), undefined);
         expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything(), undefined);
-        expect(setTimeoutSpy).toHaveBeenCalled();
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 20000);
         expect(summary.results).toHaveLength(3);
         setTimeoutSpy.mockRestore();
     });
@@ -336,8 +336,7 @@ describe('workspaceScanner', () => {
             diagnostics: { applyFindings: jest.fn() },
         });
 
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 7000);
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 10000);
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 20000);
         setTimeoutSpy.mockRestore();
     });
 
@@ -411,5 +410,115 @@ describe('workspaceScanner', () => {
             forceDeterministicOnly: true,
             deterministicOnlyReason: 'AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.',
         });
+    });
+
+    it('applies proactive request budgeting for gpt54mini even before 429 warnings', async () => {
+        (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
+            if (currentPath.endsWith('repo')) {
+                return [
+                    { name: 'first.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'second.js', isDirectory: () => false, isFile: () => true },
+                ];
+            }
+            return [];
+        });
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Folder');
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+
+        const scanEngine = {
+            scanDocument: jest
+                .fn()
+                .mockResolvedValueOnce({
+                    scanId: 'scan-1',
+                    score: 8,
+                    summary: 'first',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: [],
+                })
+                .mockResolvedValueOnce({
+                    scanId: 'scan-2',
+                    score: 9,
+                    summary: 'second',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 11,
+                    model: 'owlvex-gpt54mini',
+                    provider: 'azure-foundry',
+                    warnings: [],
+                }),
+        };
+
+        await scanFolder({
+            root: vscode.Uri.file('d:\\repo'),
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 20000);
+        setTimeoutSpy.mockRestore();
+    });
+
+    it('applies proactive request budgeting for gpt4o with a shorter window', async () => {
+        (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
+            if (currentPath.endsWith('repo')) {
+                return [
+                    { name: 'first.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'second.js', isDirectory: () => false, isFile: () => true },
+                ];
+            }
+            return [];
+        });
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Folder');
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+
+        const scanEngine = {
+            scanDocument: jest
+                .fn()
+                .mockResolvedValueOnce({
+                    scanId: 'scan-1',
+                    score: 8,
+                    summary: 'first',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'owlvex-gpt4o',
+                    provider: 'azure-foundry',
+                    warnings: [],
+                })
+                .mockResolvedValueOnce({
+                    scanId: 'scan-2',
+                    score: 9,
+                    summary: 'second',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 11,
+                    model: 'owlvex-gpt4o',
+                    provider: 'azure-foundry',
+                    warnings: [],
+                }),
+        };
+
+        await scanFolder({
+            root: vscode.Uri.file('d:\\repo'),
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3334);
+        setTimeoutSpy.mockRestore();
     });
 });

@@ -30,6 +30,53 @@ const RATE_LIMIT_COOLDOWN_MS = 5000;
 const MAX_RATE_LIMIT_COOLDOWN_MS = 60000;
 const AI_BUDGET_FALLBACK_THRESHOLD = 2;
 
+interface ProviderRateBudgetProfile {
+    requestLimit: number;
+    requestWindowMs: number;
+    estimatedRequestsPerFile: number;
+}
+
+function normalizeModelName(model: string | undefined): string {
+    return String(model ?? '')
+        .replace(/\s*\(deterministic-only\)\s*$/i, '')
+        .trim()
+        .toLowerCase();
+}
+
+function getProviderRateBudgetProfile(provider: string | undefined, model: string | undefined): ProviderRateBudgetProfile | undefined {
+    if (provider !== 'azure-foundry') {
+        return undefined;
+    }
+
+    const normalizedModel = normalizeModelName(model);
+    if (normalizedModel === 'owlvex-gpt54mini') {
+        return {
+            requestLimit: 10,
+            requestWindowMs: 60000,
+            estimatedRequestsPerFile: 3,
+        };
+    }
+
+    if (normalizedModel === 'owlvex-gpt4o') {
+        return {
+            requestLimit: 10,
+            requestWindowMs: 10000,
+            estimatedRequestsPerFile: 3,
+        };
+    }
+
+    return undefined;
+}
+
+function getProactiveSpacingMs(profile: ProviderRateBudgetProfile | undefined): number {
+    if (!profile) {
+        return 0;
+    }
+
+    const filesPerWindow = Math.max(1, Math.floor(profile.requestLimit / Math.max(1, profile.estimatedRequestsPerFile)));
+    return Math.ceil(profile.requestWindowMs / filesPerWindow);
+}
+
 function extractRetryAfterMsFromWarnings(warnings: string[] = []): number | undefined {
     for (const warning of warnings) {
         const retryAfterSecondsMatch = warning.match(/retry-after:\s*(\d+(?:\.\d+)?)/i);
@@ -212,6 +259,7 @@ async function scanUris(options: {
     let cooldownUntil = 0;
     let consecutiveRateLimitHits = 0;
     let deterministicOnlyMode = false;
+    let proactiveBudgetUntil = 0;
 
     await vscode.window.withProgress(
         {
@@ -226,10 +274,12 @@ async function scanUris(options: {
                     break;
                 }
 
-                const remainingCooldownMs = cooldownUntil - Date.now();
+                const remainingCooldownMs = Math.max(cooldownUntil, proactiveBudgetUntil) - Date.now();
                 if (remainingCooldownMs > 0) {
                     progress.report({
-                        message: `Provider rate limit hit. Cooling down for ${Math.ceil(remainingCooldownMs / 1000)}s before continuing...`,
+                        message: cooldownUntil >= proactiveBudgetUntil
+                            ? `Provider rate limit hit. Cooling down for ${Math.ceil(remainingCooldownMs / 1000)}s before continuing...`
+                            : `Applying provider request budget. Waiting ${Math.ceil(remainingCooldownMs / 1000)}s before continuing...`,
                     });
                     await sleep(remainingCooldownMs);
                 }
@@ -264,6 +314,12 @@ async function scanUris(options: {
                         consecutiveRateLimitHits = 0;
                         cooldownUntil = 0;
                     }
+                    const proactiveSpacingMs = getProactiveSpacingMs(
+                        getProviderRateBudgetProfile(result.provider, result.model),
+                    );
+                    proactiveBudgetUntil = proactiveSpacingMs > 0
+                        ? Date.now() + proactiveSpacingMs
+                        : 0;
                     options.diagnostics.applyFindings(doc, result.findings);
                     totalFindings += result.findings.length;
                     results.push({ uri, result });

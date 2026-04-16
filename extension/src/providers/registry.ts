@@ -62,7 +62,19 @@ function getPreferredConfigurationTarget(): vscode.ConfigurationTarget {
         : vscode.ConfigurationTarget.Global;
 }
 
-export async function persistProviderSetting(settingKey: string, value: string): Promise<void> {
+function normalizeConfiguredModels(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return [...new Set(
+        value
+            .map(item => String(item ?? '').trim())
+            .filter(Boolean),
+    )];
+}
+
+export async function persistProviderSetting(settingKey: string, value: unknown): Promise<void> {
     await vscode.workspace
         .getConfiguration(PROFILE.configSection)
         .update(settingKey, value, getPreferredConfigurationTarget());
@@ -251,7 +263,11 @@ class AzureFoundryProvider implements AIProvider {
     }
 
     async listModels(): Promise<string[]> {
-        return [this.selectedModel];
+        const configuredModels = normalizeConfiguredModels(
+            vscode.workspace.getConfiguration(PROFILE.configSection).get<string[]>('foundry.deployments', []),
+        );
+        const selected = this.selectedModel.trim();
+        return [...new Set([selected, ...configuredModels])].filter(Boolean);
     }
 
     async complete(req: CompletionRequest): Promise<CompletionResponse> {

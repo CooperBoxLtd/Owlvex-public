@@ -911,7 +911,13 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                await persistProviderSetting('foundry.model', deployment.trim());
+                const trimmedDeployment = deployment.trim();
+                await persistProviderSetting('foundry.model', trimmedDeployment);
+                const existingDeployments = vscode.workspace
+                    .getConfiguration(PROFILE.configSection)
+                    .get<string[]>('foundry.deployments', []);
+                const nextDeployments = [...new Set([trimmedDeployment, ...existingDeployments.map(item => item.trim()).filter(Boolean)])];
+                await persistProviderSetting('foundry.deployments', nextDeployments as any);
             }
 
             if (provider.id === 'anthropic') {

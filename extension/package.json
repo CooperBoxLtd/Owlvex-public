@@ -119,6 +119,14 @@
           "default": "gpt-4o",
           "description": "Azure AI Foundry deployment name to use for chat completions"
         },
+        "owlvex.foundry.deployments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Known Azure AI Foundry deployment names shown in the model picker"
+        },
         "owlvex.openai.model": {
           "type": "string",
           "default": "gpt-4o",
