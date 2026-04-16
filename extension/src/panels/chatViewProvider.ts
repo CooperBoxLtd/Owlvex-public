@@ -58,6 +58,7 @@ interface PendingFixPreview {
     originalText: string;
     patchedText: string;
     title: string;
+    finding: Finding;
 }
 
 interface LocalActionResult {
@@ -713,17 +714,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
-                content: `Review fix ready for ${vscode.workspace.asRelativePath(document.uri, false)}. A side-by-side diff is open and the original file is unchanged until you apply it.`,
+                content: `Review fix ready for ${vscode.workspace.asRelativePath(document.uri, false)}. A side-by-side diff is open and the original file is unchanged until you choose Keep fix or Discard fix.`,
                 kind: 'advisory',
                 actions: [
                     {
                         id: 'apply-fix-preview',
-                        label: 'Apply fix',
+                        label: 'Keep fix',
                         kind: 'applyFixPreview',
                     },
                     {
                         id: 'discard-fix-preview',
-                        label: 'Discard review',
+                        label: 'Discard fix',
                         kind: 'discardFixPreview',
                     },
                 ],
@@ -733,6 +734,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 originalText: document.getText(),
                 patchedText: patched,
                 title: finding.canonicalTitle || finding.title,
+                finding,
             };
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
@@ -784,12 +786,56 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         const updatedDocument = await vscode.workspace.openTextDocument(targetUri);
         await vscode.window.showTextDocument(updatedDocument, { preview: false });
+        const originalFinding = this.pendingFixPreview.finding;
         this.messages.push({
             role: 'assistant',
-            content: `Applied the fix preview to ${vscode.workspace.asRelativePath(targetUri, false)}.`,
+            content: `Kept the fix preview for ${vscode.workspace.asRelativePath(targetUri, false)}. Verifying the file now...`,
             kind: 'advisory',
         });
         this.pendingFixPreview = undefined;
+
+        try {
+            const scanResult = await vscode.commands.executeCommand(PROFILE.commands.scanFile, targetUri) as { status?: string; result?: ScanResult } | undefined;
+            const rescanned = scanResult?.status === 'completed' ? scanResult.result : undefined;
+            if (!rescanned) {
+                this.messages.push({
+                    role: 'assistant',
+                    content: `Verification could not confirm the result for ${vscode.workspace.asRelativePath(targetUri, false)}. The fix was kept, but no completed rescan result was returned.`,
+                    kind: 'advisory',
+                });
+            } else {
+                const matchingFinding = rescanned.findings.find(candidate =>
+                    (originalFinding.canonicalId && candidate.canonicalId === originalFinding.canonicalId)
+                    || candidate.title === originalFinding.title
+                    || (!!originalFinding.canonicalTitle && candidate.canonicalTitle === originalFinding.canonicalTitle)
+                );
+                if (!matchingFinding) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: `Verification: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                        kind: 'advisory',
+                    });
+                } else if ((matchingFinding.riskScore ?? 0) < (originalFinding.riskScore ?? 0)) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: `Verification: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                        kind: 'advisory',
+                    });
+                } else {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: `Verification: the finding is still present after the kept fix. Review the diff again or generate another fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
+                        kind: 'advisory',
+                    });
+                }
+            }
+        } catch (error: any) {
+            this.messages.push({
+                role: 'assistant',
+                content: `Verification scan failed after keeping the fix for ${vscode.workspace.asRelativePath(targetUri, false)}: ${error.message}`,
+                kind: 'advisory',
+            });
+        }
         void this.persistState();
         this.refresh();
     }
@@ -1135,7 +1181,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.pendingFixPreview = undefined;
             this.messages.push({
                 role: 'assistant',
-                content: 'Discarded the current fix review. The original file was left unchanged.',
+                content: 'Discarded the current fix preview. The original file was left unchanged.',
                 kind: 'advisory',
             });
             void this.persistState();

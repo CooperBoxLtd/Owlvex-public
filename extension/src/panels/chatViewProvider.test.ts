@@ -416,8 +416,8 @@ describe('parseChatIntent', () => {
         );
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Review fix ready for');
         expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ id: 'apply-fix-preview', label: 'Apply fix', kind: 'applyFixPreview' }),
-            expect.objectContaining({ id: 'discard-fix-preview', label: 'Discard review', kind: 'discardFixPreview' }),
+            expect.objectContaining({ id: 'apply-fix-preview', label: 'Keep fix', kind: 'applyFixPreview' }),
+            expect.objectContaining({ id: 'discard-fix-preview', label: 'Discard fix', kind: 'discardFixPreview' }),
         ]));
         expect((provider as any).messages[(provider as any).messages.length - 3].actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Open active file', kind: 'openSource', line: 3 }),
@@ -773,7 +773,7 @@ describe('parseChatIntent', () => {
             previewUri,
             expect.stringContaining('Fix Preview - Open Redirect'),
         );
-        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Review fix ready for');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
     });
 
     it('applies a generated fix preview only when the file is unchanged', async () => {
@@ -822,6 +822,26 @@ describe('parseChatIntent', () => {
         });
         (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
         (vscode.window.showTextDocument as jest.Mock).mockResolvedValue({ revealRange: jest.fn() });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 0,
+                        findings: [],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: 'No findings detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
 
         const provider = new ChatViewProvider(registry as any, storage as any);
         await provider.generateFixPreview({
@@ -852,6 +872,9 @@ describe('parseChatIntent', () => {
             }),
         ]));
         expect(vscode.window.showTextDocument).toHaveBeenCalledWith(expect.objectContaining({ uri: targetUri }), { preview: false });
+        expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(3, PROFILE.commands.scanFile, expect.objectContaining({ fsPath: 'd:\\repo\\src\\target.js' }));
+        expect((provider as any).messages[(provider as any).messages.length - 2].content).toContain('Kept the fix preview');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Verification: the reviewed finding is no longer present');
         expect((provider as any).pendingFixPreview).toBeUndefined();
     });
 

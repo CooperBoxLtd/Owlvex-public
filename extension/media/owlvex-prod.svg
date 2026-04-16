@@ -5,6 +5,16 @@
     stroke-linecap="round"
     stroke-linejoin="round"
     stroke-width="1.8"
-    d="M7 8.5 10 5l2 2.2L14 5l3 3.5v7.2A2.3 2.3 0 0 1 14.7 18H9.3A2.3 2.3 0 0 1 7 15.7V8.5Zm2.3 2.6a1.4 1.4 0 1 0 0 .1Zm5.4 0a1.4 1.4 0 1 0 0 .1ZM10 14.8l2-1.5 2 1.5"
+    d="M7.2 9 9.5 6.5 12 8.2l2.5-1.7L16.8 9v6.2A2.8 2.8 0 0 1 14 18H10a2.8 2.8 0 0 1-2.8-2.8V9Z"
   />
+  <path
+    fill="none"
+    stroke="#C5C5C5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="1.8"
+    d="M9.6 10.4c.6.6 1.4.9 2.4.9s1.8-.3 2.4-.9m-3 2.2v2.6m-1.2-.7L12 16l1.2-1.1"
+  />
+  <circle cx="10.1" cy="12.4" r="1.1" fill="#C5C5C5" />
+  <circle cx="13.9" cy="12.4" r="1.1" fill="#C5C5C5" />
 </svg>
