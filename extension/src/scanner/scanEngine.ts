@@ -9,7 +9,7 @@ import { getIssueFamilyDefinition } from '../frameworks/issueCatalog';
 import { DeterministicScanner } from './deterministicScanner';
 import type { RulePackRuntimeContext } from '../packs/packRuntime';
 import { PROFILE } from '../profile';
-import { loadProjectContextInfo } from '../projectContext';
+import { getProjectContextSummaryFromConfig, loadProjectContextInfo } from '../projectContext';
 
 export interface Finding {
     id: string;
@@ -48,6 +48,7 @@ export interface ScanResult {
     score: number;
     summary: string;
     findings: Finding[];
+    projectContextSummary?: string;
     frameworks?: string[];
     positives: string[];
     metrics: { critical: number; high: number; medium: number; low: number };
@@ -519,6 +520,7 @@ export class ScanEngine {
                 deterministicFindings,
                 options?.deterministicOnlyReason ?? 'AI enrichment skipped for this scan.',
                 provider,
+                projectContext.summary,
             );
         }
 
@@ -528,6 +530,7 @@ export class ScanEngine {
                 deterministicFindings,
                 'Owlvex backend unavailable: no licence key configured. Returning deterministic-only results.',
                 provider,
+                projectContext.summary,
             );
         }
 
@@ -548,6 +551,7 @@ export class ScanEngine {
                 deterministicFindings,
                 `Owlvex backend unavailable: ${error.message}`,
                 provider,
+                projectContext.summary,
             );
         }
         const systemPrompt = promptContext.systemPrompt;
@@ -583,6 +587,7 @@ export class ScanEngine {
                 deterministicFindings,
                 `AI provider unavailable: ${error.message}`,
                 provider,
+                projectContext.summary,
             );
         }
 
@@ -595,6 +600,7 @@ export class ScanEngine {
                 deterministicFindings,
                 `AI response unusable: ${error.message}`,
                 provider,
+                projectContext.summary,
             );
         }
 
@@ -665,6 +671,7 @@ export class ScanEngine {
             score: calculatedScore,
             summary,
             findings: allFindings,
+            projectContextSummary: projectContext.summary,
             frameworks,
             positives: parsed.positives,
             metrics: mergedMetrics,
@@ -785,6 +792,7 @@ export class ScanEngine {
         deterministicFindings: Finding[],
         warning: string,
         provider: { id: string; selectedModel: string },
+        projectContextSummary?: string,
     ): ScanResult {
         const metrics = buildMetrics(deterministicFindings);
         const score = calculateScoreFromFindings(deterministicFindings);
@@ -800,6 +808,7 @@ export class ScanEngine {
             score,
             summary,
             findings: deterministicFindings,
+            projectContextSummary: projectContextSummary ?? getProjectContextSummaryFromConfig(),
             frameworks: vscode.workspace.getConfiguration(PROFILE.configSection).get<string[]>('frameworks', ['OWASP']),
             positives: [],
             metrics,

@@ -51,6 +51,22 @@ function summarizeCorroborationCounts(findings: Finding[]): string {
     return parts.length ? parts.join(' | ') : 'none';
 }
 
+function summarizeScanTierCounts(findings: Finding[]): string {
+    const order: Array<'STATIC' | 'TARGETED_AI' | 'REPO_AI'> = ['STATIC', 'TARGETED_AI', 'REPO_AI'];
+    const counts = new Map<string, number>();
+
+    for (const finding of findings) {
+        const label = finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI');
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+
+    const parts = order
+        .filter(label => (counts.get(label) ?? 0) > 0)
+        .map(label => `${label.toLowerCase()}: ${counts.get(label)}`);
+
+    return parts.length ? parts.join(' | ') : 'none';
+}
+
 function riskRank(finding: Finding): number {
     const severityRank = finding.severity === 'CRITICAL'
         ? 4
@@ -104,7 +120,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         hasPartialAiCoverage(this.lastResult)
                             ? 'Coverage posture: partial AI coverage or deterministic-only fallback'
                             : 'Coverage posture: normal',
+                        `Scan tier posture: ${summarizeScanTierCounts(this.lastResult.findings)}`,
                         `Corroboration posture: ${summarizeCorroborationCounts(this.lastResult.findings)}`,
+                        `Project context: ${this.lastResult.projectContextSummary && this.lastResult.projectContextSummary !== 'none' ? this.lastResult.projectContextSummary : 'none'}`,
                         topRiskFinding
                             ? `Fix first: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
                             : '',

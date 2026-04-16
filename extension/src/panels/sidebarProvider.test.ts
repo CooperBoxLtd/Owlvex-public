@@ -72,6 +72,7 @@ describe('SidebarProvider', () => {
             model: 'test-model',
             provider: 'test-provider',
             warnings: [],
+            projectContextSummary: 'inline project contract',
             packContext: {
                 mode: 'fresh',
                 packIds: ['owlvex.remediation-pack.v1'],
@@ -82,7 +83,9 @@ describe('SidebarProvider', () => {
         const roots = provider.getChildren();
         expect(roots[0].label).toBe('File risk: 8.0/10');
         expect(String(roots[0].tooltip)).toContain('Coverage posture: normal');
+        expect(String(roots[0].tooltip)).toContain('Scan tier posture: static: 1');
         expect(String(roots[0].tooltip)).toContain('Corroboration posture: proven: 1');
+        expect(String(roots[0].tooltip)).toContain('Project context: inline project contract');
         expect(String(roots[0].tooltip)).toContain('Fix first: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
         expect(severityNode).toBeTruthy();
@@ -146,6 +149,7 @@ describe('SidebarProvider', () => {
             model: 'test-model',
             provider: 'test-provider',
             warnings: [],
+            projectContextSummary: 'none',
         } as any);
 
         const severityNode = provider.getChildren().find(item => item.kind === 'severity');
@@ -173,10 +177,12 @@ describe('SidebarProvider', () => {
             model: 'test-model',
             provider: 'test-provider',
             warnings: ['AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.'],
+            projectContextSummary: 'none',
         } as any);
 
         const roots = provider.getChildren();
         expect(String(roots[0].tooltip)).toContain('Coverage posture: partial AI coverage or deterministic-only fallback');
+        expect(String(roots[0].tooltip)).toContain('Scan tier posture: none');
         expect(String(roots[0].tooltip)).toContain('Corroboration posture: none');
     });
 
@@ -251,9 +257,11 @@ describe('SidebarProvider', () => {
             model: 'test-model',
             provider: 'test-provider',
             warnings: [],
+            projectContextSummary: 'inline project contract',
         } as any);
 
         const roots = provider.getChildren();
+        expect(String(roots[0].tooltip)).toContain('Scan tier posture: static: 1 | targeted_ai: 2');
         expect(String(roots[0].tooltip)).toContain('Corroboration posture: proven: 1 | partial: 1 | unverified: 1');
     });
 });

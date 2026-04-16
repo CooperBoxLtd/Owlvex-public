@@ -214,6 +214,7 @@ function buildScanSummaryLines(result: ScanResult): string[] {
         `File risk score: ${result.score.toFixed(1)}/10`,
         `Findings: ${result.findings.length}`,
         `Scan tiers: ${summarizeScanTierCounts(result.findings)}`,
+        `Project context: ${result.projectContextSummary && result.projectContextSummary !== 'none' ? result.projectContextSummary : 'none'}`,
         topRiskFinding
             ? `Fix first: ${topRiskFinding.title} | tier ${getScanTierLabel(topRiskFinding)} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
             : 'Fix first: none',

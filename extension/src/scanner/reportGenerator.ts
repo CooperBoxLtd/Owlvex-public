@@ -163,6 +163,21 @@ function summarizeCorroborationCounts(findings: ScanResult['findings']): string 
         .join(' | ');
 }
 
+function summarizeScanTierCounts(findings: ScanResult['findings']): string {
+    const order: Array<'STATIC' | 'TARGETED_AI' | 'REPO_AI'> = ['STATIC', 'TARGETED_AI', 'REPO_AI'];
+    const counts = new Map<string, number>();
+
+    for (const finding of findings) {
+        const label = finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI');
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+
+    return order
+        .filter(label => (counts.get(label) ?? 0) > 0)
+        .map(label => `${label.toLowerCase()}: ${counts.get(label)}`)
+        .join(' | ');
+}
+
 function buildSafePatternLine(
     remediation: ReturnType<typeof getCanonicalRemediation>,
 ): string | undefined {
@@ -295,6 +310,11 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
     const packCoverageSummary = [...packModes.entries()]
         .map(([label, count]) => `${label}: ${count}`)
         .join(' | ') || 'Bundled Fallback: 0';
+    const projectContextSummary = [...new Set(
+        snapshot.results
+            .map(item => item.result.projectContextSummary)
+            .filter((value): value is string => Boolean(value && value !== 'none')),
+    )].join(' | ') || 'none';
 
     const aggregateMetrics = snapshot.results.reduce(
         (totals, item) => ({
@@ -398,7 +418,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         `- Coverage posture: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Full scan posture for current provider/runtime state'}`,
+        `- Scan tier posture: ${totalFindings > 0 ? summarizeScanTierCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to classify'}`,
         `- Corroboration posture: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
+        `- Project context: ${projectContextSummary}`,
         '- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.',
         '',
     ];
@@ -414,7 +436,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
             lines.push(`- Coverage posture: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal coverage for this file'}`);
+            lines.push(`- Scan tier posture: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
             lines.push(`- Corroboration posture: ${summarizeCorroborationCounts(item.result.findings)}`);
+            lines.push(`- Project context: ${item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none'}`);
             lines.push('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
             lines.push(`- Intelligence source: ${describeRulePackRuntime(item.packContext)}`);
             lines.push('');

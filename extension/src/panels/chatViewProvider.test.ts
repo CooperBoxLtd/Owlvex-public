@@ -629,6 +629,7 @@ describe('parseChatIntent', () => {
                         model: 'owlvex-test-model',
                         provider: 'test-provider',
                         warnings: [],
+                        projectContextSummary: 'inline project contract',
                         summary: '1 finding(s) detected.',
                     },
                 };
@@ -641,6 +642,7 @@ describe('parseChatIntent', () => {
 
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Scan tiers: targeted_ai: 1');
+        expect(finalMessage.content).toContain('Project context: inline project contract');
         expect(finalMessage.content).toContain('Fix first: SQL Injection | tier TARGETED_AI');
         expect(finalMessage.content).toContain('Next step: use Fix code to open a side-by-side remediation diff.');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
