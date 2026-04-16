@@ -88,6 +88,7 @@ interface ChatState {
     editorSummary: string;
     frameworksLabel: string;
     severityThreshold: string;
+    projectContextSummary: string;
     workspaceSummary: string;
     lastScanTarget: string;
 }
@@ -1381,6 +1382,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'openProjectContext') {
+            await vscode.commands.executeCommand(PROFILE.commands.openProjectContext);
+            const projectContextSummary = getProjectContextSummaryFromConfig();
+            this.messages.push({
+                role: 'system',
+                content: projectContextSummary !== 'none'
+                    ? `Project context is ready: ${projectContextSummary}.`
+                    : 'Opened project context. Save or configure it locally to reuse it in scans.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'testAI') {
             await vscode.commands.executeCommand(PROFILE.commands.testAI);
             const provider = this.registry.getActive();
@@ -1764,6 +1780,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     ): ChatState {
         const editorContext = this.buildEditorContext();
         const provider = this.registry.getActive();
+        const projectContextSummary = getProjectContextSummaryFromConfig();
         return {
             provider: provider.name,
             providerId: provider.id,
@@ -1776,6 +1793,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             editorSummary: editorContext.summary,
             frameworksLabel: formatFrameworkSummary(this.getFrameworks()),
             severityThreshold: this.getSeverityThreshold(),
+            projectContextSummary,
             workspaceSummary: this.getWorkspaceSummary(),
             lastScanTarget: this.storage.get<string>(LAST_SCAN_TARGET_KEY, 'No scan run yet'),
         };
@@ -2225,12 +2243,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         <div class="settings-body">
           <div class="meta" id="workspaceDetail">Workspace: loading...</div>
           <div class="meta" id="editor">Inspecting editor...</div>
+          <div class="meta" id="projectContext">Project context: loading...</div>
           <div class="meta" id="providerHint">LLM setup hint: loading...</div>
           <div class="controls">
             <select id="provider"></select>
             <select id="model"></select>
           </div>
           <div class="quick-actions">
+            <button class="chip" data-action="openProjectContext">Project Context</button>
             <button class="chip" data-action="setupAI">Configure LLM</button>
             <button class="chip" data-action="testAI">Test Connection</button>
             <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
@@ -2259,6 +2279,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const workspaceEl = document.getElementById('workspace');
     const workspaceDetailEl = document.getElementById('workspaceDetail');
     const editorEl = document.getElementById('editor');
+    const projectContextEl = document.getElementById('projectContext');
     const scanProfileEl = document.getElementById('scanProfile');
     const providerStatusEl = document.getElementById('providerStatus');
     const providerHintEl = document.getElementById('providerHint');
@@ -2272,6 +2293,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       workspaceEl.textContent = state.workspaceSummary || 'No workspace folder open';
       workspaceDetailEl.textContent = 'Workspace: ' + (state.workspaceSummary || 'No workspace folder open');
       editorEl.textContent = state.editorSummary || 'Active editor: none';
+      projectContextEl.textContent = 'Project context: ' + (state.projectContextSummary || 'none');
       scanProfileEl.textContent = state.frameworksLabel + ' | ' + state.severityThreshold;
       providerStatusEl.textContent = state.providerStatus || 'Provider status: unknown';
       providerHintEl.textContent = state.providerHint || '';

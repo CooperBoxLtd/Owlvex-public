@@ -746,6 +746,50 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('All document reads must be tenant-scoped.');
     });
 
+    it('runs the project context quick action and reports readiness', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                switch (key) {
+                    case 'frameworks':
+                        return ['OWASP', 'STRIDE'];
+                    case 'severityThreshold':
+                        return 'MEDIUM';
+                    case 'projectContext':
+                        return '';
+                    case 'projectContextFile':
+                        return '.owlvex/project-context.md';
+                    case 'teamContext':
+                        return '';
+                    default:
+                        return defaultValue;
+                }
+            }),
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+                isConfigured: async () => true,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+
+        await (provider as any).handleQuickAction('openProjectContext');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.openProjectContext);
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Project context is ready:');
+        expect(finalMessage.content).toContain('.owlvex/project-context.md');
+    });
+
     it('can open a review diff from an action that targets a scanned file path', async () => {
         const complete = jest.fn().mockResolvedValue({
             content: [

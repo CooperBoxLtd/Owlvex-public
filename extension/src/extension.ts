@@ -128,6 +128,73 @@ function collectOpenEditorUris(): vscode.Uri[] {
     return [...seen.values()];
 }
 
+const DEFAULT_PROJECT_CONTEXT_RELATIVE_PATH = '.owlvex/project-context.md';
+
+function buildDefaultProjectContextContent(): string {
+    return [
+        '# Owlvex Project Context Contract',
+        '',
+        'Use this file to help Owlvex understand the project.',
+        '',
+        'Include only the context that materially improves scanning or remediation, such as:',
+        '',
+        '- product purpose',
+        '- important user roles',
+        '- auth and tenant model',
+        '- sensitive data handled here',
+        '- critical workflows',
+        '- architectural trust boundaries',
+        '- required security invariants',
+        '- generated code or folders that should be treated specially',
+        '',
+        'Examples:',
+        '',
+        '- All document reads must be tenant-scoped.',
+        '- Admin actions must pass through policy middleware.',
+        '- JWT verification happens only in auth middleware.',
+        '- The exports folder contains generated code and should not drive primary findings.',
+    ].join('\n');
+}
+
+async function openOrCreateProjectContext(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    const configuredFile = config.get<string>('projectContextFile', '').trim();
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+
+    if (!workspaceFolder) {
+        const document = await vscode.workspace.openTextDocument({
+            language: 'markdown',
+            content: buildDefaultProjectContextContent(),
+        });
+        await vscode.window.showTextDocument(document, { preview: false });
+        return { uri: document.uri, created: true };
+    }
+
+    const relativePath = configuredFile || DEFAULT_PROJECT_CONTEXT_RELATIVE_PATH;
+    const targetFsPath = path.isAbsolute(relativePath)
+        ? relativePath
+        : path.join(workspaceFolder.uri.fsPath, relativePath);
+    const targetUri = vscode.Uri.file(targetFsPath);
+
+    let created = false;
+    try {
+        await vscode.workspace.fs.stat(targetUri);
+    } catch {
+        await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(targetFsPath)));
+        await vscode.workspace.fs.writeFile(targetUri, Buffer.from(buildDefaultProjectContextContent(), 'utf8'));
+        created = true;
+    }
+
+    const normalizedRelative = vscode.workspace.asRelativePath(targetUri, false);
+    if (!configuredFile || configuredFile !== normalizedRelative) {
+        await persistProviderSetting('projectContextFile', normalizedRelative);
+    }
+
+    const document = await vscode.workspace.openTextDocument(targetUri);
+    await vscode.window.showTextDocument(document, { preview: false });
+    return { uri: targetUri, created, relativePath: normalizedRelative };
+}
+
 function getFrameworkConfigurationTarget(): vscode.ConfigurationTarget {
     return vscode.workspace.workspaceFolders?.length
         ? vscode.ConfigurationTarget.Workspace
@@ -1005,6 +1072,23 @@ export function activate(context: vscode.ExtensionContext) {
                         ? ' Check the base URL, model name, and API key.'
                         : ' Check your key.';
                 vscode.window.showErrorMessage(message?.trim() || `${provider.name} connection failed.${extraHint}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.openProjectContext, async () => {
+            const result = await openOrCreateProjectContext();
+            if (result.relativePath) {
+                vscode.window.showInformationMessage(
+                    result.created
+                        ? `${PROFILE.displayLabel}: Created project context at ${result.relativePath}`
+                        : `${PROFILE.displayLabel}: Opened project context at ${result.relativePath}`,
+                );
+            } else {
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: Opened an untitled project context document. Save it into the repo to reuse it automatically.`,
+                );
             }
         })
     );
