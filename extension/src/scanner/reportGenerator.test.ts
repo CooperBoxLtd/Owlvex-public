@@ -398,4 +398,68 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Sources: OWASP SQL Injection Prevention Cheat Sheet');
     });
 
+    it('keeps a stable report headline posture for repo-ai findings', async () => {
+        jest.useFakeTimers().setSystemTime(new Date('2026-04-16T00:00:00.000Z'));
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+        const snapshot = {
+            targetLabel: 'tools/demo-app',
+            outputRoot: vscode.Uri.file('d:\\repo\\tools\\demo-app'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\tools\\demo-app\\src\\tokens.js'),
+                    result: buildResult({
+                        score: 9,
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                scanTier: 'REPO_AI',
+                                corroboration: 'CORROBORATED',
+                                riskScore: 9,
+                            },
+                        ],
+                        provider: 'azure-foundry',
+                        model: 'owlvex-gpt54mini',
+                        summary: 'Repo context strengthened one finding.',
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        const summarySlice = written
+            .split('## Findings By File')[0]
+            .trim();
+
+        expect(summarySlice).toMatchInlineSnapshot(`
+"# Owlvex Vulnerability Scan Report
+
+Generated: 2026-04-16T00:00:00.000Z
+Target: \`tools/demo-app\`
+Report location: \`d:\\repo\\tools\\demo-app\`
+
+## Summary
+
+- Files scanned: 1
+- Files with findings: 1
+- Total findings: 1
+- Average file risk score: 9.0/10
+- Deterministic findings: 0
+- Intelligence source coverage: Fresh Packs: 1
+- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
+- Errors: 0
+- Scan warnings: 0
+- Coverage posture: Full scan posture for current provider/runtime state
+- Primary scan mode: REPO_AI
+- Scan tier posture: repo_ai: 1
+- Corroboration posture: corroborated: 1
+- Project context: inline project contract
+- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue."
+`);
+        jest.useRealTimers();
+    });
+
 });

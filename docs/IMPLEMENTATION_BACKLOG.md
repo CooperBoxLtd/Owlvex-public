@@ -69,6 +69,16 @@ Benchmark source-of-truth files for that phase:
 
 During stabilization, changes to AI normalization, report posture, confidence framing, and helper-context reasoning should be judged against those benchmark expectation files before broader issue-family expansion is considered.
 
+Issue-family admission rule for this phase:
+
+- no new issue family or major rule expansion should ship without:
+- a benchmark expectation entry
+- a safe companion or explicit negative case
+- at least one regression test
+- a false-positive guard when the class is prone to contextual overcalling
+
+If one of those is missing, the issue family stays experimental and should not be presented as part of the trusted scanner surface.
+
 The default benchmark refresh loop for this phase is:
 
 ```bash

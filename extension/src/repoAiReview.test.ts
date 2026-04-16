@@ -170,6 +170,89 @@ describe('repoAiReview helpers', () => {
         expect(prompt).toContain('"id": "db.js#f1"');
     });
 
+    it('keeps the repo ai prompt shape bounded and stable', () => {
+        const prompt = buildRepoAiReviewPrompt({
+            scopeLabel: 'Selected files: 2 file(s)',
+            projectContext: 'JWT verification happens only in auth middleware.',
+            fileSummaries: [{
+                path: 'src/lib/tokens.js',
+                fileRiskScore: 9,
+                findings: 2,
+                topFindingTitle: 'Weak JWT validation',
+                scanTiers: ['TARGETED_AI'],
+            }],
+            candidates: [{
+                reviewId: 'src/lib/tokens.js#f1',
+                path: 'src/lib/tokens.js',
+                resultIndex: 0,
+                findingIndex: 0,
+                finding: {
+                    id: 'f1',
+                    line: 17,
+                    lineEnd: 17,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'AI-1',
+                    title: 'Weak JWT validation',
+                    explanation: 'The token is decoded without verification.',
+                    threat: 'Attackers may tamper with token claims.',
+                    fix: 'Verify JWT signatures and claims before trusting them.',
+                    confidence: 0.84,
+                    provenance: 'ai',
+                    scanTier: 'TARGETED_AI',
+                    corroboration: 'PARTIAL',
+                    canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+                    riskScore: 9,
+                },
+                snippet: '17 | const claims = decodeWithoutVerify(token);',
+            }],
+        });
+
+        expect(prompt).toMatchInlineSnapshot(`
+"You are Owlvex Repo AI review.
+Review only the candidate findings below using broader repo context across the scanned files.
+Support a candidate only when cross-file or architectural context materially strengthens the claim.
+Do not invent new findings. Do not suppress findings just because the snippet is incomplete.
+Return JSON only in this shape:
+{"reviews":[{"id":"candidate-id","verdict":"support|reject|unclear","reason":"short reason"}]}
+
+Scope:
+Selected files: 2 file(s)
+
+Project context:
+JWT verification happens only in auth middleware.
+
+Scanned file summaries:
+[
+  {
+    "path": "src/lib/tokens.js",
+    "fileRiskScore": 9,
+    "findings": 2,
+    "topFindingTitle": "Weak JWT validation",
+    "scanTiers": [
+      "TARGETED_AI"
+    ]
+  }
+]
+
+Candidate findings:
+[
+  {
+    "id": "src/lib/tokens.js#f1",
+    "path": "src/lib/tokens.js",
+    "line": 17,
+    "line_end": 17,
+    "title": "Weak JWT validation",
+    "canonical_id": "owlvex.issue.weak_jwt_validation.001",
+    "risk_score": 9,
+    "corroboration": "PARTIAL",
+    "explanation": "The token is decoded without verification.",
+    "snippet": "17 | const claims = decodeWithoutVerify(token);"
+  }
+]"
+`);
+    });
+
     it('parses fenced JSON review responses', () => {
         const reviews = parseRepoAiReviewResponse('```json\n{"reviews":[{"id":"a#1","verdict":"support","reason":"cross-file policy missing"}]}\n```');
         expect(reviews).toEqual([{ id: 'a#1', verdict: 'support', reason: 'cross-file policy missing' }]);
