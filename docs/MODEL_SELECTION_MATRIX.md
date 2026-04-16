@@ -12,6 +12,7 @@ The goal is to find the best model posture for Owlvex's actual product shape:
 
 - deterministic-first security scanning
 - single-model, multi-pass corroboration
+- one selected agent executing all three reasoning roles
 - explicit confidence boundaries
 - benchmark-backed reliability
 - acceptable client cost and operational friction
@@ -46,6 +47,17 @@ The preferred evaluation posture is:
 During stabilization, model selection is organized by role.
 
 Even if the same underlying model is used for all passes, the role definitions still matter because they describe what behavior the model must support.
+
+The default Owlvex posture is not "three different agents."
+
+The default posture is:
+
+- one selected provider/model
+- one agent identity
+- three sequential role prompts
+- one merge or adjudication layer owned by Owlvex
+
+This keeps the client setup simple while still giving the scanner multiple reasoning perspectives.
 
 ### Role 1: Primary Scanner
 
@@ -315,6 +327,13 @@ To keep the next round disciplined, Owlvex should benchmark in this order:
 2. `claude-opus-4-6` as the strongest verifier / skeptic candidate
 3. one cheaper or faster candidate from the already supported providers
 4. one accessibility-first candidate such as Ollama
+
+For each candidate above, the intended test shape is still the same:
+
+- the same selected agent handles `Finder`
+- the same selected agent handles `Verifier`
+- the same selected agent handles `Skeptic`
+- Owlvex compares the three outputs using its merge rules
 
 This order matters because it answers the most important questions first:
 

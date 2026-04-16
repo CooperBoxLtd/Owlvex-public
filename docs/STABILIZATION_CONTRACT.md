@@ -130,7 +130,7 @@ Owlvex adopts single-model, multi-pass corroboration as the primary AI verificat
 
 This means:
 
-- one model may be used across multiple sequential reasoning passes
+- one selected model or agent is reused across multiple sequential reasoning passes
 - the passes must use distinct roles and instructions
 - the product must reconcile agreement and disagreement explicitly rather than pretending consensus
 
@@ -146,6 +146,15 @@ The default role set is:
    Attempt to disprove the candidate using contradictory local evidence, guards, safe patterns, or missing required sinks.
 
 These roles may be implemented using the same underlying model in separate passes. Owlvex must not require customers to provision multiple models, multiple agents, or specialized infrastructure just to benefit from corroboration.
+
+The default implementation target is:
+
+- one selected provider/model
+- one agent identity
+- three sequential prompts or passes
+- one Owlvex-controlled adjudication step
+
+Owlvex may evolve beyond that later, but stabilization work should assume the simple default unless there is a benchmark-backed reason to add more complexity.
 
 ---
 

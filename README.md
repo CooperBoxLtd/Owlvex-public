@@ -105,7 +105,7 @@ Owlvex also ships as a VS Code extension with AI-assisted coverage for patterns 
 Current direction: the AI lane is being hardened around single-model, multi-pass corroboration. The intended posture is:
 
 - deterministic findings remain `PROVEN`
-- AI findings are corroborated through separate finder / verifier / skeptic passes
+- one selected agent runs separate finder / verifier / skeptic passes in sequence
 - disagreement reduces confidence instead of being flattened away
 - degraded scans must say so explicitly
 
