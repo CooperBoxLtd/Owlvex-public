@@ -95,7 +95,7 @@ describe('SidebarProvider', () => {
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toEqual(expect.arrayContaining([
             'Discuss this finding',
-            'Review fix',
+            'Fix code',
             'Risk: HIGH/HIGH -> 8/10',
             'Confidence tier: PROVEN',
             'Corroboration: PROVEN',
@@ -108,7 +108,7 @@ describe('SidebarProvider', () => {
         const discussNode = detailNodes.find(node => node.label === 'Discuss this finding');
         expect(discussNode?.command?.command).toBe('owlvex.discussFinding');
         expect(discussNode?.command?.arguments?.[0]).toMatchObject({ id: 'finding-1', title: 'Path traversal' });
-        const fixPreviewNode = detailNodes.find(node => node.label === 'Review fix');
+        const fixPreviewNode = detailNodes.find(node => node.label === 'Fix code');
         expect(fixPreviewNode?.command?.command).toBe('owlvex.generateFixPreview');
         expect(fixPreviewNode?.command?.arguments?.[0]).toMatchObject({ id: 'finding-1', title: 'Path traversal' });
     });

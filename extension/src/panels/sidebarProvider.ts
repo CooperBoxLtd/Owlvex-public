@@ -192,11 +192,11 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
             iconId: 'comment-discussion',
         },
         {
-            label: 'Review fix',
-            tooltip: 'Ask Owlvex to open a review-only code diff for this finding.',
+            label: 'Fix code',
+            tooltip: 'Ask Owlvex to generate a review-only code diff for this finding.',
             command: {
                 command: PROFILE.commands.generateFixPreview,
-                title: 'Review fix',
+                title: 'Fix code',
                 arguments: [finding],
             },
             iconId: 'diff',

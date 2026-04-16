@@ -587,7 +587,7 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('Latest report context: none');
     });
 
-    it('adds a Review fix action to scan-backed file results', async () => {
+    it('adds a Fix code action to scan-backed file results', async () => {
         const provider = new ChatViewProvider({
             getActive: () => ({
                 id: 'test-provider',
@@ -640,9 +640,9 @@ describe('parseChatIntent', () => {
         await (provider as any).handleUserMessage('scan this file');
 
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
-        expect(finalMessage.content).toContain('Next step: use Review fix to open a side-by-side remediation diff.');
+        expect(finalMessage.content).toContain('Next step: use Fix code to open a side-by-side remediation diff.');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Review fix', kind: 'generateFixPreview', path: 'd:\\repo\\src\\userRepo.js' }),
+            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: 'd:\\repo\\src\\userRepo.js' }),
             expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
         ]));
     });
@@ -743,7 +743,7 @@ describe('parseChatIntent', () => {
             kind: 'scan',
             actions: [{
                 id: 'review-fix-redirect',
-                label: 'Review fix',
+                label: 'Fix code',
                 kind: 'generateFixPreview',
                 path: targetUri.fsPath,
                 finding: {

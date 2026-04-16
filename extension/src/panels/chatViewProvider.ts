@@ -509,7 +509,7 @@ function severityRank(severity: string): number {
 function buildReviewFixAction(finding: Finding, targetPath?: string): ChatMessageAction {
     return {
         id: `generate-fix-preview-${finding.id ?? finding.line}`,
-        label: 'Review fix',
+        label: 'Fix code',
         kind: 'generateFixPreview',
         finding,
         path: targetPath,
@@ -672,11 +672,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         });
         this.messages.push({
             role: 'user',
-            content: `Review fix: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
+            content: `Fix code: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
         });
         this.messages.push({
             role: 'assistant',
-            content: 'Preparing review fix diff...',
+            content: 'Preparing code fix diff...',
             kind: 'advisory',
         });
         this.refresh();
@@ -969,7 +969,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `Total findings: ${result.totalFindings}`,
                     ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                         .map((line, index) => `Remediation ${index + 1}: ${line}`),
-                    topActionable ? `Next step: Review fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
+                    topActionable ? `Next step: Fix code opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
                     result.results.some((item: any) => item.result.warnings.length)
                         ? `Scan warnings: ${result.results.reduce((total: number, item: any) => total + item.result.warnings.length, 0)}`
                         : 'No scan warnings were reported.',
@@ -1014,7 +1014,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `Total findings: ${result.totalFindings}`,
                     ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                         .map((line, index) => `Remediation ${index + 1}: ${line}`),
-                    topActionable ? `Next step: Review fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
+                    topActionable ? `Next step: Fix code opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
                     result.errors.length
                         ? `Scan errors: ${result.errors.length}`
                         : 'No scan errors were reported.',
@@ -1056,7 +1056,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `Total findings: ${result.totalFindings}`,
                     ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                         .map((line, index) => `Remediation ${index + 1}: ${line}`),
-                    topActionable ? `Next step: Review fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
+                    topActionable ? `Next step: Fix code opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
                     result.errors.length
                         ? `Scan errors: ${result.errors.length}`
                         : 'No scan errors were reported.',
@@ -1415,7 +1415,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ].join('\n')
                         : 'File scan did not complete.',
                     actions: result?.status === 'completed' && result?.result && result?.uri
-                        ? [buildExplainScoreAction('explain-score-file', [{ uri: result.uri, result: result.result }])]
+                        ? [
+                            ...(this.latestActionableFinding ? [buildReviewFixAction(this.latestActionableFinding, result.uri.fsPath)] : []),
+                            buildExplainScoreAction('explain-score-file', [{ uri: result.uri, result: result.result }]),
+                        ]
                         : undefined,
                 };
             } else if (action === 'scanSelectedFiles') {
@@ -1457,7 +1460,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             ? 'No supported source files were selected.'
                             : 'Selected-files scan was cancelled.',
                     actions: result?.status === 'completed'
-                        ? [buildExplainScoreAction('explain-score-selected', result.results ?? [])]
+                        ? [
+                            ...(result?.results?.length ? (() => {
+                                const topActionable = getTopActionableFindingResult(result.results ?? []);
+                                return topActionable ? [buildReviewFixAction(topActionable.finding, topActionable.targetPath)] : [];
+                            })() : []),
+                            buildExplainScoreAction('explain-score-selected', result.results ?? []),
+                        ]
                         : undefined,
                 };
             } else if (action === 'scanOpenEditors') {
@@ -1499,7 +1508,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             ? 'No supported open editors were available to scan.'
                             : 'Open-editors scan was cancelled.',
                     actions: result?.status === 'completed'
-                        ? [buildExplainScoreAction('explain-score-open-editors', result.results ?? [])]
+                        ? [
+                            ...(result?.results?.length ? (() => {
+                                const topActionable = getTopActionableFindingResult(result.results ?? []);
+                                return topActionable ? [buildReviewFixAction(topActionable.finding, topActionable.targetPath)] : [];
+                            })() : []),
+                            buildExplainScoreAction('explain-score-open-editors', result.results ?? []),
+                        ]
                         : undefined,
                 };
             } else if (action === 'scanFolder') {
@@ -1544,7 +1559,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             ? 'No supported source files were found in the selected folder.'
                             : 'Folder scan was cancelled.',
                     actions: result?.status === 'completed'
-                        ? [buildExplainScoreAction('explain-score-folder', result.results ?? [])]
+                        ? [
+                            ...(result?.results?.length ? (() => {
+                                const topActionable = getTopActionableFindingResult(result.results ?? []);
+                                return topActionable ? [buildReviewFixAction(topActionable.finding, topActionable.targetPath)] : [];
+                            })() : []),
+                            buildExplainScoreAction('explain-score-folder', result.results ?? []),
+                        ]
                         : undefined,
                 };
             } else if (action === 'scanReport') {
@@ -1587,7 +1608,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             ? 'Report creation could not continue because no supported files were found.'
                             : 'Report creation was cancelled.',
                     actions: result?.status === 'completed'
-                        ? [buildExplainScoreAction('explain-score-report', result.summary?.results ?? [])]
+                        ? [
+                            ...(result?.summary?.results?.length ? (() => {
+                                const topActionable = getTopActionableFindingResult(result.summary?.results ?? []);
+                                return topActionable ? [buildReviewFixAction(topActionable.finding, topActionable.targetPath)] : [];
+                            })() : []),
+                            buildExplainScoreAction('explain-score-report', result.summary?.results ?? []),
+                        ]
                         : undefined,
                 };
             } else {
@@ -1695,7 +1722,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             response: [
                 `File scan completed for ${relativePath}.`,
                 ...buildScanSummaryLines(result.result),
-                this.latestActionableFinding ? 'Next step: use Review fix to open a side-by-side remediation diff.' : '',
+                this.latestActionableFinding ? 'Next step: use Fix code to open a side-by-side remediation diff.' : '',
             ].join('\n'),
             kind: 'scan',
             actions,
