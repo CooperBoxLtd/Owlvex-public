@@ -141,6 +141,8 @@ The backend-served intelligence and IP-protection contract for rule/config deliv
 
 The current scanner-hardening phase and benchmark-first reliability contract live in [docs/STABILIZATION_CONTRACT.md](docs/STABILIZATION_CONTRACT.md).
 
+The model comparison rubric for stronger-agent experiments lives in [docs/MODEL_SELECTION_MATRIX.md](docs/MODEL_SELECTION_MATRIX.md).
+
 Current note: Azure production is now planned around App Service for Containers. Existing Container Apps deployment files in `infra/` are deprecated and need to be rewritten before first prod bootstrap.
 
 That document is the source of truth for:

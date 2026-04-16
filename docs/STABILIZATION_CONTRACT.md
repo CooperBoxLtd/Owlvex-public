@@ -82,6 +82,8 @@ Until this contract is met, Owlvex should not prioritize:
 
 Model upgrades are allowed, but they are not the primary plan. A stronger model may improve precision, but model quality is an amplifier, not a replacement for scanner design discipline.
 
+When model comparisons are run, they must use the evaluation method defined in [MODEL_SELECTION_MATRIX.md](D:/Dev/repos/CodeScanner/docs/MODEL_SELECTION_MATRIX.md).
+
 ---
 
 ## Benchmark Sources Of Truth

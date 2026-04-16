@@ -75,6 +75,8 @@ The current AI verification direction for stabilization is single-model, multi-p
 
 Those roles may be implemented with the same underlying model in separate passes. The goal is to improve verification without requiring customers to provision multiple agents or heavyweight validation infrastructure.
 
+Model/provider changes during this phase must be evaluated using [MODEL_SELECTION_MATRIX.md](D:/Dev/repos/CodeScanner/docs/MODEL_SELECTION_MATRIX.md) rather than by anecdotal scan quality alone.
+
 ## Workstream Map
 
 ```mermaid
