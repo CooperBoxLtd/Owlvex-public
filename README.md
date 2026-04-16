@@ -143,6 +143,8 @@ The current scanner-hardening phase and benchmark-first reliability contract liv
 
 The model comparison rubric for stronger-agent experiments lives in [docs/MODEL_SELECTION_MATRIX.md](docs/MODEL_SELECTION_MATRIX.md).
 
+The project-grounding and hybrid scan-tier contract lives in [docs/PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md](docs/PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md).
+
 Current note: Azure production is now planned around App Service for Containers. Existing Container Apps deployment files in `infra/` are deprecated and need to be rewritten before first prod bootstrap.
 
 That document is the source of truth for:

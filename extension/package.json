@@ -199,7 +199,17 @@
         "owlvex.teamContext": {
           "type": "string",
           "default": "",
-          "description": "Optional project/team context appended to every prompt"
+          "description": "Legacy optional project/team context appended to prompts. Prefer owlvex.projectContext or owlvex.projectContextFile."
+        },
+        "owlvex.projectContext": {
+          "type": "string",
+          "default": "",
+          "description": "Optional local project context contract or TDD-style summary used to ground AI scans and remediation prompts"
+        },
+        "owlvex.projectContextFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional local file path to a project context contract document used to ground AI scans and remediation prompts"
         }
       }
     },

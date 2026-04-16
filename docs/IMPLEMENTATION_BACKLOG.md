@@ -60,6 +60,8 @@ Every backlog item should preserve these invariants:
 
 The current scanner-hardening phase is governed by [STABILIZATION_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/STABILIZATION_CONTRACT.md).
 
+The next execution-shape contract for project grounding and explicit hybrid scan tiers is [PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md).
+
 Benchmark source-of-truth files for that phase:
 
 - [tools/demo/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo/EXPECTATIONS.md)
@@ -85,6 +87,48 @@ The current AI verification direction for stabilization is single-model, multi-p
 Those roles should be implemented first as one selected agent/model running three separate passes in sequence. The goal is to improve verification without requiring customers to provision multiple agents or heavyweight validation infrastructure.
 
 Model/provider changes during this phase must be evaluated using [MODEL_SELECTION_MATRIX.md](D:/Dev/repos/CodeScanner/docs/MODEL_SELECTION_MATRIX.md) rather than by anecdotal scan quality alone.
+
+The current hybrid scanner is being formalized, not replaced. Future implementation should move toward three explicit scan tiers:
+
+- `STATIC`
+- `TARGETED_AI`
+- `REPO_AI`
+
+and should support a client-side Project Context Contract that can ground AI reasoning without weakening the source-code privacy boundary.
+
+## Workstream 0: Project Context And Scan Tiers
+
+### Goal
+
+Turn the current implicit hybrid scan model into an explicit three-tier system, and add a local project-context input path that helps AI understand the repo's goals, architecture, and trust boundaries.
+
+### Tasks
+
+- define first-class scan tier metadata in the scanner result model
+- classify current scan paths as `STATIC`, `TARGETED_AI`, or `REPO_AI`
+- define a local Project Context Contract format for user-supplied TDD-style context
+- keep Project Context Contract data local by default
+- ensure project context can be included only in AI-backed tiers, never as deterministic proof input
+- surface scan tier visibly in reports, sidebar, and future scan summaries
+- add benchmark or regression coverage to prevent tier labels from drifting silently
+
+### Likely Files
+
+- [scanEngine.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/scanEngine.ts)
+- [reportGenerator.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/reportGenerator.ts)
+- [sidebarProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/sidebarProvider.ts)
+- [chatViewProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/chatViewProvider.ts)
+- [PRODUCT.md](D:/Dev/repos/CodeScanner/docs/PRODUCT.md)
+- [PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md)
+
+### Acceptance Criteria
+
+- scan results carry an explicit tier
+- deterministic results map cleanly to `STATIC`
+- bounded AI analysis paths map cleanly to `TARGETED_AI`
+- broad exploratory AI paths map cleanly to `REPO_AI`
+- project context remains local by default and never upgrades a finding to `PROVEN`
+- users can tell from the UI/report what kind of scan produced a finding
 
 ## Workstream Map
 

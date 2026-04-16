@@ -21,6 +21,10 @@ function getConfidenceTierLabel(finding: Finding): string {
     return finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE');
 }
 
+function getScanTierLabel(finding: Finding): string {
+    return finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI');
+}
+
 function getCorroborationLabel(finding: Finding): string {
     return finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED');
 }
@@ -149,6 +153,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         `Impact: ${f.severity}`,
                         `Likelihood: ${getFindingLikelihood(f)}`,
                         `Contextual risk: ${f.riskScore ?? 'n/a'}/10`,
+                        `Scan tier: ${getScanTierLabel(f)}`,
                         `Corroboration: ${getCorroborationLabel(f)}`,
                         remediation.remediation || f.explanation,
                     ].join('\n'),
@@ -204,6 +209,10 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
         {
             label: `Risk: ${finding.severity}/${getFindingLikelihood(finding)} -> ${finding.riskScore ?? 'n/a'}/10`,
             tooltip: `Impact ${finding.severity}, likelihood ${getFindingLikelihood(finding)}, contextual risk ${finding.riskScore ?? 'n/a'}/10`,
+        },
+        {
+            label: `Scan tier: ${getScanTierLabel(finding)}`,
+            tooltip: `Owlvex execution tier for this finding: ${getScanTierLabel(finding)}`,
         },
         {
             label: `Confidence tier: ${getConfidenceTierLabel(finding)}`,

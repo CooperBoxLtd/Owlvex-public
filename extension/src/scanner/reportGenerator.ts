@@ -135,6 +135,7 @@ function hasPartialAiCoverage(result: ScanResult): boolean {
 
 function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     return [
+        `mode ${(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI')).toLowerCase()}`,
         `tier ${(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')).toLowerCase()}`,
         `corroboration ${(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED')).toLowerCase()}`,
         `impact ${finding.severity.toLowerCase()}`,
@@ -437,6 +438,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`#### ${finding.canonicalTitle || finding.title}`);
                 lines.push(`- Location: \`${item.file}\` at L${finding.line}${finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`);
                 lines.push(`- Finding risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
+                lines.push(`- Scan tier: ${finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI')}`);
                 lines.push(`- Confidence tier: ${finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')}`);
                 lines.push(`- Corroboration: ${finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED')}`);
                 lines.push(`- Why it matters: ${finding.explanation || 'No explanation returned.'}`);

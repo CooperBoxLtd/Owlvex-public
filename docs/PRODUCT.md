@@ -18,6 +18,8 @@ The implementation design and architectural source of truth live in [IMPLEMENTAT
 
 The delivery backlog for that design lives in [IMPLEMENTATION_BACKLOG.md](IMPLEMENTATION_BACKLOG.md).
 
+The next execution-shape contract for project grounding and tiered hybrid scanning lives in [PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md](PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md).
+
 ---
 
 ## Product Pitch
@@ -41,11 +43,11 @@ Investor-style framing:
 
 1. **Deterministic-first findings** - Owlvex runs structural invariant checks locally before AI is involved. Findings marked deterministic are proven violations and should not be presented as probabilistic guesses.
 
-2. **AI-assisted coverage** - For patterns that cannot be structurally proven, Owlvex uses the customer-selected AI provider. AI findings carry explicit confidence context and remain clearly distinct from deterministic findings.
+2. **AI-assisted coverage** - For patterns that cannot be structurally proven, Owlvex uses the customer-selected AI provider. AI findings carry explicit confidence context and remain clearly distinct from deterministic findings. The intended hybrid execution shape is being formalized into `STATIC`, `TARGETED_AI`, and `REPO_AI` scan tiers rather than one undifferentiated AI lane.
 
 3. **Bring your own model** - OpenAI, Anthropic, Azure AI Foundry, Gemini, Groq, Mistral, Ollama, or any compatible custom endpoint.
 
-4. **Source code stays on the client** - The backend builds prompts, delivers grounded data, and records control-plane metadata. Code is sent only to the customer-selected AI provider, never to Owlvex backend services.
+4. **Source code stays on the client** - The backend builds prompts, delivers grounded data, and records control-plane metadata. Code is sent only to the customer-selected AI provider, never to Owlvex backend services. The same privacy default should apply to future user-supplied project-context/TDD documents unless the user explicitly chooses otherwise.
 
 ---
 
@@ -70,6 +72,7 @@ The execution plane. Provides:
 - in-editor diagnostics
 - AI chat for advisory guidance, plain-language fix explanations, and concrete replacement code when the user asks how to remediate a finding
 - AI-assisted reasoning that can expand from file-level context to nearby project context when the issue or proposed fix depends on code outside the active file
+- future project-context upload or paste flow so users can give Owlvex TDD-style architectural grounding, goals, and security expectations for the repo
 - future controlled remediation flow that can propose file changes for a finding, show a diff, and let the user decide whether to apply it
 - report creation with concise per-file findings, remediation guidance, and scan errors/warnings when present
 - scan comparison
@@ -124,9 +127,10 @@ This is the mechanism that defines what Owlvex can claim with certainty. No dete
 2. Extension validates licence with the Owlvex backend.
 3. Extension runs the deterministic scanner locally before any AI call.
 4. Extension requests an assembled system prompt from the backend.
-5. Extension sends source code plus prompt directly to the selected AI provider.
-6. Extension merges AI findings with deterministic findings.
-7. Extension applies diagnostics, updates the sidebar, and records scan metadata with the backend.
+5. Extension may include local project-context contract data when the selected scan tier benefits from architectural grounding.
+6. Extension sends source code plus prompt directly to the selected AI provider.
+7. Extension merges AI findings with deterministic findings.
+8. Extension applies diagnostics, updates the sidebar, and records scan metadata with the backend.
 
 ### Privacy Model
 
@@ -190,6 +194,8 @@ OpenAI, Anthropic, Azure AI Foundry, Ollama, Mistral, Google Gemini, Groq, and c
 
 **Context-aware AI assistance** - when file-only analysis is not enough, Owlvex should gather nearby project context such as imports, referenced helpers, and related files before presenting higher-confidence AI reasoning or code changes.
 
+**Project-grounded AI assistance** - future workflow where users can provide a local TDD-style project context contract so the AI lane better understands goals, roles, architecture, trust boundaries, and critical flows without changing the deterministic truth boundary.
+
 ---
 
 ## Demo Assets
@@ -235,6 +241,14 @@ Owlvex sits between generic "chat with your code" experiences and heavyweight en
 - A developer-native security product with a clear expansion path into team reporting, policy, and compliance
 
 The deterministic engine is the differentiation. It turns the product from "a scanner that finds things" into "a scanner that proves things" - a materially different trust claim.
+
+The execution model should become clearer over time:
+
+- `STATIC` for deterministic proof
+- `TARGETED_AI` for bounded AI review of narrowed code targets
+- `REPO_AI` for broad repo-context reasoning
+
+That is intended to strengthen the existing hybrid scanner, not replace it.
 
 ---
 

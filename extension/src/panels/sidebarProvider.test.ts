@@ -59,6 +59,7 @@ describe('SidebarProvider', () => {
                 confidence: 0.9,
                 canonicalId: 'owlvex.issue.path_traversal.001',
                 provenance: 'deterministic',
+                scanTier: 'STATIC',
                 confidenceTier: 'PROVEN',
                 corroboration: 'PROVEN',
                 likelihood: 'HIGH',
@@ -97,6 +98,7 @@ describe('SidebarProvider', () => {
             'Discuss this finding',
             'Fix code',
             'Risk: HIGH/HIGH -> 8/10',
+            'Scan tier: STATIC',
             'Confidence tier: PROVEN',
             'Corroboration: PROVEN',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
@@ -132,6 +134,7 @@ describe('SidebarProvider', () => {
                 fix: 'Use parameterized queries.',
                 confidence: 0.91,
                 provenance: 'ai',
+                scanTier: 'TARGETED_AI',
                 confidenceTier: 'PLAUSIBLE',
                 corroboration: 'CORROBORATED',
                 likelihood: 'HIGH',
@@ -151,6 +154,7 @@ describe('SidebarProvider', () => {
 
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toContain('AI confidence: 91%');
+        expect(detailNodes.map(node => node.label)).toContain('Scan tier: TARGETED_AI');
         expect(detailNodes.map(node => node.label)).toContain('Confidence tier: PLAUSIBLE');
         expect(detailNodes.map(node => node.label)).toContain('Corroboration: CORROBORATED');
         expect(String(provider.getChildren()[0].tooltip)).toContain('Corroboration posture: corroborated: 1');
@@ -196,6 +200,7 @@ describe('SidebarProvider', () => {
                     fix: 'Guard debug mode.',
                     confidence: 1,
                     provenance: 'deterministic',
+                    scanTier: 'STATIC',
                     confidenceTier: 'PROVEN',
                     corroboration: 'PROVEN',
                     likelihood: 'HIGH',
@@ -214,6 +219,7 @@ describe('SidebarProvider', () => {
                     fix: 'Enforce ownership checks.',
                     confidence: 0.81,
                     provenance: 'ai',
+                    scanTier: 'TARGETED_AI',
                     confidenceTier: 'PLAUSIBLE',
                     corroboration: 'PARTIAL',
                     likelihood: 'MEDIUM',
@@ -232,6 +238,7 @@ describe('SidebarProvider', () => {
                     fix: 'Allow-list destinations.',
                     confidence: 0.62,
                     provenance: 'ai',
+                    scanTier: 'TARGETED_AI',
                     confidenceTier: 'PLAUSIBLE',
                     corroboration: 'UNVERIFIED',
                     likelihood: 'LOW',

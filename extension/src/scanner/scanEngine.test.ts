@@ -408,6 +408,7 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].scanTier).toBe('STATIC');
         expect(result.model).toContain('deterministic-only');
         expect(result.warnings[0]).toMatch(/backend unavailable/i);
         expect(provider.complete).not.toHaveBeenCalled();
@@ -447,6 +448,7 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].scanTier).toBe('STATIC');
         expect(result.findings[0].confidenceTier).toBe('PROVEN');
         expect(result.warnings[0]).toMatch(/AI provider unavailable/i);
         expect(global.fetch).toHaveBeenCalledTimes(1);
@@ -1382,6 +1384,8 @@ if (process.env.NODE_ENV !== 'production') {
                     case 'severityThreshold':
                         return 'MEDIUM';
                     case 'teamContext':
+                    case 'projectContext':
+                    case 'projectContextFile':
                         return '';
                     default:
                         return defaultValue;
@@ -1452,6 +1456,8 @@ if (process.env.NODE_ENV !== 'production') {
                     case 'severityThreshold':
                         return 'MEDIUM';
                     case 'teamContext':
+                    case 'projectContext':
+                    case 'projectContextFile':
                         return '';
                     default:
                         return defaultValue;
@@ -1514,6 +1520,79 @@ if (process.env.NODE_ENV !== 'production') {
         expect(userMessage).toContain('owlvex.issue.insecure_cors.001 | Overly permissive CORS policy');
         expect(userMessage).toContain('Signals matched in code: cors, access-control-allow-origin');
         expect(userMessage).toContain('Cheat-sheet guidance: OWASP Cross Origin Resource Sharing Cheat Sheet');
+    });
+
+    it('injects local project context into prompt building and AI requests', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: (key: string, defaultValue?: any) => {
+                switch (key) {
+                    case 'apiUrl':
+                        return 'https://api.example.test';
+                    case 'frameworks':
+                        return ['OWASP'];
+                    case 'severityThreshold':
+                        return 'MEDIUM';
+                    case 'teamContext':
+                        return '';
+                    case 'projectContext':
+                        return 'Documents are tenant-scoped and admin actions must use policy middleware.';
+                    case 'projectContextFile':
+                        return '';
+                    default:
+                        return defaultValue;
+                }
+            },
+        });
+
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const complete = jest.fn().mockResolvedValue({
+            content: JSON.stringify({
+                score: 8,
+                summary: 'ok',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+            }),
+            tokenCount: 42,
+        });
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\docs.js',
+            getText: () => 'const doc = db.documents.findOne({ id: docId });',
+        } as any;
+
+        await engine.scanDocument(doc);
+
+        const promptBuildBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
+        expect(promptBuildBody.team_context).toContain('Project context contract:');
+        expect(promptBuildBody.team_context).toContain('Documents are tenant-scoped');
+
+        const userMessage = complete.mock.calls[0][0].userMessage as string;
+        expect(userMessage).toContain('Project context contract:');
+        expect(userMessage).toContain('admin actions must use policy middleware');
     });
 
     it('runs finder, verifier, and skeptic passes through the same provider sequentially', async () => {

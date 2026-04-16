@@ -640,6 +640,8 @@ describe('parseChatIntent', () => {
         await (provider as any).handleUserMessage('scan this file');
 
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Scan tiers: targeted_ai: 1');
+        expect(finalMessage.content).toContain('Fix first: SQL Injection | tier TARGETED_AI');
         expect(finalMessage.content).toContain('Next step: use Fix code to open a side-by-side remediation diff.');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: 'd:\\repo\\src\\userRepo.js' }),
@@ -695,6 +697,53 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('Title: Insecure Direct Object Reference');
         expect(request.userMessage).toContain('Suggested remediation:');
         expect(request.userMessage).toContain('Latest report context: none');
+    });
+
+    it('injects project context contract into advisory prompts when configured', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'Use ownership checks.' });
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                switch (key) {
+                    case 'frameworks':
+                        return ['OWASP', 'STRIDE'];
+                    case 'severityThreshold':
+                        return 'MEDIUM';
+                    case 'projectContext':
+                        return 'All document reads must be tenant-scoped.';
+                    case 'projectContextFile':
+                    case 'teamContext':
+                        return '';
+                    default:
+                        return defaultValue;
+                }
+            }),
+        });
+        (vscode.window.activeTextEditor as any) = undefined;
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('how should this repo handle document access?');
+
+        const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Project context contract available: inline project contract');
+        expect(request.userMessage).toContain('Project context contract:');
+        expect(request.userMessage).toContain('All document reads must be tenant-scoped.');
     });
 
     it('can open a review diff from an action that targets a scanned file path', async () => {

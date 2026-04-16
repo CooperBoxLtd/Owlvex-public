@@ -29,6 +29,7 @@ describe('reportGenerator', () => {
                     fix: 'Use parameterized queries.',
                     confidence: 0.93,
                     provenance: 'ai',
+                    scanTier: 'TARGETED_AI',
                     confidenceTier: 'PLAUSIBLE',
                     corroboration: 'CORROBORATED',
                     canonicalId: 'owlvex.issue.sql_injection.001',
@@ -109,9 +110,10 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Coverage posture: Normal coverage for this file');
         expect(written).toContain('- Corroboration posture: corroborated: 1');
         expect(written).toContain('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
-        expect(written).toContain('| Unsanitized SQL query construction | tier plausible \\| corroboration corroborated \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
+        expect(written).toContain('| Unsanitized SQL query construction | mode targeted_ai \\| tier plausible \\| corroboration corroborated \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Finding risk: HIGH impact / MEDIUM likelihood / 7/10');
+        expect(written).toContain('- Scan tier: TARGETED_AI');
         expect(written).toContain('- Confidence tier: PLAUSIBLE');
         expect(written).toContain('- Corroboration: CORROBORATED');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
@@ -228,6 +230,7 @@ describe('reportGenerator', () => {
                             {
                                 ...buildResult().findings[0],
                                 provenance: 'deterministic',
+                                scanTier: 'STATIC',
                                 confidenceTier: 'PROVEN',
                                 corroboration: 'PROVEN',
                                 ruleCode: 'SM-002',

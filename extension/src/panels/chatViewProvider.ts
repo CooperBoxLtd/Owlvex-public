@@ -8,6 +8,7 @@ import { getGroundedFrameworkLabels } from '../frameworks/frameworkGrounding';
 import type { StoredScanRecord } from '../scanner/calibrationReview';
 import type { Finding, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
+import { getProjectContextSummaryFromConfig, loadProjectContextInfo } from '../projectContext';
 
 type ChatRole = 'user' | 'assistant' | 'system';
 type MessageKind = 'advisory' | 'scan';
@@ -120,6 +121,25 @@ function getFindingLikelihood(finding: Finding): string {
     return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
 }
 
+function getScanTierLabel(finding: Finding): string {
+    return finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI');
+}
+
+function summarizeScanTierCounts(findings: Finding[]): string {
+    const order: Array<'STATIC' | 'TARGETED_AI' | 'REPO_AI'> = ['STATIC', 'TARGETED_AI', 'REPO_AI'];
+    const counts = new Map<string, number>();
+
+    for (const finding of findings) {
+        const label = getScanTierLabel(finding);
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+
+    return order
+        .filter(label => (counts.get(label) ?? 0) > 0)
+        .map(label => `${label.toLowerCase()}: ${counts.get(label)}`)
+        .join(' | ') || 'none';
+}
+
 function buildDefaultChatMessages(): ChatMessage[] {
     return [{
         role: 'system',
@@ -192,8 +212,9 @@ function buildScanSummaryLines(result: ScanResult): string[] {
     return [
         `File risk score: ${result.score.toFixed(1)}/10`,
         `Findings: ${result.findings.length}`,
+        `Scan tiers: ${summarizeScanTierCounts(result.findings)}`,
         topRiskFinding
-            ? `Fix first: ${topRiskFinding.title} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
+            ? `Fix first: ${topRiskFinding.title} | tier ${getScanTierLabel(topRiskFinding)} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
             : 'Fix first: none',
         summarizeIssueFamilies(result.findings),
         `Model: ${result.model}`,
@@ -261,6 +282,7 @@ export function buildFindingPromptContext(finding: Finding, snippet?: string): s
         `Title: ${finding.canonicalTitle || finding.title}`,
         `Rule: ${finding.ruleCode || 'n/a'}`,
         `Provenance: ${finding.provenance ?? 'unknown'}`,
+        `Scan tier: ${getScanTierLabel(finding)}`,
         `Location: line ${finding.line}${finding.lineEnd && finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`,
         `Impact: ${finding.severity}`,
         `Likelihood: ${getFindingLikelihood(finding)}`,
@@ -872,6 +894,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 : 'No workspace folder is currently open.';
             const editorContext = this.buildEditorContext();
             const scanContext = this.buildScanContext();
+            const projectContext = await loadProjectContextInfo();
             const autoSuggestedFinding = !options.suggestedFinding && looksLikeFixRequest(trimmed)
                 ? this.latestActionableFinding
                 : undefined;
@@ -893,6 +916,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `Open workspace folders: ${workspaceSummary}`,
                     scanContext.summary,
                     editorContext.summary,
+                    projectContext.combined
+                        ? `Project context contract available: ${projectContext.summary}`
+                        : 'Project context contract: none',
                     autoSuggestedFinding
                         ? `Active finding for follow-up: ${autoSuggestedFinding.canonicalTitle || autoSuggestedFinding.title} at line ${autoSuggestedFinding.line}`
                         : 'Active finding for follow-up: none',
@@ -902,6 +928,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     trimmed,
                     options.injectedContext ?? autoInjectedContext ?? 'Injected discussion context: none',
                     scanContext.promptContext,
+                    projectContext.combined ? `Project context contract:\n${projectContext.combined}` : 'Project context contract: none',
                     editorContext.promptContext,
                     latestReportContext?.promptContext ?? 'Latest report context: none',
                 ].join('\n\n'),
@@ -1106,7 +1133,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             response: [
                 `Vulnerability scan completed for ${result.summary.completed} file(s).`,
                 `Total findings: ${result.summary.totalFindings}`,
-                `Average score: ${result.averageScore.toFixed(1)}/10`,
+                `Average file risk score: ${result.averageScore.toFixed(1)}/10`,
                 ...buildGroundedRemediationHighlights(result.summary.results.flatMap((item: any) => item.result.findings))
                     .map((line, index) => `Remediation ${index + 1}: ${line}`),
                 `Report: ${relativeReportPath}`,
@@ -1587,7 +1614,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ? [
                             `Vulnerability scan completed for ${result.summary.completed} file(s).`,
                             `Total findings: ${result.summary.totalFindings}`,
-                            `Average score: ${result.averageScore.toFixed(1)}/10`,
+                            `Average file risk score: ${result.averageScore.toFixed(1)}/10`,
                             summarizeIssueFamilies(result.summary.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.summary.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),
@@ -1868,14 +1895,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private buildScanContext(): EditorContext {
         const frameworks = this.getFrameworks();
         const severity = this.getSeverityThreshold();
-        const teamContext = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('teamContext', '').trim();
+        const projectContextSummary = getProjectContextSummaryFromConfig();
 
         return {
             summary: `Active scan profile: frameworks=${frameworks.join(', ') || 'none'}, severity threshold=${severity}`,
             promptContext: [
                 `Security frameworks in scope: ${frameworks.join(', ') || 'none configured'}`,
                 `Severity threshold: ${severity}`,
-                teamContext ? `Team/project context: ${teamContext}` : 'Team/project context: none',
+                projectContextSummary !== 'none'
+                    ? `Project context contract available: ${projectContextSummary}`
+                    : 'Project context contract: none',
             ].join('\n'),
         };
     }
