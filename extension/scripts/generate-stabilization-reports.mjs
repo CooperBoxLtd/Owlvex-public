@@ -239,8 +239,12 @@ function analyzeFile(filePath, code) {
     }));
   }
 
-  if (file.endsWith('\\tools\\demo\\22-ssrf-unsafe.js') || /\bfetch\s*\(\s*req\.(query|body|params)\./i.test(code)) {
-    if (!/isAllowedOutboundUrl|allow-?list|allowedHosts|new URL\(.*hostname/i.test(code)) {
+  if (file.endsWith('\\tools\\demo\\22-ssrf-unsafe.js')
+    || file.endsWith('\\tools\\demo\\30-ssrf-allowlist-unsafe.js')
+    || /\bfetch\s*\(\s*req\.(query|body|params)\./i.test(code)
+    || (/new URL\s*\(\s*req\.(query|body|params)\./i.test(code) && /\bfetch\s*\(\s*url\.toString\(\)\s*\)/i.test(code))) {
+    if (!/isAllowedOutboundUrl|allow-?list|allowedHosts|TRUSTED_HOSTS|ALLOWED_HOSTS|SAFE_HOSTS/i.test(code)
+      || /\.includes\s*\(\s*['"][^'"]+['"]\s*\)/i.test(code)) {
       findings.push(makeFinding({
         id: 'ssrf-unsafe',
         title: 'Server-side request forgery through untrusted destination',
@@ -252,6 +256,25 @@ function analyzeFile(filePath, code) {
         confidence: 0.83,
         likelihood: 'HIGH',
         likelihoodReasons: ['Untrusted input flows directly into an outbound fetch call.'],
+      }));
+    }
+  }
+
+  if (file.endsWith('\\tools\\demo\\28-path-traversal-unsafe.js')
+    || (/path\.(join|resolve)\s*\(\s*['"][^'"]+['"]\s*,\s*req\.(query|body|params)\./i.test(code)
+      && /\b(sendFile|readFile|createReadStream)\s*\(/i.test(code))) {
+    if (!/SAFE_FILES|ALLOWED_FILES|safeFiles|allowedFiles|Map\(/i.test(code)) {
+      findings.push(makeFinding({
+        id: 'path-traversal-unsafe',
+        title: 'Path traversal through user-controlled filesystem path',
+        issueId: 'owlvex.issue.path_traversal.001',
+        line: lineOf(code, /path\.(join|resolve)|sendFile|readFile/i),
+        explanation: 'User-controlled path input reaches a filesystem boundary without a safe identifier map or boundary check.',
+        threat: 'Attackers can read or access unintended files outside the intended directory.',
+        fix: 'Map user choices to trusted identifiers and keep resolved paths inside a fixed directory boundary.',
+        confidence: 0.87,
+        likelihood: 'HIGH',
+        likelihoodReasons: ['Untrusted input is joined directly into a filesystem path before file access.'],
       }));
     }
   }

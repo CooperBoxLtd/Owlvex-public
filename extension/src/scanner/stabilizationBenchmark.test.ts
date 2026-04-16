@@ -86,5 +86,17 @@ describe('stabilizationBenchmark', () => {
                 message: 'expected at least one finding but none were reported',
             },
         ]);
+        expect(evaluation.metrics).toEqual({
+            filesChecked: 3,
+            expectedFindingFiles: 1,
+            expectedCleanFiles: 1,
+            findingFilesSatisfied: 0,
+            cleanFilesSatisfied: 0,
+            requiredFindingsChecked: 2,
+            requiredFindingsSatisfied: 2,
+            forbiddenFindingsChecked: 1,
+            forbiddenFindingsSatisfied: 1,
+            totalFailures: 2,
+        });
     });
 });
