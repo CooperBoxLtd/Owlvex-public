@@ -708,7 +708,7 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.88);
+        expect(result.findings[0].confidence).toBe(0.92);
         expect(result.findings[0].confidenceTier).toBe('PLAUSIBLE');
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.open_redirect.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Security Misconfiguration & Platform Hardening');
@@ -783,7 +783,7 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.84);
+        expect(result.findings[0].confidence).toBe(0.92);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.csrf_missing_token.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Access Control & Authorization');
         expect(result.findings[0].likelihood).toBe('HIGH');
@@ -855,7 +855,7 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.83);
+        expect(result.findings[0].confidence).toBe(0.92);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.ssrf.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
         expect(result.findings[0].likelihood).toBe('HIGH');
@@ -925,7 +925,7 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.82);
+        expect(result.findings[0].confidence).toBe(0.92);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.weak_jwt_validation.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Identity & Auth Failures');
         expect(result.findings[0].likelihood).toBe('HIGH');
@@ -997,7 +997,7 @@ def load_profile(request):
 
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.81);
+        expect(result.findings[0].confidence).toBe(0.92);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.insecure_deserialization.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
         expect(result.findings[0].likelihood).toBe('HIGH');
@@ -1514,5 +1514,174 @@ if (process.env.NODE_ENV !== 'production') {
         expect(userMessage).toContain('owlvex.issue.insecure_cors.001 | Overly permissive CORS policy');
         expect(userMessage).toContain('Signals matched in code: cors, access-control-allow-origin');
         expect(userMessage).toContain('Cheat-sheet guidance: OWASP Cross Origin Resource Sharing Cheat Sheet');
+    });
+
+    it('runs finder, verifier, and skeptic passes through the same provider sequentially', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const complete = jest.fn()
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 6.4,
+                    summary: 'Potential open redirect detected.',
+                    findings: [
+                        {
+                            id: 'ai-open-redirect-1',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A01-REDIRECT',
+                            title: 'Open Redirect',
+                            explanation: 'User-controlled destination is passed directly into a redirect call.',
+                            threat: 'Attackers can steer users to attacker-controlled pages.',
+                            fix: 'Allow-list redirect destinations.',
+                            confidence: 0.88,
+                            issue_id: 'owlvex.issue.open_redirect.001',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            })
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    reviews: [
+                        { id: 'ai-open-redirect-1', verdict: 'support', reason: 'The redirect sink is directly fed by request input.' },
+                    ],
+                }),
+                tokenCount: 10,
+            })
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    reviews: [
+                        { id: 'ai-open-redirect-1', verdict: 'clear', reason: 'No allow-list or guard is visible.' },
+                    ],
+                }),
+                tokenCount: 10,
+            });
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\redirect.js',
+            getText: () => `function go(req, res) {
+    return res.redirect(req.query.next);
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(complete).toHaveBeenCalledTimes(3);
+        expect(complete.mock.calls[0][0].userMessage).toContain('Analyse this javascript code.');
+        expect(complete.mock.calls[1][0].userMessage).toContain('You are the Verifier pass.');
+        expect(complete.mock.calls[2][0].userMessage).toContain('You are the Skeptic pass.');
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].confidence).toBe(0.92);
+        expect(result.warnings).toEqual([]);
+    });
+
+    it('suppresses AI findings rejected by the verifier pass', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const complete = jest.fn()
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 7.5,
+                    summary: 'Potential open redirect detected.',
+                    findings: [
+                        {
+                            id: 'ai-open-redirect-2',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A01-REDIRECT',
+                            title: 'Open Redirect',
+                            explanation: 'User-controlled destination is passed directly into a redirect call.',
+                            threat: 'Attackers can steer users to attacker-controlled pages.',
+                            fix: 'Allow-list redirect destinations.',
+                            confidence: 0.81,
+                            issue_id: 'owlvex.issue.open_redirect.001',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            })
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    reviews: [
+                        { id: 'ai-open-redirect-2', verdict: 'reject', reason: 'The redirect destination is not actually user-controlled in the local code context.' },
+                    ],
+                }),
+                tokenCount: 10,
+            })
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    reviews: [
+                        { id: 'ai-open-redirect-2', verdict: 'clear', reason: 'No additional contradiction beyond the verifier rejection.' },
+                    ],
+                }),
+                tokenCount: 10,
+            });
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\redirect.js',
+            getText: () => `function go(req, res) {
+    return res.redirect(req.query.next);
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(complete).toHaveBeenCalledTimes(3);
     });
 });

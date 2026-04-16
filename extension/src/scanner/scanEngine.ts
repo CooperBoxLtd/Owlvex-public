@@ -65,6 +65,12 @@ interface PromptContext {
     systemPrompt: string;
 }
 
+interface AiCorroborationReview {
+    id: string;
+    verdict: 'support' | 'reject' | 'contradict' | 'clear' | 'unclear';
+    reason?: string;
+}
+
 interface SeverityMetrics {
     critical: number;
     high: number;
@@ -593,6 +599,7 @@ export class ScanEngine {
 
         const fileHash = crypto.createHash('sha256').update(code).digest('hex');
         const fileName = document.fileName.split(/[/\\]/).pop() ?? 'unknown';
+        const warnings: string[] = [];
 
         // Merge deterministic findings with AI findings.
         // Deterministic findings lead — they are high-confidence and zero-cost.
@@ -601,7 +608,15 @@ export class ScanEngine {
         const filteredAiFindings = dedupeOverlappingAiFindings(
             suppressUnsupportedAiFindings(code, parsed.findings),
         );
-        const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, filteredAiFindings)
+        const corroboratedAi = await this._runSingleAgentCorroboration({
+            provider,
+            systemPrompt,
+            language,
+            code,
+            findings: filteredAiFindings,
+        });
+        warnings.push(...corroboratedAi.warnings);
+        const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, corroboratedAi.findings)
             .map(finding => enrichFindingRisk(finding));
         const mergedMetrics = buildMetrics(allFindings);
         const calculatedScore = calculateScoreFromFindings(allFindings);
@@ -609,7 +624,6 @@ export class ScanEngine {
             ? summarizeFindings(allFindings, parsed.summary)
             : 'No findings detected.';
         let scanId = crypto.randomUUID();
-        const warnings: string[] = [];
 
         try {
             const recordRes = await fetch(`${apiUrl}/v1/scans/record`, {
@@ -656,6 +670,83 @@ export class ScanEngine {
             durationMs,
             model: provider.selectedModel,
             provider: provider.id,
+            warnings,
+        };
+    }
+
+    private async _runSingleAgentCorroboration(params: {
+        provider: { complete(req: { systemPrompt: string; userMessage: string; model: string; temperature: number }): Promise<any>; selectedModel: string };
+        systemPrompt: string;
+        language: string;
+        code: string;
+        findings: Finding[];
+    }): Promise<{ findings: Finding[]; warnings: string[] }> {
+        if (!params.findings.length) {
+            return { findings: [], warnings: [] };
+        }
+
+        const warnings: string[] = [];
+        const verifierReviews = await this._runAiReviewPass({
+            role: 'Verifier',
+            expectedSupportVerdict: 'support',
+            expectedContradictionVerdict: 'reject',
+            provider: params.provider,
+            systemPrompt: params.systemPrompt,
+            language: params.language,
+            code: params.code,
+            findings: params.findings,
+        });
+        warnings.push(...verifierReviews.warnings);
+
+        const skepticReviews = await this._runAiReviewPass({
+            role: 'Skeptic',
+            expectedSupportVerdict: 'clear',
+            expectedContradictionVerdict: 'contradict',
+            provider: params.provider,
+            systemPrompt: params.systemPrompt,
+            language: params.language,
+            code: params.code,
+            findings: params.findings,
+        });
+        warnings.push(...skepticReviews.warnings);
+
+        const verifierMap = new Map(verifierReviews.reviews.map(review => [review.id, review]));
+        const skepticMap = new Map(skepticReviews.reviews.map(review => [review.id, review]));
+
+        const kept = params.findings
+            .filter(finding => {
+                const verifier = verifierMap.get(finding.id);
+                const skeptic = skepticMap.get(finding.id);
+                if (verifier?.verdict === 'reject') {
+                    return false;
+                }
+                if (skeptic?.verdict === 'contradict') {
+                    return false;
+                }
+                return true;
+            })
+            .map(finding => {
+                const verifier = verifierMap.get(finding.id);
+                const skeptic = skepticMap.get(finding.id);
+                if (verifier?.verdict === 'support' && skeptic?.verdict === 'clear') {
+                    return {
+                        ...finding,
+                        confidence: Math.max(finding.confidence ?? 0.8, 0.92),
+                    };
+                }
+
+                if (verifier?.verdict === 'support') {
+                    return {
+                        ...finding,
+                        confidence: Math.max(finding.confidence ?? 0.8, 0.88),
+                    };
+                }
+
+                return finding;
+            });
+
+        return {
+            findings: kept,
             warnings,
         };
     }
@@ -710,6 +801,69 @@ export class ScanEngine {
         }
 
         throw new Error('AI provider unavailable after retries.');
+    }
+
+    private async _runAiReviewPass(params: {
+        role: 'Verifier' | 'Skeptic';
+        expectedSupportVerdict: 'support' | 'clear';
+        expectedContradictionVerdict: 'reject' | 'contradict';
+        provider: { complete(req: { systemPrompt: string; userMessage: string; model: string; temperature: number }): Promise<any>; selectedModel: string };
+        systemPrompt: string;
+        language: string;
+        code: string;
+        findings: Finding[];
+    }): Promise<{ reviews: AiCorroborationReview[]; warnings: string[] }> {
+        try {
+            const response = await this._completeWithRateLimitHandling(params.provider, {
+                systemPrompt: params.systemPrompt,
+                userMessage: this._buildCorroborationPrompt(params),
+                model: params.provider.selectedModel,
+                temperature: 0,
+            });
+            return {
+                reviews: this._parseAiReviewResponse(response.content, params.findings, params.role),
+                warnings: [],
+            };
+        } catch (error: any) {
+            return {
+                reviews: [],
+                warnings: [`AI corroboration partial: ${params.role.toLowerCase()} pass unavailable: ${error.message}`],
+            };
+        }
+    }
+
+    private _buildCorroborationPrompt(params: {
+        role: 'Verifier' | 'Skeptic';
+        expectedSupportVerdict: 'support' | 'clear';
+        expectedContradictionVerdict: 'reject' | 'contradict';
+        language: string;
+        code: string;
+        findings: Finding[];
+    }): string {
+        const roleInstruction = params.role === 'Verifier'
+            ? `You are the Verifier pass. Review each candidate finding only against the local code evidence. Return verdict "${params.expectedSupportVerdict}" only when the issue class is actually supported by the code. Return verdict "${params.expectedContradictionVerdict}" when the claim is not supported or is too broad for the visible code.`
+            : `You are the Skeptic pass. Try to disprove each candidate by looking for contradictory local evidence, guards, safe patterns, or missing required sinks. Return verdict "${params.expectedContradictionVerdict}" when stronger contradictory evidence exists. Return verdict "${params.expectedSupportVerdict}" when no meaningful contradiction is visible.`;
+
+        const candidates = params.findings.map(finding => ({
+            id: finding.id,
+            line: finding.line,
+            line_end: finding.lineEnd,
+            title: finding.title,
+            canonical_id: finding.canonicalId ?? '',
+            severity: finding.severity,
+            explanation: finding.explanation,
+        }));
+
+        return `${roleInstruction}
+Respond with JSON only in this shape:
+{"reviews":[{"id":"candidate-id","verdict":"${params.expectedSupportVerdict}|${params.expectedContradictionVerdict}|unclear","reason":"short reason"}]}
+Review all candidates below and do not invent new findings.
+Language: ${params.language}
+Candidates:
+${JSON.stringify(candidates, null, 2)}
+
+Code:
+${params.code}`;
     }
 
     private async _validateLicenceCached(apiUrl: string, licenceKey: string): Promise<void> {
@@ -886,6 +1040,50 @@ export class ScanEngine {
         } catch {
             throw new Error('AI response could not be parsed as JSON');
         }
+    }
+
+    private _parseAiReviewResponse(raw: string, candidates: Finding[], role: 'Verifier' | 'Skeptic'): AiCorroborationReview[] {
+        const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+
+        try {
+            const data = JSON.parse(cleaned);
+            if (Array.isArray(data.reviews)) {
+                return data.reviews
+                    .map((review: any) => ({
+                        id: String(review.id ?? '').trim(),
+                        verdict: String(review.verdict ?? '').trim().toLowerCase(),
+                        reason: typeof review.reason === 'string' ? review.reason.trim() : undefined,
+                    }))
+                    .filter((review: any) => review.id && ['support', 'reject', 'contradict', 'clear', 'unclear'].includes(review.verdict));
+            }
+
+            if (Array.isArray(data.findings)) {
+                const matchedIds = new Set<string>();
+                for (const candidate of candidates) {
+                    const matched = data.findings.some((finding: any) =>
+                        String(finding.id ?? '').trim() === candidate.id
+                        || (
+                            Number(finding.line ?? -1) === candidate.line
+                            && String(finding.issue_id ?? '').trim() === String(candidate.canonicalId ?? '').trim()
+                        )
+                        || (
+                            Number(finding.line ?? -1) === candidate.line
+                            && String(finding.title ?? '').trim().toLowerCase() === candidate.title.trim().toLowerCase()
+                        ),
+                    );
+                    if (matched) {
+                        matchedIds.add(candidate.id);
+                    }
+                }
+
+                const fallbackVerdict: AiCorroborationReview['verdict'] = role === 'Verifier' ? 'support' : 'clear';
+                return [...matchedIds].map(id => ({ id, verdict: fallbackVerdict }));
+            }
+        } catch {
+            // Fall through to structured parse failure below.
+        }
+
+        throw new Error('AI review response could not be parsed as JSON');
     }
 
     private _resolveCanonicalFinding(finding: Finding): Finding {
