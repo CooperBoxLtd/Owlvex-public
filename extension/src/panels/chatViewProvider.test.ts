@@ -647,6 +647,56 @@ describe('parseChatIntent', () => {
         ]));
     });
 
+    it('grounds plain fix requests to the latest actionable finding even without latest-report wording', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'Use an ownership check.' });
+        (vscode.window.activeTextEditor as any) = undefined;
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).latestActionableFinding = {
+            id: 'finding-idor',
+            line: 7,
+            lineEnd: 9,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'AC-001',
+            title: 'Insecure Direct Object Reference',
+            explanation: 'The handler reads a document by id without checking ownership.',
+            threat: 'Unauthorized users can read another user document.',
+            fix: 'Add object-level authorization.',
+            confidence: 0.91,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+            canonicalId: 'owlvex.issue.idor.001',
+            canonicalTitle: 'Insecure Direct Object Reference',
+        };
+
+        await (provider as any).handleUserMessage('show me how to fix the code');
+
+        const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Active finding for follow-up: Insecure Direct Object Reference at line 7');
+        expect(request.userMessage).toContain('Finding selected for discussion:');
+        expect(request.userMessage).toContain('Title: Insecure Direct Object Reference');
+        expect(request.userMessage).toContain('Suggested remediation:');
+        expect(request.userMessage).toContain('Latest report context: none');
+    });
+
     it('can open a review diff from an action that targets a scanned file path', async () => {
         const complete = jest.fn().mockResolvedValue({
             content: [

@@ -144,6 +144,18 @@ function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions):
         || /\b(scan|report|finding|findings|issue|issues|result|results|score|scores|risk|risks|warning|warnings)\b.*\b(latest|last|previous|recent)\b/i.test(prompt);
 }
 
+function findTopFindingInCalibrationRecords(records?: StoredScanRecord[]): Finding | undefined {
+    if (!Array.isArray(records) || !records.length) {
+        return undefined;
+    }
+
+    return records
+        .flatMap(record => record?.result?.findings ?? [])
+        .filter((finding): finding is Finding => Boolean(finding && typeof finding.line === 'number'))
+        .slice()
+        .sort((left, right) => riskRank(right) - riskRank(left))[0];
+}
+
 function buildScoreBreakdown(result: ScanResult): string {
     if (!result.findings.length) {
         return 'No penalties were applied, so the file kept the full 10.0 baseline.';
@@ -825,6 +837,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 : 'No workspace folder is currently open.';
             const editorContext = this.buildEditorContext();
             const scanContext = this.buildScanContext();
+            const autoSuggestedFinding = !options.suggestedFinding && looksLikeFixRequest(trimmed)
+                ? this.latestActionableFinding
+                : undefined;
+            const autoInjectedContext = !options.injectedContext && autoSuggestedFinding
+                ? buildFindingPromptContext(autoSuggestedFinding, this.buildActiveSnippetForFinding(autoSuggestedFinding))
+                : undefined;
             const latestReportContext = shouldUseLatestScanContext(trimmed, options)
                 ? buildLatestReportPromptContext(this.storage)
                 : undefined;
@@ -840,11 +858,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     `Open workspace folders: ${workspaceSummary}`,
                     scanContext.summary,
                     editorContext.summary,
+                    autoSuggestedFinding
+                        ? `Active finding for follow-up: ${autoSuggestedFinding.canonicalTitle || autoSuggestedFinding.title} at line ${autoSuggestedFinding.line}`
+                        : 'Active finding for follow-up: none',
                     latestReportContext?.summary ?? 'Latest report: none',
                 ].join('\n'),
                 userMessage: [
                     trimmed,
-                    options.injectedContext ?? 'Injected discussion context: none',
+                    options.injectedContext ?? autoInjectedContext ?? 'Injected discussion context: none',
                     scanContext.promptContext,
                     editorContext.promptContext,
                     latestReportContext?.promptContext ?? 'Latest report context: none',
@@ -857,7 +878,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'assistant',
                 content: response.content || 'No response returned.',
                 kind: 'advisory',
-                actions: this.buildFixFollowUpActions(trimmed, options.suggestedFinding),
+                actions: this.buildFixFollowUpActions(trimmed, options.suggestedFinding ?? autoSuggestedFinding),
             };
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
@@ -1139,6 +1160,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action.kind === 'explainScore') {
+            this.latestActionableFinding = findTopFindingInCalibrationRecords(action.calibrationRecords) ?? this.latestActionableFinding;
             await vscode.commands.executeCommand(PROFILE.commands.reviewRiskCalibration, action.calibrationRecords);
             this.messages.push({
                 role: 'assistant',
