@@ -13,6 +13,8 @@ import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGene
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
 import { PROFILE } from './profile';
+import { loadProjectContextInfo } from './projectContext';
+import { applyRepoAiReviewSupport, buildRepoAiReviewPrompt, extractRepoAiSnippet, parseRepoAiReviewResponse, selectRepoAiCandidateRefs, summarizeRepoAiResults } from './repoAiReview';
 import { initializeSecretStorage } from './secrets';
 import { PackArtifactResponse, PackEntitlement, PackManifestEntry, RulePackClient } from './packs/packClient';
 import { RulePackRuntimeContext } from './packs/packRuntime';
@@ -100,6 +102,8 @@ function normalizeScanResult(result: ScanResult): ScanResult {
         warnings: result.warnings ?? [],
     };
 }
+
+const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
 
 function normalizeStoredScanRecord(item: { scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }): StoredScanRecord {
     return {
@@ -335,6 +339,91 @@ export function activate(context: vscode.ExtensionContext) {
             packIds: [...currentRulePackContext.packIds],
         },
     });
+
+    const appendRepoAiWarning = (
+        items: Array<{ uri: vscode.Uri; result: ScanResult }>,
+        warning: string,
+    ): Array<{ uri: vscode.Uri; result: ScanResult }> => {
+        if (!items.length) {
+            return items;
+        }
+
+        return items.map((item, index) => index === 0
+            ? {
+                ...item,
+                result: {
+                    ...item.result,
+                    warnings: [...(item.result.warnings ?? []), warning],
+                },
+            }
+            : item,
+        );
+    };
+
+    const maybeApplyRepoAiReview = async (
+        items: Array<{ uri: vscode.Uri; result: ScanResult }>,
+        scopeLabel: string,
+    ): Promise<Array<{ uri: vscode.Uri; result: ScanResult }>> => {
+        if (items.length < 2) {
+            return items;
+        }
+
+        const baseResults = items.map(item => ({
+            path: vscode.workspace.asRelativePath(item.uri, false) || path.basename(item.uri.fsPath),
+            result: item.result,
+        }));
+        const candidateRefs = selectRepoAiCandidateRefs(baseResults, MAX_REPO_AI_REVIEW_CANDIDATES);
+        if (!candidateRefs.length) {
+            return items;
+        }
+
+        try {
+            const provider = registry.getActive();
+            const projectContext = await loadProjectContextInfo();
+            const snippets = await Promise.all(candidateRefs.map(async ref => {
+                const document = await vscode.workspace.openTextDocument(items[ref.resultIndex].uri);
+                return {
+                    ...ref,
+                    snippet: extractRepoAiSnippet(document.getText(), ref.finding),
+                };
+            }));
+
+            const response = await provider.complete({
+                systemPrompt: 'You are Owlvex Repo AI. Review candidate findings across a bounded multi-file scan using only the provided project context, file summaries, and snippets. Support only when broader repo context materially strengthens the claim. Return JSON only.',
+                userMessage: buildRepoAiReviewPrompt({
+                    scopeLabel,
+                    projectContext: projectContext.combined,
+                    fileSummaries: summarizeRepoAiResults(baseResults),
+                    candidates: snippets,
+                }),
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+
+            const reviews = parseRepoAiReviewResponse(response.content);
+            const updated = applyRepoAiReviewSupport(baseResults, candidateRefs, reviews);
+            return updated.map((item, index) => ({
+                uri: items[index].uri,
+                result: item.result,
+            }));
+        } catch (error: any) {
+            return appendRepoAiWarning(
+                items,
+                `REPO_AI review unavailable: ${error.message}`,
+            );
+        }
+    };
+
+    const finalizeMultiFileResults = async (
+        items: Array<{ uri: vscode.Uri; result: ScanResult }>,
+        scopeLabel: string,
+    ): Promise<Array<{ uri: vscode.Uri; result: ScanResult }>> => {
+        const repoReviewed = await maybeApplyRepoAiReview(items, scopeLabel);
+        return repoReviewed.map(item => ({
+            uri: item.uri,
+            result: applyRulePackContext(item.result),
+        }));
+    };
 
     const isRevocationLikeError = (error: unknown): boolean => {
         const message = String((error as any)?.message ?? '').toLowerCase();
@@ -734,10 +823,7 @@ export function activate(context: vscode.ExtensionContext) {
                     scanEngine,
                     diagnostics,
                 });
-                const enrichedResults = summary.results.map(item => ({
-                    uri: item.uri,
-                    result: applyRulePackContext(item.result),
-                }));
+                const enrichedResults = await finalizeMultiFileResults(summary.results, `Selected files: ${fileUris.length} file(s)`);
                 const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
                 for (const item of enrichedResults) {
                     storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -807,10 +893,7 @@ export function activate(context: vscode.ExtensionContext) {
                     scanEngine,
                     diagnostics,
                 });
-                const enrichedResults = summary.results.map(item => ({
-                    uri: item.uri,
-                    result: applyRulePackContext(item.result),
-                }));
+                const enrichedResults = await finalizeMultiFileResults(summary.results, `Open editors: ${fileUris.length} file(s)`);
                 const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
                 for (const item of enrichedResults) {
                     storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -1116,10 +1199,10 @@ export function activate(context: vscode.ExtensionContext) {
                 scanEngine,
                 diagnostics,
             });
-            summary.results = summary.results.map(item => ({
-                ...item,
-                result: applyRulePackContext(item.result),
-            }));
+            summary.results = await finalizeMultiFileResults(
+                summary.results,
+                `Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`,
+            );
 
             for (const item of summary.results) {
                 storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -1220,10 +1303,7 @@ export function activate(context: vscode.ExtensionContext) {
                         scanEngine,
                         diagnostics,
                     });
-                    summary.results = summary.results.map(item => ({
-                        ...item,
-                        result: applyRulePackContext(item.result),
-                    }));
+                    summary.results = await finalizeMultiFileResults(summary.results, `Report selected files: ${fileUris.length} file(s)`);
 
                     for (const item of summary.results) {
                         storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -1272,10 +1352,7 @@ export function activate(context: vscode.ExtensionContext) {
                         scanEngine,
                         diagnostics,
                     });
-                    summary.results = summary.results.map(item => ({
-                        ...item,
-                        result: applyRulePackContext(item.result),
-                    }));
+                    summary.results = await finalizeMultiFileResults(summary.results, `Report open editors: ${fileUris.length} file(s)`);
 
                     for (const item of summary.results) {
                         storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -1318,10 +1395,10 @@ export function activate(context: vscode.ExtensionContext) {
                     scanEngine,
                     diagnostics,
                 });
-                summary.results = summary.results.map(item => ({
-                    ...item,
-                    result: applyRulePackContext(item.result),
-                }));
+                summary.results = await finalizeMultiFileResults(
+                    summary.results,
+                    `Report folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`,
+                );
 
                 for (const item of summary.results) {
                     storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));

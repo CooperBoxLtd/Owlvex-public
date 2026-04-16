@@ -141,6 +141,17 @@ function summarizeScanTierCounts(findings: Finding[]): string {
         .join(' | ') || 'none';
 }
 
+function getPrimaryScanTierLabel(findings: Finding[]): string {
+    const order: Array<'REPO_AI' | 'TARGETED_AI' | 'STATIC'> = ['REPO_AI', 'TARGETED_AI', 'STATIC'];
+    for (const label of order) {
+        if (findings.some(finding => getScanTierLabel(finding) === label)) {
+            return label;
+        }
+    }
+
+    return 'none';
+}
+
 function buildDefaultChatMessages(): ChatMessage[] {
     return [{
         role: 'system',
@@ -213,6 +224,7 @@ function buildScanSummaryLines(result: ScanResult): string[] {
     return [
         `File risk score: ${result.score.toFixed(1)}/10`,
         `Findings: ${result.findings.length}`,
+        `Primary scan mode: ${getPrimaryScanTierLabel(result.findings)}`,
         `Scan tiers: ${summarizeScanTierCounts(result.findings)}`,
         `Project context: ${result.projectContextSummary && result.projectContextSummary !== 'none' ? result.projectContextSummary : 'none'}`,
         topRiskFinding

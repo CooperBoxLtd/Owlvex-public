@@ -67,6 +67,17 @@ function summarizeScanTierCounts(findings: Finding[]): string {
     return parts.length ? parts.join(' | ') : 'none';
 }
 
+function getPrimaryScanTierLabel(findings: Finding[]): string {
+    const order: Array<'REPO_AI' | 'TARGETED_AI' | 'STATIC'> = ['REPO_AI', 'TARGETED_AI', 'STATIC'];
+    for (const label of order) {
+        if (findings.some(finding => getScanTierLabel(finding) === label)) {
+            return label;
+        }
+    }
+
+    return 'none';
+}
+
 function riskRank(finding: Finding): number {
     const severityRank = finding.severity === 'CRITICAL'
         ? 4
@@ -120,6 +131,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         hasPartialAiCoverage(this.lastResult)
                             ? 'Coverage posture: partial AI coverage or deterministic-only fallback'
                             : 'Coverage posture: normal',
+                        `Primary scan mode: ${getPrimaryScanTierLabel(this.lastResult.findings)}`,
                         `Scan tier posture: ${summarizeScanTierCounts(this.lastResult.findings)}`,
                         `Corroboration posture: ${summarizeCorroborationCounts(this.lastResult.findings)}`,
                         `Project context: ${this.lastResult.projectContextSummary && this.lastResult.projectContextSummary !== 'none' ? this.lastResult.projectContextSummary : 'none'}`,

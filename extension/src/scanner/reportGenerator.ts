@@ -178,6 +178,17 @@ function summarizeScanTierCounts(findings: ScanResult['findings']): string {
         .join(' | ');
 }
 
+function getPrimaryScanTierLabel(findings: ScanResult['findings']): string {
+    const order: Array<'REPO_AI' | 'TARGETED_AI' | 'STATIC'> = ['REPO_AI', 'TARGETED_AI', 'STATIC'];
+    for (const label of order) {
+        if (findings.some(finding => (finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI')) === label)) {
+            return label;
+        }
+    }
+
+    return 'none';
+}
+
 function buildSafePatternLine(
     remediation: ReturnType<typeof getCanonicalRemediation>,
 ): string | undefined {
@@ -418,6 +429,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         `- Coverage posture: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Full scan posture for current provider/runtime state'}`,
+        `- Primary scan mode: ${totalFindings > 0 ? getPrimaryScanTierLabel(snapshot.results.flatMap(item => item.result.findings)) : 'none'}`,
         `- Scan tier posture: ${totalFindings > 0 ? summarizeScanTierCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to classify'}`,
         `- Corroboration posture: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
         `- Project context: ${projectContextSummary}`,
@@ -436,6 +448,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
             lines.push(`- Coverage posture: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal coverage for this file'}`);
+            lines.push(`- Primary scan mode: ${item.result.findings.length ? getPrimaryScanTierLabel(item.result.findings) : 'none'}`);
             lines.push(`- Scan tier posture: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
             lines.push(`- Corroboration posture: ${summarizeCorroborationCounts(item.result.findings)}`);
             lines.push(`- Project context: ${item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none'}`);
