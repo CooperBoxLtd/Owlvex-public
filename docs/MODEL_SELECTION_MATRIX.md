@@ -256,6 +256,91 @@ If a candidate cannot complete the benchmark reliably, that is a real result and
 
 ---
 
+## Current Supported-Provider Shortlist
+
+This shortlist is derived from the providers and default models Owlvex already supports in the extension today.
+
+It is a starting hypothesis list, not a verdict.
+
+The current supported provider lane includes:
+
+- OpenAI
+- Anthropic
+- Azure AI Foundry
+- Gemini
+- Mistral
+- Groq
+- Ollama
+- custom OpenAI-compatible endpoints
+
+The current configured defaults in the product are:
+
+- OpenAI: `gpt-4o`
+- Anthropic: `claude-opus-4-6`
+- Azure AI Foundry: `gpt-4o` deployment by default
+- Gemini: `gemini-1.5-pro`
+- Mistral: `mistral-large-latest`
+- Groq: `llama-3.3-70b-versatile`
+- Ollama: `qwen2.5:7b`
+
+### Initial Candidate Posture
+
+These are the recommended first candidates to benchmark, based on current Owlvex support and product needs.
+
+| Candidate | Provider | Default Model In Repo | Best Initial Role Hypothesis | Why It Makes The Shortlist |
+| --- | --- | --- | --- | --- |
+| Incumbent baseline | Azure AI Foundry or OpenAI | `gpt-4o` | Primary scanner baseline | This is already the main reference posture in tests and recent scanner work. |
+| Reasoning-focused candidate | Anthropic | `claude-opus-4-6` | Verifier / Skeptic | Strong candidate for conservative second-pass reading and contradiction spotting. |
+| Accessibility candidate | OpenAI | `gpt-4o-mini` or similar available chat model | Budget fallback | Same provider family, simpler adoption path, useful if corroboration cost needs to drop. |
+| Throughput candidate | Gemini | `gemini-1.5-pro` | Primary scanner or verifier alternative | Worth testing for repo-scale scans and different reasoning profile. |
+| Cost-speed candidate | Groq | `llama-3.3-70b-versatile` | Budget fallback or skeptic experiment | Useful to test fast-turnaround corroboration if output quality stays within tolerance. |
+| Local/privacy candidate | Ollama | `qwen2.5:7b` | Accessibility fallback | Important for constrained clients even if it does not win on absolute quality. |
+
+### Candidates To De-Prioritize Initially
+
+The following are supported, but are not the first place to spend stabilization effort:
+
+- Mistral
+  Good to keep available, but not the first benchmark target unless it offers a clear cost or region advantage for a customer.
+- Custom OpenAI-compatible endpoints
+  These matter operationally, but they are not a single model family and should be evaluated after the core hosted baselines are understood.
+
+---
+
+## Recommended Experiment Order
+
+To keep the next round disciplined, Owlvex should benchmark in this order:
+
+1. `gpt-4o` incumbent baseline
+2. `claude-opus-4-6` as the strongest verifier / skeptic candidate
+3. one cheaper or faster candidate from the already supported providers
+4. one accessibility-first candidate such as Ollama
+
+This order matters because it answers the most important questions first:
+
+1. What is our measured baseline?
+2. Can a stronger reasoning model improve corroboration quality?
+3. Can we get acceptable quality at lower cost or higher throughput?
+4. What is the minimum viable accessible fallback for constrained customers?
+
+---
+
+## First Comparison Sheet
+
+Use this filled starter matrix for the next benchmark session.
+
+| Candidate | Intended Role | Code Reasoning | Verification Discipline | Structured Output | Duplicate Control | Repo Context | Rate-Limit Stability | Cost | Accessibility | Benchmark Result | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `gpt-4o` | Incumbent baseline | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | Current benchmark reference point |
+| `claude-opus-4-6` | Verifier / Skeptic candidate | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | First strong reasoning comparison |
+| `gemini-1.5-pro` | Repo-scale alternative | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | Useful counter-shape to current baseline |
+| `llama-3.3-70b-versatile` | Fast fallback experiment | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | Validate speed vs trust tradeoff |
+| `qwen2.5:7b` | Local accessibility fallback | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | `TBD` | Important even if ceiling is lower |
+
+All `TBD` cells must be filled from measured benchmark evidence, not intuition.
+
+---
+
 ## Adoption Rule
 
 A model should only replace the incumbent when at least one of the following is true:
