@@ -39,6 +39,15 @@ For the AI lane, framework scope can be used more directly as reasoning guidance
 - AI output should still resolve back into Owlvex canonical issues where possible
 - AI framework guidance must not be mistaken for deterministic proof
 
+For the corroboration lane, Owlvex should treat AI reasoning as role-shaped evidence rather than one monolithic answer:
+
+- a finder pass proposes candidate issues
+- a verifier pass checks whether the local code actually supports each claim
+- a skeptic pass looks for contradictory context or safe companion evidence
+- the final report posture is decided by Owlvex merge rules, not by whichever pass sounds most confident
+
+This preserves the Owlvex-native decision boundary while still letting framework guidance shape reasoning.
+
 ## Canonical Objects
 
 Owlvex should standardize on three core artifacts:

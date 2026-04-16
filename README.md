@@ -102,6 +102,13 @@ This is why there are no false positives for the covered rules. The rule only fi
 
 Owlvex also ships as a VS Code extension with AI-assisted coverage for patterns that can't be proven structurally. Deterministic findings surface first, before AI results, with explicit provenance on every finding.
 
+Current direction: the AI lane is being hardened around single-model, multi-pass corroboration. The intended posture is:
+
+- deterministic findings remain `PROVEN`
+- AI findings are corroborated through separate finder / verifier / skeptic passes
+- disagreement reduces confidence instead of being flattened away
+- degraded scans must say so explicitly
+
 ---
 
 ## Project layout
@@ -160,6 +167,19 @@ cd extension && npm run benchmark:deterministic
 ```
 
 19 suites, covering all 8 rules across three reasoning axes. All must pass before any rule change ships.
+
+### Run the stabilization benchmark pack
+
+```bash
+cd extension && npm run benchmark:stabilization
+```
+
+This runs the current stabilization test pack that protects:
+
+- benchmark expectation files in `tools/demo/` and `tools/demo-app/`
+- regression cases for safe/unsafe companions
+- degraded scan posture
+- report and sidebar confidence framing
 
 ### Build the CLI bundle
 

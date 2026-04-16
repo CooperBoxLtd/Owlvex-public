@@ -32,6 +32,12 @@ It means:
 - release signals are strong enough to trust changes
 - operational failure modes are understood and bounded
 
+For the current AI lane, production readiness also requires that corroboration posture is honest:
+
+- deterministic proof must remain distinguishable from AI-supported claims
+- multi-pass AI disagreement must reduce confidence rather than being hidden
+- degraded or partial AI coverage must be surfaced clearly in user-facing reports
+
 ## 2. Non-Negotiable Production Boundaries
 
 These must be true in production at all times:
@@ -109,12 +115,14 @@ Required:
 - every deterministic rule that is presented as proven is benchmark-backed
 - product wording matches actual implementation confidence
 - heuristic behavior is not labelled deterministic certainty
+- AI corroboration tiers and degraded coverage wording match actual scanner behavior
 
 Exit criteria:
 
 - aggregate deterministic benchmark gate passes
 - live deterministic rule set and benchmark-covered rule set match
 - any intentionally heuristic rule is either removed from deterministic claims or clearly downgraded in wording
+- user-facing confidence tiers for AI-backed findings do not overstate certainty relative to the implemented corroboration flow
 
 ## 4.4 Test And Release Readiness
 

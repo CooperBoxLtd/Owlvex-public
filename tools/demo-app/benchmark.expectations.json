@@ -1,0 +1,45 @@
+{
+  "name": "demo-app",
+  "expectations": [
+    {
+      "file": "src\\db.js",
+      "requiredFindings": [
+        "Unsanitized SQL query construction",
+        "Broken Access Control in getDocumentById"
+      ],
+      "forbiddenFindings": [
+        "Broken Access Control in getDocumentForTenant",
+        "Sensitive data exposed in logs"
+      ]
+    },
+    {
+      "file": "src\\lib\\tokens.js",
+      "requiredFindings": [
+        "Hardcoded token in source code",
+        "Weak JWT validation"
+      ]
+    },
+    {
+      "file": "src\\lib\\logger.js",
+      "requiredFindings": [
+        "Sensitive data exposed in logs"
+      ]
+    },
+    {
+      "file": "src\\lib\\urlPolicy.js",
+      "forbiddenFindings": [
+        "Sensitive data exposed in logs"
+      ]
+    },
+    {
+      "file": "src\\routes\\integrations.js",
+      "forbiddenFindings": [
+        "Potential incomplete validation in '/fetch-safe' endpoint"
+      ]
+    },
+    {
+      "file": "src\\server.js",
+      "expectedState": "clean"
+    }
+  ]
+}

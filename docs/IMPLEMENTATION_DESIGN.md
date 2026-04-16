@@ -18,6 +18,7 @@ Owlvex is a developer-first security product that combines:
 
 - local deterministic code analysis
 - optional AI-assisted reasoning
+- single-model multi-pass corroboration for AI-backed claims
 - backend-served grounded data and rule intelligence
 - structured reporting and benchmark-backed release confidence
 
@@ -92,6 +93,7 @@ It owns:
 - requesting rule/config/prompt data from backend
 - invoking the customer-selected model provider
 - merging deterministic and AI findings
+- running multi-pass AI corroboration when enabled, using separate finder / verifier / skeptic instructions against the same selected model
 - treating Owlvex canonical issues and local reasoning as the primary decision boundary
 - rendering findings, diagnostics, reports, comparisons, and advisory chat guidance
 - proposing review-first remediation diffs when a user asks Owlvex to help change code
@@ -138,12 +140,34 @@ It must remain:
 - deterministic
 - explainable
 - benchmark-gated
-- separate from heuristic AI output
+
+### 4.4 AI Verification Layer
+
+The AI lane should not rely on a single unconstrained pass when product trust depends on corroboration.
+
+The intended verification direction is:
+
+- one selected model may be used across multiple sequential passes
+- passes must use distinct roles rather than one blended prompt
+- disagreement is first-class evidence and must affect report posture
+
+The default role set is:
+
+1. `Finder`
+   propose candidate issues
+
+2. `Verifier`
+   confirm candidates only when local code evidence supports them
+
+3. `Skeptic`
+   search for contradictory guards, safe patterns, missing sinks, or nearby evidence that weakens the claim
+
+The merge layer must stay Owlvex-controlled. It should not outsource final adjudication to another free-form model response.
 
 The deterministic engine is the primary detection truth for covered behaviors.
 External frameworks may classify or map its output, but they must not silently redefine whether a structurally proven finding exists.
 
-### 4.4 AI Provider Layer
+### 4.5 AI Provider Layer
 
 The AI provider is customer-selected.
 

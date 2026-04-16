@@ -257,6 +257,8 @@
     "benchmark:deterministic": "node ../tools/owlvex-benchmark/run-deterministic.mjs",
     "benchmark:status": "node ../tools/owlvex-benchmark/benchmark-status.mjs",
     "benchmark:stabilization": "node ../tools/run-stabilization-benchmark.mjs",
+    "benchmark:stabilization:demo": "node ../tools/evaluate-stabilization-report.mjs demo",
+    "benchmark:stabilization:demo-app": "node ../tools/evaluate-stabilization-report.mjs demo-app",
     "benchmark:sq001": "node ../tools/owlvex-benchmark/engine/sq001/run-sq001-corpus.mjs",
     "benchmark:sq002": "node ../tools/owlvex-benchmark/engine/sq002/run-sq002-corpus.mjs",
     "benchmark:sq003": "node ../tools/owlvex-benchmark/engine/sq003/run-sq003-corpus.mjs",

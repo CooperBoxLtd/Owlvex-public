@@ -1,0 +1,32 @@
+{
+  "name": "demo-fixtures",
+  "expectations": [
+    { "file": "01-idor-unsafe.js", "expectedState": "finding" },
+    { "file": "02-idor-safe.js", "expectedState": "clean" },
+    { "file": "03-debug-unsafe.js", "expectedState": "finding" },
+    { "file": "04-debug-safe.js", "expectedState": "clean" },
+    { "file": "05-tenant-isolation-unsafe.js", "expectedState": "finding" },
+    { "file": "06-sqli-unsafe.js", "expectedState": "finding" },
+    { "file": "07-sqli-safe.js", "expectedState": "clean" },
+    { "file": "08-command-injection-unsafe.js", "expectedState": "finding" },
+    { "file": "09-command-injection-safe.js", "expectedState": "clean" },
+    { "file": "10-cookie-unsafe.js", "expectedState": "finding" },
+    { "file": "11-cookie-safe.js", "expectedState": "clean" },
+    { "file": "12-sensitive-logging-unsafe.js", "expectedState": "finding" },
+    { "file": "13-sensitive-logging-safe.js", "expectedState": "clean" },
+    { "file": "14-sqli-context-mismatch-unsafe.js", "expectedState": "finding" },
+    { "file": "15-sqli-context-mismatch-safe.js", "expectedState": "clean" },
+    { "file": "16-open-redirect-unsafe.js", "expectedState": "finding" },
+    { "file": "17-open-redirect-safe.js", "expectedState": "clean" },
+    { "file": "18-csrf-unsafe.js", "expectedState": "finding" },
+    { "file": "19-csrf-safe.js", "expectedState": "clean" },
+    { "file": "20-cors-unsafe.js", "expectedState": "finding" },
+    { "file": "21-cors-safe.js", "expectedState": "clean" },
+    { "file": "22-ssrf-unsafe.js", "expectedState": "finding" },
+    { "file": "23-ssrf-safe.js", "expectedState": "clean" },
+    { "file": "24-jwt-validation-unsafe.js", "expectedState": "finding" },
+    { "file": "25-jwt-validation-safe.js", "expectedState": "clean" },
+    { "file": "26-deserialization-unsafe.py", "expectedState": "finding" },
+    { "file": "27-deserialization-safe.py", "expectedState": "clean" }
+  ]
+}

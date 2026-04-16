@@ -49,6 +49,8 @@ The scanner should distinguish between:
 
 If a finding cannot survive that framing, it should be suppressed or demoted.
 
+During stabilization, Owlvex should prefer simple-access corroboration over heavy validation infrastructure. The chosen direction is single-model, multi-pass verification rather than mandatory active testing, multi-agent infrastructure, or external enterprise engines.
+
 ---
 
 ## Stabilization Scope
@@ -117,6 +119,49 @@ During stabilization:
 5. AI-only findings must be suppressible when local code evidence contradicts them.
 6. Partial AI coverage caused by provider failure must be visible to the user.
 7. Regressions found in the demo corpus or demo app must become permanent test cases.
+
+---
+
+## AI Verification Direction
+
+Owlvex adopts single-model, multi-pass corroboration as the primary AI verification strategy for the stabilization phase.
+
+This means:
+
+- one model may be used across multiple sequential reasoning passes
+- the passes must use distinct roles and instructions
+- the product must reconcile agreement and disagreement explicitly rather than pretending consensus
+
+The default role set is:
+
+1. `Finder`
+   Propose candidate issues from the code.
+
+2. `Verifier`
+   Confirm a candidate only when local code evidence supports the claim.
+
+3. `Skeptic`
+   Attempt to disprove the candidate using contradictory local evidence, guards, safe patterns, or missing required sinks.
+
+These roles may be implemented using the same underlying model in separate passes. Owlvex must not require customers to provision multiple models, multiple agents, or specialized infrastructure just to benefit from corroboration.
+
+---
+
+## Adjudication Rule
+
+When multi-pass AI reasoning is introduced, Owlvex must resolve results using explicit merge rules.
+
+The intended confidence behavior is:
+
+- deterministic proof -> `PROVEN`
+- finder plus verifier support with no meaningful contradiction -> stronger corroboration
+- one pass supports and another disputes -> confidence must be reduced or the claim suppressed
+- skeptic finds stronger contradictory local evidence -> suppress or downgrade the claim
+- degraded or incomplete passes -> downgrade confidence and state that coverage is partial
+
+Disagreement is product signal. It must not be hidden behind one flattened answer.
+
+Owlvex should translate agreement and disagreement into report posture rather than fake certainty.
 
 ---
 

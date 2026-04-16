@@ -67,6 +67,14 @@ Benchmark source-of-truth files for that phase:
 
 During stabilization, changes to AI normalization, report posture, confidence framing, and helper-context reasoning should be judged against those benchmark expectation files before broader issue-family expansion is considered.
 
+The current AI verification direction for stabilization is single-model, multi-pass corroboration:
+
+- finder pass
+- verifier pass
+- skeptic pass
+
+Those roles may be implemented with the same underlying model in separate passes. The goal is to improve verification without requiring customers to provision multiple agents or heavyweight validation infrastructure.
+
 ## Workstream Map
 
 ```mermaid
