@@ -21,6 +21,10 @@ function getConfidenceTierLabel(finding: Finding): string {
     return finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE');
 }
 
+function getCorroborationLabel(finding: Finding): string {
+    return finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED');
+}
+
 function hasPartialAiCoverage(result: ScanResult): boolean {
     return (result.warnings ?? []).some(warning =>
         /deterministic-only|AI coverage intentionally paused|AI provider unavailable|\b429\b|rate limit/i.test(warning),
@@ -128,6 +132,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         `Impact: ${f.severity}`,
                         `Likelihood: ${getFindingLikelihood(f)}`,
                         `Contextual risk: ${f.riskScore ?? 'n/a'}/10`,
+                        `Corroboration: ${getCorroborationLabel(f)}`,
                         remediation.remediation || f.explanation,
                     ].join('\n'),
                     hasDetails ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
@@ -186,6 +191,10 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
         {
             label: `Confidence tier: ${getConfidenceTierLabel(finding)}`,
             tooltip: `Owlvex confidence tier for this finding: ${getConfidenceTierLabel(finding)}`,
+        },
+        {
+            label: `Corroboration: ${getCorroborationLabel(finding)}`,
+            tooltip: `Owlvex corroboration posture for this finding: ${getCorroborationLabel(finding)}`,
         },
         {
             label: `Fix: ${remediation.remediation}`,

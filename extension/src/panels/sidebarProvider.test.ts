@@ -60,6 +60,7 @@ describe('SidebarProvider', () => {
                 canonicalId: 'owlvex.issue.path_traversal.001',
                 provenance: 'deterministic',
                 confidenceTier: 'PROVEN',
+                corroboration: 'PROVEN',
                 likelihood: 'HIGH',
                 likelihoodReasons: ['User-controlled path reaches a filesystem boundary directly.'],
                 riskScore: 8,
@@ -96,6 +97,7 @@ describe('SidebarProvider', () => {
             'Review fix',
             'Risk: HIGH/HIGH -> 8/10',
             'Confidence tier: PROVEN',
+            'Corroboration: PROVEN',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
             'Fix: Resolve user paths against a fixed base directory.',
             'Validate: Replay ../ payloads and confirm rejection.',
@@ -130,6 +132,7 @@ describe('SidebarProvider', () => {
                 confidence: 0.91,
                 provenance: 'ai',
                 confidenceTier: 'PLAUSIBLE',
+                corroboration: 'CORROBORATED',
                 likelihood: 'HIGH',
                 riskScore: 7,
             }],
@@ -148,6 +151,7 @@ describe('SidebarProvider', () => {
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toContain('AI confidence: 91%');
         expect(detailNodes.map(node => node.label)).toContain('Confidence tier: PLAUSIBLE');
+        expect(detailNodes.map(node => node.label)).toContain('Corroboration: CORROBORATED');
     });
 
     it('surfaces partial coverage posture when warnings indicate degraded AI coverage', () => {

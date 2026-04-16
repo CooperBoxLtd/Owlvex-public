@@ -26,6 +26,7 @@ export interface Finding {
     /** How this finding was produced. Deterministic findings have confidence = 1. */
     provenance?: 'deterministic' | 'ai';
     confidenceTier?: 'PROVEN' | 'PLAUSIBLE';
+    corroboration?: 'PROVEN' | 'CORROBORATED' | 'PARTIAL' | 'UNVERIFIED';
     canonicalId?: string;
     canonicalTitle?: string;
     canonicalCategory?: string;
@@ -142,6 +143,7 @@ function enrichFindingRisk(finding: Finding): Finding {
     return {
         ...finding,
         confidenceTier: finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE',
+        corroboration: finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'),
         likelihood,
         riskScore: computeFindingRiskScore(finding.severity, likelihood),
     };
@@ -732,6 +734,7 @@ export class ScanEngine {
                     return {
                         ...finding,
                         confidence: Math.max(finding.confidence ?? 0.8, 0.92),
+                        corroboration: 'CORROBORATED' as const,
                     };
                 }
 
@@ -739,10 +742,21 @@ export class ScanEngine {
                     return {
                         ...finding,
                         confidence: Math.max(finding.confidence ?? 0.8, 0.88),
+                        corroboration: 'PARTIAL' as const,
                     };
                 }
 
-                return finding;
+                if (verifier || skeptic) {
+                    return {
+                        ...finding,
+                        corroboration: 'PARTIAL' as const,
+                    };
+                }
+
+                return {
+                    ...finding,
+                    corroboration: 'UNVERIFIED' as const,
+                };
             });
 
         return {

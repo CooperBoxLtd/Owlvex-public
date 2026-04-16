@@ -98,6 +98,19 @@ The stabilization phase is driven by two benchmark layers:
 
 Every stabilization change must preserve or improve outcomes against those assets.
 
+The working benchmark command for this phase is:
+
+```bash
+cd extension
+npm run benchmark:refresh-and-evaluate
+```
+
+That command must remain able to:
+
+- generate fresh reports from the current scanner
+- evaluate those reports against the machine-readable benchmark manifests
+- fail when the current scanner behavior drifts away from the expectation files
+
 Known failure modes already observed in these benchmarks must stay covered by regression tests, including:
 
 - false positive on safe deserialization

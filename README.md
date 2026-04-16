@@ -183,6 +183,20 @@ This runs the current stabilization test pack that protects:
 - degraded scan posture
 - report and sidebar confidence framing
 
+### Refresh benchmark reports and evaluate them
+
+```bash
+cd extension && npm run benchmark:refresh-and-evaluate
+```
+
+This is the current stabilization trust loop. It:
+
+- compiles the extension
+- generates fresh Markdown reports for `tools/demo/` and `tools/demo-app/`
+- evaluates those reports against the benchmark expectation manifests
+
+Use this command when you want to know whether the current scanner behavior still matches the written stabilization contract, not just whether the unit tests pass.
+
 ### Build the CLI bundle
 
 ```bash

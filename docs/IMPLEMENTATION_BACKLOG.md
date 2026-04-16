@@ -67,6 +67,15 @@ Benchmark source-of-truth files for that phase:
 
 During stabilization, changes to AI normalization, report posture, confidence framing, and helper-context reasoning should be judged against those benchmark expectation files before broader issue-family expansion is considered.
 
+The default benchmark refresh loop for this phase is:
+
+```bash
+cd extension
+npm run benchmark:refresh-and-evaluate
+```
+
+That command is the practical "is the scanner still aligned with the expectation files?" gate for the current stabilization lane.
+
 The current AI verification direction for stabilization is single-model, multi-pass corroboration:
 
 - finder pass

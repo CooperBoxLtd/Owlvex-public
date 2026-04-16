@@ -71,31 +71,44 @@ describe('Demo fixture regression coverage', () => {
         const provider = {
             id: 'openai',
             selectedModel: 'gpt-4o',
-            complete: jest.fn().mockResolvedValue({
-                content: JSON.stringify({
-                    score: 7.5,
-                    summary: 'Insecure deserialization detected.',
-                    findings: [{
-                        id: 'demo-safe-deser',
-                        line: 9,
-                        line_end: 9,
-                        severity: 'HIGH',
-                        framework: 'OWASP',
-                        rule_code: 'A08-DESER',
-                        title: 'Insecure deserialization of untrusted data',
-                        explanation: 'User-controlled JSON is deserialized directly.',
-                        threat: 'Unexpected data may be parsed from request input.',
-                        fix: 'Validate JSON before loading it.',
-                        confidence: 0.9,
-                        issue_id: 'owlvex.issue.insecure_deserialization.001',
-                        likelihood: 'MEDIUM',
-                        likelihood_reasons: ['The request body is parsed directly from user input.'],
-                    }],
-                    positives: [],
-                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+            complete: jest.fn()
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        score: 7.5,
+                        summary: 'Insecure deserialization detected.',
+                        findings: [{
+                            id: 'demo-safe-deser',
+                            line: 9,
+                            line_end: 9,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A08-DESER',
+                            title: 'Insecure deserialization of untrusted data',
+                            explanation: 'User-controlled JSON is deserialized directly.',
+                            threat: 'Unexpected data may be parsed from request input.',
+                            fix: 'Validate JSON before loading it.',
+                            confidence: 0.9,
+                            issue_id: 'owlvex.issue.insecure_deserialization.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['The request body is parsed directly from user input.'],
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    }),
+                    tokenCount: 42,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{ id: 'demo-safe-deser', verdict: 'reject', reason: 'json.loads is data parsing, not executable deserialization.' }],
+                    }),
+                    tokenCount: 10,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{ id: 'demo-safe-deser', verdict: 'clear', reason: 'No further contradiction needed.' }],
+                    }),
+                    tokenCount: 10,
                 }),
-                tokenCount: 42,
-            }),
         };
 
         (global.fetch as jest.Mock) = jest.fn()

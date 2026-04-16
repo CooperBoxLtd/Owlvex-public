@@ -13,13 +13,13 @@ describe('stabilizationBenchmark', () => {
             '',
             '| Finding | Score Factors | Detection |',
             '| --- | --- | --- |',
-            '| Debug mode or framework error detail enabled in production | impact medium \\| likelihood medium \\| risk 5/10 | Deterministic `SM-002` |',
+            '| Debug mode or framework error detail enabled in production | tier proven \\| corroboration proven \\| impact medium \\| likelihood medium \\| risk 5/10 | Deterministic `SM-002` |',
             '',
             '### 04-debug-safe.js',
             '',
             '| Finding | Score Factors | Detection |',
             '| --- | --- | --- |',
-            '| Debug mode or framework error detail enabled in production | impact medium \\| likelihood medium \\| risk 5/10 | AI 90% |',
+            '| Debug mode or framework error detail enabled in production | tier plausible \\| corroboration corroborated \\| impact medium \\| likelihood medium \\| risk 5/10 | AI 90% |',
         ].join('\n'));
 
         expect(report.targetLabel).toBe('tools/demo');
@@ -43,14 +43,14 @@ describe('stabilizationBenchmark', () => {
             '',
             '| Finding | Score Factors | Detection |',
             '| --- | --- | --- |',
-            '| Unsanitized SQL query construction | impact critical \\| likelihood high \\| risk 10/10 | AI 62% |',
-            '| Broken Access Control in getDocumentById | impact high \\| likelihood high \\| risk 9/10 | AI 80% |',
+            '| Unsanitized SQL query construction | tier plausible \\| corroboration corroborated \\| impact critical \\| likelihood high \\| risk 10/10 | AI 62% |',
+            '| Broken Access Control in getDocumentById | tier plausible \\| corroboration corroborated \\| impact high \\| likelihood high \\| risk 9/10 | AI 80% |',
             '',
             '### src\\server.js',
             '',
             '| Finding | Score Factors | Detection |',
             '| --- | --- | --- |',
-            '| Missing CSRF protection on state-changing request | impact medium \\| likelihood medium \\| risk 5/10 | AI 80% |',
+            '| Missing CSRF protection on state-changing request | tier plausible \\| corroboration partial \\| impact medium \\| likelihood medium \\| risk 5/10 | AI 80% |',
         ].join('\n'));
 
         const evaluation = evaluateParsedReport(report, {

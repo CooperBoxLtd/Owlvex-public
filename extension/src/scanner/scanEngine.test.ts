@@ -1599,6 +1599,7 @@ if (process.env.NODE_ENV !== 'production') {
         expect(complete.mock.calls[2][0].userMessage).toContain('You are the Skeptic pass.');
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].confidence).toBe(0.92);
+        expect(result.findings[0].corroboration).toBe('CORROBORATED');
         expect(result.warnings).toEqual([]);
     });
 
@@ -1683,5 +1684,80 @@ if (process.env.NODE_ENV !== 'production') {
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
         expect(complete).toHaveBeenCalledTimes(3);
+    });
+
+    it('keeps findings but marks corroboration partial when verifier or skeptic passes are unavailable', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const complete = jest.fn()
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 6.4,
+                    summary: 'Potential open redirect detected.',
+                    findings: [
+                        {
+                            id: 'ai-open-redirect-partial',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A01-REDIRECT',
+                            title: 'Open Redirect',
+                            explanation: 'User-controlled destination is passed directly into a redirect call.',
+                            threat: 'Attackers can steer users to attacker-controlled pages.',
+                            fix: 'Allow-list redirect destinations.',
+                            confidence: 0.88,
+                            issue_id: 'owlvex.issue.open_redirect.001',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            })
+            .mockRejectedValueOnce(new Error('Azure Foundry error: 429 retry-after: 1'))
+            .mockRejectedValueOnce(new Error('Azure Foundry error: 429 retry-after: 1'));
+        const provider = {
+            id: 'azure-foundry',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\redirect.js',
+            getText: () => `function go(req, res) {
+    return res.redirect(req.query.next);
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        setTimeoutSpy.mockRestore();
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].corroboration).toBe('UNVERIFIED');
+        expect(result.warnings.join('\n')).toContain('AI corroboration partial: verifier pass unavailable');
+        expect(result.warnings.join('\n')).toContain('AI corroboration partial: skeptic pass unavailable');
     });
 });

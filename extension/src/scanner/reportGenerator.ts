@@ -136,6 +136,7 @@ function hasPartialAiCoverage(result: ScanResult): boolean {
 function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     return [
         `tier ${(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')).toLowerCase()}`,
+        `corroboration ${(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED')).toLowerCase()}`,
         `impact ${finding.severity.toLowerCase()}`,
         `likelihood ${getFindingLikelihood(finding).toLowerCase()}`,
         `risk ${finding.riskScore ?? 'n/a'}/10`,
@@ -414,6 +415,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Location: \`${item.file}\` at L${finding.line}${finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`);
                 lines.push(`- Risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
                 lines.push(`- Confidence tier: ${finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')}`);
+                lines.push(`- Corroboration: ${finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED')}`);
                 lines.push(`- Why it matters: ${finding.explanation || 'No explanation returned.'}`);
                 lines.push(`- What to change: ${remediation.remediation}`);
                 if (safePattern) {

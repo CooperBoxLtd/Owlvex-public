@@ -30,6 +30,7 @@ describe('reportGenerator', () => {
                     confidence: 0.93,
                     provenance: 'ai',
                     confidenceTier: 'PLAUSIBLE',
+                    corroboration: 'CORROBORATED',
                     canonicalId: 'owlvex.issue.sql_injection.001',
                     canonicalTitle: 'Unsanitized SQL query construction',
                     canonicalFamily: 'family.injection_execution',
@@ -103,10 +104,11 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Coverage posture: Normal coverage for this file');
-        expect(written).toContain('| Unsanitized SQL query construction | tier plausible \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
+        expect(written).toContain('| Unsanitized SQL query construction | tier plausible \\| corroboration corroborated \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Risk: HIGH impact / MEDIUM likelihood / 7/10');
         expect(written).toContain('- Confidence tier: PLAUSIBLE');
+        expect(written).toContain('- Corroboration: CORROBORATED');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
         expect(written).toContain('- What to change: Separate query structure from untrusted data with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Safe pattern: Use parameterized queries.');

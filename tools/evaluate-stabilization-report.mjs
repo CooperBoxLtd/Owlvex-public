@@ -21,7 +21,7 @@ function parseMarkdownReport(markdown) {
         break;
       }
 
-      const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*impact .+\|\s*(?:AI|Deterministic)/);
+      const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*.+\|\s*(?:AI|Deterministic)/);
       if (tableMatch && tableMatch[1] !== 'Finding') {
         findings.push(tableMatch[1].trim());
       }
