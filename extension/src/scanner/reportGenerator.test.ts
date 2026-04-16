@@ -98,12 +98,14 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source coverage: Fresh Packs: 1');
         expect(written).toContain('- Coverage posture: Full scan posture for current provider/runtime state');
+        expect(written).toContain('- Corroboration posture: corroborated: 1');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- Score: 4.2/10');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Coverage posture: Normal coverage for this file');
+        expect(written).toContain('- Corroboration posture: corroborated: 1');
         expect(written).toContain('| Unsanitized SQL query construction | tier plausible \\| corroboration corroborated \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Risk: HIGH impact / MEDIUM likelihood / 7/10');
@@ -146,6 +148,7 @@ describe('reportGenerator', () => {
         await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Corroboration posture: No findings to corroborate');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Errors');
@@ -201,9 +204,62 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Scan warnings: 1');
         expect(written).toContain('- Coverage posture: Partial AI coverage in this scan');
+        expect(written).toContain('- Corroboration posture: No findings to corroborate');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Warnings');
         expect(written).not.toContain('No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.');
+    });
+
+    it('summarizes mixed corroboration posture across a scan and per file', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+        const snapshot = {
+            targetLabel: 'src/probes/mixed.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\mixed.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                provenance: 'deterministic',
+                                confidenceTier: 'PROVEN',
+                                corroboration: 'PROVEN',
+                                ruleCode: 'SM-002',
+                            },
+                            {
+                                ...buildResult().findings[0],
+                                id: 'finding-2',
+                                line: 8,
+                                lineEnd: 8,
+                                title: 'Potential CSRF issue',
+                                canonicalTitle: 'Missing CSRF protection on state-changing request',
+                                corroboration: 'PARTIAL',
+                            },
+                            {
+                                ...buildResult().findings[0],
+                                id: 'finding-3',
+                                line: 12,
+                                lineEnd: 12,
+                                title: 'Potential open redirect',
+                                canonicalTitle: 'Open redirect using untrusted destination',
+                                corroboration: 'UNVERIFIED',
+                            },
+                        ],
+                        metrics: { critical: 0, high: 3, medium: 0, low: 0 },
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Corroboration posture: proven: 1 | partial: 1 | unverified: 1');
+        expect(written).toContain('### mixed.js');
+        expect(written).toContain('- Corroboration posture: proven: 1 | partial: 1 | unverified: 1');
     });
 
     it('normalizes string-based stride and matched signals without crashing', async () => {

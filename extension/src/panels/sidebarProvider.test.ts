@@ -81,6 +81,7 @@ describe('SidebarProvider', () => {
         const roots = provider.getChildren();
         expect(roots[0].label).toBe('Score: 4.2/10');
         expect(String(roots[0].tooltip)).toContain('Coverage posture: normal');
+        expect(String(roots[0].tooltip)).toContain('Corroboration posture: proven: 1');
         expect(String(roots[0].tooltip)).toContain('Top risk: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
         expect(severityNode).toBeTruthy();
@@ -152,6 +153,7 @@ describe('SidebarProvider', () => {
         expect(detailNodes.map(node => node.label)).toContain('AI confidence: 91%');
         expect(detailNodes.map(node => node.label)).toContain('Confidence tier: PLAUSIBLE');
         expect(detailNodes.map(node => node.label)).toContain('Corroboration: CORROBORATED');
+        expect(String(provider.getChildren()[0].tooltip)).toContain('Corroboration posture: corroborated: 1');
     });
 
     it('surfaces partial coverage posture when warnings indicate degraded AI coverage', () => {
@@ -171,5 +173,80 @@ describe('SidebarProvider', () => {
 
         const roots = provider.getChildren();
         expect(String(roots[0].tooltip)).toContain('Coverage posture: partial AI coverage or deterministic-only fallback');
+        expect(String(roots[0].tooltip)).toContain('Corroboration posture: none');
+    });
+
+    it('summarizes mixed corroboration states in the score tooltip', () => {
+        const provider = new SidebarProvider();
+        provider.refresh({
+            scanId: 'scan-4',
+            score: 5.9,
+            summary: 'Mixed corroboration states.',
+            findings: [
+                {
+                    id: 'finding-proven',
+                    line: 5,
+                    lineEnd: 5,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'SM-002',
+                    title: 'Debug mode enabled',
+                    explanation: 'Debug mode is active.',
+                    threat: 'Information disclosure.',
+                    fix: 'Guard debug mode.',
+                    confidence: 1,
+                    provenance: 'deterministic',
+                    confidenceTier: 'PROVEN',
+                    corroboration: 'PROVEN',
+                    likelihood: 'HIGH',
+                    riskScore: 8,
+                },
+                {
+                    id: 'finding-partial',
+                    line: 8,
+                    lineEnd: 8,
+                    severity: 'MEDIUM',
+                    framework: 'OWASP',
+                    ruleCode: 'OWASP-A01',
+                    title: 'Potential IDOR',
+                    explanation: 'Access control may be missing.',
+                    threat: 'Unauthorized access.',
+                    fix: 'Enforce ownership checks.',
+                    confidence: 0.81,
+                    provenance: 'ai',
+                    confidenceTier: 'PLAUSIBLE',
+                    corroboration: 'PARTIAL',
+                    likelihood: 'MEDIUM',
+                    riskScore: 6,
+                },
+                {
+                    id: 'finding-unverified',
+                    line: 12,
+                    lineEnd: 12,
+                    severity: 'LOW',
+                    framework: 'OWASP',
+                    ruleCode: 'OWASP-A10',
+                    title: 'Potential redirect issue',
+                    explanation: 'Redirect target may be untrusted.',
+                    threat: 'Phishing.',
+                    fix: 'Allow-list destinations.',
+                    confidence: 0.62,
+                    provenance: 'ai',
+                    confidenceTier: 'PLAUSIBLE',
+                    corroboration: 'UNVERIFIED',
+                    likelihood: 'LOW',
+                    riskScore: 3,
+                },
+            ],
+            positives: [],
+            metrics: { critical: 0, high: 1, medium: 1, low: 1 },
+            durationMs: 18,
+            model: 'test-model',
+            provider: 'test-provider',
+            warnings: [],
+        } as any);
+
+        const roots = provider.getChildren();
+        expect(String(roots[0].tooltip)).toContain('Corroboration posture: proven: 1 | partial: 1 | unverified: 1');
     });
 });

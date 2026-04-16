@@ -1686,6 +1686,69 @@ if (process.env.NODE_ENV !== 'production') {
         expect(complete).toHaveBeenCalledTimes(3);
     });
 
+    it('skips verifier and skeptic passes when AI candidate count exceeds corroboration budget', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const findings = Array.from({ length: 5 }, (_, index) => ({
+            id: `ai-finding-${index + 1}`,
+            line: index + 2,
+            line_end: index + 2,
+            severity: 'MEDIUM',
+            framework: 'OWASP',
+            rule_code: `A01-${index + 1}`,
+            title: `Issue ${index + 1}`,
+            explanation: 'Potential issue from finder pass.',
+            threat: 'Potential abuse.',
+            fix: 'Investigate.',
+            confidence: 0.74,
+            issue_id: `owlvex.issue.synthetic_${index + 1}.001`,
+        }));
+        const complete = jest.fn().mockResolvedValueOnce({
+            content: JSON.stringify({
+                score: 4.8,
+                summary: 'Several candidates detected.',
+                findings,
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 5, low: 0 },
+            }),
+            tokenCount: 42,
+        });
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\bulk.js',
+            getText: () => 'function a() { return true; }',
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(5);
+        expect(result.findings.every(finding => finding.corroboration === 'UNVERIFIED')).toBe(true);
+        expect(result.warnings.join('\n')).toContain('AI corroboration partial: review passes skipped because candidate count 5 exceeded corroboration budget 4.');
+    });
+
     it('keeps findings but marks corroboration partial when verifier or skeptic passes are unavailable', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
@@ -1720,8 +1783,7 @@ if (process.env.NODE_ENV !== 'production') {
                 }),
                 tokenCount: 42,
             })
-            .mockRejectedValueOnce(new Error('Azure Foundry error: 429 retry-after: 1'))
-            .mockRejectedValueOnce(new Error('Azure Foundry error: 429 retry-after: 1'));
+            .mockRejectedValue(new Error('Azure Foundry error: 429 retry-after: 1'));
         const provider = {
             id: 'azure-foundry',
             selectedModel: 'gpt-4o',
@@ -1758,6 +1820,7 @@ if (process.env.NODE_ENV !== 'production') {
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].corroboration).toBe('UNVERIFIED');
         expect(result.warnings.join('\n')).toContain('AI corroboration partial: verifier pass unavailable');
-        expect(result.warnings.join('\n')).toContain('AI corroboration partial: skeptic pass unavailable');
+        expect(result.warnings.join('\n')).toContain('AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.');
+        expect(complete).toHaveBeenCalledTimes(5);
     });
 });

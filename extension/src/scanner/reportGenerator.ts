@@ -143,6 +143,25 @@ function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     ].join(' | ');
 }
 
+function getCorroborationLabel(finding: ScanResult['findings'][number]): string {
+    return finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED');
+}
+
+function summarizeCorroborationCounts(findings: ScanResult['findings']): string {
+    const order: Array<'PROVEN' | 'CORROBORATED' | 'PARTIAL' | 'UNVERIFIED'> = ['PROVEN', 'CORROBORATED', 'PARTIAL', 'UNVERIFIED'];
+    const counts = new Map<string, number>();
+
+    for (const finding of findings) {
+        const label = getCorroborationLabel(finding);
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+
+    return order
+        .filter(label => (counts.get(label) ?? 0) > 0)
+        .map(label => `${label.toLowerCase()}: ${counts.get(label)}`)
+        .join(' | ');
+}
+
 function buildSafePatternLine(
     remediation: ReturnType<typeof getCanonicalRemediation>,
 ): string | undefined {
@@ -378,6 +397,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         `- Coverage posture: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Full scan posture for current provider/runtime state'}`,
+        `- Corroboration posture: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
         '',
     ];
 
@@ -392,6 +412,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
             lines.push(`- Coverage posture: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal coverage for this file'}`);
+            lines.push(`- Corroboration posture: ${summarizeCorroborationCounts(item.result.findings)}`);
             lines.push(`- Intelligence source: ${describeRulePackRuntime(item.packContext)}`);
             lines.push('');
             lines.push('| Finding | Score Factors | Detection |');

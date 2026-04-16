@@ -102,6 +102,8 @@ const LIKELIHOOD_MULTIPLIER: Record<FindingLikelihood, number> = {
     HIGH: 1.5,
 };
 
+const MAX_CORROBORATION_CANDIDATES = 4;
+
 function buildMetrics(findings: Finding[]): SeverityMetrics {
     return {
         critical: findings.filter(f => f.severity === 'CRITICAL').length,
@@ -471,6 +473,10 @@ function isRateLimitError(error: unknown): boolean {
     return /\b429\b/.test(message) || /rate limit/i.test(message);
 }
 
+function hasRateLimitWarning(warnings: string[]): boolean {
+    return warnings.some(warning => /\b429\b|rate limit/i.test(warning));
+}
+
 function extractRetryAfterMs(error: unknown): number | undefined {
     const message = error instanceof Error ? error.message : String(error ?? '');
     const retryAfterSecondsMatch = message.match(/retry-after:\s*(\d+(?:\.\d+)?)/i);
@@ -687,6 +693,18 @@ export class ScanEngine {
             return { findings: [], warnings: [] };
         }
 
+        if (params.findings.length > MAX_CORROBORATION_CANDIDATES) {
+            return {
+                findings: params.findings.map(finding => ({
+                    ...finding,
+                    corroboration: 'UNVERIFIED' as const,
+                })),
+                warnings: [
+                    `AI corroboration partial: review passes skipped because candidate count ${params.findings.length} exceeded corroboration budget ${MAX_CORROBORATION_CANDIDATES}.`,
+                ],
+            };
+        }
+
         const warnings: string[] = [];
         const verifierReviews = await this._runAiReviewPass({
             role: 'Verifier',
@@ -700,16 +718,21 @@ export class ScanEngine {
         });
         warnings.push(...verifierReviews.warnings);
 
-        const skepticReviews = await this._runAiReviewPass({
-            role: 'Skeptic',
-            expectedSupportVerdict: 'clear',
-            expectedContradictionVerdict: 'contradict',
-            provider: params.provider,
-            systemPrompt: params.systemPrompt,
-            language: params.language,
-            code: params.code,
-            findings: params.findings,
-        });
+        const skepticReviews = hasRateLimitWarning(verifierReviews.warnings)
+            ? {
+                reviews: [] as AiCorroborationReview[],
+                warnings: ['AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.'],
+            }
+            : await this._runAiReviewPass({
+                role: 'Skeptic',
+                expectedSupportVerdict: 'clear',
+                expectedContradictionVerdict: 'contradict',
+                provider: params.provider,
+                systemPrompt: params.systemPrompt,
+                language: params.language,
+                code: params.code,
+                findings: params.findings,
+            });
         warnings.push(...skepticReviews.warnings);
 
         const verifierMap = new Map(verifierReviews.reviews.map(review => [review.id, review]));

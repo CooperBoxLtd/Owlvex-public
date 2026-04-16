@@ -31,6 +31,22 @@ function hasPartialAiCoverage(result: ScanResult): boolean {
     );
 }
 
+function summarizeCorroborationCounts(findings: Finding[]): string {
+    const order: Array<'PROVEN' | 'CORROBORATED' | 'PARTIAL' | 'UNVERIFIED'> = ['PROVEN', 'CORROBORATED', 'PARTIAL', 'UNVERIFIED'];
+    const counts = new Map<string, number>();
+
+    for (const finding of findings) {
+        const label = getCorroborationLabel(finding);
+        counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+
+    const parts = order
+        .filter(label => (counts.get(label) ?? 0) > 0)
+        .map(label => `${label.toLowerCase()}: ${counts.get(label)}`);
+
+    return parts.length ? parts.join(' | ') : 'none';
+}
+
 function riskRank(finding: Finding): number {
     const severityRank = finding.severity === 'CRITICAL'
         ? 4
@@ -84,6 +100,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         hasPartialAiCoverage(this.lastResult)
                             ? 'Coverage posture: partial AI coverage or deterministic-only fallback'
                             : 'Coverage posture: normal',
+                        `Corroboration posture: ${summarizeCorroborationCounts(this.lastResult.findings)}`,
                         topRiskFinding
                             ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
                             : '',
