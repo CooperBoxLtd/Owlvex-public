@@ -31,6 +31,7 @@ describe('StatusBar', () => {
         } as any);
 
         const item = (vscode.window.createStatusBarItem as jest.Mock).mock.results[0].value;
-        expect(item.tooltip).toContain('Top risk: SQL Injection | HIGH/HIGH | 9/10 | AI 93%');
+        expect(item.tooltip).toContain('File risk score: 6.7/10');
+        expect(item.tooltip).toContain('Fix first: SQL Injection | HIGH/HIGH | 9/10 | AI 93%');
     });
 });

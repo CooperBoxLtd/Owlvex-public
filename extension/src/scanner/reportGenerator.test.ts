@@ -12,7 +12,7 @@ describe('reportGenerator', () => {
     function buildResult(overrides: Partial<ScanResult> = {}): ScanResult {
         return {
             scanId: 'scan-1',
-            score: 4.2,
+            score: 7,
             summary: 'High risk issue found.',
             frameworks: ['OWASP', 'STRIDE', 'CWE', 'MITRE', 'NIST'],
             findings: [
@@ -99,16 +99,19 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Intelligence source coverage: Fresh Packs: 1');
         expect(written).toContain('- Coverage posture: Full scan posture for current provider/runtime state');
         expect(written).toContain('- Corroboration posture: corroborated: 1');
+        expect(written).toContain('- Average file risk score: 7.0/10');
+        expect(written).toContain('- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
-        expect(written).toContain('- Score: 4.2/10');
+        expect(written).toContain('- File risk score: 7.0/10');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Coverage posture: Normal coverage for this file');
         expect(written).toContain('- Corroboration posture: corroborated: 1');
+        expect(written).toContain('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
         expect(written).toContain('| Unsanitized SQL query construction | tier plausible \\| corroboration corroborated \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
-        expect(written).toContain('- Risk: HIGH impact / MEDIUM likelihood / 7/10');
+        expect(written).toContain('- Finding risk: HIGH impact / MEDIUM likelihood / 7/10');
         expect(written).toContain('- Confidence tier: PLAUSIBLE');
         expect(written).toContain('- Corroboration: CORROBORATED');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
@@ -136,7 +139,7 @@ describe('reportGenerator', () => {
                 {
                     uri: vscode.Uri.file('d:\\repo\\src\\probes\\clean.js'),
                     result: buildResult({
-                        score: 9.5,
+                        score: 0,
                         summary: 'No meaningful issues found.',
                         findings: [],
                         metrics: { critical: 0, high: 0, medium: 0, low: 0 },

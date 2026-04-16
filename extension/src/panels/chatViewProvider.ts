@@ -158,26 +158,15 @@ function findTopFindingInCalibrationRecords(records?: StoredScanRecord[]): Findi
 
 function buildScoreBreakdown(result: ScanResult): string {
     if (!result.findings.length) {
-        return 'No penalties were applied, so the file kept the full 10.0 baseline.';
+        return 'No findings remain, so the file risk score is 0.0.';
     }
 
-    const parts = result.findings.map(finding => {
-        const basePenalty = finding.severity === 'CRITICAL'
-            ? 4
-            : finding.severity === 'HIGH'
-            ? 2.5
-            : finding.severity === 'MEDIUM'
-            ? 1.5
-            : 0.5;
-        const multiplier = getFindingLikelihood(finding) === 'HIGH'
-            ? 1.5
-            : getFindingLikelihood(finding) === 'LOW'
-            ? 0.75
-            : 1;
-        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (-${Number((basePenalty * multiplier).toFixed(2))})`;
-    });
+    const parts = result.findings
+        .slice()
+        .sort((left, right) => riskRank(right) - riskRank(left))
+        .map(finding => `${finding.title} (${finding.riskScore ?? 'n/a'}/10)`);
 
-    return `Started at 10.0, then applied penalties from ${parts.join(', ')}.`;
+    return `File risk score follows the highest remaining finding risk. Current ranking: ${parts.join(', ')}.`;
 }
 
 export function buildGroundedRemediationHighlights(findings: Finding[], maxFindings = 2): string[] {
@@ -200,11 +189,11 @@ function buildScanSummaryLines(result: ScanResult): string[] {
         .slice()
         .sort((left, right) => riskRank(right) - riskRank(left))[0];
     return [
-        `Score: ${result.score.toFixed(1)}/10`,
+        `File risk score: ${result.score.toFixed(1)}/10`,
         `Findings: ${result.findings.length}`,
         topRiskFinding
-            ? `Top risk: ${topRiskFinding.title} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
-            : 'Top risk: none',
+            ? `Fix first: ${topRiskFinding.title} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
+            : 'Fix first: none',
         summarizeIssueFamilies(result.findings),
         `Model: ${result.model}`,
         ...(remediationHighlights.length

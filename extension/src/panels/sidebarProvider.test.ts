@@ -43,7 +43,7 @@ describe('SidebarProvider', () => {
         const provider = new SidebarProvider();
         provider.refresh({
             scanId: 'scan-1',
-            score: 4.2,
+            score: 8,
             summary: 'Path traversal found.',
             findings: [{
                 id: 'finding-1',
@@ -79,10 +79,10 @@ describe('SidebarProvider', () => {
         });
 
         const roots = provider.getChildren();
-        expect(roots[0].label).toBe('Score: 4.2/10');
+        expect(roots[0].label).toBe('File risk: 8.0/10');
         expect(String(roots[0].tooltip)).toContain('Coverage posture: normal');
         expect(String(roots[0].tooltip)).toContain('Corroboration posture: proven: 1');
-        expect(String(roots[0].tooltip)).toContain('Top risk: Path traversal | HIGH/HIGH | 8/10');
+        expect(String(roots[0].tooltip)).toContain('Fix first: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
         expect(severityNode).toBeTruthy();
         expect(severityNode?.label).toBe('Impact HIGH (1)');

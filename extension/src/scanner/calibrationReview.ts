@@ -37,26 +37,15 @@ function summarizeIssueFamilies(findings: Finding[]): string {
 
 function buildScoreBreakdown(findings: Finding[]): string {
     if (!findings.length) {
-        return 'No penalties were applied, so the file kept the full 10.0 baseline.';
+        return 'No findings remain, so the file risk score is 0.0.';
     }
 
-    const penalties = findings.map(finding => {
-        const basePenalty = finding.severity === 'CRITICAL'
-            ? 4
-            : finding.severity === 'HIGH'
-            ? 2.5
-            : finding.severity === 'MEDIUM'
-            ? 1.5
-            : 0.5;
-        const multiplier = getFindingLikelihood(finding) === 'HIGH'
-            ? 1.5
-            : getFindingLikelihood(finding) === 'LOW'
-            ? 0.75
-            : 1;
-        return `${finding.severity.toLowerCase()} x ${getFindingLikelihood(finding).toLowerCase()} (-${Number((basePenalty * multiplier).toFixed(2))})`;
-    });
+    const ranked = findings
+        .slice()
+        .sort((left, right) => riskRank(right) - riskRank(left))
+        .map(finding => `${finding.title} (${finding.riskScore ?? 'n/a'}/10)`);
 
-    return `Started at 10.0, then applied penalties from ${penalties.join(', ')}.`;
+    return `File risk score follows the highest remaining finding risk. Current ranking: ${ranked.join(', ')}.`;
 }
 
 function buildScoreMeaning(result: ScanResult): string | undefined {
@@ -65,7 +54,7 @@ function buildScoreMeaning(result: ScanResult): string | undefined {
         return undefined;
     }
 
-    return `${result.score.toFixed(1)}/10 is the overall target score after penalties, while ${topRisk.riskScore ?? 'n/a'}/10 is the highest single-finding risk.`;
+    return `${result.score.toFixed(1)}/10 matches the highest remaining finding risk in this target. Fix that finding first, then the file risk score drops to the next-highest remaining risk.`;
 }
 
 function formatTarget(record: StoredScanRecord): string {
@@ -105,19 +94,19 @@ export function buildRiskCalibrationReport(records: StoredScanRecord[]): string 
         '',
         `Generated: ${new Date().toISOString()}`,
         `Scans reviewed: ${ordered.length}`,
-        `Average score: ${averageScore.toFixed(1)}/10`,
+        `Average file risk score: ${averageScore.toFixed(1)}/10`,
         `Total findings across reviewed scans: ${totalFindings}`,
         '',
         '## How To Use',
         '',
-        '- Start with the lowest scores and the highest contextual risks.',
-        '- Ask whether the score drop feels too soft, too harsh, or about right for the code shown.',
-        '- If something feels wrong, change one lever at a time: deterministic likelihood, impact penalty, likelihood multiplier, or a single risk-matrix cell.',
+        '- Start with the highest file risk scores and the highest contextual risks.',
+        '- Ask whether the top finding risk feels too soft, too harsh, or about right for the code shown.',
+        '- If something feels wrong, change one lever at a time: deterministic likelihood, impact label, or a single risk-matrix cell.',
         '- Turn accepted calibration calls into regression tests so the posture stays stable.',
         '',
         '## Review Queue',
         '',
-        '| Target | Score | Findings | Top risk | Families |',
+        '| Target | File risk | Findings | Top risk | Families |',
         '| --- | ---: | ---: | --- | --- |',
         ...ordered.map(record => {
             const topRisk = getTopRiskFinding(record.result.findings);
@@ -144,9 +133,9 @@ export function buildRiskCalibrationReport(records: StoredScanRecord[]): string 
         lines.push(`- Scan ID: \`${record.scanId}\``);
         lines.push(`- Scanned at: ${formatScannedAt(record)}`);
         lines.push(`- Provider/model: ${result.provider} / ${result.model}`);
-        lines.push(`- Score: ${result.score.toFixed(1)}/10`);
+        lines.push(`- File risk score: ${result.score.toFixed(1)}/10`);
         lines.push(`- Score drivers: ${buildScoreBreakdown(result.findings)}`);
-        lines.push(`- Score meaning: ${buildScoreMeaning(result) ?? 'No findings, so the overall score stayed at the baseline.'}`);
+        lines.push(`- Score meaning: ${buildScoreMeaning(result) ?? 'No findings remain, so the file risk score is 0.'}`);
         lines.push(`- Findings: ${result.findings.length}`);
         lines.push(`- Families: ${summarizeIssueFamilies(result.findings)}`);
         lines.push(topRisk

@@ -91,7 +91,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                 .sort((left, right) => riskRank(right) - riskRank(left))[0];
             const items: FindingItem[] = [
                 new FindingItem(
-                    `Score: ${this.lastResult.score.toFixed(1)}/10`,
+                    `File risk: ${this.lastResult.score.toFixed(1)}/10`,
                     [
                         `${this.lastResult.findings.length} finding(s) | ${this.lastResult.model} | ${getRulePackModeLabel(this.lastResult.packContext)}`,
                         this.lastResult.frameworks?.length
@@ -102,7 +102,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                             : 'Coverage posture: normal',
                         `Corroboration posture: ${summarizeCorroborationCounts(this.lastResult.findings)}`,
                         topRiskFinding
-                            ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
+                            ? `Fix first: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
                             : '',
                     ].filter(Boolean).join('\n'),
                     vscode.TreeItemCollapsibleState.None,

@@ -5,7 +5,7 @@ describe('buildRiskCalibrationReport', () => {
     function buildResult(overrides: Partial<ScanResult> = {}): ScanResult {
         return {
             scanId: 'scan-1',
-            score: 7.8,
+            score: 7,
             summary: '1 finding(s) detected.',
             findings: [
                 {
@@ -49,9 +49,9 @@ describe('buildRiskCalibrationReport', () => {
         ]);
 
         expect(report).toContain('# Owlvex Risk Calibration Review');
-        expect(report).toContain('| `tools/demo/10-cookie-unsafe.js` | 7.8 | 1 | Insecure Cookie: httpOnly Flag Missing (MEDIUM/HIGH -> 7/10) | Identity & Auth Failures |');
-        expect(report).toContain('- Score drivers: Started at 10.0, then applied penalties from medium x high (-2.25).');
-        expect(report).toContain('- Score meaning: 7.8/10 is the overall target score after penalties, while 7/10 is the highest single-finding risk.');
+        expect(report).toContain('| `tools/demo/10-cookie-unsafe.js` | 7.0 | 1 | Insecure Cookie: httpOnly Flag Missing (MEDIUM/HIGH -> 7/10) | Identity & Auth Failures |');
+        expect(report).toContain('- Score drivers: File risk score follows the highest remaining finding risk. Current ranking: Insecure Cookie: httpOnly Flag Missing (7/10).');
+        expect(report).toContain('- Score meaning: 7.0/10 matches the highest remaining finding risk in this target. Fix that finding first, then the file risk score drops to the next-highest remaining risk.');
         expect(report).toContain('| Insecure Cookie: httpOnly Flag Missing | MEDIUM | HIGH | 7 | Cookie name suggests session or auth state |');
     });
 });

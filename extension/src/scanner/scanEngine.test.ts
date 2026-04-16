@@ -574,7 +574,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].ruleCode).toBe('AC-001');
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.idor.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Access Control & Authorization');
-        expect(result.score).toBe(6.3);
+        expect(result.score).toBe(9);
     });
 
     it('recalculates the final score from merged severity metrics instead of trusting the model score', async () => {
@@ -639,10 +639,10 @@ describe('ScanEngine.scanDocument caching', () => {
 
         expect(result.findings).toHaveLength(1);
         expect(result.metrics).toEqual({ critical: 0, high: 0, medium: 1, low: 0 });
-        expect(result.score).toBe(7.8);
+        expect(result.score).toBe(7);
         expect(result.findings[0].likelihood).toBe('HIGH');
         expect(result.findings[0].riskScore).toBe(7);
-        expect(result.summary).toBe('1 finding(s) detected, led by 1 medium-severity issue(s). Highest contextual risk: medium impact x high likelihood = 7/10. Issue families: Identity & Auth Failures.');
+        expect(result.summary).toBe('1 finding(s) detected, led by 1 medium-severity issue(s). File risk score is driven by the highest remaining finding risk: medium impact x high likelihood = 7/10. Issue families: Identity & Auth Failures.');
     });
 
     it('preserves AI-only findings for issue classes not covered by the deterministic engine yet', async () => {
@@ -713,7 +713,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.open_redirect.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Security Misconfiguration & Platform Hardening');
         expect(result.findings[0].likelihood).toBe('HIGH');
-        expect(result.score).toBe(7.8);
+        expect(result.score).toBe(7);
     });
 
     it('keeps AI-only CSRF findings distinct from deterministic coverage', async () => {
@@ -787,7 +787,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.csrf_missing_token.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Access Control & Authorization');
         expect(result.findings[0].likelihood).toBe('HIGH');
-        expect(result.score).toBe(6.3);
+        expect(result.score).toBe(9);
     });
 
     it('keeps AI-only SSRF findings distinct from deterministic coverage', async () => {
@@ -859,7 +859,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.ssrf.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
         expect(result.findings[0].likelihood).toBe('HIGH');
-        expect(result.score).toBe(6.3);
+        expect(result.score).toBe(9);
     });
 
     it('keeps AI-only weak JWT validation findings distinct from deterministic coverage', async () => {
@@ -929,7 +929,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.weak_jwt_validation.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Identity & Auth Failures');
         expect(result.findings[0].likelihood).toBe('HIGH');
-        expect(result.score).toBe(6.3);
+        expect(result.score).toBe(9);
     });
 
     it('keeps AI-only insecure deserialization findings distinct from deterministic coverage', async () => {
@@ -1001,7 +1001,7 @@ def load_profile(request):
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.insecure_deserialization.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
         expect(result.findings[0].likelihood).toBe('HIGH');
-        expect(result.score).toBe(6.3);
+        expect(result.score).toBe(9);
     });
 
     it('suppresses AI-only insecure deserialization findings for data-only json parsing', async () => {
@@ -1072,7 +1072,7 @@ def load_profile(request):
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(0);
-        expect(result.score).toBe(10);
+        expect(result.score).toBe(0);
         expect(result.summary).toContain('No findings');
     });
 
@@ -1142,7 +1142,7 @@ if (process.env.NODE_ENV !== 'production') {
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(0);
-        expect(result.score).toBe(10);
+        expect(result.score).toBe(0);
         expect(result.summary).toBe('No findings detected.');
     });
 
@@ -1209,7 +1209,7 @@ if (process.env.NODE_ENV !== 'production') {
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(0);
-        expect(result.score).toBe(10);
+        expect(result.score).toBe(0);
         expect(result.summary).toBe('No findings detected.');
     });
 
@@ -1282,7 +1282,7 @@ if (process.env.NODE_ENV !== 'production') {
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(0);
-        expect(result.score).toBe(10);
+        expect(result.score).toBe(0);
         expect(result.summary).toBe('No findings detected.');
     });
 

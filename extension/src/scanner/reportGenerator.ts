@@ -307,7 +307,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
 
     const riskyFiles = [...snapshot.results]
         .sort((a, b) => {
-            if (a.result.score !== b.result.score) return a.result.score - b.result.score;
+            if (a.result.score !== b.result.score) return b.result.score - a.result.score;
             return b.result.findings.length - a.result.findings.length;
         })
         .slice(0, 10);
@@ -355,7 +355,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             packContext: item.result.packContext,
         }))
         .sort((a, b) => {
-            if (a.result.score !== b.result.score) return a.result.score - b.result.score;
+            if (a.result.score !== b.result.score) return b.result.score - a.result.score;
             return b.result.findings.length - a.result.findings.length;
         });
 
@@ -390,7 +390,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Files scanned: ${snapshot.results.length}`,
         `- Files with findings: ${snapshot.results.filter(item => item.result.findings.length > 0).length}`,
         `- Total findings: ${totalFindings}`,
-        `- Average score: ${averageScore.toFixed(1)}/10`,
+        `- Average file risk score: ${averageScore.toFixed(1)}/10`,
         `- Deterministic findings: ${deterministicItems.length}`,
         `- Intelligence source coverage: ${packCoverageSummary}`,
         `- Frameworks in scope: ${formatFrameworkSummary([...new Set(snapshot.results.flatMap(item => item.result.frameworks ?? []))])}`,
@@ -398,6 +398,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Scan warnings: ${warnings.length}`,
         `- Coverage posture: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Full scan posture for current provider/runtime state'}`,
         `- Corroboration posture: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
+        '- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.',
         '',
     ];
 
@@ -407,12 +408,13 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         for (const item of findingsByFile.filter(entry => entry.result.findings.length)) {
             lines.push(`### ${item.file}`);
             lines.push('');
-            lines.push(`- Score: ${item.result.score.toFixed(1)}/10`);
+            lines.push(`- File risk score: ${item.result.score.toFixed(1)}/10`);
             lines.push(`- Findings: ${item.result.findings.length}`);
             lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
             lines.push(`- Coverage posture: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal coverage for this file'}`);
             lines.push(`- Corroboration posture: ${summarizeCorroborationCounts(item.result.findings)}`);
+            lines.push('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
             lines.push(`- Intelligence source: ${describeRulePackRuntime(item.packContext)}`);
             lines.push('');
             lines.push('| Finding | Score Factors | Detection |');
@@ -434,7 +436,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 const signals = getFindingSignals(finding);
                 lines.push(`#### ${finding.canonicalTitle || finding.title}`);
                 lines.push(`- Location: \`${item.file}\` at L${finding.line}${finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`);
-                lines.push(`- Risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
+                lines.push(`- Finding risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
                 lines.push(`- Confidence tier: ${finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')}`);
                 lines.push(`- Corroboration: ${finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED')}`);
                 lines.push(`- Why it matters: ${finding.explanation || 'No explanation returned.'}`);

@@ -631,7 +631,7 @@ export function activate(context: vscode.ExtensionContext) {
                 chatView.setLastScanTarget(`File: ${vscode.workspace.asRelativePath(editor.document.uri, false)}`);
 
                 vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel}: Score ${result.score.toFixed(1)}/10 - ${result.findings.length} finding(s)${(result.warnings ?? []).length ? ` (${(result.warnings ?? []).length} warning(s))` : ''}`
+                    `${PROFILE.displayLabel}: File risk ${result.score.toFixed(1)}/10 - ${result.findings.length} finding(s)${(result.warnings ?? []).length ? ` (${(result.warnings ?? []).length} warning(s))` : ''}`
                 );
 
                 return { status: 'completed', uri: editor.document.uri, result };

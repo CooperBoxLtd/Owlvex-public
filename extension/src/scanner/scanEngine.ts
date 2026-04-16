@@ -89,19 +89,6 @@ const RISK_MATRIX: Record<FindingSeverity, Record<FindingLikelihood, number>> = 
     CRITICAL: { LOW: 8, MEDIUM: 9, HIGH: 10 },
 };
 
-const SEVERITY_PENALTY: Record<FindingSeverity, number> = {
-    LOW: 0.5,
-    MEDIUM: 1.5,
-    HIGH: 2.5,
-    CRITICAL: 4,
-};
-
-const LIKELIHOOD_MULTIPLIER: Record<FindingLikelihood, number> = {
-    LOW: 0.75,
-    MEDIUM: 1,
-    HIGH: 1.5,
-};
-
 const MAX_CORROBORATION_CANDIDATES = 4;
 
 function buildMetrics(findings: Finding[]): SeverityMetrics {
@@ -130,14 +117,17 @@ function computeFindingRiskScore(severity: FindingSeverity, likelihood: FindingL
     return RISK_MATRIX[severity][likelihood];
 }
 
-function computeFindingPenalty(finding: Finding): number {
-    const likelihood = getFindingLikelihood(finding);
-    return SEVERITY_PENALTY[finding.severity] * LIKELIHOOD_MULTIPLIER[likelihood];
-}
-
 function calculateScoreFromFindings(findings: Finding[]): number {
-    const penalty = findings.reduce((total, finding) => total + computeFindingPenalty(finding), 0);
-    return Math.max(0, Number((10 - penalty).toFixed(1)));
+    if (!findings.length) {
+        return 0;
+    }
+
+    const topRisk = findings.reduce((highest, finding) => {
+        const risk = finding.riskScore ?? computeFindingRiskScore(finding.severity, getFindingLikelihood(finding));
+        return Math.max(highest, risk);
+    }, 0);
+
+    return Number(topRisk.toFixed(1));
 }
 
 function enrichFindingRisk(finding: Finding): Finding {
@@ -173,7 +163,7 @@ function summarizeFindings(findings: Finding[], fallbackSummary: string): string
 
     if (highestRisk) {
         parts.push(
-            `Highest contextual risk: ${highestRisk.severity.toLowerCase()} impact x ${getFindingLikelihood(highestRisk).toLowerCase()} likelihood = ${(highestRisk.riskScore ?? 0)}/10.`,
+            `File risk score is driven by the highest remaining finding risk: ${highestRisk.severity.toLowerCase()} impact x ${getFindingLikelihood(highestRisk).toLowerCase()} likelihood = ${(highestRisk.riskScore ?? 0)}/10.`,
         );
     }
 

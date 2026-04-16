@@ -33,25 +33,25 @@ export class StatusBar {
     }
 
     showResult(result: Pick<ScanResult, 'score' | 'model' | 'findings' | 'packContext'>): void {
-        const icon = result.score >= 8 ? '$(shield-check)' : result.score >= 5 ? '$(shield)' : '$(shield-x)';
+        const icon = result.score >= 8 ? '$(shield-x)' : result.score >= 5 ? '$(shield)' : '$(shield-check)';
         const topRiskFinding = result.findings
             .slice()
             .sort((left, right) => ((right.riskScore ?? 0) - (left.riskScore ?? 0)))[0];
         const packLabel = getRulePackModeLabel(result.packContext);
         this.item.text = `${icon} ${result.score.toFixed(1)}/10 | ${result.model} | ${packLabel}`;
         this.item.tooltip = [
-            `Score: ${result.score.toFixed(1)}/10`,
+            `File risk score: ${result.score.toFixed(1)}/10`,
             `Findings: ${result.findings.length}`,
             `Model: ${result.model}`,
             `Intelligence: ${packLabel}`,
             topRiskFinding
-                ? `Top risk: ${topRiskFinding.title} | ${topRiskFinding.severity}/${String(topRiskFinding.likelihood ?? 'MEDIUM').toUpperCase()} | ${topRiskFinding.riskScore ?? 'n/a'}/10${getAiConfidenceLabel(topRiskFinding) ? ` | AI ${getAiConfidenceLabel(topRiskFinding)}` : ''}`
+                ? `Fix first: ${topRiskFinding.title} | ${topRiskFinding.severity}/${String(topRiskFinding.likelihood ?? 'MEDIUM').toUpperCase()} | ${topRiskFinding.riskScore ?? 'n/a'}/10${getAiConfidenceLabel(topRiskFinding) ? ` | AI ${getAiConfidenceLabel(topRiskFinding)}` : ''}`
                 : '',
         ].filter(Boolean).join(' | ');
 
-        if (result.score < 5) {
+        if (result.score >= 8) {
             this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
-        } else if (result.score < 8) {
+        } else if (result.score >= 5) {
             this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
         } else {
             this.item.backgroundColor = undefined;
