@@ -34,7 +34,13 @@
     { "file": "19-csrf-safe.js", "expectedState": "clean" },
     { "file": "20-cors-unsafe.js", "expectedState": "finding" },
     { "file": "21-cors-safe.js", "expectedState": "clean" },
-    { "file": "22-ssrf-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "22-ssrf-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "23-ssrf-safe.js", "expectedState": "clean" },
     { "file": "24-jwt-validation-unsafe.js", "expectedState": "finding" },
     { "file": "25-jwt-validation-safe.js", "expectedState": "clean" },
@@ -48,7 +54,13 @@
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
     { "file": "29-path-traversal-safe.js", "expectedState": "clean" },
-    { "file": "30-ssrf-allowlist-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "30-ssrf-allowlist-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "31-ssrf-allowlist-safe.js", "expectedState": "clean" }
   ]
 }

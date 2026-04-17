@@ -693,6 +693,14 @@ const REQUEST_MEMBER_RE =
     /\b(?:req|request)\.(?:query|params|body)\.[A-Za-z_$][A-Za-z0-9_$]*\b/;
 const FILESYSTEM_SINK_START_RE =
     /\b(?:res\.sendFile|(?:fs\.)?(?:readFile|readFileSync|createReadStream))\s*\(/g;
+const DIRECT_FETCH_RE =
+    /\bfetch\s*\(\s*((?:req|request)\.(?:query|params|body)\.[A-Za-z_$][A-Za-z0-9_$]*)\s*\)/g;
+const URL_ASSIGN_RE =
+    /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*new URL\(\s*((?:req|request)\.(?:query|params|body)\.[A-Za-z_$][A-Za-z0-9_$]*)[^)]*\)/g;
+const WEAK_HOST_ALLOWLIST_RE =
+    /\b([A-Za-z_$][A-Za-z0-9_$]*)\.(?:hostname|host)\.includes\s*\(/;
+const SAFE_OUTBOUND_GUARD_RE =
+    /\b(?:isAllowedOutboundUrl|isSafeOutboundUrl|allowlistedOutboundUrl|validateOutboundUrl)\s*\(\s*(?:req|request)\.(?:query|params|body)\.[A-Za-z_$][A-Za-z0-9_$]*\s*\)|\b[A-Za-z_$][A-Za-z0-9_$]*\.has\(\s*[A-Za-z_$][A-Za-z0-9_$]*\.(?:hostname|host)\s*\)/;
 
 function inferRequestDrivenLikelihood(snippet: string, fallbackReason: string): {
     likelihood: 'MEDIUM' | 'HIGH';
@@ -983,6 +991,77 @@ function scanPathTraversalSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanSsrfSinks(source: string): InternalFinding[] {
+    if (!source.includes('fetch(')) {
+        return [];
+    }
+
+    const found: InternalFinding[] = [];
+    const funcPattern = new RegExp(IDOR_FUNC_DEF_RE.source, IDOR_FUNC_DEF_RE.flags);
+    let match: RegExpExecArray | null;
+
+    while ((match = funcPattern.exec(source)) !== null) {
+        const braceOffset = match.index + match[0].length - 1;
+        const body = extractBodyAfterBrace(source, braceOffset);
+
+        const urlAssignments = new Map<string, string>();
+        const urlAssignPattern = new RegExp(URL_ASSIGN_RE.source, URL_ASSIGN_RE.flags);
+        let urlMatch: RegExpExecArray | null;
+        while ((urlMatch = urlAssignPattern.exec(body)) !== null) {
+            urlAssignments.set(urlMatch[1], urlMatch[2]);
+        }
+
+        const weakHostMatch = body.match(WEAK_HOST_ALLOWLIST_RE);
+        if (weakHostMatch && urlAssignments.has(weakHostMatch[1]) && /\bfetch\s*\(\s*[A-Za-z_$][A-Za-z0-9_$]*\.toString\s*\(\s*\)\s*\)/.test(body)) {
+            found.push({
+                matchIndex: match.index,
+                severity: 'HIGH',
+                ruleCode: 'SR-001',
+                title: 'Server-side request forgery through weak host allowlist',
+                explanation:
+                    'A request-derived URL is parsed and gated only by a substring hostname check before the server makes the outbound request. ' +
+                    'Substring matching is not an exact destination allowlist and can be bypassed by attacker-controlled lookalike hosts.',
+                threat:
+                    'An attacker can force the server to send requests to attacker-chosen or internal destinations by supplying hostnames that merely contain the trusted string, enabling internal probing, metadata access, or pivoting through the server.',
+                fix:
+                    'Normalize the URL and require an exact trusted-host allowlist such as `TRUSTED_HOSTS.has(url.hostname)` before any outbound request. Also block redirects or internal address ranges where appropriate.',
+                canonicalId: 'owlvex.issue.ssrf.001',
+                framework: 'OWASP',
+                likelihood: 'HIGH',
+                likelihoodReasons: ['A request-derived outbound destination is guarded only by a substring hostname check.'],
+            });
+            continue;
+        }
+
+        const directFetchPattern = new RegExp(DIRECT_FETCH_RE.source, DIRECT_FETCH_RE.flags);
+        let directFetchMatch: RegExpExecArray | null;
+        while ((directFetchMatch = directFetchPattern.exec(body)) !== null) {
+            if (SAFE_OUTBOUND_GUARD_RE.test(body)) {
+                continue;
+            }
+
+            found.push({
+                matchIndex: match.index + directFetchMatch.index,
+                severity: 'HIGH',
+                ruleCode: 'SR-001',
+                title: 'Server-side request forgery through untrusted destination',
+                explanation:
+                    'The server issues an outbound request directly to a request-derived URL without a visible trusted-destination guard in the same handler. That lets the caller choose where the server connects.',
+                threat:
+                    'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+                fix:
+                    'Do not fetch arbitrary user-supplied URLs. Parse the destination, constrain it to a trusted allowlist, and reject requests that target unapproved hosts, protocols, or internal address ranges.',
+                canonicalId: 'owlvex.issue.ssrf.001',
+                framework: 'OWASP',
+                likelihood: 'HIGH',
+                likelihoodReasons: ['A request-derived URL reaches an outbound fetch sink without a visible allowlist guard.'],
+            });
+        }
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -993,6 +1072,7 @@ export class DeterministicScanner {
             ...scanShellSinks(source),
             ...scanSqlSinks(source),
             ...scanPathTraversalSinks(source),
+            ...scanSsrfSinks(source),
             ...scanIdorSinks(source),
             ...scanTenantIsolationSinks(source),
             ...scanPiiLoggingSinks(source),

@@ -734,3 +734,62 @@ function downloadFile(req, res) {
         expect(scanner.scan(source, 'javascript')).toHaveLength(0);
     });
 });
+
+describe('DeterministicScanner SSRF rule', () => {
+    it('detects direct fetch() to a request-derived URL without a visible guard', () => {
+        const source = `
+async function fetchAvatar(req, res, fetch) {
+  const response = await fetch(req.query.url);
+  const body = await response.text();
+  res.send(body);
+}`;
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].ruleCode).toBe('SR-001');
+        expect(findings[0].canonicalId).toBe('owlvex.issue.ssrf.001');
+        expect(findings[0].confidence).toBe(1);
+        expect(findings[0].likelihood).toBe('HIGH');
+    });
+
+    it('detects weak substring hostname allowlisting before fetch', () => {
+        const source = `
+async function fetchAvatar(req, res, fetch) {
+  const url = new URL(req.query.url);
+  if (!url.hostname.includes('example.com')) {
+    return res.status(400).send('invalid host');
+  }
+  const response = await fetch(url.toString());
+  return res.send(await response.text());
+}`;
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].ruleCode).toBe('SR-001');
+        expect(findings[0].title).toContain('weak host allowlist');
+    });
+
+    it('does not flag exact hostname allowlists with Set.has()', () => {
+        const source = `
+const TRUSTED_HOSTS = new Set(['avatars.example.com', 'images.example.com']);
+async function fetchAvatar(req, res, fetch) {
+  const url = new URL(req.query.url);
+  if (!TRUSTED_HOSTS.has(url.hostname)) {
+    return res.status(400).send('invalid host');
+  }
+  const response = await fetch(url.toString());
+  return res.send(await response.text());
+}`;
+        expect(scanner.scan(source, 'javascript')).toHaveLength(0);
+    });
+
+    it('does not flag helper-guarded outbound fetches', () => {
+        const source = `
+async function fetchAvatar(req, res, fetch) {
+  if (!isAllowedOutboundUrl(req.query.url)) {
+    return res.status(400).json({ error: 'blocked' });
+  }
+  const response = await fetch(req.query.url);
+  return res.send(await response.text());
+}`;
+        expect(scanner.scan(source, 'javascript')).toHaveLength(0);
+    });
+});

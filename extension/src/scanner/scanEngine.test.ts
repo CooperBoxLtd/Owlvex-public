@@ -792,7 +792,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.score).toBe(9);
     });
 
-    it('keeps AI-only SSRF findings distinct from deterministic coverage', async () => {
+    it('promotes direct SSRF findings into deterministic coverage when the sink is structurally proven', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
             validate: jest.fn().mockResolvedValue({
@@ -856,8 +856,8 @@ describe('ScanEngine.scanDocument caching', () => {
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(1);
-        expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.92);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].confidence).toBe(1);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.ssrf.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
         expect(result.findings[0].likelihood).toBe('HIGH');
