@@ -69,6 +69,16 @@ The first stabilization set is:
 
 These families were selected because they already exist in the fixture corpus, have safe and unsafe companions, and have repeatedly exposed trust gaps in the scanner.
 
+Within that set, the next engine-building priority is deterministic depth on the highest-leverage structural families:
+
+- SSRF
+- path traversal
+- command injection
+- SQL injection
+- IDOR and tenant scoping
+
+The purpose of the next phase is not to add many new families. It is to deepen proof quality on those families until more of Owlvex's important findings can honestly move into the `STATIC` lane.
+
 ---
 
 ## Out Of Scope
@@ -81,6 +91,14 @@ Until this contract is met, Owlvex should not prioritize:
 - claiming repo-context maturity beyond what the benchmarks prove
 
 Model upgrades are allowed, but they are not the primary plan. A stronger model may improve precision, but model quality is an amplifier, not a replacement for scanner design discipline.
+
+That means the preferred next investment after demo-readiness work is:
+
+- strengthen deterministic proof contracts
+- expand benchmark-backed safe and unsafe coverage for the target families
+- add false-positive guards before promoting new deterministic behavior
+
+The engine should grow by deepening the trusted issue families first, not by broadening the catalog faster than the benchmarks can support.
 
 When model comparisons are run, they must use the evaluation method defined in [MODEL_SELECTION_MATRIX.md](D:/Dev/repos/CodeScanner/docs/MODEL_SELECTION_MATRIX.md).
 

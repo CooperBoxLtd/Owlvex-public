@@ -140,6 +140,69 @@ Turn the current implicit hybrid scan model into an explicit three-tier system, 
 - project context remains local by default and never upgrades a finding to `PROVEN`
 - users can tell from the UI/report what kind of scan produced a finding
 
+## Workstream 0.5: Deterministic Engine Depth
+
+### Goal
+
+Deepen the local deterministic engine on a small number of high-value issue families so Owlvex can turn more important findings from "AI-supported" into honest `STATIC` proof.
+
+This workstream exists to keep the next phase focused on engine trust rather than more shell polish or broad issue-family expansion.
+
+### First Target Families
+
+The next deterministic-depth targets are:
+
+- SSRF
+- path traversal
+- command injection
+- SQL injection
+- IDOR and tenant scoping
+
+These families were chosen because they are:
+
+- high value for product trust
+- structurally understandable enough to model locally
+- already represented in the fixture corpus or adjacent benchmark assets
+- repeatedly visible in demo, stabilization, and repo-context scans
+
+### Required Rule Contract Per Family
+
+No family in this workstream should be promoted into the trusted deterministic surface unless it has:
+
+- a bounded proof contract defining what must be true for the rule to fire
+- explicit safe companions or negative cases
+- benchmark expectation coverage
+- at least one regression test for a previously observed miss or false positive
+- a false-positive guard when the family is highly context-sensitive
+
+If one of those is missing, the family remains experimental and should not be marketed as deterministic proof.
+
+### Tasks
+
+- define or tighten the structural proof contract for each target family
+- document the supported sources, sinks, guards, and sanitizers where relevant
+- add safe and unsafe fixtures for each promoted deterministic behavior
+- align extension output and benchmark output on the same finding semantics
+- expand deterministic coverage only when the benchmark gate stays green
+
+### Likely Files
+
+- [deterministicScanner.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/deterministicScanner.ts)
+- [scanEngine.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/scanEngine.ts)
+- [stabilizationBenchmark.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/stabilizationBenchmark.ts)
+- [tools/demo/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo/EXPECTATIONS.md)
+- [tools/demo/benchmark.expectations.json](D:/Dev/repos/CodeScanner/tools/demo/benchmark.expectations.json)
+- [tools/demo-app/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo-app/EXPECTATIONS.md)
+- [tools/demo-app/benchmark.expectations.json](D:/Dev/repos/CodeScanner/tools/demo-app/benchmark.expectations.json)
+
+### Acceptance Criteria
+
+- each promoted family has an explicit benchmark-backed proof story
+- deterministic findings for those families remain visibly `STATIC`
+- safe companions stay clean across the benchmark loop
+- false-positive guards are documented and tested for the promoted behaviors
+- benchmark results, product wording, and finding semantics remain aligned
+
 ## Workstream Map
 
 ```mermaid
