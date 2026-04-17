@@ -2267,12 +2267,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       </div>
       <div class="meta compact" id="lastScan">Last scan target: none</div>
       <div class="primary-actions">
-        <button class="chip" data-action="scanFile">Scan Current File</button>
-        <button class="chip" data-action="scanSelectedFiles">Scan Selected Files</button>
-        <button class="chip" data-action="scanOpenEditors">Scan Open Editors</button>
-        <button class="chip" data-action="scanFolder">Scan Folder</button>
+        <button class="chip" data-action="scanFolder">Scan Workspace</button>
         <button class="chip" data-action="scanReport">Create Report</button>
       </div>
+      <div class="meta compact">For current file, selected files, or open editors, type it in chat or use the Command Palette.</div>
       <details class="settings-panel" id="settingsPanel">
         <summary>
           <span class="settings-title">
