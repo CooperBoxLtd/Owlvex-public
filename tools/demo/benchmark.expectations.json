@@ -40,7 +40,13 @@
     { "file": "25-jwt-validation-safe.js", "expectedState": "clean" },
     { "file": "26-deserialization-unsafe.py", "expectedState": "finding" },
     { "file": "27-deserialization-safe.py", "expectedState": "clean" },
-    { "file": "28-path-traversal-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "28-path-traversal-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "29-path-traversal-safe.js", "expectedState": "clean" },
     { "file": "30-ssrf-allowlist-unsafe.js", "expectedState": "finding" },
     { "file": "31-ssrf-allowlist-safe.js", "expectedState": "clean" }

@@ -48,6 +48,10 @@ const SQL_SINK_VAR_PATTERN =
 const TEMPLATE_ASSIGN_PATTERN =
     /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
 
+// Narrow request-derived assignment signal used by the path-traversal rule.
+const REQUEST_ASSIGN_PATTERN =
+    /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:req|request)\.(?:query|params|body)\.[A-Za-z_$][A-Za-z0-9_$]*/g;
+
 // HTML sanitizer assignment: const cleaned = escapeHtml(username)
 const SANITIZER_ASSIGN_PATTERN =
     /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:escapeHtml|htmlspecialchars|encodeHtml|htmlEscape|escapeXml)\s*\(/g;
@@ -685,6 +689,10 @@ const LOW_SENSITIVITY_COOKIE_NAME_RE =
     /^(?:tracker|analytics|theme|prefs?|preference|abtest)$/i;
 const HIGH_SENSITIVITY_LOG_FIELD_RE =
     /\b(?:password|accessToken|refreshToken|privateKey|secretKey|apiSecret)\b/i;
+const REQUEST_MEMBER_RE =
+    /\b(?:req|request)\.(?:query|params|body)\.[A-Za-z_$][A-Za-z0-9_$]*\b/;
+const FILESYSTEM_SINK_START_RE =
+    /\b(?:res\.sendFile|(?:fs\.)?(?:readFile|readFileSync|createReadStream))\s*\(/g;
 
 function inferRequestDrivenLikelihood(snippet: string, fallbackReason: string): {
     likelihood: 'MEDIUM' | 'HIGH';
@@ -723,6 +731,27 @@ function collectSanitizedVariables(source: string): Set<string> {
     }
 
     return sanitized;
+}
+
+function collectRequestDerivedVariables(source: string): Set<string> {
+    const tainted = new Set<string>();
+    const pattern = new RegExp(REQUEST_ASSIGN_PATTERN.source, REQUEST_ASSIGN_PATTERN.flags);
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(source)) !== null) {
+        tainted.add(match[1]);
+    }
+
+    return tainted;
+}
+
+function isRequestDerivedExpression(expression: string, taintedVars: Set<string>): boolean {
+    const trimmed = expression.trim();
+    if (REQUEST_MEMBER_RE.test(trimmed)) {
+        return true;
+    }
+
+    return taintedVars.has(trimmed);
 }
 
 function templateContainsHtmlSanitizer(templateBody: string, sanitizedVars: Set<string>): boolean {
@@ -883,6 +912,77 @@ function scanSqlSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanPathTraversalSinks(source: string): InternalFinding[] {
+    if (!source.includes('path.join(') && !source.includes('path.resolve(')) {
+        return [];
+    }
+
+    const found: InternalFinding[] = [];
+    const taintedVars = collectRequestDerivedVariables(source);
+    const vulnerablePathVars = new Set<string>();
+    const assignPattern =
+        /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*path\.(?:join|resolve)\s*\(/g;
+
+    let match: RegExpExecArray | null;
+    while ((match = assignPattern.exec(source)) !== null) {
+        const openParen = source.indexOf('(', match.index);
+        if (openParen < 0) { continue; }
+
+        const args = splitTopLevelArgs(extractArgsAfterParen(source, openParen));
+        if (args.length < 2) { continue; }
+
+        if (args.slice(1).some(arg => isRequestDerivedExpression(arg, taintedVars))) {
+            vulnerablePathVars.add(match[1]);
+        }
+    }
+
+    const sinkPattern = new RegExp(FILESYSTEM_SINK_START_RE.source, FILESYSTEM_SINK_START_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        const openParen = source.indexOf('(', match.index);
+        if (openParen < 0) { continue; }
+
+        const args = splitTopLevelArgs(extractArgsAfterParen(source, openParen));
+        if (!args.length) { continue; }
+
+        const firstArg = args[0].trim();
+        const taintedPathVarUse = vulnerablePathVars.has(firstArg);
+        let directPathCall = false;
+
+        if (/\bpath\.(?:join|resolve)\s*\(/.test(firstArg)) {
+            const nestedOpenParen = firstArg.indexOf('(');
+            if (nestedOpenParen >= 0) {
+                const nestedArgs = splitTopLevelArgs(extractArgsAfterParen(firstArg, nestedOpenParen));
+                directPathCall = nestedArgs.slice(1).some(arg => isRequestDerivedExpression(arg, taintedVars));
+            }
+        }
+
+        if (!taintedPathVarUse && !directPathCall) { continue; }
+
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'PT-001',
+            title: 'Path Traversal',
+            explanation:
+                'A filesystem path is built with `path.join()` or `path.resolve()` using request-derived input ' +
+                'and then passed into a file-serving or file-reading sink. Without a fixed identifier map or ' +
+                'boundary check, attacker-controlled path segments such as `../` can escape the intended directory.',
+            threat:
+                'An attacker can request files outside the allowed directory and read sensitive server-side content ' +
+                'such as configuration, credentials, source code, or other tenant data if the process account can access it.',
+            fix:
+                'Do not join raw request path fragments into filesystem paths. Map user input to known-safe identifiers, ' +
+                'or resolve against a fixed base directory and reject any path that escapes that base before reading or serving the file.',
+            canonicalId: 'owlvex.issue.path_traversal.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived file path reaches a filesystem sink without a visible boundary check.'],
+        });
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -892,6 +992,7 @@ export class DeterministicScanner {
         const internal: InternalFinding[] = [
             ...scanShellSinks(source),
             ...scanSqlSinks(source),
+            ...scanPathTraversalSinks(source),
             ...scanIdorSinks(source),
             ...scanTenantIsolationSinks(source),
             ...scanPiiLoggingSinks(source),

@@ -681,3 +681,56 @@ describe('DeterministicScanner — finding shape', () => {
         expect(first[0].id).not.toBe(second[0].id);
     });
 });
+
+describe('DeterministicScanner path traversal rule', () => {
+    it('detects request-derived path.join() feeding res.sendFile()', () => {
+        const source = `
+const path = require('path');
+function downloadFile(req, res) {
+  const fullPath = path.join('/var/app/uploads', req.query.file);
+  res.sendFile(fullPath);
+}`;
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].ruleCode).toBe('PT-001');
+        expect(findings[0].title).toBe('Path Traversal');
+        expect(findings[0].canonicalId).toBe('owlvex.issue.path_traversal.001');
+        expect(findings[0].confidence).toBe(1);
+        expect(findings[0].likelihood).toBe('HIGH');
+    });
+
+    it('detects direct path.resolve() call inside a filesystem sink', () => {
+        const source = `
+const path = require('path');
+const fs = require('fs');
+function readFile(req) {
+  return fs.readFileSync(path.resolve('/srv/docs', req.params.name), 'utf8');
+}`;
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].ruleCode).toBe('PT-001');
+    });
+
+    it('does not flag identifier-map selection before path.join()', () => {
+        const source = `
+const path = require('path');
+const SAFE_FILES = { invoice: 'invoice.pdf' };
+function downloadFile(req, res) {
+  const selected = SAFE_FILES[req.query.file];
+  if (!selected) return;
+  const fullPath = path.join('/var/app/uploads', selected);
+  res.sendFile(fullPath);
+}`;
+        expect(scanner.scan(source, 'javascript')).toHaveLength(0);
+    });
+
+    it('does not flag constant paths passed to sendFile()', () => {
+        const source = `
+const path = require('path');
+function downloadFile(req, res) {
+  const fullPath = path.join('/var/app/uploads', 'invoice.pdf');
+  res.sendFile(fullPath);
+}`;
+        expect(scanner.scan(source, 'javascript')).toHaveLength(0);
+    });
+});

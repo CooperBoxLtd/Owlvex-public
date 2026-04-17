@@ -44,6 +44,10 @@ These expectations should be read together with:
 | `25-jwt-validation-safe.js` | clean | expected validation path |
 | `26-deserialization-unsafe.py` | finding expected | executable deserializer present |
 | `27-deserialization-safe.py` | clean | data-only JSON parsing |
+| `28-path-traversal-unsafe.js` | finding expected | request-derived filesystem path |
+| `29-path-traversal-safe.js` | clean | identifier map before file access |
+| `30-ssrf-allowlist-unsafe.js` | finding expected | weak substring host validation |
+| `31-ssrf-allowlist-safe.js` | clean | exact trusted host allow-list |
 
 ## Stabilization Rule
 
