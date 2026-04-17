@@ -97,6 +97,15 @@ async function sleep(ms: number): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function isScannableSourceUri(uri: vscode.Uri | undefined): uri is vscode.Uri {
+    return Boolean(uri?.fsPath && SUPPORTED_EXTENSIONS.has(path.extname(uri.fsPath).toLowerCase()));
+}
+
+export function getActiveScannableEditorUri(): vscode.Uri | undefined {
+    const activeUri = vscode.window.activeTextEditor?.document?.uri;
+    return isScannableSourceUri(activeUri) ? activeUri : undefined;
+}
+
 export async function pickScanRoot(): Promise<vscode.Uri | undefined> {
     const picked = await vscode.window.showOpenDialog({
         canSelectFiles: false,
@@ -124,6 +133,19 @@ export async function pickScanFile(): Promise<vscode.Uri | undefined> {
     });
 
     return picked?.[0];
+}
+
+export async function resolveScanFileTarget(requestedUri?: vscode.Uri): Promise<vscode.Uri | undefined> {
+    if (isScannableSourceUri(requestedUri)) {
+        return requestedUri;
+    }
+
+    const activeUri = getActiveScannableEditorUri();
+    if (activeUri) {
+        return activeUri;
+    }
+
+    return pickScanFile();
 }
 
 export async function pickScanFiles(): Promise<vscode.Uri[] | undefined> {
@@ -192,6 +214,7 @@ export async function scanFolder(options: {
     root: vscode.Uri;
     scanEngine: ScanEngine;
     diagnostics: { applyFindings(doc: vscode.TextDocument, findings: any[]): void };
+    skipConfirmation?: boolean;
 }): Promise<FolderScanSummary> {
     const files = await collectScannableFiles(options.root);
     if (!files.length) {
@@ -207,6 +230,7 @@ export async function scanFolder(options: {
         confirmMessage: `Owlvex: Scan ${files.length} file(s) in ${path.basename(options.root.fsPath)}?`,
         progressTitle: `Owlvex: Scanning ${path.basename(options.root.fsPath)}`,
         getShortName: (uri) => path.relative(options.root.fsPath, uri.fsPath) || path.basename(uri.fsPath),
+        skipConfirmation: options.skipConfirmation,
     });
 }
 
@@ -214,6 +238,7 @@ export async function scanSelectedFiles(options: {
     files: vscode.Uri[];
     scanEngine: ScanEngine;
     diagnostics: { applyFindings(doc: vscode.TextDocument, findings: any[]): void };
+    skipConfirmation?: boolean;
 }): Promise<FolderScanSummary> {
     if (!options.files.length) {
         vscode.window.showInformationMessage('No supported source files were selected');
@@ -228,6 +253,7 @@ export async function scanSelectedFiles(options: {
         confirmMessage: `Owlvex: Scan ${options.files.length} selected file(s)?`,
         progressTitle: 'Owlvex: Scanning selected files',
         getShortName: (uri) => vscode.workspace.asRelativePath(uri, false) || path.basename(uri.fsPath),
+        skipConfirmation: options.skipConfirmation,
     });
 }
 
@@ -239,16 +265,19 @@ async function scanUris(options: {
     confirmMessage: string;
     progressTitle: string;
     getShortName: (uri: vscode.Uri) => string;
+    skipConfirmation?: boolean;
 }): Promise<FolderScanSummary> {
     const files = options.files;
 
-    const confirm = await vscode.window.showInformationMessage(
-        options.confirmMessage,
-        { modal: true },
-        options.confirmLabel,
-    );
-    if (confirm !== options.confirmLabel) {
-        return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+    if (!options.skipConfirmation) {
+        const confirm = await vscode.window.showInformationMessage(
+            options.confirmMessage,
+            { modal: true },
+            options.confirmLabel,
+        );
+        if (confirm !== options.confirmLabel) {
+            return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+        }
     }
 
     let completed = 0;

@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as vscode from 'vscode';
-import { collectScannableFiles, pickScanFiles, scanFolder, scanSelectedFiles } from './workspaceScanner';
+import { collectScannableFiles, getActiveScannableEditorUri, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './workspaceScanner';
 
 jest.mock('fs/promises');
 
@@ -126,6 +126,36 @@ describe('workspaceScanner', () => {
         expect(picked).toEqual([first, second]);
     });
 
+    it('uses the active supported editor for current-file scans before opening a picker', async () => {
+        const activeUri = vscode.Uri.file('d:\\repo\\src\\active.js');
+        (vscode.window.activeTextEditor as any) = {
+            document: {
+                uri: activeUri,
+            },
+        };
+
+        const target = await resolveScanFileTarget();
+
+        expect(target).toEqual(activeUri);
+        expect(vscode.window.showOpenDialog).not.toHaveBeenCalled();
+        expect(getActiveScannableEditorUri()).toEqual(activeUri);
+    });
+
+    it('falls back to the file picker when the active editor is unsupported', async () => {
+        const pickedUri = vscode.Uri.file('d:\\repo\\src\\picked.js');
+        (vscode.window.activeTextEditor as any) = {
+            document: {
+                uri: vscode.Uri.file('d:\\repo\\README.md'),
+            },
+        };
+        (vscode.window.showOpenDialog as jest.Mock).mockResolvedValue([pickedUri]);
+
+        const target = await resolveScanFileTarget();
+
+        expect(target).toEqual(pickedUri);
+        expect(vscode.window.showOpenDialog).toHaveBeenCalled();
+    });
+
     it('returns empty status when no supported files are found', async () => {
         (fs.readdir as jest.Mock).mockResolvedValue([]);
 
@@ -193,6 +223,39 @@ describe('workspaceScanner', () => {
         expect(summary.totalFindings).toBe(2);
         expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
             'Owlvex: Scan 2 selected file(s)?',
+            { modal: true },
+            'Scan Selected Files',
+        );
+    });
+
+    it('can skip redundant confirmation for explicit selected-files scans', async () => {
+        const scanEngine = {
+            scanDocument: jest
+                .fn()
+                .mockResolvedValue({
+                    scanId: 'scan-1',
+                    score: 8,
+                    summary: 'ok',
+                    findings: [{ line: 1 }],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 1 },
+                    durationMs: 10,
+                    model: 'qwen2.5:7b',
+                    provider: 'ollama',
+                    warnings: [],
+                }),
+        };
+
+        const summary = await scanSelectedFiles({
+            files: [vscode.Uri.file('d:\\repo\\src\\one.js')],
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+            skipConfirmation: true,
+        });
+
+        expect(summary.status).toBe('completed');
+        expect(vscode.window.showInformationMessage).not.toHaveBeenCalledWith(
+            'Owlvex: Scan 1 selected file(s)?',
             { modal: true },
             'Scan Selected Files',
         );

@@ -8,7 +8,7 @@ import { StatusBar } from './ui/statusBar';
 import { SidebarProvider } from './panels/sidebarProvider';
 import { ChatViewProvider } from './panels/chatViewProvider';
 import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
-import { pickScanFile, pickScanFiles, pickScanRoot, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
+import { pickScanFile, pickScanFiles, pickScanRoot, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
@@ -759,7 +759,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.scanFile, async (requestedUri?: vscode.Uri): Promise<ScanFileCommandResult> => {
-            const fileUri = requestedUri ?? await pickScanFile();
+            const fileUri = await resolveScanFileTarget(requestedUri);
             if (!fileUri) {
                 return { status: 'cancelled' };
             }
@@ -822,6 +822,7 @@ export function activate(context: vscode.ExtensionContext) {
                     files: fileUris,
                     scanEngine,
                     diagnostics,
+                    skipConfirmation: true,
                 });
                 const enrichedResults = await finalizeMultiFileResults(summary.results, `Selected files: ${fileUris.length} file(s)`);
                 const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
@@ -892,6 +893,7 @@ export function activate(context: vscode.ExtensionContext) {
                     files: fileUris,
                     scanEngine,
                     diagnostics,
+                    skipConfirmation: true,
                 });
                 const enrichedResults = await finalizeMultiFileResults(summary.results, `Open editors: ${fileUris.length} file(s)`);
                 const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
@@ -1198,6 +1200,7 @@ export function activate(context: vscode.ExtensionContext) {
                 root,
                 scanEngine,
                 diagnostics,
+                skipConfirmation: true,
             });
             summary.results = await finalizeMultiFileResults(
                 summary.results,
@@ -1259,7 +1262,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }
 
                 if (picked.label === 'Scan selected file and create report') {
-                    const fileUri = await pickScanFile();
+                    const fileUri = await resolveScanFileTarget();
                     if (!fileUri) return { status: 'cancelled' };
 
                     const document = await vscode.workspace.openTextDocument(fileUri);
@@ -1302,6 +1305,7 @@ export function activate(context: vscode.ExtensionContext) {
                         files: fileUris,
                         scanEngine,
                         diagnostics,
+                        skipConfirmation: true,
                     });
                     summary.results = await finalizeMultiFileResults(summary.results, `Report selected files: ${fileUris.length} file(s)`);
 
@@ -1351,6 +1355,7 @@ export function activate(context: vscode.ExtensionContext) {
                         files: fileUris,
                         scanEngine,
                         diagnostics,
+                        skipConfirmation: true,
                     });
                     summary.results = await finalizeMultiFileResults(summary.results, `Report open editors: ${fileUris.length} file(s)`);
 
@@ -1394,6 +1399,7 @@ export function activate(context: vscode.ExtensionContext) {
                     root,
                     scanEngine,
                     diagnostics,
+                    skipConfirmation: true,
                 });
                 summary.results = await finalizeMultiFileResults(
                     summary.results,
