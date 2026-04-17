@@ -766,6 +766,72 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
     });
 
+    it('treats apply changes as a diff preview request instead of a direct save', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```python\nimport json\n\ndef load_profile(request):\n    return json.loads(request.body)\n```',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\tools\\demo\\26-deserialization-unsafe.py');
+        const previewUri = { fsPath: 'untitled:deser-fix.py', scheme: 'untitled', toString: () => 'untitled:deser-fix.py' };
+        (vscode.window.activeTextEditor as any) = undefined;
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
+            if (input?.language === 'python') {
+                return { uri: previewUri };
+            }
+            return {
+                uri: targetUri,
+                languageId: 'python',
+                getText: () => [
+                    'import pickle',
+                    '',
+                    'def load_profile(request):',
+                    '    return pickle.loads(request.body)',
+                ].join('\n'),
+            };
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).latestActionableFinding = {
+            id: 'finding-deserialization',
+            line: 4,
+            lineEnd: 4,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'A08-DESER',
+            title: 'Insecure deserialization of untrusted data',
+            explanation: 'Untrusted input is deserialized with pickle.',
+            threat: 'Remote code execution.',
+            fix: 'Use JSON for untrusted input.',
+            confidence: 0.92,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+        };
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+
+        await (provider as any).handleUserMessage('ok apply changes');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            'vscode.diff',
+            targetUri,
+            previewUri,
+            expect.stringContaining('Fix Preview - Insecure deserialization of untrusted data'),
+        );
+        expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
+    });
+
     it('injects project context contract into advisory prompts when configured', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'Use ownership checks.' });
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({

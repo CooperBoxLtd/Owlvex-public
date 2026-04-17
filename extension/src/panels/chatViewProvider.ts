@@ -201,7 +201,7 @@ function looksLikeFixRequest(prompt: string): boolean {
 }
 
 function looksLikeImplementRequest(prompt: string): boolean {
-    return /\b(implement( this| the)? change|change it in the file|change the file|edit the file|apply( the)? fix|make the change|update the file|do it)\b/i.test(prompt);
+    return /\b(implement( this| the)? change|change it in the file|change the file|edit the file|apply( the)? fix|apply( the)? change|apply( the)? changes|apply it|make the change|make the changes|update the file|do it)\b/i.test(prompt);
 }
 
 function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions): boolean {
