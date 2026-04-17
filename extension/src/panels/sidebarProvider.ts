@@ -25,6 +25,45 @@ function getScanTierLabel(finding: Finding): string {
     return finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI');
 }
 
+function getScanTierDisplayLabel(value: string): string {
+    switch (value) {
+        case 'STATIC':
+            return 'Static proof';
+        case 'TARGETED_AI':
+            return 'Targeted AI review';
+        case 'REPO_AI':
+            return 'Repo-context AI review';
+        default:
+            return value;
+    }
+}
+
+function getConfidenceDisplayLabel(value: string): string {
+    switch (value) {
+        case 'PROVEN':
+            return 'Proven';
+        case 'PLAUSIBLE':
+            return 'Plausible';
+        default:
+            return value;
+    }
+}
+
+function getCorroborationDisplayLabel(value: string): string {
+    switch (value) {
+        case 'PROVEN':
+            return 'Proven';
+        case 'CORROBORATED':
+            return 'Corroborated';
+        case 'PARTIAL':
+            return 'Partial';
+        case 'UNVERIFIED':
+            return 'Unverified';
+        default:
+            return value;
+    }
+}
+
 function getCorroborationLabel(finding: Finding): string {
     return finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED');
 }
@@ -131,9 +170,9 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         hasPartialAiCoverage(this.lastResult)
                             ? 'Coverage posture: partial AI coverage or deterministic-only fallback'
                             : 'Coverage posture: normal',
-                        `Primary scan mode: ${getPrimaryScanTierLabel(this.lastResult.findings)}`,
-                        `Scan tier posture: ${summarizeScanTierCounts(this.lastResult.findings)}`,
-                        `Corroboration posture: ${summarizeCorroborationCounts(this.lastResult.findings)}`,
+                        `Analysis mode: ${getScanTierDisplayLabel(getPrimaryScanTierLabel(this.lastResult.findings))}`,
+                        `Analysis mix: ${summarizeScanTierCounts(this.lastResult.findings)}`,
+                        `Evidence: ${summarizeCorroborationCounts(this.lastResult.findings)}`,
                         `Project context: ${this.lastResult.projectContextSummary && this.lastResult.projectContextSummary !== 'none' ? this.lastResult.projectContextSummary : 'none'}`,
                         topRiskFinding
                             ? `Fix first: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
@@ -183,8 +222,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         `Impact: ${f.severity}`,
                         `Likelihood: ${getFindingLikelihood(f)}`,
                         `Contextual risk: ${f.riskScore ?? 'n/a'}/10`,
-                        `Scan tier: ${getScanTierLabel(f)}`,
-                        `Corroboration: ${getCorroborationLabel(f)}`,
+                        `Analysis mode: ${getScanTierDisplayLabel(getScanTierLabel(f))}`,
+                        `Evidence: ${getCorroborationDisplayLabel(getCorroborationLabel(f))}`,
                         remediation.remediation || f.explanation,
                     ].join('\n'),
                     hasDetails ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
@@ -241,16 +280,16 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
             tooltip: `Impact ${finding.severity}, likelihood ${getFindingLikelihood(finding)}, contextual risk ${finding.riskScore ?? 'n/a'}/10`,
         },
         {
-            label: `Scan tier: ${getScanTierLabel(finding)}`,
-            tooltip: `Owlvex execution tier for this finding: ${getScanTierLabel(finding)}`,
+            label: `Analysis mode: ${getScanTierDisplayLabel(getScanTierLabel(finding))}`,
+            tooltip: `How Owlvex analyzed this finding: ${getScanTierDisplayLabel(getScanTierLabel(finding))}`,
         },
         {
-            label: `Confidence tier: ${getConfidenceTierLabel(finding)}`,
-            tooltip: `Owlvex confidence tier for this finding: ${getConfidenceTierLabel(finding)}`,
+            label: `Confidence: ${getConfidenceDisplayLabel(getConfidenceTierLabel(finding))}`,
+            tooltip: `Owlvex confidence for this finding: ${getConfidenceDisplayLabel(getConfidenceTierLabel(finding))}`,
         },
         {
-            label: `Corroboration: ${getCorroborationLabel(finding)}`,
-            tooltip: `Owlvex corroboration posture for this finding: ${getCorroborationLabel(finding)}`,
+            label: `Evidence: ${getCorroborationDisplayLabel(getCorroborationLabel(finding))}`,
+            tooltip: `Owlvex evidence posture for this finding: ${getCorroborationDisplayLabel(getCorroborationLabel(finding))}`,
         },
         {
             label: `Fix: ${remediation.remediation}`,

@@ -24,7 +24,7 @@
       "requiredFindings": [
         "Sensitive data exposed in logs"
       ],
-      "requiredPrimaryScanMode": "STATIC",
+      "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },

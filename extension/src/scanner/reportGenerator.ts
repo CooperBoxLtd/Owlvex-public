@@ -189,6 +189,45 @@ function getPrimaryScanTierLabel(findings: ScanResult['findings']): string {
     return 'none';
 }
 
+function getScanTierDisplayLabel(value: string): string {
+    switch (value) {
+        case 'STATIC':
+            return 'Static proof';
+        case 'TARGETED_AI':
+            return 'Targeted AI review';
+        case 'REPO_AI':
+            return 'Repo-context AI review';
+        default:
+            return value;
+    }
+}
+
+function getConfidenceDisplayLabel(value: string): string {
+    switch (value) {
+        case 'PROVEN':
+            return 'Proven';
+        case 'PLAUSIBLE':
+            return 'Plausible';
+        default:
+            return value;
+    }
+}
+
+function getCorroborationDisplayLabel(value: string): string {
+    switch (value) {
+        case 'PROVEN':
+            return 'Proven';
+        case 'CORROBORATED':
+            return 'Corroborated';
+        case 'PARTIAL':
+            return 'Partial';
+        case 'UNVERIFIED':
+            return 'Unverified';
+        default:
+            return value;
+    }
+}
+
 function buildSafePatternLine(
     remediation: ReturnType<typeof getCanonicalRemediation>,
 ): string | undefined {
@@ -429,9 +468,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         `- Coverage posture: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Full scan posture for current provider/runtime state'}`,
-        `- Primary scan mode: ${totalFindings > 0 ? getPrimaryScanTierLabel(snapshot.results.flatMap(item => item.result.findings)) : 'none'}`,
-        `- Scan tier posture: ${totalFindings > 0 ? summarizeScanTierCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to classify'}`,
-        `- Corroboration posture: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
+        `- Analysis mode: ${totalFindings > 0 ? getScanTierDisplayLabel(getPrimaryScanTierLabel(snapshot.results.flatMap(item => item.result.findings))) : 'none'}`,
+        `- Analysis mix: ${totalFindings > 0 ? summarizeScanTierCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to classify'}`,
+        `- Evidence: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
         `- Project context: ${projectContextSummary}`,
         '- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.',
         '',
@@ -448,9 +487,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
             lines.push(`- Coverage posture: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal coverage for this file'}`);
-            lines.push(`- Primary scan mode: ${item.result.findings.length ? getPrimaryScanTierLabel(item.result.findings) : 'none'}`);
-            lines.push(`- Scan tier posture: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
-            lines.push(`- Corroboration posture: ${summarizeCorroborationCounts(item.result.findings)}`);
+            lines.push(`- Analysis mode: ${item.result.findings.length ? getScanTierDisplayLabel(getPrimaryScanTierLabel(item.result.findings)) : 'none'}`);
+            lines.push(`- Analysis mix: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
+            lines.push(`- Evidence: ${summarizeCorroborationCounts(item.result.findings)}`);
             lines.push(`- Project context: ${item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none'}`);
             lines.push('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
             lines.push(`- Intelligence source: ${describeRulePackRuntime(item.packContext)}`);
@@ -475,9 +514,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`#### ${finding.canonicalTitle || finding.title}`);
                 lines.push(`- Location: \`${item.file}\` at L${finding.line}${finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`);
                 lines.push(`- Finding risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
-                lines.push(`- Scan tier: ${finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI')}`);
-                lines.push(`- Confidence tier: ${finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')}`);
-                lines.push(`- Corroboration: ${finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED')}`);
+                lines.push(`- Analysis mode: ${getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'))}`);
+                lines.push(`- Confidence: ${getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'))}`);
+                lines.push(`- Evidence: ${getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'))}`);
                 lines.push(`- Why it matters: ${finding.explanation || 'No explanation returned.'}`);
                 lines.push(`- What to change: ${remediation.remediation}`);
                 if (safePattern) {

@@ -4,7 +4,7 @@
     {
       "file": "01-idor-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "STATIC",
+      "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
@@ -17,7 +17,7 @@
     {
       "file": "08-command-injection-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "STATIC",
+      "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },

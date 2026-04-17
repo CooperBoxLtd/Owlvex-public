@@ -100,8 +100,9 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source coverage: Fresh Packs: 1');
         expect(written).toContain('- Coverage posture: Full scan posture for current provider/runtime state');
-        expect(written).toContain('- Scan tier posture: targeted_ai: 1');
-        expect(written).toContain('- Corroboration posture: corroborated: 1');
+        expect(written).toContain('- Analysis mode: Targeted AI review');
+        expect(written).toContain('- Analysis mix: targeted_ai: 1');
+        expect(written).toContain('- Evidence: corroborated: 1');
         expect(written).toContain('- Project context: inline project contract');
         expect(written).toContain('- Average file risk score: 7.0/10');
         expect(written).toContain('- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.');
@@ -111,16 +112,17 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Coverage posture: Normal coverage for this file');
-        expect(written).toContain('- Scan tier posture: targeted_ai: 1');
-        expect(written).toContain('- Corroboration posture: corroborated: 1');
+        expect(written).toContain('- Analysis mode: Targeted AI review');
+        expect(written).toContain('- Analysis mix: targeted_ai: 1');
+        expect(written).toContain('- Evidence: corroborated: 1');
         expect(written).toContain('- Project context: inline project contract');
         expect(written).toContain('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
         expect(written).toContain('| Unsanitized SQL query construction | mode targeted_ai \\| tier plausible \\| corroboration corroborated \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Finding risk: HIGH impact / MEDIUM likelihood / 7/10');
-        expect(written).toContain('- Scan tier: TARGETED_AI');
-        expect(written).toContain('- Confidence tier: PLAUSIBLE');
-        expect(written).toContain('- Corroboration: CORROBORATED');
+        expect(written).toContain('- Analysis mode: Targeted AI review');
+        expect(written).toContain('- Confidence: Plausible');
+        expect(written).toContain('- Evidence: Corroborated');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
         expect(written).toContain('- What to change: Separate query structure from untrusted data with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Safe pattern: Use parameterized queries.');
@@ -158,7 +160,7 @@ describe('reportGenerator', () => {
         await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
-        expect(written).toContain('- Corroboration posture: No findings to corroborate');
+        expect(written).toContain('- Evidence: No findings to corroborate');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Errors');
@@ -214,7 +216,7 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Scan warnings: 1');
         expect(written).toContain('- Coverage posture: Partial AI coverage in this scan');
-        expect(written).toContain('- Corroboration posture: No findings to corroborate');
+        expect(written).toContain('- Evidence: No findings to corroborate');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Warnings');
         expect(written).not.toContain('No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.');
@@ -268,11 +270,11 @@ describe('reportGenerator', () => {
         await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
-        expect(written).toContain('- Scan tier posture: static: 1 | targeted_ai: 2');
-        expect(written).toContain('- Corroboration posture: proven: 1 | partial: 1 | unverified: 1');
+        expect(written).toContain('- Analysis mix: static: 1 | targeted_ai: 2');
+        expect(written).toContain('- Evidence: proven: 1 | partial: 1 | unverified: 1');
         expect(written).toContain('### mixed.js');
-        expect(written).toContain('- Scan tier posture: static: 1 | targeted_ai: 2');
-        expect(written).toContain('- Corroboration posture: proven: 1 | partial: 1 | unverified: 1');
+        expect(written).toContain('- Analysis mix: static: 1 | targeted_ai: 2');
+        expect(written).toContain('- Evidence: proven: 1 | partial: 1 | unverified: 1');
     });
 
     it('normalizes string-based stride and matched signals without crashing', async () => {
@@ -453,9 +455,9 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 - Errors: 0
 - Scan warnings: 0
 - Coverage posture: Full scan posture for current provider/runtime state
-- Primary scan mode: REPO_AI
-- Scan tier posture: repo_ai: 1
-- Corroboration posture: corroborated: 1
+- Analysis mode: Repo-context AI review
+- Analysis mix: repo_ai: 1
+- Evidence: corroborated: 1
 - Project context: inline project contract
 - Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue."
 `);

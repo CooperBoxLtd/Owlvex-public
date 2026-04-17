@@ -641,9 +641,10 @@ describe('parseChatIntent', () => {
         await (provider as any).handleUserMessage('scan this file');
 
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
-        expect(finalMessage.content).toContain('Scan tiers: targeted_ai: 1');
+        expect(finalMessage.content).toContain('Analysis mode: Targeted AI review');
+        expect(finalMessage.content).toContain('Analysis mix: targeted_ai: 1');
         expect(finalMessage.content).toContain('Project context: inline project contract');
-        expect(finalMessage.content).toContain('Fix first: SQL Injection | tier TARGETED_AI');
+        expect(finalMessage.content).toContain('Fix first: SQL Injection | via Targeted AI review');
         expect(finalMessage.content).toContain('Next step: use Fix code to open a side-by-side remediation diff.');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: 'd:\\repo\\src\\userRepo.js' }),

@@ -83,8 +83,9 @@ describe('SidebarProvider', () => {
         const roots = provider.getChildren();
         expect(roots[0].label).toBe('File risk: 8.0/10');
         expect(String(roots[0].tooltip)).toContain('Coverage posture: normal');
-        expect(String(roots[0].tooltip)).toContain('Scan tier posture: static: 1');
-        expect(String(roots[0].tooltip)).toContain('Corroboration posture: proven: 1');
+        expect(String(roots[0].tooltip)).toContain('Analysis mode: Static proof');
+        expect(String(roots[0].tooltip)).toContain('Analysis mix: static: 1');
+        expect(String(roots[0].tooltip)).toContain('Evidence: proven: 1');
         expect(String(roots[0].tooltip)).toContain('Project context: inline project contract');
         expect(String(roots[0].tooltip)).toContain('Fix first: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
@@ -101,9 +102,9 @@ describe('SidebarProvider', () => {
             'Discuss this finding',
             'Fix code',
             'Risk: HIGH/HIGH -> 8/10',
-            'Scan tier: STATIC',
-            'Confidence tier: PROVEN',
-            'Corroboration: PROVEN',
+            'Analysis mode: Static proof',
+            'Confidence: Proven',
+            'Evidence: Proven',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
             'Fix: Resolve user paths against a fixed base directory.',
             'Validate: Replay ../ payloads and confirm rejection.',
@@ -158,10 +159,10 @@ describe('SidebarProvider', () => {
 
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toContain('AI confidence: 91%');
-        expect(detailNodes.map(node => node.label)).toContain('Scan tier: TARGETED_AI');
-        expect(detailNodes.map(node => node.label)).toContain('Confidence tier: PLAUSIBLE');
-        expect(detailNodes.map(node => node.label)).toContain('Corroboration: CORROBORATED');
-        expect(String(provider.getChildren()[0].tooltip)).toContain('Corroboration posture: corroborated: 1');
+        expect(detailNodes.map(node => node.label)).toContain('Analysis mode: Targeted AI review');
+        expect(detailNodes.map(node => node.label)).toContain('Confidence: Plausible');
+        expect(detailNodes.map(node => node.label)).toContain('Evidence: Corroborated');
+        expect(String(provider.getChildren()[0].tooltip)).toContain('Evidence: corroborated: 1');
     });
 
     it('surfaces partial coverage posture when warnings indicate degraded AI coverage', () => {
@@ -182,8 +183,8 @@ describe('SidebarProvider', () => {
 
         const roots = provider.getChildren();
         expect(String(roots[0].tooltip)).toContain('Coverage posture: partial AI coverage or deterministic-only fallback');
-        expect(String(roots[0].tooltip)).toContain('Scan tier posture: none');
-        expect(String(roots[0].tooltip)).toContain('Corroboration posture: none');
+        expect(String(roots[0].tooltip)).toContain('Analysis mix: none');
+        expect(String(roots[0].tooltip)).toContain('Evidence: none');
     });
 
     it('summarizes mixed corroboration states in the score tooltip', () => {
@@ -261,7 +262,7 @@ describe('SidebarProvider', () => {
         } as any);
 
         const roots = provider.getChildren();
-        expect(String(roots[0].tooltip)).toContain('Scan tier posture: static: 1 | targeted_ai: 2');
-        expect(String(roots[0].tooltip)).toContain('Corroboration posture: proven: 1 | partial: 1 | unverified: 1');
+        expect(String(roots[0].tooltip)).toContain('Analysis mix: static: 1 | targeted_ai: 2');
+        expect(String(roots[0].tooltip)).toContain('Evidence: proven: 1 | partial: 1 | unverified: 1');
     });
 });

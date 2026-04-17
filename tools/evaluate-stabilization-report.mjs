@@ -32,18 +32,18 @@ function parseMarkdownReport(markdown) {
         break;
       }
 
-      const primaryScanModeMatch = line.match(/^- Primary scan mode:\s+(.+)$/);
-      if (primaryScanModeMatch) {
+      const primaryScanModeMatch = line.match(/^-\s+(?:Primary scan mode|Analysis mode):\s+(.+)$/);
+      if (primaryScanModeMatch && !primaryScanMode) {
         primaryScanMode = primaryScanModeMatch[1].trim();
       }
 
-      const scanTierPostureMatch = line.match(/^- Scan tier posture:\s+(.+)$/);
-      if (scanTierPostureMatch) {
+      const scanTierPostureMatch = line.match(/^-\s+(?:Scan tier posture|Analysis mix):\s+(.+)$/);
+      if (scanTierPostureMatch && !scanTierPosture) {
         scanTierPosture = scanTierPostureMatch[1].trim();
       }
 
-      const corroborationPostureMatch = line.match(/^- Corroboration posture:\s+(.+)$/);
-      if (corroborationPostureMatch) {
+      const corroborationPostureMatch = line.match(/^-\s+(?:Corroboration posture|Evidence):\s+(.+)$/);
+      if (corroborationPostureMatch && !corroborationPosture) {
         corroborationPosture = corroborationPostureMatch[1].trim();
       }
 

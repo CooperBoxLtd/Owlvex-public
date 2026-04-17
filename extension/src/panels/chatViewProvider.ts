@@ -126,6 +126,34 @@ function getScanTierLabel(finding: Finding): string {
     return finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI');
 }
 
+function getScanTierDisplayLabel(value: string): string {
+    switch (value) {
+        case 'STATIC':
+            return 'Static proof';
+        case 'TARGETED_AI':
+            return 'Targeted AI review';
+        case 'REPO_AI':
+            return 'Repo-context AI review';
+        default:
+            return value;
+    }
+}
+
+function getCorroborationDisplayLabel(value: string): string {
+    switch (value) {
+        case 'PROVEN':
+            return 'Proven';
+        case 'CORROBORATED':
+            return 'Corroborated';
+        case 'PARTIAL':
+            return 'Partial';
+        case 'UNVERIFIED':
+            return 'Unverified';
+        default:
+            return value;
+    }
+}
+
 function summarizeScanTierCounts(findings: Finding[]): string {
     const order: Array<'STATIC' | 'TARGETED_AI' | 'REPO_AI'> = ['STATIC', 'TARGETED_AI', 'REPO_AI'];
     const counts = new Map<string, number>();
@@ -224,11 +252,11 @@ function buildScanSummaryLines(result: ScanResult): string[] {
     return [
         `File risk score: ${result.score.toFixed(1)}/10`,
         `Findings: ${result.findings.length}`,
-        `Primary scan mode: ${getPrimaryScanTierLabel(result.findings)}`,
-        `Scan tiers: ${summarizeScanTierCounts(result.findings)}`,
+        `Analysis mode: ${getScanTierDisplayLabel(getPrimaryScanTierLabel(result.findings))}`,
+        `Analysis mix: ${summarizeScanTierCounts(result.findings)}`,
         `Project context: ${result.projectContextSummary && result.projectContextSummary !== 'none' ? result.projectContextSummary : 'none'}`,
         topRiskFinding
-            ? `Fix first: ${topRiskFinding.title} | tier ${getScanTierLabel(topRiskFinding)} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
+            ? `Fix first: ${topRiskFinding.title} | via ${getScanTierDisplayLabel(getScanTierLabel(topRiskFinding))} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
             : 'Fix first: none',
         summarizeIssueFamilies(result.findings),
         `Model: ${result.model}`,
