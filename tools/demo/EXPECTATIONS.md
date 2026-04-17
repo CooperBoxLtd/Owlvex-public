@@ -50,6 +50,8 @@ These expectations should be read together with:
 | `31-ssrf-allowlist-safe.js` | clean | exact trusted host allow-list |
 | `32-command-injection-shell-unsafe.js` | finding expected | shell:true with interpolated command |
 | `33-command-injection-shell-safe.js` | clean | argument array without shell parsing |
+| `34-sqli-concat-unsafe.js` | finding expected | SQL built through string concatenation |
+| `35-sqli-concat-safe.js` | clean | parameter binding keeps value out of SQL text |
 
 ## Stabilization Rule
 

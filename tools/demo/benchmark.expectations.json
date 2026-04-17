@@ -69,6 +69,14 @@
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
-    { "file": "33-command-injection-shell-safe.js", "expectedState": "clean" }
+    { "file": "33-command-injection-shell-safe.js", "expectedState": "clean" },
+    {
+      "file": "34-sqli-concat-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "35-sqli-concat-safe.js", "expectedState": "clean" }
   ]
 }

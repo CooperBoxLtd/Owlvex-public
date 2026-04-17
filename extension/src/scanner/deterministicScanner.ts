@@ -40,15 +40,19 @@ const SHELL_SPAWN_PATTERN =
 // Matches db.query(`...${x}...`) — excludes parameterized (.query('...', [...])).
 const SQL_SINK_INLINE_PATTERN =
     /\.(query|execute|raw)\s*\(\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
+const SQL_SINK_INLINE_CONCAT_PATTERN =
+    /\.(query|execute|raw)\s*\(\s*((?:'[^']*'|"[^"]*")\s*\+\s*[^,\n;)]+)/g;
 
 // SQ-001: SQL sink call with a plain variable as the first argument.
-// Catches db.query(queryVar) when queryVar was assigned a template literal.
+// Catches db.query(queryVar) when queryVar was assigned a template literal or concat string.
 const SQL_SINK_VAR_PATTERN =
     /\.(query|execute|raw)\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*[,)]/g;
 
 // Template literal assignment: const query = `SELECT ... ${x} ...`
 const TEMPLATE_ASSIGN_PATTERN =
     /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
+const CONCAT_ASSIGN_PATTERN =
+    /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*((?:'[^']*'|"[^"]*")\s*\+\s*[^;\n]+)/g;
 
 // Narrow request-derived assignment signal used by the path-traversal rule.
 const REQUEST_ASSIGN_PATTERN =
@@ -989,6 +993,35 @@ function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: 
     };
 }
 
+function makeSqlConcatFinding(matchIndex: number, sinkName: string, snippet: string): InternalFinding {
+    return {
+        matchIndex,
+        severity: 'HIGH',
+        ruleCode: 'SQ-001',
+        title: 'SQL Injection',
+        explanation:
+            `A SQL string built through string concatenation is passed directly to ` +
+            `\`.${sinkName}\`. The appended value becomes part of the raw SQL text â€” ` +
+            `there is no parameterization layer between the value and the SQL parser.`,
+        threat:
+            'An attacker who controls the concatenated value can inject SQL metacharacters ' +
+            "(`'`, `\"`, `--`, `;`) to break out of the intended query structure, read or " +
+            'modify any data the database user can access, bypass authentication logic, ' +
+            'and in some database configurations execute operating-system commands.',
+        fix:
+            `Replace the raw SQL assembly with a parameterized query: ` +
+            `\`.${sinkName}('SELECT ... WHERE id = ?', [value])\`. ` +
+            'Pass user-supplied values as bound parameters â€” the database driver handles ' +
+            'escaping, and the value never becomes part of the SQL text.',
+        canonicalId: 'owlvex.issue.sql_injection.001',
+        framework: 'OWASP',
+        ...inferRequestDrivenLikelihood(
+            snippet,
+            'The SQL text is directly assembled through string concatenation, but the source of the value is not fully visible in this file.',
+        ),
+    };
+}
+
 function scanSqlSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
     const sanitizedVars = collectSanitizedVariables(source);
@@ -996,12 +1029,17 @@ function scanSqlSinks(source: string): InternalFinding[] {
     // Collect template literal assignments: `const query = \`SELECT ${x}\``
     const templateVars = new Map<string, { contextMismatch: boolean; templateBody: string }>();
     const assignPattern = new RegExp(TEMPLATE_ASSIGN_PATTERN.source, TEMPLATE_ASSIGN_PATTERN.flags);
+    const concatVars = new Map<string, string>();
+    const concatAssignPattern = new RegExp(CONCAT_ASSIGN_PATTERN.source, CONCAT_ASSIGN_PATTERN.flags);
     let match: RegExpExecArray | null;
     while ((match = assignPattern.exec(source)) !== null) {
         templateVars.set(match[1], {
             contextMismatch: templateContainsHtmlSanitizer(match[2], sanitizedVars),
             templateBody: match[2],
         });
+    }
+    while ((match = concatAssignPattern.exec(source)) !== null) {
+        concatVars.set(match[1], match[2]);
     }
 
     // Case A: inline template literal passed directly to the sink.
@@ -1010,6 +1048,16 @@ function scanSqlSinks(source: string): InternalFinding[] {
         found.push(makeSqlFinding(
             match.index,
             templateContainsHtmlSanitizer(match[2], sanitizedVars),
+            match[1],
+            match[2],
+        ));
+    }
+
+    // Case A2: inline string concatenation passed directly to the sink.
+    const inlineConcatPattern = new RegExp(SQL_SINK_INLINE_CONCAT_PATTERN.source, SQL_SINK_INLINE_CONCAT_PATTERN.flags);
+    while ((match = inlineConcatPattern.exec(source)) !== null) {
+        found.push(makeSqlConcatFinding(
+            match.index,
             match[1],
             match[2],
         ));
@@ -1027,6 +1075,17 @@ function scanSqlSinks(source: string): InternalFinding[] {
                 templateVar.contextMismatch,
                 match[1],
                 templateVar.templateBody,
+            ));
+            continue;
+        }
+
+        if (concatVars.has(varName)) {
+            const concatBody = concatVars.get(varName);
+            if (!concatBody) { continue; }
+            found.push(makeSqlConcatFinding(
+                match.index,
+                match[1],
+                concatBody,
             ));
         }
     }

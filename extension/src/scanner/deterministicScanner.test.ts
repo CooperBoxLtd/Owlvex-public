@@ -174,6 +174,23 @@ return db.query(query);`;
         expect(scanner.scan(source, 'javascript')).toHaveLength(1);
     });
 
+    it('detects inline string concatenation in db.query()', () => {
+        const source = "db.query(\"SELECT * FROM users WHERE id = '\" + userId + \"'\")";
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].ruleCode).toBe('SQ-001');
+        expect(findings[0].title).toBe('SQL Injection');
+    });
+
+    it('detects concatenated query variables passed to db.query()', () => {
+        const source = `
+const query = "SELECT * FROM users WHERE id = '" + userId + "'";
+return db.query(query);`;
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].ruleCode).toBe('SQ-001');
+    });
+
     it('does not flag parameterized query with string literal', () => {
         const source = "db.query('SELECT * FROM users WHERE id = $1', [userId])";
         expect(scanner.scan(source, 'javascript')).toHaveLength(0);
