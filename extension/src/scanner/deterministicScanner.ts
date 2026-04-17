@@ -61,6 +61,18 @@ const REQUEST_ASSIGN_PATTERN =
 // HTML sanitizer assignment: const cleaned = escapeHtml(username)
 const SANITIZER_ASSIGN_PATTERN =
     /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:escapeHtml|htmlspecialchars|encodeHtml|htmlEscape|escapeXml)\s*\(/g;
+const OPEN_REDIRECT_DIRECT_RE =
+    /\bres\.redirect\s*\(\s*(?:req|request)\.(?:query|body|params)\.[A-Za-z_$][A-Za-z0-9_$]*\s*\)/g;
+const OPEN_REDIRECT_ASSIGN_RE =
+    /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:req|request)\.(?:query|body|params)\.[A-Za-z_$][A-Za-z0-9_$]*/g;
+const REDIRECT_VAR_SINK_RE =
+    /\bres\.redirect\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/g;
+const JWT_DECODE_RE =
+    /\b[A-Za-z_$][A-Za-z0-9_$]*\.decode\s*\(\s*[^)]{0,200}\)/g;
+const CORS_WILDCARD_ORIGIN_RE =
+    /setHeader\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]\s*\)/g;
+const CORS_CREDENTIALS_TRUE_RE =
+    /setHeader\s*\(\s*['"]Access-Control-Allow-Credentials['"]\s*,\s*['"]true['"]\s*\)/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -1235,6 +1247,120 @@ function scanSsrfSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanOpenRedirectSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    let match: RegExpExecArray | null;
+    const directPattern = new RegExp(OPEN_REDIRECT_DIRECT_RE.source, OPEN_REDIRECT_DIRECT_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'MEDIUM',
+            ruleCode: 'OR-001',
+            title: 'Open Redirect',
+            explanation:
+                'A redirect destination is taken directly from request-controlled input and passed to `res.redirect()`. ' +
+                'That lets the caller choose the navigation target without a trusted allow-list.',
+            threat:
+                'An attacker can craft links that send users through a trusted application and then bounce them to ' +
+                'phishing pages, malware delivery sites, or attacker-controlled OAuth callback endpoints.',
+            fix:
+                'Map user input to trusted route names or require an explicit allow-list of local redirect targets ' +
+                'before calling `res.redirect()`.',
+            canonicalId: 'owlvex.issue.open_redirect.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['The redirect sink uses request-controlled input directly.'],
+        });
+    }
+
+    const redirectVars = new Set<string>();
+    const assignPattern = new RegExp(OPEN_REDIRECT_ASSIGN_RE.source, OPEN_REDIRECT_ASSIGN_RE.flags);
+    while ((match = assignPattern.exec(source)) !== null) {
+        redirectVars.add(match[1]);
+    }
+
+    const sinkPattern = new RegExp(REDIRECT_VAR_SINK_RE.source, REDIRECT_VAR_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!redirectVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'MEDIUM',
+            ruleCode: 'OR-001',
+            title: 'Open Redirect',
+            explanation:
+                'A variable populated from request-controlled input is later passed into `res.redirect()` without a ' +
+                'trusted allow-list or route mapping.',
+            threat:
+                'An attacker can craft links that send users through a trusted application and then bounce them to ' +
+                'phishing pages, malware delivery sites, or attacker-controlled OAuth callback endpoints.',
+            fix:
+                'Map user input to trusted route names or require an explicit allow-list of local redirect targets ' +
+                'before calling `res.redirect()`.',
+            canonicalId: 'owlvex.issue.open_redirect.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['The redirect sink uses request-controlled input directly.'],
+        });
+    }
+
+    return found;
+}
+
+function scanJwtWeakValidationSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const pattern = new RegExp(JWT_DECODE_RE.source, JWT_DECODE_RE.flags);
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT Validation',
+            explanation:
+                'The code calls `jwt.decode(...)` and trusts token contents without signature verification. Decoding ' +
+                'a token only parses claims; it does not prove the token was issued by a trusted signer.',
+            threat:
+                'An attacker can forge arbitrary claims such as user ID, role, or tenant and have the application ' +
+                'treat them as trusted identity data if downstream code accepts the decoded payload.',
+            fix:
+                'Use `jwt.verify(...)` with explicit algorithm, issuer, audience, and expiry constraints before ' +
+                'trusting any JWT claims.',
+            canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['The code decodes JWT claims without any visible signature verification.'],
+        });
+    }
+    return found;
+}
+
+function scanCorsSinks(source: string): InternalFinding[] {
+    if (!CORS_WILDCARD_ORIGIN_RE.test(source) || !CORS_CREDENTIALS_TRUE_RE.test(source)) {
+        return [];
+    }
+
+    const match = source.match(CORS_WILDCARD_ORIGIN_RE);
+    return [{
+        matchIndex: match ? source.indexOf(match[0]) : 0,
+        severity: 'MEDIUM',
+        ruleCode: 'CO-001',
+        title: 'Overly Permissive CORS Policy',
+        explanation:
+            'The response sets `Access-Control-Allow-Origin: *` together with `Access-Control-Allow-Credentials: true`. ' +
+            'That is an unsafe and browser-incompatible combination for sensitive APIs.',
+        threat:
+            'Misconfigured cross-origin policy can expose sensitive responses to unintended browser origins or create ' +
+            'a false sense of security about which origins are trusted.',
+        fix:
+            'Return a specific trusted origin instead of `*`, and only allow credentials for explicit origins that ' +
+            'are intended to access the API.',
+        canonicalId: 'owlvex.issue.insecure_cors.001',
+        framework: 'OWASP',
+        likelihood: 'MEDIUM',
+        likelihoodReasons: ['Wildcard CORS with credentials is visible directly in the response headers.'],
+    }];
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -1246,6 +1372,9 @@ export class DeterministicScanner {
             ...scanSqlSinks(source),
             ...scanPathTraversalSinks(source),
             ...scanSsrfSinks(source),
+            ...scanOpenRedirectSinks(source),
+            ...scanJwtWeakValidationSinks(source),
+            ...scanCorsSinks(source),
             ...scanIdorSinks(source),
             ...scanTenantIsolationSinks(source),
             ...scanPiiLoggingSinks(source),

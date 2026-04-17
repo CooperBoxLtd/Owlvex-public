@@ -647,7 +647,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.summary).toBe('1 finding(s) detected, led by 1 medium-severity issue(s). File risk score is driven by the highest remaining finding risk: medium impact x high likelihood = 7/10. Issue families: Identity & Auth Failures.');
     });
 
-    it('preserves AI-only findings for issue classes not covered by the deterministic engine yet', async () => {
+    it('promotes open redirect into deterministic coverage when the sink is structurally proven', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
             validate: jest.fn().mockResolvedValue({
@@ -709,9 +709,9 @@ describe('ScanEngine.scanDocument caching', () => {
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(1);
-        expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.92);
-        expect(result.findings[0].confidenceTier).toBe('PLAUSIBLE');
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].confidence).toBe(1);
+        expect(result.findings[0].confidenceTier).toBe('PROVEN');
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.open_redirect.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Security Misconfiguration & Platform Hardening');
         expect(result.findings[0].likelihood).toBe('HIGH');
@@ -864,7 +864,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.score).toBe(9);
     });
 
-    it('keeps AI-only weak JWT validation findings distinct from deterministic coverage', async () => {
+    it('promotes weak JWT validation into deterministic coverage when decode() is visible', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
             validate: jest.fn().mockResolvedValue({
@@ -926,8 +926,8 @@ describe('ScanEngine.scanDocument caching', () => {
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(1);
-        expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.92);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].confidence).toBe(1);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.weak_jwt_validation.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Identity & Auth Failures');
         expect(result.findings[0].likelihood).toBe('HIGH');
@@ -1501,14 +1501,11 @@ if (process.env.NODE_ENV !== 'production') {
         const engine = new ScanEngine(licenceMgr, registry);
         const doc = {
             languageId: 'javascript',
-            fileName: 'd:\\repo\\cors.js',
+            fileName: 'd:\\repo\\csrf.js',
             getText: () => [
-                'function enableCors(app) {',
-                '  app.use((req, res, next) => {',
-                "    res.setHeader('Access-Control-Allow-Origin', '*');",
-                "    res.setHeader('Access-Control-Allow-Credentials', 'true');",
-                '    next();',
-                '  });',
+                'function updateEmail(req, res, db) {',
+                "  db.query('UPDATE users SET email = ? WHERE id = ?', [req.body.email, req.session.userId]);",
+                "  res.sendStatus(204);",
                 '}',
             ].join('\n'),
         } as any;
@@ -1517,9 +1514,9 @@ if (process.env.NODE_ENV !== 'production') {
 
         const userMessage = complete.mock.calls[0][0].userMessage as string;
         expect(userMessage).toContain('Grounded candidate issues for AI-only analysis:');
-        expect(userMessage).toContain('owlvex.issue.insecure_cors.001 | Overly permissive CORS policy');
-        expect(userMessage).toContain('Signals matched in code: cors, access-control-allow-origin');
-        expect(userMessage).toContain('Cheat-sheet guidance: OWASP Cross Origin Resource Sharing Cheat Sheet');
+        expect(userMessage).toContain('owlvex.issue.sql_injection.001 | Unsanitized SQL query construction');
+        expect(userMessage).toContain('Signals matched in code: query');
+        expect(userMessage).toContain('Cheat-sheet guidance: OWASP SQL Injection Prevention Cheat Sheet');
     });
 
     it('injects local project context into prompt building and AI requests', async () => {
@@ -1607,32 +1604,32 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     score: 6.4,
-                    summary: 'Potential open redirect detected.',
+                    summary: 'Potential CSRF issue detected.',
                     findings: [
                         {
-                            id: 'ai-open-redirect-1',
-                            line: 2,
-                            line_end: 2,
-                            severity: 'MEDIUM',
+                            id: 'ai-csrf-verify-1',
+                            line: 1,
+                            line_end: 4,
+                            severity: 'HIGH',
                             framework: 'OWASP',
-                            rule_code: 'A01-REDIRECT',
-                            title: 'Open Redirect',
-                            explanation: 'User-controlled destination is passed directly into a redirect call.',
-                            threat: 'Attackers can steer users to attacker-controlled pages.',
-                            fix: 'Allow-list redirect destinations.',
+                            rule_code: 'A01-CSRF',
+                            title: 'Missing CSRF protection',
+                            explanation: 'A state-changing browser request is accepted without a CSRF token check.',
+                            threat: 'Attackers can trick an authenticated browser into performing an unwanted action.',
+                            fix: 'Require anti-CSRF tokens or same-site protections.',
                             confidence: 0.88,
-                            issue_id: 'owlvex.issue.open_redirect.001',
+                            issue_id: 'owlvex.issue.csrf_missing_token.001',
                         },
                     ],
                     positives: [],
-                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
                 }),
                 tokenCount: 42,
             })
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-open-redirect-1', verdict: 'support', reason: 'The redirect sink is directly fed by request input.' },
+                        { id: 'ai-csrf-verify-1', verdict: 'support', reason: 'The route changes state and no CSRF validation is visible.' },
                     ],
                 }),
                 tokenCount: 10,
@@ -1640,7 +1637,7 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-open-redirect-1', verdict: 'clear', reason: 'No allow-list or guard is visible.' },
+                        { id: 'ai-csrf-verify-1', verdict: 'clear', reason: 'No CSRF token guard or equivalent same-site defense is visible.' },
                     ],
                 }),
                 tokenCount: 10,
@@ -1664,9 +1661,10 @@ if (process.env.NODE_ENV !== 'production') {
         const engine = new ScanEngine(licenceMgr, registry);
         const doc = {
             languageId: 'javascript',
-            fileName: 'd:\\repo\\redirect.js',
-            getText: () => `function go(req, res) {
-    return res.redirect(req.query.next);
+            fileName: 'd:\\repo\\csrf.js',
+            getText: () => `function updateEmail(req, res, db) {
+    db.query('UPDATE users SET email = ? WHERE id = ?', [req.body.email, req.session.userId]);
+    res.sendStatus(204);
 }`,
         } as any;
 
@@ -1694,32 +1692,32 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     score: 7.5,
-                    summary: 'Potential open redirect detected.',
+                    summary: 'Potential CSRF issue detected.',
                     findings: [
                         {
-                            id: 'ai-open-redirect-2',
-                            line: 2,
-                            line_end: 2,
-                            severity: 'MEDIUM',
+                            id: 'ai-csrf-verify-2',
+                            line: 1,
+                            line_end: 4,
+                            severity: 'HIGH',
                             framework: 'OWASP',
-                            rule_code: 'A01-REDIRECT',
-                            title: 'Open Redirect',
-                            explanation: 'User-controlled destination is passed directly into a redirect call.',
-                            threat: 'Attackers can steer users to attacker-controlled pages.',
-                            fix: 'Allow-list redirect destinations.',
+                            rule_code: 'A01-CSRF',
+                            title: 'Missing CSRF protection',
+                            explanation: 'A state-changing browser request is accepted without a CSRF token check.',
+                            threat: 'Attackers can trick an authenticated browser into performing an unwanted action.',
+                            fix: 'Require anti-CSRF tokens or same-site protections.',
                             confidence: 0.81,
-                            issue_id: 'owlvex.issue.open_redirect.001',
+                            issue_id: 'owlvex.issue.csrf_missing_token.001',
                         },
                     ],
                     positives: [],
-                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
                 }),
                 tokenCount: 42,
             })
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-open-redirect-2', verdict: 'reject', reason: 'The redirect destination is not actually user-controlled in the local code context.' },
+                        { id: 'ai-csrf-verify-2', verdict: 'reject', reason: 'A CSRF token check is already enforced elsewhere in the flow.' },
                     ],
                 }),
                 tokenCount: 10,
@@ -1727,7 +1725,7 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-open-redirect-2', verdict: 'clear', reason: 'No additional contradiction beyond the verifier rejection.' },
+                        { id: 'ai-csrf-verify-2', verdict: 'clear', reason: 'No additional contradiction beyond the verifier rejection.' },
                     ],
                 }),
                 tokenCount: 10,
@@ -1751,9 +1749,10 @@ if (process.env.NODE_ENV !== 'production') {
         const engine = new ScanEngine(licenceMgr, registry);
         const doc = {
             languageId: 'javascript',
-            fileName: 'd:\\repo\\redirect.js',
-            getText: () => `function go(req, res) {
-    return res.redirect(req.query.next);
+            fileName: 'd:\\repo\\csrf.js',
+            getText: () => `function updateEmail(req, res, db) {
+    db.query('UPDATE users SET email = ? WHERE id = ?', [req.body.email, req.session.userId]);
+    res.sendStatus(204);
 }
 `,
         } as any;
@@ -1840,25 +1839,25 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     score: 6.4,
-                    summary: 'Potential open redirect detected.',
+                    summary: 'Potential CSRF issue detected.',
                     findings: [
                         {
-                            id: 'ai-open-redirect-partial',
-                            line: 2,
-                            line_end: 2,
-                            severity: 'MEDIUM',
+                            id: 'ai-csrf-partial',
+                            line: 1,
+                            line_end: 4,
+                            severity: 'HIGH',
                             framework: 'OWASP',
-                            rule_code: 'A01-REDIRECT',
-                            title: 'Open Redirect',
-                            explanation: 'User-controlled destination is passed directly into a redirect call.',
-                            threat: 'Attackers can steer users to attacker-controlled pages.',
-                            fix: 'Allow-list redirect destinations.',
+                            rule_code: 'A01-CSRF',
+                            title: 'Missing CSRF protection',
+                            explanation: 'A state-changing browser request is accepted without a CSRF token check.',
+                            threat: 'Attackers can trick an authenticated browser into performing an unwanted action.',
+                            fix: 'Require anti-CSRF tokens or same-site protections.',
                             confidence: 0.88,
-                            issue_id: 'owlvex.issue.open_redirect.001',
+                            issue_id: 'owlvex.issue.csrf_missing_token.001',
                         },
                     ],
                     positives: [],
-                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
                 }),
                 tokenCount: 42,
             })
@@ -1887,9 +1886,10 @@ if (process.env.NODE_ENV !== 'production') {
         const engine = new ScanEngine(licenceMgr, registry);
         const doc = {
             languageId: 'javascript',
-            fileName: 'd:\\repo\\redirect.js',
-            getText: () => `function go(req, res) {
-    return res.redirect(req.query.next);
+            fileName: 'd:\\repo\\csrf.js',
+            getText: () => `function updateEmail(req, res, db) {
+    db.query('UPDATE users SET email = ? WHERE id = ?', [req.body.email, req.session.userId]);
+    res.sendStatus(204);
 }`,
         } as any;
 

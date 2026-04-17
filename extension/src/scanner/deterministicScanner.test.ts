@@ -893,3 +893,76 @@ async function fetchAvatar(req, res, fetch) {
         expect(scanner.scan(source, 'javascript')).toHaveLength(0);
     });
 });
+
+// ---------------------------------------------------------------------------
+// SM-002: Open redirect
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner â€” SM-002 open redirect', () => {
+    it('detects direct redirect from request query', () => {
+        const source = `function continueLogin(req, res) { return res.redirect(req.query.next); }`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'OR-001')).toHaveLength(1);
+    });
+
+    it('detects redirect through a request-derived variable', () => {
+        const source = `
+function continueLogin(req, res) {
+  const next = req.query.next;
+  return res.redirect(next);
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'OR-001')).toHaveLength(1);
+    });
+
+    it('does not flag allow-listed local redirect mapping', () => {
+        const source = `
+const ALLOWED_ROUTES = new Set(['/dashboard', '/settings']);
+function continueLogin(req, res) {
+  const next = ALLOWED_ROUTES.has(req.query.next) ? req.query.next : '/dashboard';
+  return res.redirect(next);
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'OR-001')).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// IA-001: Weak JWT validation
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner â€” IA-001 JWT validation', () => {
+    it('detects jwt.decode() without verification', () => {
+        const source = `function readClaims(token, jwt) { return jwt.decode(token); }`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'JW-001')).toHaveLength(1);
+    });
+
+    it('does not flag jwt.verify()', () => {
+        const source = `function readClaims(token, jwt) { return jwt.verify(token, key, { algorithms: ['RS256'] }); }`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'JW-001')).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// SM-003: Overly permissive CORS
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner â€” SM-003 CORS misconfiguration', () => {
+    it('detects wildcard origin plus credentials', () => {
+        const source = `
+function enableCors(app) {
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    next();
+  });
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'CO-001')).toHaveLength(1);
+    });
+
+    it('does not flag explicit origin handling with credentials', () => {
+        const source = `
+function enableCors(app, origin) {
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    next();
+  });
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'CO-001')).toHaveLength(0);
+    });
+});

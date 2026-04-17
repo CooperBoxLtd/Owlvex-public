@@ -28,11 +28,23 @@
     { "file": "13-sensitive-logging-safe.js", "expectedState": "clean" },
     { "file": "14-sqli-context-mismatch-unsafe.js", "expectedState": "finding" },
     { "file": "15-sqli-context-mismatch-safe.js", "expectedState": "clean" },
-    { "file": "16-open-redirect-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "16-open-redirect-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "17-open-redirect-safe.js", "expectedState": "clean" },
     { "file": "18-csrf-unsafe.js", "expectedState": "finding" },
     { "file": "19-csrf-safe.js", "expectedState": "clean" },
-    { "file": "20-cors-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "20-cors-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "21-cors-safe.js", "expectedState": "clean" },
     {
       "file": "22-ssrf-unsafe.js",
@@ -42,7 +54,13 @@
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
     { "file": "23-ssrf-safe.js", "expectedState": "clean" },
-    { "file": "24-jwt-validation-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "24-jwt-validation-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "25-jwt-validation-safe.js", "expectedState": "clean" },
     { "file": "26-deserialization-unsafe.py", "expectedState": "finding" },
     { "file": "27-deserialization-safe.py", "expectedState": "clean" },
