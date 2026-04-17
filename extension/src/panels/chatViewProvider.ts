@@ -62,6 +62,10 @@ interface PendingFixPreview {
     finding: Finding;
 }
 
+interface GenerateFixPreviewOptions {
+    reuseCurrentTurn?: boolean;
+}
+
 interface LocalActionResult {
     handled: boolean;
     response?: string;
@@ -194,6 +198,10 @@ function riskRank(finding: Finding): number {
 
 function looksLikeFixRequest(prompt: string): boolean {
     return /\b(fix|patch|replace|rewrite|safe version|secure version|implement|apply|remediate|solution)\b/i.test(prompt);
+}
+
+function looksLikeImplementRequest(prompt: string): boolean {
+    return /\b(implement( this| the)? change|change it in the file|change the file|edit the file|apply( the)? fix|make the change|update the file|do it)\b/i.test(prompt);
 }
 
 function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions): boolean {
@@ -616,6 +624,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private pendingFixPreview?: PendingFixPreview;
     private readonly restorableMessages?: ChatMessage[];
     private latestActionableFinding?: Finding;
+    private latestActionableTargetPath?: string;
 
     constructor(
         private readonly registry: ProviderRegistry,
@@ -711,8 +720,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         );
     }
 
-    async generateFixPreview(finding: Finding, targetPath?: string): Promise<void> {
+    async generateFixPreview(finding: Finding, targetPath?: string, options: GenerateFixPreviewOptions = {}): Promise<void> {
         this.latestActionableFinding = finding;
+        this.latestActionableTargetPath = targetPath ?? this.latestActionableTargetPath;
         let document = vscode.window.activeTextEditor?.document;
         if (targetPath) {
             const targetUri = vscode.Uri.file(targetPath);
@@ -728,21 +738,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         const discussionContext = await this.buildFindingContextBundle(finding);
         await this.show();
-        this.messages.push({
-            role: 'system',
-            content: discussionContext.sourceSummary,
-            kind: 'advisory',
-            actions: discussionContext.sourceActions,
-        });
-        this.messages.push({
-            role: 'user',
-            content: `Fix code: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
-        });
-        this.messages.push({
-            role: 'assistant',
-            content: 'Preparing code fix diff...',
-            kind: 'advisory',
-        });
+        if (!options.reuseCurrentTurn) {
+            this.messages.push({
+                role: 'system',
+                content: discussionContext.sourceSummary,
+                kind: 'advisory',
+                actions: discussionContext.sourceActions,
+            });
+            this.messages.push({
+                role: 'user',
+                content: `Fix code: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
+            });
+            this.messages.push({
+                role: 'assistant',
+                content: 'Preparing code fix diff...',
+                kind: 'advisory',
+            });
+        } else {
+            this.messages[this.messages.length - 1] = {
+                role: 'assistant',
+                content: 'Preparing code fix diff...',
+                kind: 'advisory',
+            };
+        }
         this.refresh();
 
         try {
@@ -807,6 +825,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 kind: 'advisory',
             };
             this.pendingFixPreview = undefined;
+            this.latestActionableTargetPath = undefined;
         }
 
         void this.persistState();
@@ -929,6 +948,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return;
             }
 
+            const autoSuggestedFinding = !options.suggestedFinding && looksLikeFixRequest(trimmed)
+                ? this.latestActionableFinding
+                : undefined;
+            const autoTargetPath = this.getActiveFixTargetPath();
+            if (!options.injectedContext && !options.suggestedFinding && looksLikeImplementRequest(trimmed) && autoSuggestedFinding && autoTargetPath) {
+                await this.generateFixPreview(autoSuggestedFinding, autoTargetPath, { reuseCurrentTurn: true });
+                void this.persistState();
+                this.refresh();
+                return;
+            }
+
             const provider = this.registry.getActive();
             const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
             const workspaceSummary = workspaceFolders.length
@@ -937,9 +967,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const editorContext = this.buildEditorContext();
             const scanContext = this.buildScanContext();
             const projectContext = await loadProjectContextInfo();
-            const autoSuggestedFinding = !options.suggestedFinding && looksLikeFixRequest(trimmed)
-                ? this.latestActionableFinding
-                : undefined;
             const autoInjectedContext = !options.injectedContext && autoSuggestedFinding
                 ? buildFindingPromptContext(autoSuggestedFinding, this.buildActiveSnippetForFinding(autoSuggestedFinding))
                 : undefined;
@@ -1026,6 +1053,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
             const topActionable = getTopActionableFindingResult(result.results ?? []);
             this.latestActionableFinding = topActionable?.finding;
+            this.latestActionableTargetPath = topActionable?.targetPath;
             const actions: ChatMessageAction[] = [];
             if (topActionable) {
                 actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
@@ -1071,6 +1099,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
             const topActionable = getTopActionableFindingResult(result.results ?? []);
             this.latestActionableFinding = topActionable?.finding;
+            this.latestActionableTargetPath = topActionable?.targetPath;
             const actions: ChatMessageAction[] = [];
             if (topActionable) {
                 actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
@@ -1113,6 +1142,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
             const topActionable = getTopActionableFindingResult(result.results ?? []);
             this.latestActionableFinding = topActionable?.finding;
+            this.latestActionableTargetPath = topActionable?.targetPath;
             const actions: ChatMessageAction[] = [];
             if (topActionable) {
                 actions.push(buildReviewFixAction(topActionable.finding, topActionable.targetPath));
@@ -1170,6 +1200,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         const relativeReportPath = vscode.workspace.asRelativePath(result.reportUri, false);
+        const topActionable = getTopActionableFindingResult(result.summary.results ?? []);
+        this.latestActionableFinding = topActionable?.finding;
+        this.latestActionableTargetPath = topActionable?.targetPath;
         return {
             handled: true,
             response: [
@@ -1184,9 +1217,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     : 'No scan errors were reported.',
             ].join('\n'),
             kind: 'scan',
-            actions: [{
-                ...buildExplainScoreAction('explain-score-report-intent', result.summary.results ?? []),
-            }],
+            actions: [
+                ...(topActionable ? [buildReviewFixAction(topActionable.finding, topActionable.targetPath)] : []),
+                {
+                    ...buildExplainScoreAction('explain-score-report-intent', result.summary.results ?? []),
+                },
+            ],
         };
     }
 
@@ -1248,6 +1284,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         if (action.kind === 'discardFixPreview') {
             this.pendingFixPreview = undefined;
+            this.latestActionableTargetPath = undefined;
             this.messages.push({
                 role: 'assistant',
                 content: 'Discarded the current fix preview. The original file was left unchanged.',
@@ -1489,6 +1526,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.latestActionableFinding = result?.result?.findings
                     ?.slice()
                     ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.latestActionableTargetPath = result?.uri?.fsPath;
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     kind: 'scan',
@@ -1517,6 +1555,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     ?.flatMap((item: any) => item.result.findings)
                     ?.slice()
                     ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.latestActionableTargetPath = getTopActionableFindingResult(result?.results ?? [])?.targetPath;
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     kind: 'scan',
@@ -1565,6 +1604,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     ?.flatMap((item: any) => item.result.findings)
                     ?.slice()
                     ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.latestActionableTargetPath = getTopActionableFindingResult(result?.results ?? [])?.targetPath;
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     kind: 'scan',
@@ -1613,6 +1653,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     ?.flatMap((item: any) => item.result.findings)
                     ?.slice()
                     ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.latestActionableTargetPath = getTopActionableFindingResult(result?.results ?? [])?.targetPath;
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     kind: 'scan',
@@ -1664,6 +1705,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     ?.flatMap((item: any) => item.result.findings)
                     ?.slice()
                     ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.latestActionableTargetPath = getTopActionableFindingResult(result?.summary?.results ?? [])?.targetPath;
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     kind: 'scan',
@@ -1738,6 +1780,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.messages.splice(0, this.messages.length, ...buildDefaultChatMessages());
         this.pendingFixPreview = undefined;
         this.latestActionableFinding = undefined;
+        this.latestActionableTargetPath = undefined;
     }
 
     private getLatestReportFinding(): Finding | undefined {
@@ -1755,13 +1798,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             .sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
     }
 
+    private getActiveFixTargetPath(): string | undefined {
+        return this.pendingFixPreview?.targetPath
+            ?? this.latestActionableTargetPath
+            ?? vscode.window.activeTextEditor?.document.uri.fsPath;
+    }
+
     private buildFixFollowUpActions(prompt: string, suggestedFinding?: Finding): ChatMessageAction[] | undefined {
         if (!looksLikeFixRequest(prompt)) {
             return undefined;
         }
 
         const finding = suggestedFinding ?? this.latestActionableFinding;
-        const targetPath = vscode.window.activeTextEditor?.document.uri.fsPath;
+        const targetPath = this.getActiveFixTargetPath();
         if (!finding || !targetPath) {
             return undefined;
         }
@@ -1795,6 +1844,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.latestActionableFinding = result.result.findings
             .slice()
             .sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+        this.latestActionableTargetPath = result.uri?.fsPath;
         const actions: ChatMessageAction[] = result.uri
             ? [buildExplainScoreAction('explain-score-scan-file-intent', [{ uri: result.uri, result: result.result }])]
             : [];
@@ -2055,6 +2105,55 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       margin-top: 12px;
       flex-wrap: wrap;
     }
+    .scan-controls {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .scan-scope {
+      flex: 1 1 220px;
+      min-width: 180px;
+    }
+    .assistant-panel {
+      margin-top: 8px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 12px;
+      background: color-mix(in srgb, var(--vscode-editorWidget-background) 85%, transparent);
+      overflow: hidden;
+    }
+    .assistant-panel summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      user-select: none;
+    }
+    .assistant-panel summary::-webkit-details-marker {
+      display: none;
+    }
+    .assistant-summary {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+    .assistant-summary .title {
+      margin: 0;
+    }
+    .assistant-caption {
+      font-size: 11px;
+      opacity: 0.78;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .assistant-body {
+      padding: 0 12px 12px;
+    }
     .settings-panel {
       margin-top: 12px;
       border: 1px solid var(--vscode-widget-border);
@@ -2252,25 +2351,43 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <div class="shell">
     <div class="header">
       <div class="header-top">
-        <div class="title">Owlvex Assistant</div>
+        <details class="assistant-panel" id="assistantPanel" open>
+          <summary>
+            <span class="assistant-summary">
+              <span class="title">Owlvex Assistant</span>
+              <span class="assistant-caption" id="assistantCaption">Provider: connecting...</span>
+            </span>
+            <span class="settings-chevron">v</span>
+          </summary>
+          <div class="assistant-body">
+            <div class="meta" id="meta">Connecting...</div>
+            <div class="summary-grid">
+              <div class="summary-card">
+                <div class="summary-label">Workspace</div>
+                <div class="summary-value" id="workspace">loading...</div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-label">Scan Profile</div>
+                <div class="summary-value" id="scanProfile">Loading scan profile...</div>
+              </div>
+            </div>
+            <div class="meta compact" id="lastScan">Last scan target: none</div>
+            <div class="scan-controls">
+              <select id="scanScope" class="scan-scope" aria-label="Scan scope">
+                <option value="scanFile">Current file</option>
+                <option value="scanSelectedFiles">Selected files</option>
+                <option value="scanOpenEditors">Open editors</option>
+                <option value="scanFolder" selected>Workspace</option>
+              </select>
+              <button class="chip" id="runScan">Scan</button>
+            </div>
+            <div class="primary-actions">
+              <button class="chip" data-action="scanReport">Create Report</button>
+            </div>
+            <div class="meta compact">For current file, selected files, or open editors, type it in chat or use the Command Palette.</div>
+          </div>
+        </details>
       </div>
-      <div class="meta" id="meta">Connecting...</div>
-      <div class="summary-grid">
-        <div class="summary-card">
-          <div class="summary-label">Workspace</div>
-          <div class="summary-value" id="workspace">loading...</div>
-        </div>
-        <div class="summary-card">
-          <div class="summary-label">Scan Profile</div>
-          <div class="summary-value" id="scanProfile">Loading scan profile...</div>
-        </div>
-      </div>
-      <div class="meta compact" id="lastScan">Last scan target: none</div>
-      <div class="primary-actions">
-        <button class="chip" data-action="scanFolder">Scan Workspace</button>
-        <button class="chip" data-action="scanReport">Create Report</button>
-      </div>
-      <div class="meta compact">For current file, selected files, or open editors, type it in chat or use the Command Palette.</div>
       <details class="settings-panel" id="settingsPanel">
         <summary>
           <span class="settings-title">
@@ -2314,6 +2431,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const vscode = acquireVsCodeApi();
     const messagesEl = document.getElementById('messages');
     const metaEl = document.getElementById('meta');
+    const assistantCaptionEl = document.getElementById('assistantCaption');
     const promptEl = document.getElementById('prompt');
     const workspaceEl = document.getElementById('workspace');
     const workspaceDetailEl = document.getElementById('workspaceDetail');
@@ -2323,12 +2441,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const providerStatusEl = document.getElementById('providerStatus');
     const providerHintEl = document.getElementById('providerHint');
     const lastScanEl = document.getElementById('lastScan');
+    const scanScopeEl = document.getElementById('scanScope');
+    const runScanEl = document.getElementById('runScan');
     const providerEl = document.getElementById('provider');
     const modelEl = document.getElementById('model');
     const settingsPanelEl = document.getElementById('settingsPanel');
 
     function render(state) {
-      metaEl.textContent = 'Provider: ' + state.provider + ' | Model: ' + state.model;
+      const providerLine = 'Provider: ' + state.provider + ' | Model: ' + state.model;
+      metaEl.textContent = providerLine;
+      assistantCaptionEl.textContent = providerLine;
       workspaceEl.textContent = state.workspaceSummary || 'No workspace folder open';
       workspaceDetailEl.textContent = 'Workspace: ' + (state.workspaceSummary || 'No workspace folder open');
       editorEl.textContent = state.editorSummary || 'Active editor: none';
@@ -2432,6 +2554,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       button.addEventListener('click', () => {
         vscode.postMessage({ type: 'chat:action', action: button.getAttribute('data-action') });
       });
+    });
+    runScanEl.addEventListener('click', () => {
+      vscode.postMessage({ type: 'chat:action', action: scanScopeEl.value });
     });
     promptEl.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {

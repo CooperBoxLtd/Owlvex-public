@@ -702,6 +702,70 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('Latest report context: none');
     });
 
+    it('opens a review diff when the user asks to implement a change for the active finding', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```javascript\nconst safeRedirect = allowList(req.query.next);\nreturn res.redirect(safeRedirect);\n```',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
+        const previewUri = { fsPath: 'untitled:redirect-fix.js', scheme: 'untitled', toString: () => 'untitled:redirect-fix.js' };
+        (vscode.window.activeTextEditor as any) = undefined;
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
+            if (input?.language === 'javascript') {
+                return { uri: previewUri };
+            }
+            return {
+                uri: targetUri,
+                languageId: 'javascript',
+                getText: () => [
+                    'function go(req, res) {',
+                    '  return res.redirect(req.query.next);',
+                    '}',
+                ].join('\n'),
+            };
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).latestActionableFinding = {
+            id: 'finding-open-redirect',
+            line: 2,
+            lineEnd: 2,
+            severity: 'MEDIUM',
+            framework: 'OWASP',
+            ruleCode: 'A01-REDIRECT',
+            title: 'Open Redirect',
+            explanation: 'Untrusted destination reaches redirect.',
+            threat: 'Phishing.',
+            fix: 'Allow-list destinations.',
+            confidence: 0.88,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 7,
+        };
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+
+        await (provider as any).handleUserMessage('implement this change in the file');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            'vscode.diff',
+            targetUri,
+            previewUri,
+            expect.stringContaining('Fix Preview - Open Redirect'),
+        );
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
+    });
+
     it('injects project context contract into advisory prompts when configured', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'Use ownership checks.' });
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
