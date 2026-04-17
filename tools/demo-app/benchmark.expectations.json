@@ -5,12 +5,14 @@
       "file": "src\\db.js",
       "requiredFindings": [
         "Unsanitized SQL query construction",
-        "Broken Access Control in getDocumentById"
+        "Missing object-level authorization"
       ],
       "forbiddenFindings": [
         "Broken Access Control in getDocumentForTenant",
         "Sensitive data exposed in logs"
-      ]
+      ],
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
     {
       "file": "src\\lib\\tokens.js",

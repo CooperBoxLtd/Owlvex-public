@@ -70,6 +70,10 @@ const IDOR_SESSION_ARG_RE =
 // DB query call with a parameterized args array.
 const IDOR_QUERY_PARAMS_RE =
     /\.(query|execute|raw)\s*\(\s*(?:`[^`]*`|'[^']*'|"[^"]*")\s*,\s*\[([^\]]{0,400})\]/g;
+const IDOR_OBJECT_FIND_RE =
+    /\.findOne\s*\(\s*\{([^}]*)\}\s*\)/g;
+const IDOR_COLLECTION_FIND_RE =
+    /\.find\s*\(\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)\s*=>\s*([\s\S]{0,240}?)\)\s*/g;
 
 // Authorization check patterns — any of these in the body → no IDOR finding.
 const IDOR_AUTH_CHECK_RE =
@@ -116,6 +120,28 @@ function idorHasIdInArgs(argsText: string, untrustedParams: string[]): boolean {
     return args.some(arg => untrustedParams.includes(arg));
 }
 
+function hasScopedObjectLookup(criteriaText: string): boolean {
+    return SCOPE_FIELD_RE.test(criteriaText) && SCOPE_PARAM_RE.test(criteriaText);
+}
+
+function hasObjectLookupByUntrustedId(criteriaText: string, untrustedParams: string[]): boolean {
+    return untrustedParams.some(param =>
+        new RegExp(`\\bid\\s*:\\s*${param.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`).test(criteriaText)
+    );
+}
+
+function hasCollectionIdLookup(predicateText: string, itemVar: string, untrustedParams: string[]): boolean {
+    return untrustedParams.some(param => new RegExp(
+        `\\b${itemVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\.\\s*id\\s*===\\s*${param.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`
+    ).test(predicateText));
+}
+
+function hasScopedCollectionLookup(predicateText: string, itemVar: string): boolean {
+    return new RegExp(
+        `\\b${itemVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\.\\s*(?:ownerId|userId|tenantId|organizationId|orgId|workspaceId|accountId|companyId)\\s*===\\s*(?:currentUser\\.id|userId|ownerId|tenantId|organizationId|orgId|workspaceId|accountId|companyId)\\b`
+    ).test(predicateText);
+}
+
 function scanIdorSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
     const funcPattern = new RegExp(IDOR_FUNC_DEF_RE.source, IDOR_FUNC_DEF_RE.flags);
@@ -143,6 +169,33 @@ function scanIdorSinks(source: string): InternalFinding[] {
             if (idorHasIdInArgs(argsText, untrustedParams)) {
                 hasVulnerableQuery = true;
                 break;
+            }
+        }
+
+        if (!hasVulnerableQuery) {
+            const objectFindPattern = new RegExp(IDOR_OBJECT_FIND_RE.source, IDOR_OBJECT_FIND_RE.flags);
+            let objectFindMatch: RegExpExecArray | null;
+            while ((objectFindMatch = objectFindPattern.exec(body)) !== null) {
+                const criteriaText = objectFindMatch[1] ?? '';
+                if (hasScopedObjectLookup(criteriaText)) { continue; }
+                if (hasObjectLookupByUntrustedId(criteriaText, untrustedParams)) {
+                    hasVulnerableQuery = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasVulnerableQuery) {
+            const collectionFindPattern = new RegExp(IDOR_COLLECTION_FIND_RE.source, IDOR_COLLECTION_FIND_RE.flags);
+            let collectionFindMatch: RegExpExecArray | null;
+            while ((collectionFindMatch = collectionFindPattern.exec(body)) !== null) {
+                const itemVar = collectionFindMatch[1] ?? 'item';
+                const predicateText = collectionFindMatch[2] ?? '';
+                if (hasScopedCollectionLookup(predicateText, itemVar)) { continue; }
+                if (hasCollectionIdLookup(predicateText, itemVar, untrustedParams)) {
+                    hasVulnerableQuery = true;
+                    break;
+                }
             }
         }
 
@@ -220,6 +273,10 @@ const TENANT_PARAM_RE =
 // Detects whether a query's args array includes a tenant identifier.
 const TENANT_ARG_RE =
     /\b(tenantId|organizationId|orgId|workspaceId|accountId|companyId|tenantContext|tenantScope)\b/;
+const SCOPE_PARAM_RE =
+    /\b(currentUser\.id|userId|ownerId|tenantId|organizationId|orgId|workspaceId|accountId|companyId)\b/;
+const SCOPE_FIELD_RE =
+    /\b(ownerId|userId|tenantId|organizationId|orgId|workspaceId|accountId|companyId)\b/;
 
 function hasTenantContext(source: string): boolean {
     return TENANT_CONTEXT_SIGNALS.some(signal => source.includes(signal));
@@ -255,6 +312,35 @@ function scanTenantIsolationSinks(source: string): InternalFinding[] {
             if (!TENANT_ARG_RE.test(argsText)) {
                 hasMissingTenantConstraint = true;
                 break;
+            }
+        }
+
+        if (!hasMissingTenantConstraint) {
+            const objectFindPattern = new RegExp(IDOR_OBJECT_FIND_RE.source, IDOR_OBJECT_FIND_RE.flags);
+            let objectFindMatch: RegExpExecArray | null;
+            while ((objectFindMatch = objectFindPattern.exec(body)) !== null) {
+                const criteriaText = objectFindMatch[1] ?? '';
+                if (!SCOPE_FIELD_RE.test(criteriaText) || !TENANT_ARG_RE.test(criteriaText)) {
+                    hasMissingTenantConstraint = true;
+                    break;
+                }
+            }
+        }
+
+        if (!hasMissingTenantConstraint) {
+            const collectionFindPattern = new RegExp(IDOR_COLLECTION_FIND_RE.source, IDOR_COLLECTION_FIND_RE.flags);
+            let collectionFindMatch: RegExpExecArray | null;
+            while ((collectionFindMatch = collectionFindPattern.exec(body)) !== null) {
+                const itemVar = collectionFindMatch[1] ?? 'item';
+                const predicateText = collectionFindMatch[2] ?? '';
+                const escapedItemVar = itemVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const tenantScoped = new RegExp(
+                    `\\b${escapedItemVar}\\s*\\.\\s*(?:tenantId|organizationId|orgId|workspaceId|accountId|companyId)\\s*===\\s*(?:tenantId|organizationId|orgId|workspaceId|accountId|companyId)\\b`
+                ).test(predicateText);
+                if (!tenantScoped) {
+                    hasMissingTenantConstraint = true;
+                    break;
+                }
             }
         }
 

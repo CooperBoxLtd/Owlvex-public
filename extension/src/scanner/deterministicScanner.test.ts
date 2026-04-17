@@ -326,6 +326,40 @@ function getDoc(currentUser, docId, db) {
         const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'AC-001');
         expect(findings[0].framework).toBe('OWASP');
     });
+
+    it('detects object-store lookup by id without ownership scope', () => {
+        const source = `
+function getDoc(currentUser, docId, db) {
+  return db.documents.findOne({ id: docId });
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'AC-001');
+        expect(findings).toHaveLength(1);
+    });
+
+    it('does not flag object-store lookup when owner scope is present', () => {
+        const source = `
+function getDoc(currentUser, docId, db) {
+  return db.documents.findOne({ id: docId, ownerId: currentUser.id });
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'AC-001')).toHaveLength(0);
+    });
+
+    it('detects collection lookup by id without ownership scope', () => {
+        const source = `
+function getDoc(currentUser, id, documents) {
+  return documents.find((doc) => doc.id === id);
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'AC-001');
+        expect(findings).toHaveLength(1);
+    });
+
+    it('does not flag collection lookup when owner scope is present', () => {
+        const source = `
+function getDoc(currentUser, id, userId, documents) {
+  return documents.find((doc) => doc.id === id && doc.ownerId === userId);
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'AC-001')).toHaveLength(0);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -384,6 +418,23 @@ async function getProfile(currentUser, db) {
         const source = `
 function getTasks(currentUser, workspaceId, db) {
   return db.query('SELECT * FROM tasks WHERE workspace_id = ?', [workspaceId]);
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'AC-T001')).toHaveLength(0);
+    });
+
+    it('detects collection lookup without tenant scope when tenantId is accepted', () => {
+        const source = `
+function getDocuments(id, tenantId, documents) {
+  return documents.find((doc) => doc.id === id);
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'AC-T001');
+        expect(findings).toHaveLength(1);
+    });
+
+    it('does not flag collection lookup when tenant scope is enforced', () => {
+        const source = `
+function getDocuments(id, tenantId, documents) {
+  return documents.find((doc) => doc.id === id && doc.tenantId === tenantId);
 }`;
         expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'AC-T001')).toHaveLength(0);
     });
