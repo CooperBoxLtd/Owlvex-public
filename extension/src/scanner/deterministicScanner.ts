@@ -22,6 +22,10 @@ import type { Finding } from './scanEngine';
 
 const SUPPORTED_LANGUAGES = new Set([
     'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
+    'python',
+]);
+const JS_LIKE_LANGUAGES = new Set([
+    'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
 ]);
 
 // HTML-oriented sanitizers that are NOT valid for SQL context.
@@ -73,6 +77,14 @@ const CORS_WILDCARD_ORIGIN_RE =
     /setHeader\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]\s*\)/g;
 const CORS_CREDENTIALS_TRUE_RE =
     /setHeader\s*\(\s*['"]Access-Control-Allow-Credentials['"]\s*,\s*['"]true['"]\s*\)/g;
+const CSRF_SESSION_RE =
+    /\b(?:req|request)\.(?:session|cookies)\.[A-Za-z_$][A-Za-z0-9_$]*\b/;
+const CSRF_MUTATION_RE =
+    /\.(query|execute|raw)\s*\(\s*['"`]\s*(?:UPDATE|INSERT|DELETE)\b/gi;
+const CSRF_TOKEN_CHECK_RE =
+    /\bcsrf(?:Token)?\b[\s\S]{0,80}(?:===|!==|==|!=)[\s\S]{0,80}\bcsrf(?:Token)?\b/i;
+const PICKLE_LOADS_RE =
+    /\bpickle\.loads\s*\(\s*(?:request|req)\.body\s*\)/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -1361,26 +1373,87 @@ function scanCorsSinks(source: string): InternalFinding[] {
     }];
 }
 
+function scanCsrfSinks(source: string): InternalFinding[] {
+    if (!CSRF_SESSION_RE.test(source) || !CSRF_MUTATION_RE.test(source) || CSRF_TOKEN_CHECK_RE.test(source)) {
+        return [];
+    }
+
+    const mutationPattern = new RegExp(CSRF_MUTATION_RE.source, CSRF_MUTATION_RE.flags);
+    const match = mutationPattern.exec(source);
+    return [{
+        matchIndex: match ? match.index : 0,
+        severity: 'HIGH',
+        ruleCode: 'CS-001',
+        title: 'Missing CSRF Protection',
+        explanation:
+            'A state-changing request uses browser session or cookie identity without a visible CSRF token check. ' +
+            'That lets ambient browser credentials authorize the action without proving the request came from the trusted site.',
+        threat:
+            'An attacker can trick an authenticated browser into submitting the state-changing request and silently ' +
+            'changing account data or triggering privileged actions on behalf of the victim.',
+        fix:
+            'Require an anti-CSRF token or equivalent same-site browser defense on every state-changing browser request, ' +
+            'and validate it before performing the mutation.',
+        canonicalId: 'owlvex.issue.csrf_missing_token.001',
+        framework: 'OWASP',
+        likelihood: 'HIGH',
+        likelihoodReasons: ['A browser-authenticated state-changing action is visible and no CSRF token validation appears in the handler.'],
+    }];
+}
+
+function scanDeserializationSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const pattern = new RegExp(PICKLE_LOADS_RE.source, PICKLE_LOADS_RE.flags);
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'DS-001',
+            title: 'Insecure Deserialization',
+            explanation:
+                'The code passes request-controlled bytes into `pickle.loads(...)`. Pickle is an executable object ' +
+                'deserializer, not a data-only format, so untrusted payloads can trigger attacker-controlled object loading behavior.',
+            threat:
+                'An attacker can craft a malicious serialized payload that executes code or performs unsafe actions ' +
+                'during deserialization, leading to server compromise.',
+            fix:
+                'Do not deserialize untrusted input with `pickle`. Replace it with a data-only format such as JSON ' +
+                'and validate the payload shape before use.',
+            canonicalId: 'owlvex.issue.insecure_deserialization.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['An executable deserialization primitive is applied directly to request-controlled input.'],
+        });
+    }
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
             return [];
         }
 
-        const internal: InternalFinding[] = [
-            ...scanShellSinks(source),
-            ...scanSqlSinks(source),
-            ...scanPathTraversalSinks(source),
-            ...scanSsrfSinks(source),
-            ...scanOpenRedirectSinks(source),
-            ...scanJwtWeakValidationSinks(source),
-            ...scanCorsSinks(source),
-            ...scanIdorSinks(source),
-            ...scanTenantIsolationSinks(source),
-            ...scanPiiLoggingSinks(source),
-            ...scanInsecureCookieSinks(source),
-            ...scanDebugModeSinks(source),
-        ];
+        const internal: InternalFinding[] = JS_LIKE_LANGUAGES.has(language)
+            ? [
+                ...scanShellSinks(source),
+                ...scanSqlSinks(source),
+                ...scanPathTraversalSinks(source),
+                ...scanSsrfSinks(source),
+                ...scanOpenRedirectSinks(source),
+                ...scanJwtWeakValidationSinks(source),
+                ...scanCorsSinks(source),
+                ...scanCsrfSinks(source),
+                ...scanIdorSinks(source),
+                ...scanTenantIsolationSinks(source),
+                ...scanPiiLoggingSinks(source),
+                ...scanInsecureCookieSinks(source),
+                ...scanDebugModeSinks(source),
+            ]
+            : [
+                ...scanDeserializationSinks(source),
+            ];
 
         return internal.map(f => ({
             id: crypto.randomUUID(),

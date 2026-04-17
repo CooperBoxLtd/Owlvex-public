@@ -36,7 +36,13 @@
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
     { "file": "17-open-redirect-safe.js", "expectedState": "clean" },
-    { "file": "18-csrf-unsafe.js", "expectedState": "finding" },
+    {
+      "file": "18-csrf-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "19-csrf-safe.js", "expectedState": "clean" },
     {
       "file": "20-cors-unsafe.js",
@@ -62,7 +68,13 @@
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
     { "file": "25-jwt-validation-safe.js", "expectedState": "clean" },
-    { "file": "26-deserialization-unsafe.py", "expectedState": "finding" },
+    {
+      "file": "26-deserialization-unsafe.py",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
     { "file": "27-deserialization-safe.py", "expectedState": "clean" },
     {
       "file": "28-path-traversal-unsafe.js",

@@ -966,3 +966,64 @@ function enableCors(app, origin) {
         expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'CO-001')).toHaveLength(0);
     });
 });
+
+// ---------------------------------------------------------------------------
+// CS-001: Missing CSRF protection
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner - CS-001 CSRF protection', () => {
+    it('detects state-changing browser request without csrf token validation', () => {
+        const source = `
+function updateEmail(req, res, db) {
+  db.query(
+    'UPDATE users SET email = ? WHERE id = ?',
+    [req.body.email, req.session.userId],
+  );
+  res.json({ ok: true });
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'CS-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].canonicalId).toBe('owlvex.issue.csrf_missing_token.001');
+    });
+
+    it('does not flag when csrf token is checked before mutation', () => {
+        const source = `
+function updateEmail(req, res, db) {
+  if (req.body.csrfToken !== req.session.csrfToken) {
+    return res.status(403).json({ error: 'invalid csrf token' });
+  }
+  db.query(
+    'UPDATE users SET email = ? WHERE id = ?',
+    [req.body.email, req.session.userId],
+  );
+  return res.json({ ok: true });
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'CS-001')).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// DS-001: Insecure deserialization
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner - DS-001 insecure deserialization', () => {
+    it('detects pickle.loads(request.body) in python', () => {
+        const source = `
+import pickle
+
+def load_profile(request):
+    return pickle.loads(request.body)
+`;
+        const findings = scanner.scan(source, 'python').filter(f => f.ruleCode === 'DS-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].canonicalId).toBe('owlvex.issue.insecure_deserialization.001');
+    });
+
+    it('does not flag json.loads(request.body) in python', () => {
+        const source = `
+import json
+
+def load_profile(request):
+    return json.loads(request.body)
+`;
+        expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'DS-001')).toHaveLength(0);
+    });
+});

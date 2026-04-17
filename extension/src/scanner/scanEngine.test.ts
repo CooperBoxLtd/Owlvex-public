@@ -718,7 +718,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.score).toBe(7);
     });
 
-    it('keeps AI-only CSRF findings distinct from deterministic coverage', async () => {
+    it('promotes CSRF findings into deterministic coverage when the browser mutation is structurally proven', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
             validate: jest.fn().mockResolvedValue({
@@ -784,8 +784,8 @@ describe('ScanEngine.scanDocument caching', () => {
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(1);
-        expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.92);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].confidence).toBe(1);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.csrf_missing_token.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Access Control & Authorization');
         expect(result.findings[0].likelihood).toBe('HIGH');
@@ -934,7 +934,7 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.score).toBe(9);
     });
 
-    it('keeps AI-only insecure deserialization findings distinct from deterministic coverage', async () => {
+    it('promotes insecure deserialization into deterministic coverage when pickle.loads(request.body) is visible', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
             validate: jest.fn().mockResolvedValue({
@@ -998,8 +998,8 @@ def load_profile(request):
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(1);
-        expect(result.findings[0].provenance).toBe('ai');
-        expect(result.findings[0].confidence).toBe(0.92);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].confidence).toBe(1);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.insecure_deserialization.001');
         expect(result.findings[0].canonicalFamilyLabel).toBe('Injection & Execution');
         expect(result.findings[0].likelihood).toBe('HIGH');
@@ -1604,21 +1604,21 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     score: 6.4,
-                    summary: 'Potential CSRF issue detected.',
+                    summary: 'Potential eval injection detected.',
                     findings: [
                         {
-                            id: 'ai-csrf-verify-1',
-                            line: 1,
-                            line_end: 4,
+                            id: 'ai-eval-verify-1',
+                            line: 2,
+                            line_end: 2,
                             severity: 'HIGH',
                             framework: 'OWASP',
-                            rule_code: 'A01-CSRF',
-                            title: 'Missing CSRF protection',
-                            explanation: 'A state-changing browser request is accepted without a CSRF token check.',
-                            threat: 'Attackers can trick an authenticated browser into performing an unwanted action.',
-                            fix: 'Require anti-CSRF tokens or same-site protections.',
+                            rule_code: 'A03-EVAL',
+                            title: 'Dynamic Code Evaluation',
+                            explanation: 'User-controlled input is executed through eval().',
+                            threat: 'Attackers can execute arbitrary code in the application context.',
+                            fix: 'Do not pass untrusted input to eval; replace it with a safe parser or allow-list.',
                             confidence: 0.88,
-                            issue_id: 'owlvex.issue.csrf_missing_token.001',
+                            issue_id: 'owlvex.issue.code_injection.eval.001',
                         },
                     ],
                     positives: [],
@@ -1629,7 +1629,7 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-csrf-verify-1', verdict: 'support', reason: 'The route changes state and no CSRF validation is visible.' },
+                        { id: 'ai-eval-verify-1', verdict: 'support', reason: 'The code sends request-controlled input into eval().' },
                     ],
                 }),
                 tokenCount: 10,
@@ -1637,7 +1637,7 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-csrf-verify-1', verdict: 'clear', reason: 'No CSRF token guard or equivalent same-site defense is visible.' },
+                        { id: 'ai-eval-verify-1', verdict: 'clear', reason: 'No guard or sanitizing parser is visible around eval().' },
                     ],
                 }),
                 tokenCount: 10,
@@ -1661,10 +1661,9 @@ if (process.env.NODE_ENV !== 'production') {
         const engine = new ScanEngine(licenceMgr, registry);
         const doc = {
             languageId: 'javascript',
-            fileName: 'd:\\repo\\csrf.js',
-            getText: () => `function updateEmail(req, res, db) {
-    db.query('UPDATE users SET email = ? WHERE id = ?', [req.body.email, req.session.userId]);
-    res.sendStatus(204);
+            fileName: 'd:\\repo\\eval.js',
+            getText: () => `function runExpression(req, res) {
+    return eval(req.query.expression);
 }`,
         } as any;
 
@@ -1692,21 +1691,21 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     score: 7.5,
-                    summary: 'Potential CSRF issue detected.',
+                    summary: 'Potential eval injection detected.',
                     findings: [
                         {
-                            id: 'ai-csrf-verify-2',
-                            line: 1,
-                            line_end: 4,
+                            id: 'ai-eval-verify-2',
+                            line: 2,
+                            line_end: 2,
                             severity: 'HIGH',
                             framework: 'OWASP',
-                            rule_code: 'A01-CSRF',
-                            title: 'Missing CSRF protection',
-                            explanation: 'A state-changing browser request is accepted without a CSRF token check.',
-                            threat: 'Attackers can trick an authenticated browser into performing an unwanted action.',
-                            fix: 'Require anti-CSRF tokens or same-site protections.',
+                            rule_code: 'A03-EVAL',
+                            title: 'Dynamic Code Evaluation',
+                            explanation: 'User-controlled input is executed through eval().',
+                            threat: 'Attackers can execute arbitrary code in the application context.',
+                            fix: 'Do not pass untrusted input to eval; replace it with a safe parser or allow-list.',
                             confidence: 0.81,
-                            issue_id: 'owlvex.issue.csrf_missing_token.001',
+                            issue_id: 'owlvex.issue.code_injection.eval.001',
                         },
                     ],
                     positives: [],
@@ -1717,7 +1716,7 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-csrf-verify-2', verdict: 'reject', reason: 'A CSRF token check is already enforced elsewhere in the flow.' },
+                        { id: 'ai-eval-verify-2', verdict: 'reject', reason: 'The expression is not actually attacker-controlled in the verified code path.' },
                     ],
                 }),
                 tokenCount: 10,
@@ -1725,7 +1724,7 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-csrf-verify-2', verdict: 'clear', reason: 'No additional contradiction beyond the verifier rejection.' },
+                        { id: 'ai-eval-verify-2', verdict: 'clear', reason: 'No additional contradiction beyond the verifier rejection.' },
                     ],
                 }),
                 tokenCount: 10,
@@ -1749,10 +1748,9 @@ if (process.env.NODE_ENV !== 'production') {
         const engine = new ScanEngine(licenceMgr, registry);
         const doc = {
             languageId: 'javascript',
-            fileName: 'd:\\repo\\csrf.js',
-            getText: () => `function updateEmail(req, res, db) {
-    db.query('UPDATE users SET email = ? WHERE id = ?', [req.body.email, req.session.userId]);
-    res.sendStatus(204);
+            fileName: 'd:\\repo\\eval.js',
+            getText: () => `function runExpression(req, res) {
+    return eval(req.query.expression);
 }
 `,
         } as any;
@@ -1839,21 +1837,21 @@ if (process.env.NODE_ENV !== 'production') {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     score: 6.4,
-                    summary: 'Potential CSRF issue detected.',
+                    summary: 'Potential eval injection detected.',
                     findings: [
                         {
-                            id: 'ai-csrf-partial',
-                            line: 1,
-                            line_end: 4,
+                            id: 'ai-eval-partial',
+                            line: 2,
+                            line_end: 2,
                             severity: 'HIGH',
                             framework: 'OWASP',
-                            rule_code: 'A01-CSRF',
-                            title: 'Missing CSRF protection',
-                            explanation: 'A state-changing browser request is accepted without a CSRF token check.',
-                            threat: 'Attackers can trick an authenticated browser into performing an unwanted action.',
-                            fix: 'Require anti-CSRF tokens or same-site protections.',
+                            rule_code: 'A03-EVAL',
+                            title: 'Dynamic Code Evaluation',
+                            explanation: 'User-controlled input is executed through eval().',
+                            threat: 'Attackers can execute arbitrary code in the application context.',
+                            fix: 'Do not pass untrusted input to eval; replace it with a safe parser or allow-list.',
                             confidence: 0.88,
-                            issue_id: 'owlvex.issue.csrf_missing_token.001',
+                            issue_id: 'owlvex.issue.code_injection.eval.001',
                         },
                     ],
                     positives: [],
@@ -1886,10 +1884,9 @@ if (process.env.NODE_ENV !== 'production') {
         const engine = new ScanEngine(licenceMgr, registry);
         const doc = {
             languageId: 'javascript',
-            fileName: 'd:\\repo\\csrf.js',
-            getText: () => `function updateEmail(req, res, db) {
-    db.query('UPDATE users SET email = ? WHERE id = ?', [req.body.email, req.session.userId]);
-    res.sendStatus(204);
+            fileName: 'd:\\repo\\eval.js',
+            getText: () => `function runExpression(req, res) {
+    return eval(req.query.expression);
 }`,
         } as any;
 
