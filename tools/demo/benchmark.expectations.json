@@ -61,6 +61,14 @@
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
-    { "file": "31-ssrf-allowlist-safe.js", "expectedState": "clean" }
+    { "file": "31-ssrf-allowlist-safe.js", "expectedState": "clean" },
+    {
+      "file": "32-command-injection-shell-unsafe.js",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "33-command-injection-shell-safe.js", "expectedState": "clean" }
   ]
 }

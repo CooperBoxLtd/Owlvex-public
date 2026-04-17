@@ -33,6 +33,8 @@ const HTML_SANITIZERS = [
 // Matches exec()/execSync() only. Other process APIs require separate modeling.
 const SHELL_SINK_PATTERN =
     /\b(exec|execSync)\s*\(\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
+const SHELL_SPAWN_PATTERN =
+    /\b(spawn|spawnSync)\s*\(\s*`([^`]*\$\{[^}]+\}[^`]*)`\s*,[\s\S]{0,160}?\{\s*[^}]*\bshell\s*:\s*true\b[^}]*\}/g;
 
 // SQ-001: SQL sink call with a template literal as the first argument (inline).
 // Matches db.query(`...${x}...`) — excludes parameterized (.query('...', [...])).
@@ -889,6 +891,32 @@ function scanShellSinks(source: string): InternalFinding[] {
                 'and pass user-supplied values as separate array elements. ' +
                 '`execFile` invokes the binary directly without a shell — metacharacters in arguments ' +
                 'are treated as literal data, not shell syntax.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            ...inferRequestDrivenLikelihood(
+                match[2],
+                'The sink is shell-parsed and clearly injectable, but the source of the interpolated value is not fully visible.',
+            ),
+        });
+    }
+
+    const spawnPattern = new RegExp(SHELL_SPAWN_PATTERN.source, SHELL_SPAWN_PATTERN.flags);
+    while ((match = spawnPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                `The call to \`${match[1]}\` passes a template literal into a process API with ` +
+                '`shell: true`, which means the command string is parsed by a shell. The interpolated ' +
+                'value becomes shell syntax rather than a safe argument value.',
+            threat:
+                'An attacker who controls any interpolated value can inject shell metacharacters ' +
+                'and execute arbitrary operating system commands with the privileges of the server process.',
+            fix:
+                'Remove `shell: true` and pass user-controlled values as separate arguments to the spawned process. ' +
+                'Prefer `execFile` or `spawn(command, [arg1, arg2])` so the OS executes the binary directly without shell parsing.',
             canonicalId: 'owlvex.issue.command_injection.001',
             framework: 'OWASP',
             ...inferRequestDrivenLikelihood(

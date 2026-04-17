@@ -48,6 +48,8 @@ These expectations should be read together with:
 | `29-path-traversal-safe.js` | clean | identifier map before file access |
 | `30-ssrf-allowlist-unsafe.js` | finding expected | weak substring host validation |
 | `31-ssrf-allowlist-safe.js` | clean | exact trusted host allow-list |
+| `32-command-injection-shell-unsafe.js` | finding expected | shell:true with interpolated command |
+| `33-command-injection-shell-safe.js` | clean | argument array without shell parsing |
 
 ## Stabilization Rule
 

@@ -72,6 +72,38 @@ function handler(req, res) {
         expect(findings).toHaveLength(0);
     });
 
+    it('detects spawn() with template literal command when shell:true is enabled', () => {
+        const source = `
+const { spawn } = require('child_process');
+function handler(req) {
+  return spawn(\`grep \${req.query.username} /var/app/accounts.txt\`, [], { shell: true });
+}`;
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].ruleCode).toBe('GR-001');
+        expect(findings[0].likelihood).toBe('HIGH');
+    });
+
+    it('detects spawnSync() with template literal command when shell:true is enabled', () => {
+        const source = `
+const { spawnSync } = require('child_process');
+function handler(pattern) {
+  return spawnSync(\`grep \${pattern} /etc/passwd\`, [], { shell: true });
+}`;
+        const findings = scanner.scan(source, 'javascript');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].ruleCode).toBe('GR-001');
+    });
+
+    it('does not flag spawn() with argument array when shell is false', () => {
+        const source = `
+const { spawn } = require('child_process');
+function handler(username) {
+  return spawn('grep', [username, '/var/app/accounts.txt'], { shell: false });
+}`;
+        expect(scanner.scan(source, 'javascript')).toHaveLength(0);
+    });
+
     it('does not flag exec() with a plain string literal', () => {
         const source = `exec('ls -la /tmp')`;
         expect(scanner.scan(source, 'javascript')).toHaveLength(0);
