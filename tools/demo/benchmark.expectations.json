@@ -131,6 +131,22 @@
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
-    { "file": "41-python-path-traversal-safe.py", "expectedState": "clean" }
+    { "file": "41-python-path-traversal-safe.py", "expectedState": "clean" },
+    {
+      "file": "42-python-ssrf-unsafe.py",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "43-python-ssrf-safe.py", "expectedState": "clean" },
+    {
+      "file": "44-python-jwt-validation-unsafe.py",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "45-python-jwt-validation-safe.py", "expectedState": "clean" }
   ]
 }

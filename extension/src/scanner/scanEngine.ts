@@ -305,6 +305,12 @@ function hasManualJwtVerification(snippet: string): boolean {
         && /\bclaims\.(?:iss|aud)\b/i.test(snippet);
 }
 
+function hasVerifiedPythonJwtDecode(snippet: string): boolean {
+    return /\bjwt\.decode\s*\(/i.test(snippet)
+        && /\balgorithms\s*=\s*\[[^\]]+\]/i.test(snippet)
+        && !/verify_signature['"]?\s*:\s*false/i.test(snippet);
+}
+
 function isRouteMountShellSnippet(snippet: string): boolean {
     return /\bapp\.use\s*\(\s*['"]\//i.test(snippet)
         && !/\b(?:app|router)\.(?:post|put|patch|delete)\s*\(/i.test(snippet);
@@ -344,7 +350,8 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
         return true;
     }
 
-    if (finding.canonicalId === 'owlvex.issue.weak_jwt_validation.001' && hasManualJwtVerification(snippet)) {
+    if (finding.canonicalId === 'owlvex.issue.weak_jwt_validation.001'
+        && (hasManualJwtVerification(snippet) || hasVerifiedPythonJwtDecode(snippet))) {
         return true;
     }
 

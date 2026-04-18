@@ -1078,6 +1078,74 @@ def load_profile(request):
         expect(result.summary).toContain('No findings');
     });
 
+    it('suppresses AI-only weak-jwt findings for verified Python jwt.decode usage', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.8,
+                    summary: 'Weak JWT validation detected.',
+                    findings: [
+                        {
+                            id: 'ai-jwt-fp-1',
+                            line: 4,
+                            line_end: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A07-JWT',
+                            title: 'Weak JWT validation',
+                            explanation: 'The code calls jwt.decode directly without verification.',
+                            threat: 'Forged claims may be trusted.',
+                            fix: 'Verify signature and accepted algorithms.',
+                            confidence: 0.92,
+                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The code calls jwt.decode directly without verification.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'python',
+            fileName: 'd:\\repo\\jwt-safe.py',
+            getText: () => `import jwt
+
+def parse_token(token, secret):
+    return jwt.decode(token, secret, algorithms=["HS256"])
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toContain('No findings');
+    });
+
     it('suppresses AI-only debug-mode findings when debug activation is properly guarded', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),

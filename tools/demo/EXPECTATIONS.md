@@ -58,6 +58,10 @@ These expectations should be read together with:
 | `39-python-sqli-safe.py` | clean | parameterized Python SQL query |
 | `40-python-path-traversal-unsafe.py` | finding expected | request-derived Python file path |
 | `41-python-path-traversal-safe.py` | clean | fixed Python file path |
+| `42-python-ssrf-unsafe.py` | finding expected | request-derived Python outbound request |
+| `43-python-ssrf-safe.py` | clean | fixed outbound Python destination |
+| `44-python-jwt-validation-unsafe.py` | finding expected | Python JWT decode skips signature verification |
+| `45-python-jwt-validation-safe.py` | clean | Python JWT verification enforces signature checking |
 
 ## Stabilization Rule
 

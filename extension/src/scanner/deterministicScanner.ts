@@ -115,6 +115,12 @@ const PYTHON_PATH_ASSIGN_RE =
     /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*os\.path\.join\s*\(([^)]*)\)/g;
 const PYTHON_FILE_SINK_RE =
     /\b(?:open|send_file|FileResponse)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
+const PYTHON_REQUESTS_DIRECT_RE =
+    /\brequests\.(?:get|post|put|delete|request)\s*\(\s*((?:request|req)\.(?:args(?:\.get)?|form(?:\.get)?|json(?:\.get)?|GET(?:\.get)?|POST(?:\.get)?)\b[^\n)]*|f(['"])[^\n]{0,240}\{[^}\n]+\}[^\n]{0,240}\2)\s*[,)]/g;
+const PYTHON_REQUESTS_VAR_RE =
+    /\brequests\.(?:get|post|put|delete|request)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
+const PYTHON_JWT_UNVERIFIED_RE =
+    /\bjwt\.decode\s*\([\s\S]{0,240}?\boptions\s*=\s*\{[\s\S]{0,120}?['"]verify_signature['"]\s*:\s*False[\s\S]{0,120}?\}/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -1832,6 +1838,87 @@ function scanPythonPathTraversalSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanPythonSsrfSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(PYTHON_REQUEST_ASSIGN_RE.source, PYTHON_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const directPattern = new RegExp(PYTHON_REQUESTS_DIRECT_RE.source, PYTHON_REQUESTS_DIRECT_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SR-001',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation:
+                'The server issues an outbound Python `requests` call directly to a request-derived or interpolated URL without a visible trusted-destination guard in the same handler.',
+            threat:
+                'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+            fix:
+                'Do not fetch arbitrary user-supplied URLs. Parse the destination, constrain it to a trusted allowlist, and reject requests that target unapproved hosts, protocols, or internal address ranges.',
+            canonicalId: 'owlvex.issue.ssrf.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Python URL reaches an outbound requests sink without a visible allowlist guard.'],
+        });
+    }
+
+    const varPattern = new RegExp(PYTHON_REQUESTS_VAR_RE.source, PYTHON_REQUESTS_VAR_RE.flags);
+    while ((match = varPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SR-001',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation:
+                'The server issues an outbound Python `requests` call to a request-derived URL variable without a visible trusted-destination guard in the same handler.',
+            threat:
+                'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+            fix:
+                'Do not fetch arbitrary user-supplied URLs. Parse the destination, constrain it to a trusted allowlist, and reject requests that target unapproved hosts, protocols, or internal address ranges.',
+            canonicalId: 'owlvex.issue.ssrf.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Python URL variable reaches an outbound requests sink without a visible allowlist guard.'],
+        });
+    }
+
+    return found;
+}
+
+function scanPythonJwtWeakValidationSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const pattern = new RegExp(PYTHON_JWT_UNVERIFIED_RE.source, PYTHON_JWT_UNVERIFIED_RE.flags);
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT Validation',
+            explanation:
+                'The code calls Python `jwt.decode(...)` with `verify_signature` disabled. Decoding claims without signature verification does not prove the token was issued by a trusted signer.',
+            threat:
+                'An attacker can forge arbitrary claims such as user ID, role, or tenant and have the application treat them as trusted identity data if downstream code accepts the decoded payload.',
+            fix:
+                'Use verified JWT decoding with explicit algorithm, issuer, audience, and expiry constraints before trusting any token claims. Do not disable signature verification in production paths.',
+            canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['Python jwt.decode(...) is configured to skip signature verification.'],
+        });
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -1860,6 +1947,8 @@ export class DeterministicScanner {
                 ...scanPythonShellSinks(source),
                 ...scanPythonSqlSinks(source),
                 ...scanPythonPathTraversalSinks(source),
+                ...scanPythonSsrfSinks(source),
+                ...scanPythonJwtWeakValidationSinks(source),
                 ...scanDeserializationSinks(source),
             ];
 

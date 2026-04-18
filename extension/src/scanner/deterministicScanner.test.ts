@@ -384,6 +384,49 @@ def download():
 `;
         expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'PT-001')).toHaveLength(0);
     });
+
+    it('detects Python requests.get() with a request-derived URL variable', () => {
+        const source = `
+import requests
+
+def fetch_avatar(request):
+    url = request.args.get("url")
+    return requests.get(url)
+`;
+        const findings = scanner.scan(source, 'python');
+        expect(findings.filter(f => f.ruleCode === 'SR-001')).toHaveLength(1);
+    });
+
+    it('does not flag Python requests.get() with a fixed allowlisted URL literal', () => {
+        const source = `
+import requests
+
+def fetch_avatar():
+    return requests.get("https://example.com/avatar.png")
+`;
+        expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'SR-001')).toHaveLength(0);
+    });
+
+    it('detects Python jwt.decode() with verify_signature disabled', () => {
+        const source = `
+import jwt
+
+def parse_token(token):
+    return jwt.decode(token, options={"verify_signature": False})
+`;
+        const findings = scanner.scan(source, 'python');
+        expect(findings.filter(f => f.ruleCode === 'JW-001')).toHaveLength(1);
+    });
+
+    it('does not flag Python jwt.decode() when algorithms are enforced without disabling verification', () => {
+        const source = `
+import jwt
+
+def parse_token(token, secret):
+    return jwt.decode(token, secret, algorithms=["HS256"])
+`;
+        expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'JW-001')).toHaveLength(0);
+    });
 });
 
 // ---------------------------------------------------------------------------
