@@ -8,7 +8,7 @@ const scanner = new DeterministicScanner();
 describe('DeterministicScanner — language gating', () => {
     it('returns no findings for unsupported languages', () => {
         const source = 'System.out.println(input);';
-        expect(scanner.scan(source, 'go')).toHaveLength(0);
+        expect(scanner.scan(source, 'rust')).toHaveLength(0);
     });
 
     it('returns findings for javascript', () => {
@@ -51,6 +51,15 @@ class Demo {
     }
 }`;
         expect(scanner.scan(source, 'csharp').length).toBeGreaterThan(0);
+    });
+
+    it('returns findings for go when a supported sink shape is present', () => {
+        const source = `
+func handler(r *http.Request) {
+    cmd := r.URL.Query().Get("cmd")
+    exec.Command("sh", "-c", cmd).Run()
+}`;
+        expect(scanner.scan(source, 'go').length).toBeGreaterThan(0);
     });
 });
 
@@ -682,6 +691,84 @@ class Demo {
     }
 }`;
         expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'SR-001')).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Go wave 1: shell injection, SQL injection, path traversal, SSRF
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner â€” Go wave 1', () => {
+    it('detects exec.Command("sh", "-c", cmd) with a request-derived variable', () => {
+        const source = `
+func handler(r *http.Request) {
+    cmd := r.URL.Query().Get("cmd")
+    exec.Command("sh", "-c", cmd).Run()
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'GR-001')).toHaveLength(1);
+    });
+
+    it('does not flag exec.Command() with a fixed executable and explicit args', () => {
+        const source = `
+func handler(r *http.Request) {
+    name := r.URL.Query().Get("name")
+    exec.Command("grep", name).Run()
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'GR-001')).toHaveLength(0);
+    });
+
+    it('detects Go SQL built through concatenation before execution', () => {
+        const source = `
+func load(db *sql.DB, r *http.Request) {
+    userID := r.URL.Query().Get("id")
+    query := "SELECT * FROM users WHERE id = '" + userID + "'"
+    db.Query(query)
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'SQ-001')).toHaveLength(1);
+    });
+
+    it('does not flag Go parameterized database calls', () => {
+        const source = `
+func load(db *sql.DB, r *http.Request) {
+    userID := r.URL.Query().Get("id")
+    db.Query("SELECT * FROM users WHERE id = ?", userID)
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'SQ-001')).toHaveLength(0);
+    });
+
+    it('detects filepath.Join() with request-derived input flowing into os.ReadFile()', () => {
+        const source = `
+func readFile(r *http.Request) ([]byte, error) {
+    name := r.URL.Query().Get("file")
+    target := filepath.Join("/srv/files", name)
+    return os.ReadFile(target)
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'PT-001')).toHaveLength(1);
+    });
+
+    it('does not flag fixed Go file reads without request-derived path joins', () => {
+        const source = `
+func readFile() ([]byte, error) {
+    target := filepath.Join("/srv/files", "logo.png")
+    return os.ReadFile(target)
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'PT-001')).toHaveLength(0);
+    });
+
+    it('detects http.Get() on a request-derived destination', () => {
+        const source = `
+func fetch(r *http.Request) (*http.Response, error) {
+    url := r.URL.Query().Get("url")
+    return http.Get(url)
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'SR-001')).toHaveLength(1);
+    });
+
+    it('does not flag http.Get() on a fixed trusted literal', () => {
+        const source = `
+func fetch() (*http.Response, error) {
+    return http.Get("https://example.com/avatar.png")
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'SR-001')).toHaveLength(0);
     });
 });
 

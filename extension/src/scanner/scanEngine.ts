@@ -295,6 +295,7 @@ function hasAllowlistedOutboundRequest(snippet: string): boolean {
     const hasOutboundSink = /\bfetch\s*\(/i.test(snippet)
         || /\brequests\.(?:get|post|put|delete|request)\s*\(/i.test(snippet)
         || /\b(?:httpClient|client)\.(?:GetStringAsync|GetAsync|PostAsync)\s*\(/.test(snippet)
+        || /\b(?:http\.Get|client\.Get)\s*\(/.test(snippet)
         || /\bopenStream\s*\(/i.test(snippet);
     const hasRejectPath = /\breturn\s+res\s*\.\s*status\s*\(\s*400\s*\)/i.test(snippet)
         || /\bthrow\s+new\s+\w+/i.test(snippet)
@@ -334,8 +335,10 @@ function hasParameterizedSqlUsage(snippet: string): boolean {
     const hasCsharpBinding =
         /\bnew\s+SqlCommand\s*\(\s*"[\s\S]{0,220}?@\w+[\s\S]{0,220}?",/.test(snippet)
         && /\.Parameters\.Add(?:WithValue)?\s*\(/.test(snippet);
+    const hasGoBinding =
+        /\b(?:db|tx)\.(?:Query|QueryRow|Exec)\s*\(\s*"[\s\S]{0,220}?\?[\s\S]{0,220}?"\s*,/.test(snippet);
 
-    return hasJsOrPythonBinding || hasJavaBinding || hasCsharpBinding;
+    return hasJsOrPythonBinding || hasJavaBinding || hasCsharpBinding || hasGoBinding;
 }
 
 function hasSafeProcessExecution(snippet: string): boolean {
@@ -347,8 +350,10 @@ function hasSafeProcessExecution(snippet: string): boolean {
         && /\bshell\s*=\s*False\b/.test(snippet);
     const hasSafeJavaProcess = /\bnew\s+ProcessBuilder\s*\(/.test(snippet);
     const hasSafeCsharpProcess = /\bProcess\.Start\s*\(\s*"[^"]+"\s*,/.test(snippet);
+    const hasSafeGoProcess = /\bexec\.Command\s*\(\s*"[^"]+"\s*,/.test(snippet)
+        && !/\bexec\.Command\s*\(\s*"sh"\s*,\s*"-c"/.test(snippet);
 
-    return hasSafeJsProcess || hasSafePythonProcess || hasSafeJavaProcess || hasSafeCsharpProcess;
+    return hasSafeJsProcess || hasSafePythonProcess || hasSafeJavaProcess || hasSafeCsharpProcess || hasSafeGoProcess;
 }
 
 function hasPathBoundaryCheck(snippet: string): boolean {
@@ -364,8 +369,11 @@ function hasPathBoundaryCheck(snippet: string): boolean {
     const hasCsharpBoundaryCheck =
         /\bPath\.GetFullPath\s*\(/.test(snippet)
         && /\.StartsWith\s*\(\s*(?:baseDir|rootDir|uploadsDir|safeBase|allowedRoot)/.test(snippet);
+    const hasGoBoundaryCheck =
+        /\bfilepath\.Clean\s*\(/.test(snippet)
+        && /\bstrings\.HasPrefix\s*\(\s*(?:candidate|target|cleanPath)\s*,\s*(?:baseDir|rootDir|uploadsDir|safeBase|allowedRoot)/.test(snippet);
 
-    return hasJsBoundaryCheck || hasPythonBoundaryCheck || hasJavaBoundaryCheck || hasCsharpBoundaryCheck;
+    return hasJsBoundaryCheck || hasPythonBoundaryCheck || hasJavaBoundaryCheck || hasCsharpBoundaryCheck || hasGoBoundaryCheck;
 }
 
 function hasSafeRedirectConstraint(snippet: string): boolean {

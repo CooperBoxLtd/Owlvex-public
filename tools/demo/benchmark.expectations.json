@@ -281,6 +281,50 @@
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
-    { "file": "65-csharp-ssrf-safe.cs", "expectedState": "clean" }
+    { "file": "65-csharp-ssrf-safe.cs", "expectedState": "clean" },
+    {
+      "file": "66-go-command-injection-unsafe.go",
+      "language": "go",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "67-go-command-injection-safe.go", "expectedState": "clean" },
+    {
+      "file": "68-go-sqli-unsafe.go",
+      "language": "go",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `SQ-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "69-go-sqli-safe.go", "expectedState": "clean" },
+    {
+      "file": "70-go-path-traversal-unsafe.go",
+      "language": "go",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `PT-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "71-go-path-traversal-safe.go", "expectedState": "clean" },
+    {
+      "file": "72-go-ssrf-unsafe.go",
+      "language": "go",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `SR-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "73-go-ssrf-safe.go", "expectedState": "clean" }
   ]
 }

@@ -22,13 +22,14 @@ import type { Finding } from './scanEngine';
 
 const SUPPORTED_LANGUAGES = new Set([
     'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
-    'python', 'java', 'csharp',
+    'python', 'java', 'csharp', 'go',
 ]);
 const JS_LIKE_LANGUAGES = new Set([
     'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
 ]);
 const JAVA_LANGUAGES = new Set(['java']);
 const CSHARP_LANGUAGES = new Set(['csharp']);
+const GO_LANGUAGES = new Set(['go']);
 
 // HTML-oriented sanitizers that are NOT valid for SQL context.
 const HTML_SANITIZERS = [
@@ -177,6 +178,26 @@ const CSHARP_HTTP_DIRECT_RE =
     /\b(?:httpClient|client)\.(?:GetStringAsync|GetAsync|PostAsync)\s*\(\s*(?:Request|request)\.(?:Query|Form)\s*\[\s*"[^"]+"\s*\]\s*\)/g;
 const CSHARP_HTTP_VAR_RE =
     /\b(?:httpClient|client)\.(?:GetStringAsync|GetAsync|PostAsync)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
+const GO_REQUEST_ASSIGN_RE =
+    /\b([A-Za-z_][A-Za-z0-9_]*)\s*(?::=|=)\s*(?:r|req)\.(?:URL\.Query\(\)\.Get|FormValue)\s*\(\s*"[^"]+"\s*\)/g;
+const GO_EXEC_DIRECT_RE =
+    /\bexec\.Command\s*\(\s*"sh"\s*,\s*"-c"\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
+const GO_EXEC_CONCAT_RE =
+    /\bexec\.Command\s*\(\s*"sh"\s*,\s*"-c"\s*,\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,120}?\)/g;
+const GO_SQL_INLINE_CONCAT_RE =
+    /\b(?:db|tx)\.(?:Query|QueryRow|Exec)\s*\(\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,160}?\)/g;
+const GO_SQL_ASSIGN_RE =
+    /\b([A-Za-z_][A-Za-z0-9_]*)\s*(?::=|=)\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,160}?\n/g;
+const GO_SQL_VAR_SINK_RE =
+    /\b(?:db|tx)\.(?:Query|QueryRow|Exec)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
+const GO_PATH_ASSIGN_RE =
+    /\b([A-Za-z_][A-Za-z0-9_]*)\s*(?::=|=)\s*filepath\.Join\s*\(([^)]*)\)/g;
+const GO_FILE_SINK_RE =
+    /\b(?:os\.ReadFile|os\.Open|http\.ServeFile)\s*\(\s*(?:[^,]+,\s*)?([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
+const GO_HTTP_DIRECT_RE =
+    /\b(?:http\.Get|client\.Get)\s*\(\s*(?:r|req)\.(?:URL\.Query\(\)\.Get|FormValue)\s*\(\s*"[^"]+"\s*\)\s*\)/g;
+const GO_HTTP_VAR_RE =
+    /\b(?:http\.Get|client\.Get)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -2516,6 +2537,211 @@ function scanCsharpSsrfSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanGoShellSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(GO_REQUEST_ASSIGN_RE.source, GO_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const directPattern = new RegExp(GO_EXEC_DIRECT_RE.source, GO_EXEC_DIRECT_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The Go code passes a request-derived string into `exec.Command("sh", "-c", ...)`, which hands the command text to a shell for parsing. Untrusted shell metacharacters can change the intended command.',
+            threat:
+                'An attacker can inject shell syntax to execute arbitrary commands, read files, pivot to adjacent services, or fully compromise the host account running the service.',
+            fix:
+                'Do not route request input through `sh -c`. Use a fixed executable with explicit arguments such as `exec.Command("grep", value)` and validate or allow-list any untrusted values before execution.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Go variable reaches a shell-parsed exec.Command("sh", "-c", ...) sink.'],
+        });
+    }
+
+    const concatPattern = new RegExp(GO_EXEC_CONCAT_RE.source, GO_EXEC_CONCAT_RE.flags);
+    while ((match = concatPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The Go code builds a shell command through string concatenation and passes it into `exec.Command("sh", "-c", ...)`. Untrusted values become part of shell-parsed command text.',
+            threat:
+                'An attacker can alter the executed command, run additional shell operations, or coerce the service into exposing or modifying sensitive host data.',
+            fix:
+                'Replace shell-parsed command strings with a fixed executable and explicit argument list, and validate or allow-list any untrusted values before execution.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Go shell command is assembled through concatenation before exec.Command("sh", "-c", ...).'],
+        });
+    }
+
+    return found;
+}
+
+function scanGoSqlSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    let match: RegExpExecArray | null;
+
+    const inlinePattern = new RegExp(GO_SQL_INLINE_CONCAT_RE.source, GO_SQL_INLINE_CONCAT_RE.flags);
+    while ((match = inlinePattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation:
+                'A Go database call executes SQL text built through string concatenation. Untrusted values become part of the raw query before the database driver sees it.',
+            threat:
+                'An attacker can inject SQL syntax to change the query structure, read data, modify rows, or bypass application logic.',
+            fix:
+                'Replace concatenated SQL with parameterized calls such as `db.Query("SELECT ... WHERE id = ?", userID)` so untrusted values stay out of the SQL text.',
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Go SQL sink executes concatenated query text.'],
+        });
+    }
+
+    const queryVars = new Set<string>();
+    const assignPattern = new RegExp(GO_SQL_ASSIGN_RE.source, GO_SQL_ASSIGN_RE.flags);
+    while ((match = assignPattern.exec(source)) !== null) {
+        queryVars.add(match[1]);
+    }
+
+    const sinkPattern = new RegExp(GO_SQL_VAR_SINK_RE.source, GO_SQL_VAR_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!queryVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation:
+                'A Go database call executes a query variable that was built through string concatenation. Untrusted values become part of the raw SQL text before execution.',
+            threat:
+                'An attacker can inject SQL syntax to change the query structure, expose data, or modify records.',
+            fix:
+                'Use parameterized Go database calls and pass user values as bound arguments instead of concatenating them into the SQL string.',
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A concatenated Go SQL query variable reaches a database sink.'],
+        });
+    }
+
+    return found;
+}
+
+function scanGoPathTraversalSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    const pathVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(GO_REQUEST_ASSIGN_RE.source, GO_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const pathPattern = new RegExp(GO_PATH_ASSIGN_RE.source, GO_PATH_ASSIGN_RE.flags);
+    while ((match = pathPattern.exec(source)) !== null) {
+        const argsText = match[2] ?? '';
+        if ([...taintedVars].some(varName => new RegExp(`\\b${varName}\\b`).test(argsText))) {
+            pathVars.add(match[1]);
+        }
+    }
+
+    const sinkPattern = new RegExp(GO_FILE_SINK_RE.source, GO_FILE_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!pathVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'PT-001',
+            title: 'Path Traversal',
+            explanation:
+                'A Go filesystem path is built with `filepath.Join(...)` using request-derived input and then passed into a file-reading or file-serving sink. Without a fixed identifier map or boundary check, attacker-controlled path fragments can escape the intended directory.',
+            threat:
+                'An attacker can read files outside the expected directory, including configuration, credentials, source code, or other tenant data if the process account can access them.',
+            fix:
+                'Bind file access to a fixed base directory or identifier map, normalize before use, and reject any request-derived path that escapes the allowed boundary.',
+            canonicalId: 'owlvex.issue.path_traversal.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Go file path reaches a filesystem sink without a visible boundary check.'],
+        });
+    }
+
+    return found;
+}
+
+function scanGoSsrfSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(GO_REQUEST_ASSIGN_RE.source, GO_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const directPattern = new RegExp(GO_HTTP_DIRECT_RE.source, GO_HTTP_DIRECT_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SR-001',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation:
+                'The Go code issues an outbound `http.Get(...)` or `client.Get(...)` call directly to request-controlled input without a visible trusted-destination guard.',
+            threat:
+                'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+            fix:
+                'Do not fetch arbitrary user-supplied URLs. Route outbound access through an allow-list or named integration, and validate protocol, hostname, and internal address ranges before making the request.',
+            canonicalId: 'owlvex.issue.ssrf.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Go URL reaches an outbound HTTP sink without a visible allowlist guard.'],
+        });
+    }
+
+    const varPattern = new RegExp(GO_HTTP_VAR_RE.source, GO_HTTP_VAR_RE.flags);
+    while ((match = varPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SR-001',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation:
+                'The Go code issues an outbound `http.Get(...)` or `client.Get(...)` call to a request-derived URL variable without a visible trusted-destination guard.',
+            threat:
+                'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+            fix:
+                'Do not fetch arbitrary user-supplied URLs. Route outbound access through an allow-list or named integration, and validate protocol, hostname, and internal address ranges before making the request.',
+            canonicalId: 'owlvex.issue.ssrf.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Go URL variable reaches an outbound HTTP sink without a visible allowlist guard.'],
+        });
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -2539,8 +2765,8 @@ export class DeterministicScanner {
                 ...scanPiiLoggingSinks(source),
                 ...scanInsecureCookieSinks(source),
                 ...scanDebugModeSinks(source),
-            ]
-            : JAVA_LANGUAGES.has(language)
+                ]
+                : JAVA_LANGUAGES.has(language)
                 ? [
                     ...scanJavaShellSinks(source),
                     ...scanJavaSqlSinks(source),
@@ -2556,6 +2782,13 @@ export class DeterministicScanner {
                         ...scanCsharpPathTraversalSinks(source),
                         ...scanCsharpSsrfSinks(source),
                     ]
+                    : GO_LANGUAGES.has(language)
+                        ? [
+                            ...scanGoShellSinks(source),
+                            ...scanGoSqlSinks(source),
+                            ...scanGoPathTraversalSinks(source),
+                            ...scanGoSsrfSinks(source),
+                        ]
             : [
                 ...scanPythonShellSinks(source),
                 ...scanPythonSqlSinks(source),

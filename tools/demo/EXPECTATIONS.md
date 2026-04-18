@@ -82,6 +82,14 @@ These expectations should be read together with:
 | `63-csharp-path-traversal-safe.cs` | clean | fixed C# file path |
 | `64-csharp-ssrf-unsafe.cs` | finding expected | request-derived C# outbound request |
 | `65-csharp-ssrf-safe.cs` | clean | fixed outbound C# destination |
+| `66-go-command-injection-unsafe.go` | finding expected | Go shell execution from request input |
+| `67-go-command-injection-safe.go` | clean | Go fixed executable with explicit args |
+| `68-go-sqli-unsafe.go` | finding expected | Go SQL built through string concatenation |
+| `69-go-sqli-safe.go` | clean | Go parameterized database call |
+| `70-go-path-traversal-unsafe.go` | finding expected | request-derived Go file path |
+| `71-go-path-traversal-safe.go` | clean | fixed Go file path |
+| `72-go-ssrf-unsafe.go` | finding expected | request-derived Go outbound request |
+| `73-go-ssrf-safe.go` | clean | fixed outbound Go destination |
 
 ## Stabilization Rule
 

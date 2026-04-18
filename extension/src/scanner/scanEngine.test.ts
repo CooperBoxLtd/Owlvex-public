@@ -1640,6 +1640,142 @@ if (process.env.NODE_ENV !== 'production') {
         expect(result.summary).toBe('No findings detected.');
     });
 
+    it('suppresses AI-only command injection findings when Go uses exec.Command with a fixed executable', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.2,
+                    summary: 'Command injection detected.',
+                    findings: [
+                        {
+                            id: 'ai-cmd-go-fp-1',
+                            line: 5,
+                            line_end: 5,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A03-CMD',
+                            title: 'Command Injection',
+                            explanation: 'The code executes a command influenced by request input.',
+                            threat: 'An attacker may control OS command execution.',
+                            fix: 'Avoid shell execution and validate input.',
+                            confidence: 0.88,
+                            issue_id: 'owlvex.issue.command_injection.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The command is influenced by request data.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'go',
+            fileName: 'd:\\repo\\cmd-safe.go',
+            getText: () => `func handler(r *http.Request) {
+    name := r.URL.Query().Get("name")
+    exec.Command("grep", name).Run()
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only SQL injection findings when Go uses a parameterized query', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.1,
+                    summary: 'SQL injection detected.',
+                    findings: [
+                        {
+                            id: 'ai-sqli-go-fp-1',
+                            line: 4,
+                            line_end: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A03-SQL',
+                            title: 'SQL Injection',
+                            explanation: 'The code builds a database query from request input.',
+                            threat: 'An attacker may inject SQL.',
+                            fix: 'Use parameterized queries.',
+                            confidence: 0.87,
+                            issue_id: 'owlvex.issue.sql_injection.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The query uses request-derived input.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'go',
+            fileName: 'd:\\repo\\sql-safe.go',
+            getText: () => `func load(db *sql.DB, r *http.Request) {
+    userID := r.URL.Query().Get("id")
+    db.Query("SELECT * FROM users WHERE id = ?", userID)
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
     it('suppresses AI-only path traversal findings when Python enforces an absolute base-directory boundary', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
