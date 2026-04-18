@@ -93,6 +93,14 @@ function getFindingLikelihoodReasons(finding: ScanResult['findings'][number]): s
     return normalizeList(finding.likelihoodReasons);
 }
 
+function getAiConfidence(finding: ScanResult['findings'][number]): number {
+    return finding.resolverConfidence ?? finding.confidence ?? 0;
+}
+
+function isLowConfidenceAiFinding(finding: ScanResult['findings'][number]): boolean {
+    return finding.provenance !== 'deterministic' && getAiConfidence(finding) < 0.75;
+}
+
 function getCanonicalRemediation(finding: ScanResult['findings'][number]): {
     remediation: string;
     refs: string[];
@@ -137,6 +145,7 @@ function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     const scanTier = getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'));
     const confidence = getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'));
     const corroboration = getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'));
+    const reviewFlag = isLowConfidenceAiFinding(finding) ? ' | manual review recommended' : '';
     return [
         `mode ${scanTier}`,
         `confidence ${confidence}`,
@@ -144,7 +153,7 @@ function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
         `impact ${finding.severity.toLowerCase()}`,
         `likelihood ${getFindingLikelihood(finding).toLowerCase()}`,
         `risk ${finding.riskScore ?? 'n/a'}/10`,
-    ].join(' | ');
+    ].join(' | ') + reviewFlag;
 }
 
 function getCorroborationLabel(finding: ScanResult['findings'][number]): string {
@@ -208,9 +217,9 @@ function getScanTierDisplayLabel(value: string): string {
 function getConfidenceDisplayLabel(value: string): string {
     switch (value) {
         case 'PROVEN':
-            return 'Proven';
+            return 'Confirmed by rule';
         case 'PLAUSIBLE':
-            return 'Plausible';
+            return 'AI-reviewed';
         default:
             return value;
     }
@@ -219,16 +228,35 @@ function getConfidenceDisplayLabel(value: string): string {
 function getCorroborationDisplayLabel(value: string): string {
     switch (value) {
         case 'PROVEN':
-            return 'Proven';
+            return 'Confirmed by rule';
         case 'CORROBORATED':
-            return 'Cross-checked';
+            return 'Validated by AI review';
         case 'PARTIAL':
-            return 'Needs confirmation';
+            return 'Partially validated';
         case 'UNVERIFIED':
-            return 'Not confirmed yet';
+            return 'Needs manual review';
         default:
             return value;
     }
+}
+
+function buildHowToReadTable(): string[] {
+    return [
+        '## How To Read This Report',
+        '',
+        '| Report field | What it means | How to use it |',
+        '| --- | --- | --- |',
+        '| Confidence | How sure Owlvex is that the issue is real | Use this as the trust level for the finding |',
+        '| Confirmed by rule | Deterministic analysis proved the issue from code structure | Highest confidence |',
+        '| Validated by AI review | AI found the issue and a follow-up review supported it | Strong signal, but not rule-proven |',
+        '| Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |',
+        '| Needs manual review | Evidence is weak, incomplete, or low-confidence | Do not treat as confirmed yet |',
+        '| Impact | How serious the damage could be if exploited | Business/security severity |',
+        '| Likelihood | How likely exploitation is from the observed code | Exploitability estimate |',
+        '| Risk score | Overall priority if the finding is real | Use this to prioritize fixes |',
+        '| Detection confidence | Confidence in the detection itself | Separate from risk score |',
+        '',
+    ];
 }
 
 function buildSafePatternLine(
@@ -411,6 +439,54 @@ function buildProjectContextLabel(summary: string): string {
     return summary;
 }
 
+function buildConfidencePostureLine(
+    findings: ScanResult['findings'],
+): string {
+    if (!findings.length) {
+        return 'No findings to validate.';
+    }
+
+    const proven = findings.filter(finding => getCorroborationLabel(finding) === 'PROVEN').length;
+    const corroborated = findings.filter(finding => getCorroborationLabel(finding) === 'CORROBORATED').length;
+    const manualReview = findings.filter(finding => isLowConfidenceAiFinding(finding) || getCorroborationLabel(finding) === 'UNVERIFIED').length;
+    const partial = findings.filter(finding => getCorroborationLabel(finding) === 'PARTIAL').length;
+
+    const parts: string[] = [];
+    if (proven > 0) {
+        parts.push(`${proven} verified`);
+    }
+    if (corroborated > 0) {
+        parts.push(`${corroborated} cross-checked`);
+    }
+    if (partial > 0) {
+        parts.push(`${partial} partially validated`);
+    }
+    if (manualReview > 0) {
+        parts.push(`${manualReview} need manual review`);
+    }
+
+    return parts.join(' | ') || 'No findings to validate.';
+}
+
+function buildFixFirstLines(
+    findingsByFile: Array<{ file: string; result: ScanResult }>,
+): string[] {
+    const risky = findingsByFile.filter(item => item.result.findings.length > 0).slice(0, 3);
+    if (!risky.length) {
+        return ['No immediate action needed from this scan.', ''];
+    }
+
+    const lines: string[] = [];
+    for (const item of risky) {
+        const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];
+        const title = topFinding.canonicalTitle || topFinding.title;
+        const confidenceSuffix = isLowConfidenceAiFinding(topFinding) ? ' Manual review recommended.' : '';
+        lines.push(`- \`${item.file}\` (${item.result.score.toFixed(1)}/10): ${title}. ${topFinding.fix}${confidenceSuffix}`);
+    }
+    lines.push('');
+    return lines;
+}
+
 export async function generateWorkspaceScanReport(root: vscode.Uri, summary: FolderScanSummary): Promise<vscode.Uri> {
     return generateReportFromSnapshot(root, {
         targetLabel: root.fsPath,
@@ -424,10 +500,6 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
     const now = new Date();
     const reportFileName = `owlvex-scan-report-${formatTimestamp(now)}.md`;
     const reportUri = vscode.Uri.joinPath(root, reportFileName);
-    const scores = snapshot.results.map(item => item.result.score);
-    const averageScore = scores.length
-        ? scores.reduce((total, score) => total + score, 0) / scores.length
-        : 0;
     const warnings = snapshot.results.flatMap(item =>
         (item.result.warnings ?? []).map(warning => ({
             file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
@@ -527,6 +599,8 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         ? Math.max(...findingsByFile.map(item => item.result.score))
         : 0;
     const cleanFiles = snapshot.results.filter(item => item.result.findings.length === 0).length;
+    const lowConfidenceAiCount = allFindingItems.filter(item => isLowConfidenceAiFinding(item.finding)).length;
+    const allFindings = snapshot.results.flatMap(item => item.result.findings);
 
     const lines: string[] = [
         '# Owlvex Vulnerability Scan Report',
@@ -541,18 +615,20 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- ${buildScanTrustLine(snapshot.results)}`,
         `- Highest file risk: ${highestFileRisk.toFixed(1)}/10`,
         `- Clean files: ${cleanFiles}/${snapshot.results.length}`,
-        '- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.',
+        `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
         '',
+        '## Fix First',
+        '',
+        ...buildFixFirstLines(findingsByFile),
+        ...buildHowToReadTable(),
         '## Scan Facts',
         '',
         `- Files scanned: ${snapshot.results.length}`,
         `- Files with findings: ${snapshot.results.filter(item => item.result.findings.length > 0).length}`,
         `- Total findings: ${totalFindings}`,
-        `- Average file risk score: ${averageScore.toFixed(1)}/10`,
         `- Static findings: ${deterministicItems.length}`,
-        `- Analysis mode: ${totalFindings > 0 ? getScanTierDisplayLabel(getPrimaryScanTierLabel(snapshot.results.flatMap(item => item.result.findings))) : 'none'}`,
-        `- Analysis mix: ${totalFindings > 0 ? summarizeScanTierCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to classify'}`,
-        `- Evidence: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
+        `- AI findings needing manual review: ${lowConfidenceAiCount}`,
+        `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
         '',
         '## Coverage And Context',
         '',
@@ -567,31 +643,45 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
 
     lines.push('## Findings By File', '');
 
-    if (findingsByFile.some(item => item.result.findings.length)) {
-        for (const item of findingsByFile.filter(entry => entry.result.findings.length)) {
+    if (findingsByFile.length) {
+        for (const item of findingsByFile) {
             lines.push(`### ${item.file}`);
             lines.push('');
             lines.push(`- File risk score: ${item.result.score.toFixed(1)}/10`);
             lines.push(`- Findings: ${item.result.findings.length}`);
             if (item.result.findings.length) {
                 const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];
-                lines.push(`- Start with: ${topFinding.canonicalTitle || topFinding.title} (${topFinding.riskScore ?? 'n/a'}/10 risk)`);
+                lines.push(`- Fix first: ${topFinding.canonicalTitle || topFinding.title} (${topFinding.riskScore ?? 'n/a'}/10 risk)`);
+                lines.push(`- Why this matters: ${topFinding.explanation || 'No explanation returned.'}`);
+                lines.push(`- What to change: ${getCanonicalRemediation(topFinding).remediation}`);
             }
-            lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
+            lines.push(`- Confidence: ${buildConfidencePostureLine(item.result.findings)}`);
+            lines.push(`- Manual review: ${item.result.findings.filter(finding => isLowConfidenceAiFinding(finding)).length} low-confidence AI finding(s)`);
+            lines.push('');
+
+            if (!item.result.findings.length) {
+                lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
+                lines.push(`- Coverage: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal for this file'}`);
+                lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
+                lines.push('');
+                continue;
+            }
+
+            lines.push('#### Technical Details');
+            lines.push('');
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
             lines.push(`- Coverage: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal for this file'}`);
             lines.push(`- Analysis mode: ${item.result.findings.length ? getScanTierDisplayLabel(getPrimaryScanTierLabel(item.result.findings)) : 'none'}`);
             lines.push(`- Analysis mix: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
             lines.push(`- Evidence: ${summarizeCorroborationCounts(item.result.findings)}`);
             lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
-            lines.push('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
             lines.push(`- Knowledge sources: ${buildKnowledgeSourceDetail(item.packContext)}`);
             lines.push('');
-            lines.push('| Finding | Score Factors | Detection |');
+            lines.push('| Finding | What drives the score | Detection confidence |');
             lines.push('| --- | --- | --- |');
             for (const finding of item.result.findings.slice().sort((left, right) => riskRank(right) - riskRank(left))) {
                 lines.push(
-                    `| ${escapeMarkdown(finding.canonicalTitle || finding.title)} | ${escapeMarkdown(summarizeFindingRow(finding))} | ${finding.provenance === 'deterministic' ? `Deterministic \`${finding.ruleCode || 'n/a'}\`` : `AI ${Math.round((finding.resolverConfidence ?? finding.confidence) * 100)}%`} |`,
+                    `| ${escapeMarkdown(finding.canonicalTitle || finding.title)} | ${escapeMarkdown(summarizeFindingRow(finding))} | ${finding.provenance === 'deterministic' ? `Confirmed by rule \`${finding.ruleCode || 'n/a'}\`` : `${Math.round((finding.resolverConfidence ?? finding.confidence) * 100)}%`} |`,
                 );
             }
             lines.push('');
@@ -609,7 +699,13 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Finding risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
                 lines.push(`- Analysis mode: ${getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'))}`);
                 lines.push(`- Confidence: ${getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'))}`);
+                if (finding.provenance !== 'deterministic') {
+                    lines.push(`- Detection confidence: ${Math.round(getAiConfidence(finding) * 100)}%${isLowConfidenceAiFinding(finding) ? ' (manual review recommended)' : ''}`);
+                }
                 lines.push(`- Evidence: ${getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'))}`);
+                if (isLowConfidenceAiFinding(finding)) {
+                    lines.push('- Review note: This AI finding has a low confidence score. Verify the classification, title, and remediation against the code before acting on it.');
+                }
                 lines.push(`- Why it matters: ${finding.explanation || 'No explanation returned.'}`);
                 lines.push(`- What to change: ${remediation.remediation}`);
                 if (safePattern) {

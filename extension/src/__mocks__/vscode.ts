@@ -42,7 +42,7 @@ export const commands = {
 
 export const extensions = {
     getExtension: jest.fn(() => ({
-        exports: { secrets: { get: jest.fn(), store: jest.fn() } },
+        exports: { secrets: { get: jest.fn(), store: jest.fn(), delete: jest.fn() } },
     })),
 };
 

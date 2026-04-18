@@ -101,33 +101,40 @@ describe('reportGenerator', () => {
         expect(written).toContain('- This scan established: 1 reviewed with targeted AI.');
         expect(written).toContain('- Highest file risk: 7.0/10');
         expect(written).toContain('- Clean files: 0/1');
-        expect(written).toContain('- Average file risk score: 7.0/10');
-        expect(written).toContain('- Analysis mode: Targeted AI review');
-        expect(written).toContain('- Analysis mix: targeted_ai: 1');
-        expect(written).toContain('- Evidence: corroborated: 1');
+        expect(written).toContain('- Confidence posture: 1 cross-checked');
+        expect(written).not.toContain('- Average file risk score:');
+        expect(written).toContain('- AI findings needing manual review: 0');
         expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
         expect(written).toContain('- Knowledge sources: Fresh packs (1)');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Project context: inline project contract');
-        expect(written).toContain('- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.');
+        expect(written).toContain('## Fix First');
+        expect(written).toContain('- `example.js` (7.0/10): Unsanitized SQL query construction.');
+        expect(written).toContain('## How To Read This Report');
+        expect(written).toContain('| Report field | What it means | How to use it |');
+        expect(written).toContain('| Confidence | How sure Owlvex is that the issue is real | Use this as the trust level for the finding |');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
-        expect(written).toContain('- Start with: Unsanitized SQL query construction (7/10 risk)');
-        expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
+        expect(written).toContain('- Fix first: Unsanitized SQL query construction (7/10 risk)');
+        expect(written).toContain('- Why this matters: User input is concatenated into a query.');
+        expect(written).toContain('- What to change: Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs');
+        expect(written).toContain('- Confidence: 1 cross-checked');
+        expect(written).toContain('- Manual review: 0 low-confidence AI finding(s)');
         expect(written).toContain('- Knowledge sources: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Coverage: Normal for this file');
+        expect(written).toContain('#### Technical Details');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Analysis mix: targeted_ai: 1');
         expect(written).toContain('- Evidence: corroborated: 1');
         expect(written).toContain('- Project context: inline project contract');
-        expect(written).toContain('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
-        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence Plausible \\| evidence Cross-checked \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| impact high \\| likelihood medium \\| risk 7/10 | 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Finding risk: HIGH impact / MEDIUM likelihood / 7/10');
         expect(written).toContain('- Analysis mode: Targeted AI review');
-        expect(written).toContain('- Confidence: Plausible');
-        expect(written).toContain('- Evidence: Cross-checked');
+        expect(written).toContain('- Confidence: AI-reviewed');
+        expect(written).toContain('- Detection confidence: 93%');
+        expect(written).toContain('- Evidence: Validated by AI review');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
         expect(written).toContain('- What to change: Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Safe pattern: Use parameterized queries.');
@@ -165,12 +172,18 @@ describe('reportGenerator', () => {
         await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
-        expect(written).toContain('- Evidence: No findings to corroborate');
+        expect(written).toContain('- Confidence posture: No findings to validate.');
         expect(written).toContain('- Start with: no active findings were identified in this scan.');
         expect(written).toContain('- Highest file risk: 0.0/10');
         expect(written).toContain('- Clean files: 1/1');
+        expect(written).toContain('- AI findings needing manual review: 0');
+        expect(written).toContain('## Fix First');
+        expect(written).toContain('No immediate action needed from this scan.');
         expect(written).toContain('## Findings By File');
-        expect(written).toContain('No detailed findings were returned.');
+        expect(written).toContain('### clean.js');
+        expect(written).toContain('- File risk score: 0.0/10');
+        expect(written).toContain('- Findings: 0');
+        expect(written).toContain('- Summary: No findings detected.');
         expect(written).toContain('## Scan Errors');
         expect(written).toContain('- clean.js: model timeout');
     });
@@ -224,9 +237,11 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Scan warnings: 1');
         expect(written).toContain('- Coverage: Partial AI coverage in this scan');
-        expect(written).toContain('- Evidence: No findings to corroborate');
+        expect(written).toContain('- AI findings needing manual review: 0');
         expect(written).toContain('- This scan did not produce active findings. Coverage and provider status are listed below.');
-        expect(written).toContain('No detailed findings were returned.');
+        expect(written).toContain('### degraded-clean.js');
+        expect(written).toContain('- Summary: No findings detected. Scan completed with provider/backend warnings.');
+        expect(written).toContain('- Coverage: Partial AI coverage or deterministic-only fallback affected this file');
         expect(written).toContain('## Scan Warnings');
         expect(written).not.toContain('No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.');
     });
@@ -282,8 +297,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Analysis mix: static: 1 | targeted_ai: 2');
         expect(written).toContain('- Evidence: proven: 1 | partial: 1 | unverified: 1');
         expect(written).toContain('### mixed.js');
-        expect(written).toContain('- Analysis mix: static: 1 | targeted_ai: 2');
-        expect(written).toContain('- Evidence: proven: 1 | partial: 1 | unverified: 1');
+        expect(written).toContain('- Confidence: 1 verified | 1 partially validated | 1 need manual review');
     });
 
     it('normalizes string-based stride and matched signals without crashing', async () => {
@@ -409,6 +423,39 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Sources: OWASP SQL Injection Prevention Cheat Sheet');
     });
 
+    it('flags low-confidence AI findings for manual review', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+        const snapshot = {
+            targetLabel: 'src/probes/low-confidence.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\low-confidence.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                confidence: 0.65,
+                                resolverConfidence: 0.65,
+                            },
+                        ],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- AI findings needing manual review: 1');
+        expect(written).toContain('- Manual review: 1 low-confidence AI finding(s)');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| impact high \\| likelihood medium \\| risk 7/10 \\| manual review recommended | 65% |');
+        expect(written).toContain('- Detection confidence: 65% (manual review recommended)');
+        expect(written).toContain('- Review note: This AI finding has a low confidence score. Verify the classification, title, and remediation against the code before acting on it.');
+    });
+
     it('keeps a stable report headline posture for repo-ai findings', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-04-16T00:00:00.000Z'));
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
@@ -458,18 +505,34 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 - This scan established: 1 strengthened with repo context.
 - Highest file risk: 9.0/10
 - Clean files: 0/1
-- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.
+- Confidence posture: 1 cross-checked
+
+## Fix First
+
+- \`src\\tokens.js\` (9.0/10): Unsanitized SQL query construction. Use parameterized queries.
+
+## How To Read This Report
+
+| Report field | What it means | How to use it |
+| --- | --- | --- |
+| Confidence | How sure Owlvex is that the issue is real | Use this as the trust level for the finding |
+| Confirmed by rule | Deterministic analysis proved the issue from code structure | Highest confidence |
+| Validated by AI review | AI found the issue and a follow-up review supported it | Strong signal, but not rule-proven |
+| Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |
+| Needs manual review | Evidence is weak, incomplete, or low-confidence | Do not treat as confirmed yet |
+| Impact | How serious the damage could be if exploited | Business/security severity |
+| Likelihood | How likely exploitation is from the observed code | Exploitability estimate |
+| Risk score | Overall priority if the finding is real | Use this to prioritize fixes |
+| Detection confidence | Confidence in the detection itself | Separate from risk score |
 
 ## Scan Facts
 
 - Files scanned: 1
 - Files with findings: 1
 - Total findings: 1
-- Average file risk score: 9.0/10
 - Static findings: 0
-- Analysis mode: Repo-context AI review
-- Analysis mix: repo_ai: 1
-- Evidence: corroborated: 1
+- AI findings needing manual review: 0
+- Confidence posture: 1 cross-checked
 
 ## Coverage And Context
 

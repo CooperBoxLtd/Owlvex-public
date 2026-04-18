@@ -79,6 +79,14 @@ Within that set, the next engine-building priority is deterministic depth on the
 
 The purpose of the next phase is not to add many new families. It is to deepen proof quality on those families until more of Owlvex's important findings can honestly move into the `STATIC` lane.
 
+After that first bounded deterministic tranche, the next stabilization priorities are:
+
+- product hardening on the live scan / explain / fix loop
+- bounded language expansion using the same proof discipline
+
+The next language wave should not be judged by raw language count alone.
+It should be judged by whether the trusted issue families can be ported into the next language without breaking the benchmark-backed proof story.
+
 ---
 
 ## Out Of Scope
@@ -99,6 +107,17 @@ That means the preferred next investment after demo-readiness work is:
 - add false-positive guards before promoting new deterministic behavior
 
 The engine should grow by deepening the trusted issue families first, not by broadening the catalog faster than the benchmarks can support.
+
+Likewise, the product should not widen language claims faster than the rule contracts and benchmarks can support.
+
+The recommended next deterministic language order is:
+
+1. deeper Python coverage
+2. Java
+3. C#
+4. Go
+
+Those languages should be expanded only through bounded rule contracts on the existing trusted family set, not through broad unsupported language marketing.
 
 When model comparisons are run, they must use the evaluation method defined in [MODEL_SELECTION_MATRIX.md](D:/Dev/repos/CodeScanner/docs/MODEL_SELECTION_MATRIX.md).
 

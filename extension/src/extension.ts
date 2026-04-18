@@ -7,6 +7,7 @@ import { DiagnosticsProvider } from './diagnostics/diagnosticsProvider';
 import { StatusBar } from './ui/statusBar';
 import { SidebarProvider } from './panels/sidebarProvider';
 import { ChatViewProvider } from './panels/chatViewProvider';
+import { OWLVEX_PREVIEW_SCHEME, PreviewDocumentProvider } from './panels/previewDocumentProvider';
 import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
 import { pickScanFile, pickScanFiles, pickScanRoot, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
@@ -266,6 +267,78 @@ async function promptForSetting(
     return normalized;
 }
 
+export function getProviderConnectionSettingKeys(providerId: string): string[] {
+    switch (providerId) {
+        case 'azure-foundry':
+            return ['foundry.endpoint', 'foundry.model', 'foundry.deployments'];
+        case 'anthropic':
+            return ['anthropic.model'];
+        case 'openai':
+            return ['openai.model'];
+        case 'mistral':
+            return ['mistral.model'];
+        case 'gemini':
+            return ['gemini.model'];
+        case 'groq':
+            return ['groq.model'];
+        case 'ollama':
+            return ['ollama.host', 'ollama.model'];
+        case 'custom':
+            return ['custom.baseUrl', 'custom.model'];
+        default:
+            return [];
+    }
+}
+
+export function providerAllowsOptionalApiKey(providerId: string): boolean {
+    return providerId === 'custom';
+}
+
+export function resolveConnectedModelSelection(selectedModel: string, discoveredModels: string[]): string {
+    const normalizedSelectedModel = selectedModel.trim();
+    if (normalizedSelectedModel) {
+        return normalizedSelectedModel;
+    }
+
+    return discoveredModels.find(model => model.trim())?.trim() ?? '';
+}
+
+async function resetProviderSettings(providerId: string): Promise<void> {
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    for (const key of getProviderConnectionSettingKeys(providerId)) {
+        await config.update(key, undefined, vscode.workspace.workspaceFolders?.length
+            ? vscode.ConfigurationTarget.Workspace
+            : vscode.ConfigurationTarget.Global);
+    }
+}
+
+export async function clearProviderConnection(
+    providerId: string,
+    secretStorage: Pick<vscode.SecretStorage, 'delete'>,
+): Promise<void> {
+    await resetProviderSettings(providerId);
+    await secretStorage.delete(getProviderApiKeySecretName(providerId));
+
+    // Clear the legacy Azure secret too so older installs do not keep a hidden duplicate.
+    if (providerId === 'azure-foundry') {
+        await secretStorage.delete(`${PROFILE.secretPrefix}.azure-foundry.apiKey`);
+    }
+}
+
+async function chooseFallbackProviderId(registry: ProviderRegistry, removedProviderId: string): Promise<string> {
+    for (const provider of registry.allProviders()) {
+        if (provider.id === removedProviderId) {
+            continue;
+        }
+
+        if (await provider.isConfigured()) {
+            return provider.id;
+        }
+    }
+
+    return 'openai';
+}
+
 async function readErrorResponse(res: Response, prefix: string): Promise<string> {
     const text = await res.text();
     if (!text.trim()) {
@@ -290,6 +363,9 @@ async function readJsonResponse(res: Response, prefix: string): Promise<any> {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+    context.subscriptions.push(
+        vscode.workspace.registerTextDocumentContentProvider(OWLVEX_PREVIEW_SCHEME, new PreviewDocumentProvider()),
+    );
     secrets = context.secrets;
     initializeSecretStorage(context.secrets);
 
@@ -1000,8 +1076,12 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            await registry.setActiveProvider(providerChoice.providerId);
-            const provider = registry.getActive();
+            const provider = registry.getProvider(providerChoice.providerId);
+            if (!provider) {
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel}: Unknown provider "${providerChoice.providerId}".`);
+                return;
+            }
+
             if (provider.id === 'ollama') {
                 vscode.window.showInformationMessage(getProviderSetupSummary(provider.id));
                 const host = await promptForSetting(
@@ -1028,6 +1108,7 @@ export function activate(context: vscode.ExtensionContext) {
                 provider.selectedModel = model.trim();
                 const { success, latencyMs } = await provider.testConnection();
                 if (success) {
+                    await registry.setActiveProvider(provider.id);
                     vscode.window.showInformationMessage(`Ollama connected (${latencyMs}ms) using ${provider.selectedModel} at ${host}`);
                 } else {
                     vscode.window.showErrorMessage('Ollama connection failed. Check the host URL, confirm Ollama is running, and verify the model is installed.');
@@ -1130,24 +1211,41 @@ export function activate(context: vscode.ExtensionContext) {
                 await persistProviderSetting('custom.model', model.trim());
             }
 
-            const key = await vscode.window.showInputBox({
-                prompt: `Enter API key for ${provider.name}`,
-                ignoreFocusOut: true,
-                password: true,
-            });
-            if (!key) return;
+            let key: string | undefined;
+            if (provider.id !== 'ollama') {
+                key = await vscode.window.showInputBox({
+                    prompt: providerAllowsOptionalApiKey(provider.id)
+                        ? `Enter API key for ${provider.name} (leave blank if this endpoint does not require auth)`
+                        : `Enter API key for ${provider.name}`,
+                    ignoreFocusOut: true,
+                    password: true,
+                });
 
-            await context.secrets.store(getProviderApiKeySecretName(provider.id), key);
+                if (key === undefined) {
+                    return;
+                }
+
+                if (key.trim()) {
+                    await context.secrets.store(getProviderApiKeySecretName(provider.id), key.trim());
+                } else if (providerAllowsOptionalApiKey(provider.id)) {
+                    await context.secrets.delete(getProviderApiKeySecretName(provider.id));
+                } else {
+                    return;
+                }
+            }
+
             const { success, latencyMs, message } = await provider.testConnection();
             if (success) {
                 try {
                     const models = await provider.listModels();
-                    if (models.length && !models.includes(provider.selectedModel)) {
-                        provider.selectedModel = models[0];
+                    const activeModel = resolveConnectedModelSelection(provider.selectedModel, models);
+                    if (activeModel && activeModel !== provider.selectedModel) {
+                        provider.selectedModel = activeModel;
                     }
-                    const activeModel = provider.selectedModel;
+                    await registry.setActiveProvider(provider.id);
                     vscode.window.showInformationMessage(`${provider.name} connected (${latencyMs}ms) using ${activeModel}`);
                 } catch {
+                    await registry.setActiveProvider(provider.id);
                     vscode.window.showInformationMessage(`${provider.name} connected (${latencyMs}ms)`);
                 }
             } else {
@@ -1158,6 +1256,42 @@ export function activate(context: vscode.ExtensionContext) {
                         : ' Check your key.';
                 vscode.window.showErrorMessage(message?.trim() || `${provider.name} connection failed.${extraHint}`);
             }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.removeAIConnection, async () => {
+            const currentProvider = registry.getActive();
+            const providerChoice = await vscode.window.showQuickPick(
+                registry.allProviders().map(item => ({
+                    label: item.name,
+                    description: item.id === currentProvider.id ? 'Current provider' : '',
+                    providerId: item.id,
+                })),
+                {
+                    placeHolder: 'Choose the provider connection to remove',
+                    ignoreFocusOut: true,
+                },
+            );
+            if (!providerChoice) {
+                return;
+            }
+
+            const confirmation = await vscode.window.showWarningMessage(
+                `Remove the saved ${providerChoice.label} connection from this VS Code profile?`,
+                { modal: true },
+                'Remove',
+            );
+            if (confirmation !== 'Remove') {
+                return;
+            }
+
+            await clearProviderConnection(providerChoice.providerId, context.secrets);
+            if (registry.getActive().id === providerChoice.providerId) {
+                await registry.setActiveProvider(await chooseFallbackProviderId(registry, providerChoice.providerId));
+            }
+
+            vscode.window.showInformationMessage(`${PROFILE.displayLabel}: Removed saved ${providerChoice.label} connection.`);
         })
     );
 

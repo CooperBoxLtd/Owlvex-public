@@ -58,6 +58,10 @@
         "title": "Owlvex: Setup AI Connection"
       },
       {
+        "command": "owlvex.removeAIConnection",
+        "title": "Owlvex: Remove AI Connection"
+      },
+      {
         "command": "owlvex.openProjectContext",
         "title": "Owlvex: Open Project Context"
       },

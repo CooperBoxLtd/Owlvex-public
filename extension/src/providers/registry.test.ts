@@ -2,7 +2,7 @@
  * Unit tests for ProviderRegistry — provider lookup, active provider selection,
  * and all provider list coverage.
  */
-import { getProviderApiKeySecretName, ProviderRegistry } from './registry';
+import { getProviderApiKeySecretName, isLikelyOpenAIChatModel, ProviderRegistry } from './registry';
 
 // workspace.getConfiguration mock returns a cfg object — we control it per test.
 import * as vscode from 'vscode';
@@ -30,7 +30,7 @@ describe('ProviderRegistry', () => {
         }));
         secretGetMock = jest.fn(async (key: string) => key === 'owlvex.foundry.apiKey' ? 'test-foundry-key' : undefined);
         (vscode.extensions.getExtension as jest.Mock).mockReturnValue({
-            exports: { secrets: { get: secretGetMock, store: jest.fn() } },
+            exports: { secrets: { get: secretGetMock, store: jest.fn(), delete: jest.fn() } },
         });
         registry = new ProviderRegistry();
     });
@@ -131,6 +131,30 @@ describe('ProviderRegistry', () => {
             expect(models).toEqual(['gpt-4o']);
         });
 
+        it('keeps GPT-5 and Codex-family models when OpenAI advertises them', async () => {
+            configState['openai.model'] = 'gpt-5-mini';
+            secretGetMock.mockImplementation(async (key: string) => {
+                if (key === 'owlvex.openai.apiKey') {
+                    return 'test-openai-key';
+                }
+                return undefined;
+            });
+            (global.fetch as jest.Mock) = jest.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({
+                    data: [
+                        { id: 'gpt-5-mini' },
+                        { id: 'gpt-5' },
+                        { id: 'codex-mini-latest' },
+                        { id: 'text-embedding-3-large' },
+                    ],
+                }),
+            });
+
+            const models = await registry.getProvider('openai')!.listModels();
+            expect(models).toEqual(['gpt-5-mini', 'codex-mini-latest', 'gpt-5']);
+        });
+
         it('Anthropic lists expected models', async () => {
             const models = await registry.getProvider('anthropic')!.listModels();
             expect(models).toEqual(['claude-opus-4-6']);
@@ -155,6 +179,20 @@ describe('ProviderRegistry', () => {
             (global.fetch as jest.Mock) = jest.fn().mockRejectedValue(new Error('not running'));
             const models = await registry.getProvider('ollama')!.listModels();
             expect(models.length).toBeGreaterThan(0);
+        });
+
+        it('treats custom endpoints without auth as configured when a base URL exists', async () => {
+            configState['custom.baseUrl'] = 'https://custom.local';
+            const configured = await registry.getProvider('custom')!.isConfigured();
+            expect(configured).toBe(true);
+        });
+    });
+
+    describe('OpenAI model filtering', () => {
+        it('recognizes current chat-capable OpenAI model families', () => {
+            expect(isLikelyOpenAIChatModel('gpt-5')).toBe(true);
+            expect(isLikelyOpenAIChatModel('codex-mini-latest')).toBe(true);
+            expect(isLikelyOpenAIChatModel('text-embedding-3-large')).toBe(false);
         });
     });
 

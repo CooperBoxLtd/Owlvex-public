@@ -106,6 +106,25 @@ The current hybrid scanner is being formalized, not replaced. Future implementat
 
 and should support a client-side Project Context Contract that can ground AI reasoning without weakening the source-code privacy boundary.
 
+## Current Phase Priorities
+
+The next implementation phase should not treat language count as the main measure of product quality.
+
+The current priority order is:
+
+1. product hardening
+2. bounded language expansion
+3. issue-catalog and contract catch-up
+
+This ordering exists because Owlvex's deterministic floor is now materially stronger, but the overall product experience still has visible trust and UX gaps. The next phase should improve:
+
+- conversation reliability and finding-state continuity
+- fix-review clarity and verification behavior
+- panel and workflow coherence
+- language support only where the same proof discipline can be maintained
+
+Language expansion is valuable, but it must follow the same bounded rule-contract discipline as issue-family expansion.
+
 ## Workstream 0: Project Context And Scan Tiers
 
 ### Goal
@@ -202,6 +221,125 @@ If one of those is missing, the family remains experimental and should not be ma
 - safe companions stay clean across the benchmark loop
 - false-positive guards are documented and tested for the promoted behaviors
 - benchmark results, product wording, and finding semantics remain aligned
+
+## Workstream 0.6: Product Hardening
+
+### Goal
+
+Raise overall product quality by improving the parts of Owlvex that still feel inconsistent, confusing, or fragile even when the scanner core is correct.
+
+This workstream exists because engine quality alone is not enough. If conversation state, remediation flow, or panel behavior drift, the product can still feel unreliable even when the findings are technically strong.
+
+### Primary Focus Areas
+
+- conversation reliability
+- fix-review workflow polish
+- panel and information architecture clarity
+- explanation and trust-language consistency
+
+### Tasks
+
+- keep active finding context stable across scan-backed follow-up prompts
+- make `Fix code`, diff preview, `Keep fix`, and verification messaging behave consistently
+- reduce UI crowding and clarify which actions are primary versus secondary
+- keep score, evidence, and scan-mode explanations clear and non-contradictory
+- add regression tests for live product bugs, not only scanner-family behavior
+
+### Likely Files
+
+- [chatViewProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/chatViewProvider.ts)
+- [sidebarProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/sidebarProvider.ts)
+- [reportGenerator.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/reportGenerator.ts)
+- [extension.ts](D:/Dev/repos/CodeScanner/extension/src/extension.ts)
+- [workspaceScanner.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/workspaceScanner.ts)
+
+### Acceptance Criteria
+
+- scan-backed conversation remains anchored to the active finding until explicitly replaced
+- apply/fix phrasing always means diff preview first, not silent file mutation
+- verification after `Keep fix` is explicit and consistent
+- panel actions are understandable without relying on hidden commands
+- user-facing wording matches the real trust boundary of the engine
+
+## Workstream 0.7: Language Expansion By Proof Contract
+
+### Goal
+
+Expand Owlvex language support in bounded waves using the same trusted issue families rather than chasing a broad unsupported language list.
+
+The language boundary is not the real engineering boundary. The real boundary is whether a rule contract can be implemented and benchmarked honestly for that language.
+
+### Expansion Principle
+
+Owlvex should only promote deterministic support for a new language when:
+
+- at least a small set of high-value issue families can be modeled truthfully
+- safe companions exist
+- benchmark expectations exist
+- false-positive guards exist
+
+Languages may be analyzable through AI before they are supported deterministically. That is acceptable, but the product must keep the difference explicit.
+
+### Recommended Expansion Waves
+
+#### Wave 1: Python depth
+
+Port the current trusted family set further into Python, prioritizing:
+
+- SQL injection
+- command injection
+- path traversal
+- SSRF
+- auth and JWT misuse
+- unsafe deserialization beyond `pickle` alone
+
+#### Wave 2: Java
+
+Start with the same high-value family set where structural proof is realistic:
+
+- SQL injection
+- path traversal
+- SSRF
+- open redirect
+- deserialization
+- auth and session misuse
+
+#### Wave 3: C#
+
+Port the same family set used for Java where ASP.NET and service-layer patterns map cleanly.
+
+#### Wave 4: Go
+
+Add the subset of the family set that ports cleanly:
+
+- SQL injection
+- SSRF
+- path traversal
+- command injection
+- auth and token misuse
+
+### Tasks
+
+- define language-specific proof contracts for each promoted family
+- add safe and unsafe fixtures per language wave
+- keep the same canonical issue IDs wherever the issue family is the same
+- document what is deterministic versus AI-only per language
+- avoid claiming broad deterministic language coverage before the benchmark supports it
+
+### Likely Files
+
+- [deterministicScanner.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/deterministicScanner.ts)
+- [scanEngine.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/scanEngine.ts)
+- [tools/demo](D:/Dev/repos/CodeScanner/tools/demo)
+- future language-specific corpora or fixture slices
+- [ISSUE_EXPANSION_ROADMAP.md](D:/Dev/repos/CodeScanner/docs/ISSUE_EXPANSION_ROADMAP.md)
+
+### Acceptance Criteria
+
+- each language wave has explicit rule contracts and benchmark coverage
+- product wording distinguishes analyzable languages from proof-grade deterministic languages
+- the same canonical issue identity is reused across languages where appropriate
+- no language wave ships on anecdotal support alone
 
 ## Workstream Map
 
@@ -579,24 +717,26 @@ Prepare the backend for Azure deployment without changing the customer-code boun
 
 ## Recommended Execution Order
 
-1. protect the data boundary
-2. backend-served rule and config delivery
-3. product output alignment
-4. conditional-rule benchmark catch-up
-5. CI and release discipline
-6. Azure control plane readiness
-7. fourth deterministic axis
+1. product hardening
+2. bounded language expansion
+3. issue catalog and contract catch-up
+4. protect the data boundary
+5. backend-served rule and config delivery
+6. product output alignment
+7. benchmark and claim maintenance
+8. Azure control plane readiness
+9. CI and release discipline
 
 ## Near-Term Priority Slice
 
-If we want the smallest high-value delivery sequence, do this first:
+If we want the highest-value near-term delivery sequence, do this first:
 
-1. keep benchmark claims and product docs aligned
-2. align benchmark deterministic findings with extension output fields
-3. define rule/config pack shape for backend delivery
-4. add local cache and version handling for that rule/config data
+1. harden conversation and remediation reliability
+2. improve fix-review and verification UX
+3. deepen Python as the next deterministic language wave
+4. tighten issue-catalog and contract language around the stronger engine
 
-That sequence improves trust, product coherence, and IP posture without changing the data boundary.
+That sequence improves real product quality first, then expands supported depth without blurring the trust boundary.
 
 ## Definition Of Progress
 

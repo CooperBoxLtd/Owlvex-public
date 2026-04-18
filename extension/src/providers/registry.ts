@@ -80,14 +80,20 @@ export async function persistProviderSetting(settingKey: string, value: unknown)
         .update(settingKey, value, getPreferredConfigurationTarget());
 }
 
-// Chat-capable model prefixes used to filter OpenAI/Groq model lists
-const OPENAI_CHAT_PREFIXES = ['gpt-4', 'gpt-3.5', 'o1', 'o3', 'chatgpt'];
+// Chat-capable model prefixes used to filter OpenAI/Groq model lists.
+// Keep this broad enough to preserve newer GPT-5/Codex families during setup.
+const OPENAI_CHAT_PREFIXES = ['gpt-5', 'gpt-4', 'gpt-3.5', 'o1', 'o3', 'o4', 'chatgpt', 'codex'];
 const OPENAI_FALLBACK_MODELS = ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'gpt-3.5-turbo', 'o1', 'o3-mini'];
 const ANTHROPIC_MODELS     = ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001'];
 const MISTRAL_FALLBACK     = ['mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest', 'codestral-latest'];
 const GEMINI_FALLBACK      = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
 const GROQ_FALLBACK        = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
 const AZURE_CHAT_API_VERSION = '2024-10-21';
+
+export function isLikelyOpenAIChatModel(modelId: string): boolean {
+    const normalized = modelId.trim().toLowerCase();
+    return OPENAI_CHAT_PREFIXES.some(prefix => normalized.startsWith(prefix));
+}
 
 // ----------------------------------------------------------------
 // OpenAI Provider (also used as base for compatible endpoints)
@@ -121,9 +127,10 @@ class OpenAIProvider implements AIProvider {
             const data = await res.json() as any;
             const chat = (data.data as any[])
                 .map((m: any) => m.id as string)
-                .filter(id => OPENAI_CHAT_PREFIXES.some(p => id.startsWith(p)))
+                .filter(isLikelyOpenAIChatModel)
                 .sort();
-            return chat.length ? chat : [this.selectedModel];
+            const models = [...new Set([this.selectedModel, ...chat].filter(Boolean))];
+            return models.length ? models : [this.selectedModel];
         } catch {
             return [this.selectedModel];
         }
@@ -630,7 +637,7 @@ class CustomProvider implements AIProvider {
     }
 
     async isConfigured(): Promise<boolean> {
-        return !!(this.baseUrl && await this.getApiKey());
+        return !!this.baseUrl;
     }
 
     async listModels(): Promise<string[]> {
