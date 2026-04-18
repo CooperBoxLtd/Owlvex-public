@@ -7,7 +7,7 @@
       "id": "owlvex.remediation.sql_injection.001",
       "issue_id": "owlvex.issue.sql_injection.001",
       "title": "Canonical remediation for SQL injection",
-      "canonical_fix_summary": "Separate query structure from untrusted data with parameter binding or ORM-safe APIs, constrain dynamic query parts to allow-lists, and verify that attacker-controlled input can no longer change SQL semantics.",
+      "canonical_fix_summary": "Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs, constrain dynamic query parts to allow-lists, and verify that attacker-controlled input can no longer change query semantics.",
       "framework_variants": [
         {
           "framework": "Express",
@@ -108,7 +108,7 @@
       "id": "owlvex.remediation.command_injection.001",
       "issue_id": "owlvex.issue.command_injection.001",
       "title": "Canonical remediation for command injection",
-      "canonical_fix_summary": "Remove shell-string execution where possible, call safe library APIs directly, and when process execution is unavoidable pass fixed executables with validated argument lists that never include attacker-controlled shell syntax.",
+      "canonical_fix_summary": "Remove shell-string execution where possible, call safe library APIs directly, and when process execution is unavoidable pass fixed executables with validated argument lists that keep untrusted data out of command syntax.",
       "framework_variants": [
         {
           "framework": "Express",
@@ -411,7 +411,7 @@
       "id": "owlvex.remediation.path_traversal.001",
       "issue_id": "owlvex.issue.path_traversal.001",
       "title": "Canonical remediation for path traversal",
-      "canonical_fix_summary": "Constrain file access to a fixed base directory, normalize and resolve paths before use, and reject any request-derived path that escapes the allowed boundary or selects unexpected files.",
+      "canonical_fix_summary": "Bind file access to a fixed base directory or server-side identifier map, normalize and resolve paths before use, and reject any request-derived path that escapes the allowed boundary or selects unexpected files.",
       "framework_variants": [
         {
           "framework": "Express",
@@ -512,7 +512,7 @@
       "id": "owlvex.remediation.ssrf.001",
       "issue_id": "owlvex.issue.ssrf.001",
       "title": "Canonical remediation for SSRF",
-      "canonical_fix_summary": "Constrain outbound requests to approved destinations, normalize and validate URLs before use, and block internal address ranges, metadata endpoints, and attacker-controlled protocols from request execution paths.",
+      "canonical_fix_summary": "Treat outbound destinations as control data: route requests through approved hosts or named integrations, validate protocol and hostname before use, and block internal address ranges, metadata endpoints, redirects, and attacker-controlled protocols.",
       "framework_variants": [
         {
           "framework": "Express",
