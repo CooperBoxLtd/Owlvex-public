@@ -2523,100 +2523,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       font-size: 11px;
       line-height: 1.35;
     }
-    .status-strip {
-      display: flex;
-      gap: 8px;
-      margin-top: 10px;
-      flex-wrap: wrap;
-    }
-    .status-pill {
-      border: 1px solid var(--vscode-widget-border);
-      border-radius: 999px;
-      padding: 4px 8px;
-      font-size: 10px;
-      line-height: 1.3;
-      background: color-mix(in srgb, var(--vscode-editorWidget-background) 75%, transparent);
-      opacity: 0.9;
-    }
-    .assistant-actions {
-      margin-top: 12px;
-      padding-top: 10px;
-      border-top: 1px solid color-mix(in srgb, var(--vscode-widget-border) 70%, transparent);
-      display: grid;
-      gap: 8px;
-    }
-    .assistant-actions-label {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      opacity: 0.68;
-    }
-    .scan-controls {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .scan-scope {
-      flex: 1 1 220px;
-      min-width: 180px;
-    }
-    .action-row {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-      align-items: center;
-    }
-    .assistant-panel {
-      margin-top: 8px;
-      border: 1px solid var(--vscode-widget-border);
-      border-radius: 12px;
-      background: color-mix(in srgb, var(--vscode-editorWidget-background) 85%, transparent);
-      overflow: hidden;
-      display: none;
-    }
-    .assistant-panel summary {
-      list-style: none;
-      cursor: pointer;
-      padding: 10px 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      user-select: none;
-    }
-    .assistant-panel summary::-webkit-details-marker {
-      display: none;
-    }
-    .assistant-summary {
-      display: grid;
-      gap: 2px;
-      min-width: 0;
-    }
-    .assistant-summary .title {
-      margin: 0;
-    }
-    .assistant-caption {
-      font-size: 11px;
-      opacity: 0.78;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    .assistant-tools {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-    .settings-chevron {
-      font-size: 11px;
-      opacity: 0.75;
-      transition: transform 0.18s ease;
-    }
-    .assistant-panel[open] .settings-chevron {
-      transform: rotate(180deg);
-    }
     .icon-button {
       border: 1px solid var(--vscode-widget-border);
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 72%, transparent);
@@ -2645,9 +2551,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 72%, transparent);
       color: var(--vscode-foreground);
       cursor: pointer;
-    }
-    .assistant-body {
-      padding: 0 12px 12px;
     }
     .settings-panel {
       margin-top: 8px;
@@ -2943,41 +2846,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <button class="icon-button" id="toggleSettingsTop" type="button" title="Settings" aria-label="Open settings">&#9881;</button>
           <button class="icon-button" id="newChatTop" type="button" title="New chat" aria-label="New chat">&#9998;</button>
         </div>
-        <details class="assistant-panel" id="assistantPanel" open>
-          <summary>
-            <span class="assistant-summary">
-              <span class="title">Owlvex Assistant</span>
-              <span class="assistant-caption" id="assistantCaption">Provider: connecting...</span>
-            </span>
-            <span class="assistant-tools">
-              <button class="icon-button" id="toggleSettings" type="button" title="Settings" aria-label="Open settings">⚙</button>
-              <span class="settings-chevron">v</span>
-            </span>
-          </summary>
-          <div class="assistant-body">
-            <div class="status-strip">
-              <div class="status-pill" id="workspace">Workspace: loading...</div>
-              <div class="status-pill" id="scanProfile">Loading scan profile...</div>
-              <div class="status-pill" id="lastScan">Last scan: none</div>
-              <div class="status-pill" id="projectContextBadge">Project context: none</div>
-            </div>
-            <div class="assistant-actions">
-              <div class="scan-controls">
-                <select id="scanScope" class="scan-scope" aria-label="Scan scope">
-                  <option value="scanFile">Current file</option>
-                  <option value="scanSelectedFiles">Selected files</option>
-                  <option value="scanOpenEditors">Open editors</option>
-                  <option value="scanFolder" selected>Workspace</option>
-                </select>
-                <button class="chip" id="runScan">Scan</button>
-              </div>
-              <div class="action-row">
-                <button class="chip" data-action="scanReport">Create Report</button>
-                <button class="chip" data-action="openProjectContext">Project Context</button>
-              </div>
-            </div>
-          </div>
-        </details>
       </div>
       <div class="settings-panel" id="settingsPanel" hidden>
         <div class="settings-head">
@@ -3040,21 +2908,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const messagesEl = document.getElementById('messages');
-    const assistantCaptionEl = document.getElementById('assistantCaption');
     const assistantCaptionBarEl = document.getElementById('assistantCaptionBar');
     const promptEl = document.getElementById('prompt');
-    const workspaceEl = document.getElementById('workspace');
     const workspaceDetailEl = document.getElementById('workspaceDetail');
     const editorEl = document.getElementById('editor');
     const projectContextEl = document.getElementById('projectContext');
-    const projectContextBadgeEl = document.getElementById('projectContextBadge');
-    const scanProfileEl = document.getElementById('scanProfile');
     const providerStatusEl = document.getElementById('providerStatus');
     const providerHintEl = document.getElementById('providerHint');
-    const lastScanEl = document.getElementById('lastScan');
     const conversationHeaderEl = document.getElementById('conversationHeader');
-    const scanScopeEl = document.getElementById('scanScope');
-    const runScanEl = document.getElementById('runScan');
     const scanScopeBottomEl = document.getElementById('scanScopeBottom');
     const runScanBottomEl = document.getElementById('runScanBottom');
     const providerEl = document.getElementById('provider');
@@ -3062,7 +2923,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const settingsPanelEl = document.getElementById('settingsPanel');
     const historyStripEl = document.getElementById('historyStrip');
     const historyCopyEl = document.getElementById('historyCopy');
-    const toggleSettingsEl = document.getElementById('toggleSettings');
     const toggleSettingsTopEl = document.getElementById('toggleSettingsTop');
     const closeSettingsEl = document.getElementById('closeSettings');
     const toggleHistoryEl = document.getElementById('toggleHistory');
@@ -3074,18 +2934,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     function render(state) {
       const providerLine = 'Provider: ' + state.provider + ' | Model: ' + state.model;
-      assistantCaptionEl.textContent = providerLine;
       assistantCaptionBarEl.textContent = providerLine;
-      workspaceEl.textContent = state.workspaceSummary || 'No workspace folder open';
       workspaceDetailEl.textContent = 'Workspace: ' + (state.workspaceSummary || 'No workspace folder open');
       editorEl.textContent = state.editorSummary || 'Active editor: none';
       projectContextEl.textContent = 'Project context: ' + (state.projectContextSummary || 'none');
-      projectContextBadgeEl.textContent = 'Project context: ' + (state.projectContextSummary || 'none');
-      scanProfileEl.textContent = state.frameworksLabel + ' | ' + state.severityThreshold;
       providerStatusEl.textContent = state.providerStatus || 'Provider status: unknown';
       providerHintEl.textContent = state.providerHint || '';
       llmButtonEl.textContent = state.provider + ' · ' + state.model;
-      lastScanEl.textContent = 'Last scan: ' + (state.lastScanTarget || 'No scan run yet');
       conversationHeaderEl.textContent = state.conversationStatus || 'Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.';
       if (settingsPanelEl && !state.providers.length) {
         settingsPanelEl.hidden = false;
@@ -3186,11 +3041,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     newChatTopEl.addEventListener('click', () => {
       vscode.postMessage({ type: 'chat:clear' });
     });
-    toggleSettingsEl.addEventListener('click', (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      settingsPanelEl.hidden = !settingsPanelEl.hidden;
-    });
     toggleSettingsTopEl.addEventListener('click', () => {
       settingsPanelEl.hidden = !settingsPanelEl.hidden;
     });
@@ -3224,9 +3074,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       button.addEventListener('click', () => {
         vscode.postMessage({ type: 'chat:action', action: button.getAttribute('data-action') });
       });
-    });
-    runScanEl.addEventListener('click', () => {
-      vscode.postMessage({ type: 'chat:action', action: scanScopeEl.value });
     });
     runScanBottomEl.addEventListener('click', () => {
       vscode.postMessage({ type: 'chat:action', action: scanScopeBottomEl.value });
@@ -3376,3 +3223,4 @@ function getNonce(): string {
     }
     return value;
 }
+
