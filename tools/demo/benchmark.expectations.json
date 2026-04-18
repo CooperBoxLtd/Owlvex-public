@@ -3,7 +3,10 @@
   "expectations": [
     {
       "file": "01-idor-unsafe.js",
+      "language": "javascript",
+      "family": "Access Control & Authorization",
       "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `AC-001`"],
       "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
@@ -16,7 +19,10 @@
     { "file": "07-sqli-safe.js", "expectedState": "clean" },
     {
       "file": "08-command-injection-unsafe.js",
+      "language": "javascript",
+      "family": "Injection & Execution",
       "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
       "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
@@ -70,7 +76,10 @@
     { "file": "25-jwt-validation-safe.js", "expectedState": "clean" },
     {
       "file": "26-deserialization-unsafe.py",
+      "language": "python",
+      "family": "Injection & Execution",
       "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `DS-001`"],
       "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
@@ -110,7 +119,10 @@
     { "file": "35-sqli-concat-safe.js", "expectedState": "clean" },
     {
       "file": "36-python-command-injection-unsafe.py",
+      "language": "python",
+      "family": "Injection & Execution",
       "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
       "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
@@ -118,7 +130,10 @@
     { "file": "37-python-command-injection-safe.py", "expectedState": "clean" },
     {
       "file": "38-python-sqli-unsafe.py",
+      "language": "python",
+      "family": "Injection & Execution",
       "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `SQ-001`"],
       "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
@@ -126,7 +141,10 @@
     { "file": "39-python-sqli-safe.py", "expectedState": "clean" },
     {
       "file": "40-python-path-traversal-unsafe.py",
+      "language": "python",
+      "family": "Injection & Execution",
       "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `PT-001`"],
       "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
@@ -134,7 +152,10 @@
     { "file": "41-python-path-traversal-safe.py", "expectedState": "clean" },
     {
       "file": "42-python-ssrf-unsafe.py",
+      "language": "python",
+      "family": "Injection & Execution",
       "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `SR-001`"],
       "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
@@ -142,7 +163,10 @@
     { "file": "43-python-ssrf-safe.py", "expectedState": "clean" },
     {
       "file": "44-python-jwt-validation-unsafe.py",
+      "language": "python",
+      "family": "Identity & Auth Failures",
       "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `JW-001`"],
       "requiredPrimaryScanMode": "Static proof",
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]

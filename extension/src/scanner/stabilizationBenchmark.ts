@@ -1,6 +1,7 @@
 export interface ParsedReportFile {
     file: string;
     findings: string[];
+    detections: string[];
     primaryScanMode?: string;
     scanTierPosture?: string;
     corroborationPosture?: string;
@@ -13,9 +14,12 @@ export interface ParsedReport {
 
 export interface FileExpectation {
     file: string;
+    language?: string;
+    family?: string;
     expectedState?: 'clean' | 'finding';
     requiredFindings?: string[];
     forbiddenFindings?: string[];
+    requiredDetectionIncludes?: string[];
     requiredPrimaryScanMode?: string;
     requiredScanTierPostureIncludes?: string[];
     requiredCorroborationPostureIncludes?: string[];
@@ -47,6 +51,8 @@ export interface BenchmarkEvaluationMetrics {
     requiredFindingsSatisfied: number;
     forbiddenFindingsChecked: number;
     forbiddenFindingsSatisfied: number;
+    requiredDetectionChecks: number;
+    requiredDetectionSatisfied: number;
     primaryScanModesChecked: number;
     primaryScanModesSatisfied: number;
     scanTierPostureChecks: number;
@@ -76,6 +82,7 @@ export function parseMarkdownReport(markdown: string): ParsedReport {
 
         const file = headingMatch[1].trim();
         const findings: string[] = [];
+        const detections: string[] = [];
         let primaryScanMode: string | undefined;
         let scanTierPosture: string | undefined;
         let corroborationPosture: string | undefined;
@@ -101,13 +108,19 @@ export function parseMarkdownReport(markdown: string): ParsedReport {
                 corroborationPosture = corroborationPostureMatch[1].trim();
             }
 
-            const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*.+\|\s*(?:AI|Deterministic)/);
+            const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*.+\|\s*(.+?)\s*\|$/);
             if (tableMatch && tableMatch[1] !== 'Finding') {
-                findings.push(tableMatch[1].trim());
+                const findingTitle = tableMatch[1].trim();
+                const detection = tableMatch[2].trim();
+                if (findingTitle === '---' || detection === '---') {
+                    continue;
+                }
+                findings.push(findingTitle);
+                detections.push(detection);
             }
         }
 
-        files.push({ file, findings, primaryScanMode, scanTierPosture, corroborationPosture });
+        files.push({ file, findings, detections, primaryScanMode, scanTierPosture, corroborationPosture });
     }
 
     return { targetLabel, files };
@@ -126,6 +139,8 @@ export function evaluateParsedReport(report: ParsedReport, manifest: BenchmarkMa
         requiredFindingsSatisfied: 0,
         forbiddenFindingsChecked: 0,
         forbiddenFindingsSatisfied: 0,
+        requiredDetectionChecks: 0,
+        requiredDetectionSatisfied: 0,
         primaryScanModesChecked: 0,
         primaryScanModesSatisfied: 0,
         scanTierPostureChecks: 0,
@@ -139,6 +154,7 @@ export function evaluateParsedReport(report: ParsedReport, manifest: BenchmarkMa
         const normalizedFile = normalizeFile(expectation.file);
         const reportEntry = byFile.get(normalizedFile);
         const findingTitles = reportEntry?.findings ?? [];
+        const detections = reportEntry?.detections ?? [];
         const primaryScanMode = reportEntry?.primaryScanMode ?? 'none';
         const scanTierPosture = reportEntry?.scanTierPosture ?? 'none';
         const corroborationPosture = reportEntry?.corroborationPosture ?? 'none';
@@ -191,6 +207,19 @@ export function evaluateParsedReport(report: ParsedReport, manifest: BenchmarkMa
                 });
             } else {
                 metrics.forbiddenFindingsSatisfied += 1;
+            }
+        }
+
+        for (const expected of expectation.requiredDetectionIncludes ?? []) {
+            metrics.requiredDetectionChecks += 1;
+            if (!detections.some(detection => detection.toLowerCase().includes(expected.toLowerCase()))) {
+                fileSatisfied = false;
+                failures.push({
+                    file: expectation.file,
+                    message: `detection summary missing expected fragment: ${expected}`,
+                });
+            } else {
+                metrics.requiredDetectionSatisfied += 1;
             }
         }
 

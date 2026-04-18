@@ -27,6 +27,7 @@ describe('stabilizationBenchmark', () => {
             {
                 file: '03-debug-unsafe.js',
                 findings: ['Debug mode or framework error detail enabled in production'],
+                detections: ['Deterministic `SM-002`'],
                 primaryScanMode: undefined,
                 scanTierPosture: undefined,
                 corroborationPosture: undefined,
@@ -34,6 +35,7 @@ describe('stabilizationBenchmark', () => {
             {
                 file: '04-debug-safe.js',
                 findings: ['Debug mode or framework error detail enabled in production'],
+                detections: ['AI 90%'],
                 primaryScanMode: undefined,
                 scanTierPosture: undefined,
                 corroborationPosture: undefined,
@@ -60,6 +62,7 @@ describe('stabilizationBenchmark', () => {
             {
                 file: 'src\\lib\\logger.js',
                 findings: ['Sensitive data exposed in logs'],
+                detections: ['Deterministic `DP-001`'],
                 primaryScanMode: 'Static proof',
                 scanTierPosture: 'static: 1',
                 corroborationPosture: 'proven: 1',
@@ -128,6 +131,8 @@ describe('stabilizationBenchmark', () => {
             requiredFindingsSatisfied: 2,
             forbiddenFindingsChecked: 1,
             forbiddenFindingsSatisfied: 1,
+            requiredDetectionChecks: 0,
+            requiredDetectionSatisfied: 0,
             primaryScanModesChecked: 0,
             primaryScanModesSatisfied: 0,
             scanTierPostureChecks: 0,
@@ -159,6 +164,7 @@ describe('stabilizationBenchmark', () => {
                 {
                     file: 'src\\lib\\logger.js',
                     requiredFindings: ['Sensitive data exposed in logs'],
+                    requiredDetectionIncludes: ['Deterministic `DP-001`'],
                     requiredPrimaryScanMode: 'Static proof',
                     requiredScanTierPostureIncludes: ['static: 1'],
                     requiredCorroborationPostureIncludes: ['proven: 1'],
@@ -169,9 +175,43 @@ describe('stabilizationBenchmark', () => {
         expect(evaluation.passed).toBe(true);
         expect(evaluation.metrics.primaryScanModesChecked).toBe(1);
         expect(evaluation.metrics.primaryScanModesSatisfied).toBe(1);
+        expect(evaluation.metrics.requiredDetectionChecks).toBe(1);
+        expect(evaluation.metrics.requiredDetectionSatisfied).toBe(1);
         expect(evaluation.metrics.scanTierPostureChecks).toBe(1);
         expect(evaluation.metrics.scanTierPostureSatisfied).toBe(1);
         expect(evaluation.metrics.corroborationPostureChecks).toBe(1);
         expect(evaluation.metrics.corroborationPostureSatisfied).toBe(1);
+    });
+
+    it('evaluates required detection fragments against parsed reports', () => {
+        const report = parseMarkdownReport([
+            '## Findings By File',
+            '',
+            '### 42-python-ssrf-unsafe.py',
+            '',
+            '- Analysis mode: Static proof',
+            '- Analysis mix: static: 1',
+            '- Evidence: proven: 1',
+            '',
+            '| Finding | Score Factors | Detection |',
+            '| --- | --- | --- |',
+            '| Server-side request forgery through untrusted destination | mode Static proof \\| confidence Proven \\| evidence Proven \\| impact high \\| likelihood high \\| risk 9/10 | Deterministic `SR-001` |',
+        ].join('\n'));
+
+        const evaluation = evaluateParsedReport(report, {
+            name: 'demo-python',
+            expectations: [
+                {
+                    file: '42-python-ssrf-unsafe.py',
+                    requiredFindings: ['Server-side request forgery through untrusted destination'],
+                    requiredDetectionIncludes: ['Deterministic `SR-001`'],
+                    requiredPrimaryScanMode: 'Static proof',
+                },
+            ],
+        });
+
+        expect(evaluation.passed).toBe(true);
+        expect(evaluation.metrics.requiredDetectionChecks).toBe(1);
+        expect(evaluation.metrics.requiredDetectionSatisfied).toBe(1);
     });
 });

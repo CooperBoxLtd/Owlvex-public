@@ -61,6 +61,11 @@ printDelta(
   candidateDemo.metrics.forbiddenFindingsSatisfied + candidateDemoApp.metrics.forbiddenFindingsSatisfied,
 );
 printDelta(
+  'Required detections satisfied',
+  baselineDemo.metrics.requiredDetectionSatisfied + baselineDemoApp.metrics.requiredDetectionSatisfied,
+  candidateDemo.metrics.requiredDetectionSatisfied + candidateDemoApp.metrics.requiredDetectionSatisfied,
+);
+printDelta(
   'Primary scan modes satisfied',
   baselineDemo.metrics.primaryScanModesSatisfied + baselineDemoApp.metrics.primaryScanModesSatisfied,
   candidateDemo.metrics.primaryScanModesSatisfied + candidateDemoApp.metrics.primaryScanModesSatisfied,

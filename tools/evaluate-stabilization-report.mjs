@@ -22,6 +22,7 @@ function parseMarkdownReport(markdown) {
 
     const file = headingMatch[1].trim();
     const findings = [];
+    const detections = [];
     let primaryScanMode;
     let scanTierPosture;
     let corroborationPosture;
@@ -47,13 +48,14 @@ function parseMarkdownReport(markdown) {
         corroborationPosture = corroborationPostureMatch[1].trim();
       }
 
-      const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*.+\|\s*(?:AI|Deterministic)/);
+      const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*.+\|\s*(.+?)\s*\|$/);
       if (tableMatch && tableMatch[1] !== 'Finding') {
         findings.push(tableMatch[1].trim());
+        detections.push(tableMatch[2].trim());
       }
     }
 
-    files.push({ file, findings, primaryScanMode, scanTierPosture, corroborationPosture });
+    files.push({ file, findings, detections, primaryScanMode, scanTierPosture, corroborationPosture });
   }
 
   return { targetLabel, files };
@@ -76,6 +78,8 @@ function evaluateParsedReport(report, manifest) {
     requiredFindingsSatisfied: 0,
     forbiddenFindingsChecked: 0,
     forbiddenFindingsSatisfied: 0,
+    requiredDetectionChecks: 0,
+    requiredDetectionSatisfied: 0,
     primaryScanModesChecked: 0,
     primaryScanModesSatisfied: 0,
     scanTierPostureChecks: 0,
@@ -88,6 +92,7 @@ function evaluateParsedReport(report, manifest) {
   for (const expectation of manifest.expectations) {
     const reportEntry = byFile.get(normalizeFile(expectation.file));
     const findingTitles = reportEntry?.findings ?? [];
+    const detections = reportEntry?.detections ?? [];
     const primaryScanMode = reportEntry?.primaryScanMode ?? 'none';
     const scanTierPosture = reportEntry?.scanTierPosture ?? 'none';
     const corroborationPosture = reportEntry?.corroborationPosture ?? 'none';
@@ -125,6 +130,15 @@ function evaluateParsedReport(report, manifest) {
         failures.push(`${expectation.file}: forbidden finding present ${title}`);
       } else {
         metrics.forbiddenFindingsSatisfied += 1;
+      }
+    }
+
+    for (const expected of expectation.requiredDetectionIncludes ?? []) {
+      metrics.requiredDetectionChecks += 1;
+      if (!detections.some(detection => detection.toLowerCase().includes(expected.toLowerCase()))) {
+        failures.push(`${expectation.file}: detection summary missing expected fragment ${expected}`);
+      } else {
+        metrics.requiredDetectionSatisfied += 1;
       }
     }
 
@@ -178,6 +192,7 @@ function printMetrics(metrics) {
   console.log(`Clean expectations: ${metrics.cleanFilesSatisfied}/${metrics.expectedCleanFiles}`);
   console.log(`Required findings: ${metrics.requiredFindingsSatisfied}/${metrics.requiredFindingsChecked}`);
   console.log(`Forbidden findings respected: ${metrics.forbiddenFindingsSatisfied}/${metrics.forbiddenFindingsChecked}`);
+  console.log(`Required detections: ${metrics.requiredDetectionSatisfied}/${metrics.requiredDetectionChecks}`);
   console.log(`Primary scan modes: ${metrics.primaryScanModesSatisfied}/${metrics.primaryScanModesChecked}`);
   console.log(`Scan tier posture checks: ${metrics.scanTierPostureSatisfied}/${metrics.scanTierPostureChecks}`);
   console.log(`Corroboration posture checks: ${metrics.corroborationPostureSatisfied}/${metrics.corroborationPostureChecks}`);
