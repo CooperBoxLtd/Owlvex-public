@@ -1580,3 +1580,32 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('reviewed file scope no longer matches');
         expect((provider as any).pendingFixPreview).toBeUndefined();
     });
+
+    it('shows the security boundary summary from settings quick actions', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'Safe fix' });
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        };
+        const storage = {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        };
+        const provider = new ChatViewProvider(registry as any, storage as any);
+
+        await (provider as any).handleQuickAction('securityBoundary');
+
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Owlvex security boundary:');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Deterministic scanning runs locally');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Fixes stay in preview until you choose Keep fix');
+    });

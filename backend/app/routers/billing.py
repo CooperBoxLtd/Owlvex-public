@@ -20,6 +20,12 @@ settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
+def _redact_licence_key(raw_key: str) -> str:
+    if len(raw_key) <= 8:
+        return "redacted"
+    return f"{raw_key[:4]}...{raw_key[-4:]}"
+
+
 @router.post("/webhook/stripe")
 async def stripe_webhook(
     request: Request,
@@ -93,7 +99,12 @@ async def _handle_checkout_completed(db: AsyncSession, session: dict) -> None:
     db.add(licence)
     await db.commit()
 
-    logger.info(f"New licence created for {customer_email} (plan={plan}). Key: {raw_key}")
+    logger.info(
+        "New licence created for %s (plan=%s). Key fingerprint: %s",
+        customer_email,
+        plan,
+        _redact_licence_key(raw_key),
+    )
     await _send_licence_email(customer_email, team_name, plan, raw_key)
 
 

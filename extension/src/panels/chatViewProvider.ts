@@ -1935,6 +1935,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'securityBoundary') {
+            this.messages.push({
+                role: 'system',
+                content: [
+                    'Owlvex security boundary:',
+                    '- Deterministic scanning runs locally in the extension.',
+                    '- Source code for AI-backed review goes directly to your selected provider.',
+                    '- Owlvex backend is intended to receive licence, prompt, pack, and scan/comparison metadata rather than raw source code.',
+                    '- Project context stays local by default and is only used in direct AI review when configured.',
+                    '- Fixes stay in preview until you choose Keep fix.',
+                ].join('\n'),
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'openProjectContext') {
             await vscode.commands.executeCommand(PROFILE.commands.openProjectContext);
             const projectContextSummary = getProjectContextSummaryFromConfig();
@@ -2970,6 +2988,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             <button class="chip" data-action="enterLicence">Enter Licence</button>
             <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
             <button class="chip" data-action="testAI">Test Connection</button>
+            <button class="chip" data-action="securityBoundary">Security Boundary</button>
             <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
             <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
           </div>
