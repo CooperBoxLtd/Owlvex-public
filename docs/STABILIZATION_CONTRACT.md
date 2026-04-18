@@ -83,6 +83,7 @@ After that first bounded deterministic tranche, the next stabilization prioritie
 
 - product hardening on the live scan / explain / fix loop
 - bounded language expansion using the same proof discipline
+- platform security and customer trust-boundary hardening
 
 The next language wave should not be judged by raw language count alone.
 It should be judged by whether the trusted issue families can be ported into the next language without breaking the benchmark-backed proof story.
@@ -204,6 +205,24 @@ The default implementation target is:
 - three sequential prompts or passes
 - one Owlvex-controlled adjudication step
 
+Those three passes must remain behaviorally distinct in implementation, not just named differently in the UI.
+
+Minimum pass contracts:
+
+- `Finder`
+  - proposes bounded candidates from visible code
+  - optimizes for recall, not final truth
+  - must stay tied to concrete local signals
+- `Verifier`
+  - confirms only when local evidence supports the claim
+  - must not invent new findings
+  - should prefer rejection over guesswork
+- `Skeptic`
+  - attempts falsification through guards, safe patterns, missing sinks, or contradictory evidence
+  - should suppress or reduce confidence when stronger contradiction exists
+
+If those role boundaries drift, the confidence story of the AI lane also drifts.
+
 Owlvex may evolve beyond that later, but stabilization work should assume the simple default unless there is a benchmark-backed reason to add more complexity.
 
 ---
@@ -218,6 +237,11 @@ The intended confidence behavior is:
 - finder plus verifier support with no meaningful contradiction -> stronger corroboration
 - one pass supports and another disputes -> confidence must be reduced or the claim suppressed
 - skeptic finds stronger contradictory local evidence -> suppress or downgrade the claim
+
+Owlvex may expose the multi-pass reasoning trail for AI-backed findings in reports, but that trail must remain AI-only.
+
+- deterministic findings should continue to explain themselves through rule proof and code evidence
+- AI findings may show pass scores and the reasoning trail that kept the finding alive
 - degraded or incomplete passes -> downgrade confidence and state that coverage is partial
 
 Disagreement is product signal. It must not be hidden behind one flattened answer.

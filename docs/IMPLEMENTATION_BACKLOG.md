@@ -45,6 +45,8 @@ Current product shape:
 - deterministic engine runs locally
 - backend provides licence, prompt, catalog, and metadata services
 - backend must not receive raw source code for scanning
+- extension now supports a trial-oriented onboarding path for backend, licence, and provider configuration
+- AI-backed findings now expose multi-pass corroboration detail through finder, verifier, and skeptic roles
 
 ## Build Principles
 
@@ -115,6 +117,7 @@ The current priority order is:
 1. product hardening
 2. bounded language expansion
 3. issue-catalog and contract catch-up
+4. platform security and trust-boundary hardening
 
 This ordering exists because Owlvex's deterministic floor is now materially stronger, but the overall product experience still has visible trust and UX gaps. The next phase should improve:
 
@@ -124,6 +127,13 @@ This ordering exists because Owlvex's deterministic floor is now materially stro
 - language support only where the same proof discipline can be maintained
 
 Language expansion is valuable, but it must follow the same bounded rule-contract discipline as issue-family expansion.
+
+The current phase should also make demos and trials work without engineer hand-holding. That means:
+
+- backend URL can be configured in-product
+- licence setup is visible in the shell
+- provider setup is part of the normal workflow
+- one setup check can confirm whether the trial path is ready
 
 ## Workstream 0: Project Context And Scan Tiers
 
@@ -261,6 +271,42 @@ This workstream exists because engine quality alone is not enough. If conversati
 - panel actions are understandable without relying on hidden commands
 - user-facing wording matches the real trust boundary of the engine
 
+## Workstream 0.65: Trial And Onboarding Readiness
+
+### Goal
+
+Make Owlvex testable by external users through the real product path:
+
+- install the VSIX
+- connect to backend
+- enter a licence
+- configure a provider
+- verify readiness
+
+This workstream exists because the product should be demoable and trialable without custom builds or per-user hand-configuration by the Owlvex team.
+
+### Tasks
+
+- make backend URL configuration a first-class extension workflow
+- make licence entry and validation visible in the shell
+- expose provider setup as part of the normal UI flow
+- add one explicit trial-readiness check for backend, licence, and provider state
+- keep deterministic fallback honest when onboarding is incomplete
+
+### Likely Files
+
+- [extension.ts](D:/Dev/repos/CodeScanner/extension/src/extension.ts)
+- [chatViewProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/chatViewProvider.ts)
+- [profile.ts](D:/Dev/repos/CodeScanner/extension/src/profile.ts)
+- [package.json](D:/Dev/repos/CodeScanner/extension/package.json)
+
+### Acceptance Criteria
+
+- a tester can configure backend, licence, and provider from the extension UI
+- the shell shows backend, licence, and LLM state clearly
+- one explicit setup check can confirm whether the trial path is ready
+- incomplete setup does not pretend the full AI-backed flow is available
+
 ## Workstream 0.7: Language Expansion By Proof Contract
 
 ### Goal
@@ -340,6 +386,44 @@ Add the subset of the family set that ports cleanly:
 - product wording distinguishes analyzable languages from proof-grade deterministic languages
 - the same canonical issue identity is reused across languages where appropriate
 - no language wave ships on anecdotal support alone
+
+## Workstream 0.9: Platform Security And Trust Boundary
+
+### Goal
+
+Treat platform security as a first-class product workstream.
+
+Owlvex now needs explicit security work not only on scanner output, but on the platform boundary itself:
+
+- what stays local
+- what reaches the selected AI provider
+- what reaches Owlvex backend
+- what is stored
+- how secrets, licences, prompts, and packs are protected
+
+### Tasks
+
+- audit extension-to-provider and extension-to-backend payloads
+- document allowed and forbidden data flows explicitly
+- verify the backend remains metadata-only for scanning workflows
+- review backend secret handling against the intended secret-management model
+- harden customer-visible wording around privacy, source handling, and trial connectivity
+
+### Likely Files
+
+- [PRODUCT.md](D:/Dev/repos/CodeScanner/docs/PRODUCT.md)
+- [PRODUCTION_READINESS_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/PRODUCTION_READINESS_CONTRACT.md)
+- [PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md)
+- [RULE_PACK_DELIVERY_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/RULE_PACK_DELIVERY_CONTRACT.md)
+- [extension.ts](D:/Dev/repos/CodeScanner/extension/src/extension.ts)
+- [scanEngine.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/scanEngine.ts)
+
+### Acceptance Criteria
+
+- docs state clearly what data stays local, what goes to the model provider, and what reaches Owlvex backend
+- trial and production flows preserve the same metadata-only backend boundary
+- secret-handling expectations are explicit for both extension and backend
+- platform security is tracked as an explicit roadmap item rather than implied future hardening
 
 ## Workstream Map
 

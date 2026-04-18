@@ -151,6 +151,12 @@ Not allowed by default:
 - uploading it to Owlvex backend as required scan input
 - assuming it is safe to retain centrally
 
+The same boundary should hold in demo, trial, and production onboarding flows:
+
+- backend connectivity and licence validation may be required for AI-backed product features
+- that does not authorize Owlvex backend to receive raw source code or project-context documents as normal scan payloads
+- trial readiness UX should make backend dependency visible without weakening the local-code privacy model
+
 ---
 
 ## Framework Interpretation Boundary: `Clean Code`
@@ -280,6 +286,19 @@ But today that hybrid system is too implicit.
 Users and developers benefit from a clearer execution taxonomy.
 
 The three-tier model makes the current hybrid scan easier to reason about without changing its core privacy boundary.
+
+Owlvex should also make the execution state visible to the user during onboarding and scanning:
+
+- backend connected or not
+- licence valid or not
+- provider configured or not
+- scan tier used for the current result
+
+Those operational states must not be hidden, because users need to understand the difference between:
+
+- deterministic-only local behavior
+- fully configured AI-backed behavior
+- degraded or partially available behavior
 
 ---
 

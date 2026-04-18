@@ -45,6 +45,14 @@ Investor-style framing:
 
 2. **AI-assisted coverage** - For patterns that cannot be structurally proven, Owlvex uses the customer-selected AI provider. AI findings carry explicit confidence context and remain clearly distinct from deterministic findings. The intended hybrid execution shape is being formalized into `STATIC`, `TARGETED_AI`, and `REPO_AI` scan tiers rather than one undifferentiated AI lane.
 
+   AI-backed findings should now also carry a clearer corroboration story:
+
+   - finder pass proposes the candidate
+   - verifier pass checks whether local code supports it
+   - skeptic pass tries to disprove it
+
+   That reasoning trail belongs to AI findings only and must not blur the deterministic proof boundary.
+
 3. **Bring your own model** - OpenAI, Anthropic, Azure AI Foundry, Gemini, Groq, Mistral, Ollama, or any compatible custom endpoint.
 
 4. **Source code stays on the client** - The backend builds prompts, delivers grounded data, and records control-plane metadata. Code is sent only to the customer-selected AI provider, never to Owlvex backend services. The same privacy default should apply to future user-supplied project-context/TDD documents unless the user explicitly chooses otherwise.
@@ -77,6 +85,11 @@ The execution plane. Provides:
 - report creation with concise per-file findings, remediation guidance, and scan errors/warnings when present
 - scan comparison
 - provider and model switching
+- trial and demo onboarding for:
+  - backend URL configuration
+  - licence entry
+  - provider setup
+  - trial-readiness checks
 
 Lives in `extension/`.
 
@@ -124,7 +137,7 @@ This is the mechanism that defines what Owlvex can claim with certainty. No dete
 ### Scan Flow
 
 1. Extension reads local settings such as provider, model, frameworks, and severity threshold.
-2. Extension validates licence with the Owlvex backend.
+2. Extension may validate backend reachability and licence state with the Owlvex backend.
 3. Extension runs the deterministic scanner locally before any AI call.
 4. Extension requests an assembled system prompt from the backend.
 5. Extension may include local project-context contract data when the selected scan tier benefits from architectural grounding.
@@ -132,12 +145,25 @@ This is the mechanism that defines what Owlvex can claim with certainty. No dete
 7. Extension merges AI findings with deterministic findings.
 8. Extension applies diagnostics, updates the sidebar, and records scan metadata with the backend.
 
+The current onboarding path for AI-backed use is:
+
+1. configure backend URL
+2. enter or validate licence
+3. configure provider/model
+4. run a trial/setup readiness check
+
 ### Privacy Model
 
 - Source code is processed on the client side and sent directly to the customer-selected AI provider.
 - The Owlvex backend sees control-plane and scan metadata such as file hash, language, provider, model, frameworks, score, finding counts, duration, and prompt identity data used for product operations.
 - Deterministic analysis runs locally in the extension, with no backend involvement.
 - The product should continue minimizing backend-stored scan context so the control plane stays as metadata-oriented as practical.
+
+The same boundary applies to demo and trial users:
+
+- backend connectivity and licence validation do not imply source upload to Owlvex backend
+- project-context documents should follow the same default-local handling as source code
+- trial onboarding should make backend dependence explicit without weakening the metadata-only backend contract
 
 ---
 
@@ -190,11 +216,13 @@ OpenAI, Anthropic, Azure AI Foundry, Ollama, Mistral, Google Gemini, Groq, and c
 
 **Advisory chat** - exploratory guidance clearly distinguished from formal scan output. This is the place for plain-language fix explanations grounded in the active file or latest scan.
 
-**Review-first remediation** - future workflow where Owlvex can generate a candidate patch for the active finding, show the proposed diff, and apply changes only after explicit user approval.
+**Review-first remediation** - Owlvex can generate a candidate patch for the active finding, show the proposed diff, and apply changes only after explicit user approval.
 
 **Context-aware AI assistance** - when file-only analysis is not enough, Owlvex should gather nearby project context such as imports, referenced helpers, and related files before presenting higher-confidence AI reasoning or code changes.
 
 **Project-grounded AI assistance** - future workflow where users can provide a local TDD-style project context contract so the AI lane better understands goals, roles, architecture, trust boundaries, and critical flows without changing the deterministic truth boundary.
+
+**Trial onboarding** - configure backend, enter a licence, configure an LLM, and verify whether the AI-backed path is ready without editing settings files by hand.
 
 ---
 
@@ -258,4 +286,6 @@ That is intended to strengthen the existing hybrid scanner, not replace it.
 - AI scan quality is probabilistic; only deterministic findings carry certainty claims
 - Large folder scans can be slow on smaller local models
 - Framework selection is currently a reasoning and reporting lens, not a fully independent framework-native detection engine
+- backend/licence/provider setup is still required for the full AI-backed experience
+- platform-security and customer trust-boundary hardening now need to be treated as a first-class product workstream
 - Curated framework and cheat-sheet packs are now used in runtime prompt construction, but the AI lane still needs deeper issue-targeted grounding coverage and more eval cases before it can be called fully mature

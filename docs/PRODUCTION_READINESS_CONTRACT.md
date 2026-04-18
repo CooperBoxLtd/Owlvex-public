@@ -37,6 +37,7 @@ For the current AI lane, production readiness also requires that corroboration p
 - deterministic proof must remain distinguishable from AI-supported claims
 - multi-pass AI disagreement must reduce confidence rather than being hidden
 - degraded or partial AI coverage must be surfaced clearly in user-facing reports
+- AI reasoning trails, when shown, must remain clearly AI-only and must not be presented as deterministic proof
 
 ## 2. Non-Negotiable Production Boundaries
 
@@ -84,6 +85,7 @@ Exit criteria:
 - a code review of extension-to-backend payloads confirms metadata-only behavior
 - backend route handlers that accept scan-related payloads document allowed fields
 - docs explicitly describe allowed and forbidden data flows
+- demo and trial onboarding paths preserve the same metadata-only backend boundary as production
 
 ## 4.2 Contract Readiness
 
@@ -191,6 +193,7 @@ Exit criteria:
 - admin operations require explicit admin credentials
 - production CORS behavior is tested against the real client origin model
 - no known high-severity boundary or auth flaw is open at release time
+- secret-management posture is aligned between documented infra and live infra, or any drift is explicitly tracked and accepted
 
 ## 4.8 Grounded Data Readiness
 
