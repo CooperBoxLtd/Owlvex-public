@@ -98,3 +98,18 @@ These expectations should be read together with:
 For the current trusted issue set, every safe companion above must stay clean and every unsafe companion above must remain detectable.
 
 If a future change alters one of these outcomes, that change is not automatically an improvement. It must be explained, benchmarked, and reviewed against the stabilization contract.
+
+## Exploratory AI Fixtures
+
+The files below are intentionally outside the current deterministic stabilization gate. They exist to exercise AI-backed reasoning on patterns we want to improve without pretending they are proof-grade yet.
+
+| File | Intended AI focus | Notes |
+| --- | --- | --- |
+| `76-nosql-injection-unsafe.js` | finding likely | client-controlled Mongo-style filter object |
+| `77-nosql-injection-safe.js` | should stay quiet | explicit allow-listed NoSQL filter |
+| `78-mass-assignment-unsafe.js` | finding likely | request body spread into update payload |
+| `79-mass-assignment-safe.js` | should stay quiet | explicit profile field allow-list |
+| `80-unprotected-admin-route-unsafe.js` | finding likely | admin route without visible guard |
+| `81-unprotected-admin-route-safe.js` | should stay quiet | explicit admin middleware present |
+
+These fixtures are review aids, not release-gated proof claims. If we later promote any of these families into deterministic coverage, they should move into the main expectation table with unsafe/safe benchmark requirements.

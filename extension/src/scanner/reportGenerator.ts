@@ -121,7 +121,7 @@ function summarizeFileResult(result: ScanResult): string {
     const additionalCount = result.findings.length - 1;
 
     return [
-        `${result.findings.length} finding(s), led by a ${severityText}-impact/${likelihoodText}-likelihood ${title} (${highestSeverityFinding.riskScore ?? 'n/a'}/10 risk).`,
+        `${result.findings.length === 1 ? 'One' : result.findings.length} ${result.findings.length === 1 ? 'finding was' : 'findings were'} identified, led by a ${severityText}-impact/${likelihoodText}-likelihood ${title} (${highestSeverityFinding.riskScore ?? 'n/a'}/10 risk).`,
         family ? `Primary issue family: ${family}.` : '',
         additionalCount > 0 ? `${additionalCount} additional finding(s) also detected.` : '',
     ].filter(Boolean).join(' ');
@@ -367,7 +367,48 @@ function buildScanTrustLine(results: ReportSnapshot['results']): string {
         parts.push(`${repoAiCount} strengthened with repo context`);
     }
 
-    return `What this scan established: ${parts.join('; ')}.`;
+    return `This scan established: ${parts.join('; ')}.`;
+}
+
+function buildKnowledgeSourcesSummary(results: ReportSnapshot['results']): string {
+    const packModes = new Map<string, number>();
+    for (const item of results) {
+        const label = getRulePackModeLabel(item.result.packContext);
+        packModes.set(label, (packModes.get(label) ?? 0) + 1);
+    }
+
+    return [...packModes.entries()]
+        .map(([label, count]) => {
+            if (/^Bundled Fallback$/i.test(label)) {
+                return `Bundled fallback rules only (${count})`;
+            }
+            if (/^Fresh Packs$/i.test(label)) {
+                return `Fresh packs (${count})`;
+            }
+            return `${label} (${count})`;
+        })
+        .join(' | ') || 'Bundled fallback rules only (0)';
+}
+
+function buildKnowledgeSourceDetail(packContext?: ScanResult['packContext']): string {
+    const label = getRulePackModeLabel(packContext);
+    if (/^Bundled Fallback$/i.test(label)) {
+        return 'Bundled fallback rules only';
+    }
+
+    return describeRulePackRuntime(packContext);
+}
+
+function buildProjectContextLabel(summary: string): string {
+    if (!summary || summary === 'none') {
+        return 'none';
+    }
+
+    if (summary.startsWith('file ')) {
+        return `loaded from ${summary.slice(5)}`;
+    }
+
+    return summary;
 }
 
 export async function generateWorkspaceScanReport(root: vscode.Uri, summary: FolderScanSummary): Promise<vscode.Uri> {
@@ -393,14 +434,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             warning,
         })),
     );
-    const packModes = new Map<string, number>();
-    for (const item of snapshot.results) {
-        const label = getRulePackModeLabel(item.result.packContext);
-        packModes.set(label, (packModes.get(label) ?? 0) + 1);
-    }
-    const packCoverageSummary = [...packModes.entries()]
-        .map(([label, count]) => `${label}: ${count}`)
-        .join(' | ') || 'Bundled Fallback: 0';
+    const packCoverageSummary = buildKnowledgeSourcesSummary(snapshot.results);
     const projectContextSummary = [...new Set(
         snapshot.results
             .map(item => item.result.projectContextSummary)
@@ -489,6 +523,10 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         (total, item) => total + item.result.findings.length,
         0,
     );
+    const highestFileRisk = findingsByFile.length
+        ? Math.max(...findingsByFile.map(item => item.result.score))
+        : 0;
+    const cleanFiles = snapshot.results.filter(item => item.result.findings.length === 0).length;
 
     const lines: string[] = [
         '# Owlvex Vulnerability Scan Report',
@@ -501,6 +539,8 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         '',
         `- ${buildOverallPriorityLine(findingsByFile)}`,
         `- ${buildScanTrustLine(snapshot.results)}`,
+        `- Highest file risk: ${highestFileRisk.toFixed(1)}/10`,
+        `- Clean files: ${cleanFiles}/${snapshot.results.length}`,
         '- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.',
         '',
         '## Scan Facts',
@@ -519,7 +559,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Coverage: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Normal for the current provider and runtime state'}`,
         `- Knowledge sources: ${packCoverageSummary}`,
         `- Frameworks in scope: ${formatFrameworkSummary([...new Set(snapshot.results.flatMap(item => item.result.frameworks ?? []))])}`,
-        `- Project context: ${projectContextSummary}`,
+        `- Project context: ${buildProjectContextLabel(projectContextSummary)}`,
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         '',
@@ -543,9 +583,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Analysis mode: ${item.result.findings.length ? getScanTierDisplayLabel(getPrimaryScanTierLabel(item.result.findings)) : 'none'}`);
             lines.push(`- Analysis mix: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
             lines.push(`- Evidence: ${summarizeCorroborationCounts(item.result.findings)}`);
-            lines.push(`- Project context: ${item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none'}`);
+            lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
             lines.push('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
-            lines.push(`- Knowledge sources: ${describeRulePackRuntime(item.packContext)}`);
+            lines.push(`- Knowledge sources: ${buildKnowledgeSourceDetail(item.packContext)}`);
             lines.push('');
             lines.push('| Finding | Score Factors | Detection |');
             lines.push('| --- | --- | --- |');

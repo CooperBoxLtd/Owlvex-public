@@ -98,13 +98,15 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('# Owlvex Vulnerability Scan Report');
         expect(written).toContain('- Start with: Unsanitized SQL query construction in `example.js` (7/10 risk).');
-        expect(written).toContain('- What this scan established: 1 reviewed with targeted AI.');
+        expect(written).toContain('- This scan established: 1 reviewed with targeted AI.');
+        expect(written).toContain('- Highest file risk: 7.0/10');
+        expect(written).toContain('- Clean files: 0/1');
         expect(written).toContain('- Average file risk score: 7.0/10');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Analysis mix: targeted_ai: 1');
         expect(written).toContain('- Evidence: corroborated: 1');
         expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
-        expect(written).toContain('- Knowledge sources: Fresh Packs: 1');
+        expect(written).toContain('- Knowledge sources: Fresh packs (1)');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Project context: inline project contract');
         expect(written).toContain('- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.');
@@ -165,6 +167,8 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Evidence: No findings to corroborate');
         expect(written).toContain('- Start with: no active findings were identified in this scan.');
+        expect(written).toContain('- Highest file risk: 0.0/10');
+        expect(written).toContain('- Clean files: 1/1');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Errors');
@@ -451,7 +455,9 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 ## Summary
 
 - Start with: Unsanitized SQL query construction in \`src\\tokens.js\` (9/10 risk).
-- What this scan established: 1 strengthened with repo context.
+- This scan established: 1 strengthened with repo context.
+- Highest file risk: 9.0/10
+- Clean files: 0/1
 - Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.
 
 ## Scan Facts
@@ -468,7 +474,7 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 ## Coverage And Context
 
 - Coverage: Normal for the current provider and runtime state
-- Knowledge sources: Fresh Packs: 1
+- Knowledge sources: Fresh packs (1)
 - Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
 - Project context: inline project contract
 - Errors: 0
