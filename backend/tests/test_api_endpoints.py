@@ -207,6 +207,18 @@ async def test_validate_licence_valid_key(client):
     assert "OWASP" in data["features"]["frameworks"]
 
 
+@pytest.mark.asyncio
+async def test_validate_licence_rejects_unexpected_fields(client):
+    with patch("app.routers.licences.validate_licence", return_value={"valid": True, "licence_id": str(uuid.uuid4()), "features": {"frameworks": ["OWASP"]}}):
+        response = await client.post(
+            "/v1/licences/validate",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={"user_email": "user@example.com", "source_code": "should not be accepted"},
+        )
+
+    assert response.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # /v1/licences/generate (admin)
 # ---------------------------------------------------------------------------
@@ -242,6 +254,16 @@ async def test_generate_licence_invalid_plan(client):
         headers={"X-Admin-Key": "test-admin-key"},
     )
     assert response.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_generate_licence_rejects_unexpected_fields(client):
+    response = await client.post(
+        "/v1/licences/generate",
+        json={"team_name": "New Corp", "email": "admin@newcorp.com", "plan": "developer", "seats": 1, "prompt_snapshot": "nope"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -602,3 +624,39 @@ async def test_policy_evaluation_returns_decision(client):
     data = response.json()
     assert data["decision"] == "block"
     assert data["matched_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_policy_evaluation_rejects_nested_unexpected_fields(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"frameworks": ["OWASP"]},
+    }
+    with patch("app.routers.policies.validate_licence", return_value=mock_licence):
+        response = await client.post(
+            "/v1/policies/evaluate",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+            json={
+                "findings": [
+                    {
+                        "issue_id": "owlvex.issue.sql_injection.001",
+                        "severity": "HIGH",
+                        "title": "SQL Injection",
+                        "line": 5,
+                        "source_code": "select * from users",
+                    }
+                ],
+                "policy": {
+                    "policy": "block",
+                    "conditions": {
+                        "issue_ids": ["owlvex.issue.sql_injection.001"],
+                        "severity": ["HIGH", "CRITICAL"],
+                    },
+                },
+            },
+        )
+
+    assert response.status_code == 422

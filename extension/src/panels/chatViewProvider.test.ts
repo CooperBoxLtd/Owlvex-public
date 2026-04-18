@@ -1526,5 +1526,57 @@ describe('parseChatIntent', () => {
 
         expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(expect.objectContaining({ fsPath: 'd:\\repo\\src\\app.js' }));
         expect(showTextDocument).toHaveBeenCalled();
+        });
     });
-});
+
+    it('blocks applying a fix preview when the reviewed file scope does not match the preview target', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'Safe fix' });
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        };
+        const storage = {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        };
+        const provider = new ChatViewProvider(registry as any, storage as any);
+        (provider as any).pendingFixPreview = {
+            targetPath: 'd:\\repo\\src\\target.js',
+            originalText: 'const safe = false;',
+            patchedText: 'const safe = true;',
+            title: 'Unsafe toggle',
+            reviewedPaths: ['d:\\repo\\src\\other.js'],
+            finding: {
+                id: 'finding-3',
+                line: 1,
+                lineEnd: 1,
+                severity: 'MEDIUM',
+                framework: 'OWASP',
+                ruleCode: 'GEN-001',
+                title: 'Unsafe toggle',
+                explanation: 'Unsafe value remains false.',
+                threat: 'Unexpected state.',
+                fix: 'Set the value safely.',
+                confidence: 0.9,
+                provenance: 'ai',
+                likelihood: 'MEDIUM',
+                riskScore: 5,
+            },
+        };
+
+        await provider.applyPendingFixPreview();
+
+        expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('reviewed file scope no longer matches');
+        expect((provider as any).pendingFixPreview).toBeUndefined();
+    });

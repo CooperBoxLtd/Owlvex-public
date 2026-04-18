@@ -2,7 +2,7 @@ import hashlib
 import secrets
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -25,6 +25,7 @@ settings = get_settings()
 # Called by VS Code extension on startup
 # ----------------------------------------------------------------
 class ValidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     user_email: Optional[str] = None
 
 
@@ -50,10 +51,11 @@ async def validate(
 # Admin-only — creates a new licence (called after Stripe checkout)
 # ----------------------------------------------------------------
 class GenerateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     team_name: str
     email: EmailStr
     plan: str
-    seats: int = 1
+    seats: int = Field(default=1, ge=1)
     expires_at: Optional[str] = None
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None

@@ -63,6 +63,7 @@ interface PendingFixPreview {
     patchedText: string;
     title: string;
     finding: Finding;
+    reviewedPaths?: string[];
     changes?: Array<{
         targetPath: string;
         originalText: string;
@@ -115,6 +116,17 @@ interface ChatState {
     conversationStatus: string;
     hasRestorableChat: boolean;
     restorableMessageCount: number;
+}
+
+function normalizeReviewedPath(filePath: string): string {
+    return path.normalize(filePath).toLowerCase();
+}
+
+function getReviewedPathSet(preview: PendingFixPreview): Set<string> {
+    const reviewed = preview.reviewedPaths?.length
+        ? preview.reviewedPaths
+        : preview.changes?.map(change => change.targetPath) ?? [preview.targetPath];
+    return new Set(reviewed.map(normalizeReviewedPath));
 }
 
 const CHAT_STATE_KEY = `${PROFILE.storagePrefix}.chat.messages`;
@@ -1035,6 +1047,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 patchedText: patched,
                 title: finding.canonicalTitle || finding.title,
                 finding,
+                reviewedPaths: [document.uri.fsPath],
             };
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
@@ -1152,6 +1165,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 patchedText: primaryChange.patchedText,
                 title: primaryChange.title,
                 finding: primaryChange.finding,
+                reviewedPaths: changes.map(change => change.targetPath),
                 changes,
             };
             this.messages[this.messages.length - 1] = {
@@ -1179,8 +1193,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        const reviewedPaths = getReviewedPathSet(this.pendingFixPreview);
+
         if ((this.pendingFixPreview.changes?.length ?? 0) > 1) {
             const changes = this.pendingFixPreview.changes!;
+            const unexpectedChange = changes.find(change => !reviewedPaths.has(normalizeReviewedPath(change.targetPath)));
+            if (unexpectedChange) {
+                this.messages.push({
+                    role: 'assistant',
+                    content: `Owlvex blocked the combined fix preview because it included an unreviewed file (${vscode.workspace.asRelativePath(vscode.Uri.file(unexpectedChange.targetPath), false)}). Regenerate the preview before applying it.`,
+                    kind: 'advisory',
+                });
+                this.pendingFixPreview = undefined;
+                void this.persistState();
+                this.refresh();
+                return;
+            }
             for (const change of changes) {
                 const document = await vscode.workspace.openTextDocument(vscode.Uri.file(change.targetPath));
                 if (document.getText() !== change.originalText) {
@@ -1215,6 +1243,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.messages.push({
                 role: 'assistant',
                 content: `Kept the reviewed fix across ${changes.length} files. The reviewed code was written into each file from the combined diff.`,
+                kind: 'advisory',
+            });
+            this.pendingFixPreview = undefined;
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (!reviewedPaths.has(normalizeReviewedPath(this.pendingFixPreview.targetPath))) {
+            this.messages.push({
+                role: 'assistant',
+                content: 'Owlvex blocked the fix preview because the reviewed file scope no longer matches the preview target. Regenerate the preview before applying it.',
                 kind: 'advisory',
             });
             this.pendingFixPreview = undefined;
