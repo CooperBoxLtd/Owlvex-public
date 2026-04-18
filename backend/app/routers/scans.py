@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -16,6 +16,7 @@ router = APIRouter(prefix="/v1/scans", tags=["scans"])
 # Code is NEVER sent here.
 # ----------------------------------------------------------------
 class RecordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     file_name: str                          # filename only, no path
     file_hash: str                          # SHA256 of the scanned code
     language: str
@@ -28,7 +29,6 @@ class RecordRequest(BaseModel):
     token_count: Optional[int] = None
     duration_ms: Optional[int] = None
     prompt_id: Optional[str] = None
-    prompt_snapshot: Optional[str] = None
     user_email: Optional[str] = None
 
 
@@ -69,7 +69,6 @@ async def record(
         token_count=body.token_count,
         duration_ms=body.duration_ms,
         prompt_id=body.prompt_id,
-        prompt_snapshot=body.prompt_snapshot,
         user_email=body.user_email,
     )
 
@@ -81,6 +80,7 @@ async def record(
 # Diff engine: findings sent from plugin memory, not from our DB
 # ----------------------------------------------------------------
 class CompareRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     scan_a_id: str
     scan_b_id: str
     findings_a: list[dict]

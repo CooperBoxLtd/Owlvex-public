@@ -40,7 +40,6 @@ async def record_scan(
     token_count: Optional[int],
     duration_ms: Optional[int],
     prompt_id: Optional[str],
-    prompt_snapshot: Optional[str],
     user_email: Optional[str] = None,
 ) -> ScanHistory:
     resolved_prompt_id = await _resolve_prompt_id(db, licence_id, prompt_id)
@@ -60,7 +59,6 @@ async def record_scan(
         token_count=token_count,
         duration_ms=duration_ms,
         prompt_id=resolved_prompt_id,
-        prompt_snapshot=prompt_snapshot,
         status="completed",
     )
     db.add(scan)

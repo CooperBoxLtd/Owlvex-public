@@ -296,6 +296,30 @@ async def test_build_prompt_returns_system_prompt(client):
     assert "python" in data["system_prompt"]
 
 
+@pytest.mark.asyncio
+async def test_build_prompt_rejects_unexpected_team_context_field(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"frameworks": ["OWASP", "CWE"]},
+    }
+    with patch("app.routers.prompts.validate_licence", return_value=mock_licence):
+        response = await client.post(
+            "/v1/prompts/build",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+            json={
+                "frameworks": ["OWASP"],
+                "language": "python",
+                "model": "gpt-4o",
+                "team_context": "sensitive local project context",
+            },
+        )
+
+    assert response.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # /v1/scans/record
 # ---------------------------------------------------------------------------
@@ -340,6 +364,36 @@ async def test_record_scan_valid(client):
         )
     assert response.status_code == 200
     assert "scan_id" in response.json()
+
+
+@pytest.mark.asyncio
+async def test_record_scan_rejects_prompt_snapshot_field(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"scans_per_day": None, "frameworks": ["OWASP"]},
+    }
+    with patch("app.routers.scans.validate_licence", return_value=mock_licence):
+        response = await client.post(
+            "/v1/scans/record",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+            json={
+                "file_name": "app.py",
+                "file_hash": "deadbeef" * 8,
+                "language": "python",
+                "model": "gpt-4o",
+                "provider": "openai",
+                "frameworks": ["OWASP"],
+                "score": 7.5,
+                "findings_summary": {"critical": 0, "high": 1, "medium": 2, "low": 0},
+                "finding_count": 3,
+                "prompt_snapshot": "full assembled system prompt",
+            },
+        )
+
+    assert response.status_code == 422
 
 
 @pytest.mark.asyncio
@@ -404,6 +458,33 @@ async def test_compare_scan_returns_extension_compatible_shape(client):
     assert data["resolved_findings"] == 2
     assert isinstance(data["new_finding_details"], list)
     assert isinstance(data["resolved_finding_details"], list)
+
+
+@pytest.mark.asyncio
+async def test_compare_scan_rejects_unexpected_extra_fields(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"comparison": True, "frameworks": ["OWASP"]},
+    }
+    with patch("app.routers.scans.validate_licence", return_value=mock_licence):
+        response = await client.post(
+            "/v1/scans/compare",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+            json={
+                "scan_a_id": str(uuid.uuid4()),
+                "scan_b_id": str(uuid.uuid4()),
+                "findings_a": [],
+                "findings_b": [],
+                "score_a": 6.0,
+                "score_b": 8.0,
+                "source_code": "should never be accepted here",
+            },
+        )
+
+    assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------

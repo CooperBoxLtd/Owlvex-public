@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -11,11 +11,11 @@ router = APIRouter(prefix="/v1/prompts", tags=["prompts"])
 
 
 class BuildRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     frameworks: list[str] = ["OWASP"]
     language: str = "unknown"
     model: str = "gpt-4o"
     severity_threshold: str = "MEDIUM"
-    team_context: str = ""
     custom_prompt: Optional[str] = None
     template_id: Optional[str] = None
 
@@ -39,7 +39,6 @@ async def build(
         language=body.language,
         model=body.model,
         severity_threshold=body.severity_threshold,
-        team_context=body.team_context,
         custom_prompt=body.custom_prompt,
         template_id=body.template_id,
         allowed_frameworks=allowed,
