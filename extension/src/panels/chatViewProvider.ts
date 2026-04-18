@@ -239,7 +239,7 @@ function buildFindingFallback(
         lines.push(
             hasPendingFixPreview
                 ? 'A fix preview is already open. Review the diff, then choose Keep fix or Discard fix.'
-                : 'Next step: use Fix code to open a side-by-side remediation diff.'
+                : 'Next step: choose Fix code to open a side-by-side remediation diff.'
         );
     }
 
@@ -313,8 +313,8 @@ function buildScanSummaryLines(result: ScanResult): string[] {
         `Analysis mix: ${summarizeScanTierCounts(result.findings)}`,
         `Project context: ${result.projectContextSummary && result.projectContextSummary !== 'none' ? result.projectContextSummary : 'none'}`,
         topRiskFinding
-            ? `Fix first: ${topRiskFinding.title} | via ${getScanTierDisplayLabel(getScanTierLabel(topRiskFinding))} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
-            : 'Fix first: none',
+            ? `Top issue: ${topRiskFinding.title} | via ${getScanTierDisplayLabel(getScanTierLabel(topRiskFinding))} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
+            : 'Top issue: none',
         summarizeIssueFamilies(result.findings),
         `Model: ${result.model}`,
         ...(remediationHighlights.length
@@ -325,6 +325,46 @@ function buildScanSummaryLines(result: ScanResult): string[] {
             : 'No scan warnings were reported.',
         `Summary: ${result.summary || 'No summary returned.'}`,
     ];
+}
+
+function buildProviderFailureMessage(error: unknown): string {
+    const message = String((error as any)?.message ?? error ?? '').trim();
+    if (isRateLimitError(error)) {
+        return 'The provider hit a rate limit before it could finish that request.';
+    }
+
+    return message
+        ? `The provider could not finish that request (${message}).`
+        : 'The provider could not finish that request.';
+}
+
+function buildMultiFileScanResponse(
+    label: string,
+    completed: number,
+    results: Array<{ result: ScanResult }>,
+    errors: unknown[],
+    topActionable?: { finding: Finding; targetPath?: string },
+    reportPath?: string,
+): string {
+    const findings = results.flatMap(item => item.result.findings ?? []);
+    const warnings = results.reduce((total, item) => total + (item.result.warnings?.length ?? 0), 0);
+    const averageScore = completed > 0
+        ? results.reduce((total, item) => total + (item.result.score ?? 0), 0) / completed
+        : 0;
+    const issueFamilies = summarizeIssueFamilies(findings);
+
+    return [
+        `${label} completed.`,
+        `Files scanned: ${completed}`,
+        `Total findings: ${findings.length}`,
+        `Average file risk score: ${averageScore.toFixed(1)}/10`,
+        issueFamilies,
+        ...buildGroundedRemediationHighlights(findings).map((line, index) => `Remediation ${index + 1}: ${line}`),
+        topActionable ? `Next step: Fix code opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
+        reportPath ? `Report: ${reportPath}` : '',
+        warnings ? `Scan warnings: ${warnings}` : 'No scan warnings were reported.',
+        errors.length ? `Scan errors: ${errors.length}` : 'No scan errors were reported.',
+    ].filter(Boolean).join('\n');
 }
 
 function buildCalibrationRecords(results: Array<{ uri: vscode.Uri; result: ScanResult }>): StoredScanRecord[] {
@@ -1106,7 +1146,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     fallbackFinding,
                     isRateLimitError(error)
                         ? 'The provider hit a rate limit, so I am falling back to grounded local context for the active finding.'
-                        : `The provider request failed (${error.message}), so I am falling back to grounded local context for the active finding.`,
+                        : `${buildProviderFailureMessage(error)} I am falling back to grounded local context for the active finding.`,
                     fallbackTargetPath,
                     Boolean(this.pendingFixPreview),
                 );
@@ -1119,7 +1159,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             } else {
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
-                    content: `Request failed: ${error.message}`,
+                    content: `${buildProviderFailureMessage(error)} Try again, or ask about the current file, latest scan, or active finding.`,
                     kind: 'advisory',
                 };
             }
@@ -1167,19 +1207,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             actions.push(buildExplainScoreAction('explain-score-scan-folder-intent', result.results ?? []));
             return {
                 handled: true,
-                response: [
-                    `Folder scan completed for ${result.completed} file(s).`,
-                    `Total findings: ${result.totalFindings}`,
-                    ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
-                        .map((line, index) => `Remediation ${index + 1}: ${line}`),
-                    topActionable ? `Next step: Fix code opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
-                    result.results.some((item: any) => item.result.warnings.length)
-                        ? `Scan warnings: ${result.results.reduce((total: number, item: any) => total + item.result.warnings.length, 0)}`
-                        : 'No scan warnings were reported.',
-                    result.errors.length
-                        ? `Scan errors: ${result.errors.length}`
-                        : 'No scan errors were reported.',
-                ].join('\n'),
+                response: buildMultiFileScanResponse('Folder scan', result.completed, result.results ?? [], result.errors ?? [], topActionable),
                 kind: 'scan',
                 actions,
             };
@@ -1213,16 +1241,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             actions.push(buildExplainScoreAction('explain-score-scan-selected-intent', result.results ?? []));
             return {
                 handled: true,
-                response: [
-                    `Selected-files scan completed for ${result.completed} file(s).`,
-                    `Total findings: ${result.totalFindings}`,
-                    ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
-                        .map((line, index) => `Remediation ${index + 1}: ${line}`),
-                    topActionable ? `Next step: Fix code opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
-                    result.errors.length
-                        ? `Scan errors: ${result.errors.length}`
-                        : 'No scan errors were reported.',
-                ].join('\n'),
+                response: buildMultiFileScanResponse('Selected files scan', result.completed, result.results ?? [], result.errors ?? [], topActionable),
                 kind: 'scan',
                 actions,
             };
@@ -1256,16 +1275,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             actions.push(buildExplainScoreAction('explain-score-scan-open-editors-intent', result.results ?? []));
             return {
                 handled: true,
-                response: [
-                    `Open-editors scan completed for ${result.completed} file(s).`,
-                    `Total findings: ${result.totalFindings}`,
-                    ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
-                        .map((line, index) => `Remediation ${index + 1}: ${line}`),
-                    topActionable ? `Next step: Fix code opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
-                    result.errors.length
-                        ? `Scan errors: ${result.errors.length}`
-                        : 'No scan errors were reported.',
-                ].join('\n'),
+                response: buildMultiFileScanResponse('Open editors scan', result.completed, result.results ?? [], result.errors ?? [], topActionable),
                 kind: 'scan',
                 actions,
             };
@@ -1311,17 +1321,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.latestActionableTargetPath = topActionable?.targetPath;
         return {
             handled: true,
-            response: [
-                `Vulnerability scan completed for ${result.summary.completed} file(s).`,
-                `Total findings: ${result.summary.totalFindings}`,
-                `Average file risk score: ${result.averageScore.toFixed(1)}/10`,
-                ...buildGroundedRemediationHighlights(result.summary.results.flatMap((item: any) => item.result.findings))
-                    .map((line, index) => `Remediation ${index + 1}: ${line}`),
-                `Report: ${relativeReportPath}`,
-                result.summary.errors.length
-                    ? `Scan errors: ${result.summary.errors.length}`
-                    : 'No scan errors were reported.',
-            ].join('\n'),
+            response: buildMultiFileScanResponse(
+                'Vulnerability scan',
+                result.summary.completed,
+                result.summary.results ?? [],
+                result.summary.errors ?? [],
+                topActionable,
+                relativeReportPath,
+            ),
             kind: 'scan',
             actions: [
                 ...(topActionable ? [buildReviewFixAction(topActionable.finding, topActionable.targetPath)] : []),
