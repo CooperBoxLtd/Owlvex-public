@@ -14,7 +14,7 @@ from app.services.licence_service import (
     hash_licence_key,
     record_seat_seen,
 )
-from app.services.rate_limit import rate_limiter
+from app.services.rate_limit import allow_control_plane_request
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/licences", tags=["licences"])
@@ -37,8 +37,14 @@ async def validate(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
-    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
-    if not rate_limiter.allow("licence_validate", client_ip, settings.licence_validate_rate_limit, settings.rate_limit_window_seconds):
+    if not allow_control_plane_request(
+        "licence_validate",
+        request,
+        limit=settings.licence_validate_rate_limit,
+        window_seconds=settings.rate_limit_window_seconds,
+        licence_key=x_licence_key,
+        trust_forwarded_for=settings.trust_forwarded_for,
+    ):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many licence validation requests")
 
     result = await validate_licence(db, x_licence_key)

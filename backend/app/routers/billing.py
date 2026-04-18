@@ -32,6 +32,9 @@ async def stripe_webhook(
     db: AsyncSession = Depends(get_db),
     stripe_signature: str = Header(..., alias="Stripe-Signature"),
 ):
+    if not settings.billing_enabled:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Billing is disabled")
+
     payload = await request.body()
 
     try:

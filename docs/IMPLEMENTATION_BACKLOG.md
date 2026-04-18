@@ -119,6 +119,12 @@ The current priority order is:
 3. issue-catalog and contract catch-up
 4. platform security and trust-boundary hardening
 
+Current operating decision for this phase:
+
+- keep trials free
+- keep billing disabled by default
+- document billing-path security work now, but defer billing enablement work until the product is intentionally moved into a billable phase
+
 This ordering exists because Owlvex's deterministic floor is now materially stronger, but the overall product experience still has visible trust and UX gaps. The next phase should improve:
 
 - conversation reliability and finding-state continuity
@@ -424,6 +430,7 @@ Owlvex now needs explicit security work not only on scanner output, but on the p
 - trial and production flows preserve the same metadata-only backend boundary
 - secret-handling expectations are explicit for both extension and backend
 - platform security is tracked as an explicit roadmap item rather than implied future hardening
+- deferred billing-path risks are documented explicitly rather than silently ignored
 
 ## Workstream Map
 

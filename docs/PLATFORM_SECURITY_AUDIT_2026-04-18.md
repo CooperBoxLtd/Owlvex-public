@@ -37,6 +37,16 @@ This boundary is the core trust story of the product and must stay true in:
 
 ## Security Review Summary
 
+### Current operating decision
+
+For the current demo and trial phase:
+
+- trials remain free
+- billing remains disabled by default
+- the backend should be treated as a metadata-only control plane for trial use
+
+This means the current unresolved billing-specific risks are documented, but they are not on the active trial path unless billing is deliberately enabled later.
+
 ### Immediate result
 
 One high-priority boundary issue was identified and fixed during this audit:
@@ -160,6 +170,33 @@ Recommended next step:
 - write an explicit allowed-fields review for each route
 - add negative tests for unexpected source-bearing fields where applicable
 
+### 6. Deferred until billing is enabled: webhook idempotency and billable-flow hardening
+
+Severity: High when billing is enabled
+
+Current behavior:
+
+- Stripe webhook handling is disabled by default in the current trial posture
+- if billing is enabled later, `checkout.session.completed` handling still needs explicit idempotency protection and stronger duplicate-prevention guarantees around issued licences
+
+Why it matters:
+
+- replayed or retried billing events should never mint multiple valid licences for the same purchase
+- billing flows should not become the place where key lifecycle mistakes or entitlement duplication enter the platform
+
+Current decision:
+
+- document this clearly
+- leave billing disabled during the free-trial phase
+- treat billing enablement as blocked on explicit webhook and entitlement hardening
+
+Required before billing enablement:
+
+- webhook idempotency protection
+- duplicate-prevention on Stripe-linked licence issuance
+- billing-route tests for replay and retry behavior
+- a review of secret handling and operational monitoring for the billing path
+
 ## Current Data-Flow Snapshot
 
 ### Local only
@@ -223,6 +260,11 @@ Recommended next step:
 
 - add a customer-facing security / privacy statement that mirrors this technical boundary
 - make trial and production wording use the same data-flow language
+
+### Priority 4
+
+- keep billing disabled until the product is intentionally moved into a billable phase
+- reopen webhook-idempotency and entitlement-hardening work only when billing enablement is back on the roadmap
 
 ## Working Rule
 

@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     environment: str = "development"
     owlvex_pack_signing_private_key_pem: str = ""
     owlvex_pack_signing_key_id: str = ""
+    billing_enabled: bool = False
+    trust_forwarded_for: bool = False
     licence_validate_rate_limit: int = 20
     prompt_build_rate_limit: int = 30
     pack_fetch_rate_limit: int = 60

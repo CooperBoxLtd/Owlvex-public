@@ -6,21 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.services.licence_service import validate_licence
 from app.services.pack_service import get_pack_artifact, get_pack_signing_posture, list_available_packs
-from app.services.rate_limit import rate_limiter
+from app.services.rate_limit import allow_control_plane_request, get_client_ip
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/packs", tags=["packs"])
 logger = logging.getLogger(__name__)
 settings = get_settings()
-
-
-def _client_ip(request: Request) -> str:
-    forwarded_for = request.headers.get("x-forwarded-for", "").strip()
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
-
-
 def _audit_pack_event(
     event: str,
     request: Request,
@@ -29,7 +20,7 @@ def _audit_pack_event(
 ) -> None:
     payload = {
         "event": event,
-        "client_ip": _client_ip(request),
+        "client_ip": get_client_ip(request, trust_forwarded_for=settings.trust_forwarded_for),
         "licence_id": licence.get("licence_id"),
         "team_name": licence.get("team_name"),
         "plan": licence.get("plan"),
@@ -45,7 +36,14 @@ async def manifest(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
-    if not rate_limiter.allow("pack_fetch", _client_ip(request), settings.pack_fetch_rate_limit, settings.rate_limit_window_seconds):
+    if not allow_control_plane_request(
+        "pack_fetch",
+        request,
+        limit=settings.pack_fetch_rate_limit,
+        window_seconds=settings.rate_limit_window_seconds,
+        licence_key=x_licence_key,
+        trust_forwarded_for=settings.trust_forwarded_for,
+    ):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many pack requests")
 
     lic = await validate_licence(db, x_licence_key)
@@ -76,7 +74,14 @@ async def get_pack(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
-    if not rate_limiter.allow("pack_fetch", _client_ip(request), settings.pack_fetch_rate_limit, settings.rate_limit_window_seconds):
+    if not allow_control_plane_request(
+        "pack_fetch",
+        request,
+        limit=settings.pack_fetch_rate_limit,
+        window_seconds=settings.rate_limit_window_seconds,
+        licence_key=x_licence_key,
+        trust_forwarded_for=settings.trust_forwarded_for,
+    ):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many pack requests")
 
     lic = await validate_licence(db, x_licence_key)

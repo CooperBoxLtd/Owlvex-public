@@ -71,6 +71,12 @@ This contract does not require:
 - every roadmap feature to be complete
 - enterprise hardening beyond the minimum controls listed here
 
+Current operating note:
+
+- during the free-trial phase, billing may remain intentionally disabled
+- disabled billing does not remove the need to document billing-path risks
+- it does mean billing-specific production blockers can stay deferred until the product is intentionally moved into a billable phase
+
 ## 4. Required Readiness Areas
 
 ## 4.1 Product Boundary Readiness
@@ -165,6 +171,11 @@ Exit criteria:
 - database initialization path is documented and repeatable
 - required production secrets are enumerated
 - the deployment path supports redeploy without reprovisioning everything
+
+Billing-specific note:
+
+- if billing is disabled, billing webhook idempotency is documented but not an active release-path blocker for trial-only operation
+- if billing is enabled, webhook replay safety and entitlement duplication protections become production blockers
 
 ## 4.6 Observability Readiness
 
@@ -268,6 +279,7 @@ Based on the current codebase state, the highest-value production-readiness gaps
 6. make the release gate explicit in CI and docs
 7. require auditable trusted-source provenance for grounded packs and remediation content
 8. resolve product-contract drift such as contributed settings or advertised behaviors that are not wired end-to-end in the runtime
+9. if billing is enabled later, add webhook idempotency and duplicate-entitlement protection before treating the billing path as production ready
 
 ## 9. Definition Of Production Ready
 
