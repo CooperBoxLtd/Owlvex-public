@@ -2479,7 +2479,7 @@ class Demo {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-eval-verify-1', verdict: 'support', reason: 'The code sends request-controlled input into eval().' },
+                        { id: 'ai-eval-verify-1', verdict: 'support', confidence: 0.91, reason: 'The code sends request-controlled input into eval().' },
                     ],
                 }),
                 tokenCount: 10,
@@ -2487,7 +2487,7 @@ class Demo {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     reviews: [
-                        { id: 'ai-eval-verify-1', verdict: 'clear', reason: 'No guard or sanitizing parser is visible around eval().' },
+                        { id: 'ai-eval-verify-1', verdict: 'clear', confidence: 0.89, reason: 'No guard or sanitizing parser is visible around eval().' },
                     ],
                 }),
                 tokenCount: 10,
@@ -2526,6 +2526,12 @@ class Demo {
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].confidence).toBe(0.92);
         expect(result.findings[0].corroboration).toBe('CORROBORATED');
+        expect(result.findings[0].aiReviewScores).toEqual({
+            finder: 0.88,
+            verifier: 0.91,
+            skeptic: 0.89,
+            final: 0.92,
+        });
         expect(result.warnings).toEqual([]);
     });
 

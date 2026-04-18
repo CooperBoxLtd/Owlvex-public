@@ -94,7 +94,7 @@ function getFindingLikelihoodReasons(finding: ScanResult['findings'][number]): s
 }
 
 function getAiConfidence(finding: ScanResult['findings'][number]): number {
-    return finding.resolverConfidence ?? finding.confidence ?? 0;
+    return finding.aiReviewScores?.final ?? finding.resolverConfidence ?? finding.confidence ?? 0;
 }
 
 function isLowConfidenceAiFinding(finding: ScanResult['findings'][number]): boolean {
@@ -146,14 +146,41 @@ function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     const confidence = getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'));
     const corroboration = getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'));
     const reviewFlag = isLowConfidenceAiFinding(finding) ? ' | manual review recommended' : '';
-    return [
+    const parts = [
         `mode ${scanTier}`,
         `confidence ${confidence}`,
         `evidence ${corroboration}`,
+    ];
+
+    if (finding.provenance !== 'deterministic') {
+        parts.push(formatAiPassScoreSummary(finding));
+    }
+
+    parts.push(
         `impact ${finding.severity.toLowerCase()}`,
         `likelihood ${getFindingLikelihood(finding).toLowerCase()}`,
         `risk ${finding.riskScore ?? 'n/a'}/10`,
-    ].join(' | ') + reviewFlag;
+    );
+
+    return parts.join(' | ') + reviewFlag;
+}
+
+function formatPercent(value: number | undefined): string {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 'n/a';
+    }
+
+    return `${Math.round(value * 100)}%`;
+}
+
+function formatAiPassScoreSummary(finding: ScanResult['findings'][number]): string {
+    const scores = finding.aiReviewScores;
+    return [
+        `finder ${formatPercent(scores?.finder ?? finding.resolverConfidence ?? finding.confidence)}`,
+        `verifier ${formatPercent(scores?.verifier)}`,
+        `skeptic ${formatPercent(scores?.skeptic)}`,
+        `final ${formatPercent(scores?.final ?? getAiConfidence(finding))}`,
+    ].join(' | ');
 }
 
 function getCorroborationLabel(finding: ScanResult['findings'][number]): string {
@@ -700,7 +727,8 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Analysis mode: ${getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'))}`);
                 lines.push(`- Confidence: ${getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'))}`);
                 if (finding.provenance !== 'deterministic') {
-                    lines.push(`- Detection confidence: ${Math.round(getAiConfidence(finding) * 100)}%${isLowConfidenceAiFinding(finding) ? ' (manual review recommended)' : ''}`);
+                    lines.push(`- AI pass scores: ${formatAiPassScoreSummary(finding)}`);
+                    lines.push(`- Detection confidence: ${formatPercent(getAiConfidence(finding))}${isLowConfidenceAiFinding(finding) ? ' (manual review recommended)' : ''}`);
                 }
                 lines.push(`- Evidence: ${getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'))}`);
                 if (isLowConfidenceAiFinding(finding)) {

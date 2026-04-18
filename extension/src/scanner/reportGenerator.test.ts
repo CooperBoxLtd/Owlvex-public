@@ -32,6 +32,12 @@ describe('reportGenerator', () => {
                     scanTier: 'TARGETED_AI',
                     confidenceTier: 'PLAUSIBLE',
                     corroboration: 'CORROBORATED',
+                    aiReviewScores: {
+                        finder: 0.88,
+                        verifier: 0.91,
+                        skeptic: 0.9,
+                        final: 0.93,
+                    },
                     canonicalId: 'owlvex.issue.sql_injection.001',
                     canonicalTitle: 'Unsanitized SQL query construction',
                     canonicalFamily: 'family.injection_execution',
@@ -128,11 +134,12 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Analysis mix: targeted_ai: 1');
         expect(written).toContain('- Evidence: corroborated: 1');
         expect(written).toContain('- Project context: inline project contract');
-        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| impact high \\| likelihood medium \\| risk 7/10 | 93% |');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| finder 88% \\| verifier 91% \\| skeptic 90% \\| final 93% \\| impact high \\| likelihood medium \\| risk 7/10 | 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Finding risk: HIGH impact / MEDIUM likelihood / 7/10');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Confidence: AI-reviewed');
+        expect(written).toContain('- AI pass scores: finder 88% | verifier 91% | skeptic 90% | final 93%');
         expect(written).toContain('- Detection confidence: 93%');
         expect(written).toContain('- Evidence: Validated by AI review');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
@@ -439,6 +446,12 @@ describe('reportGenerator', () => {
                                 ...buildResult().findings[0],
                                 confidence: 0.65,
                                 resolverConfidence: 0.65,
+                                aiReviewScores: {
+                                    finder: 0.62,
+                                    verifier: 0.68,
+                                    skeptic: 0.64,
+                                    final: 0.65,
+                                },
                             },
                         ],
                     }),
@@ -451,7 +464,8 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- AI findings needing manual review: 1');
         expect(written).toContain('- Manual review: 1 low-confidence AI finding(s)');
-        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| impact high \\| likelihood medium \\| risk 7/10 \\| manual review recommended | 65% |');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| finder 62% \\| verifier 68% \\| skeptic 64% \\| final 65% \\| impact high \\| likelihood medium \\| risk 7/10 \\| manual review recommended | 65% |');
+        expect(written).toContain('- AI pass scores: finder 62% | verifier 68% | skeptic 64% | final 65%');
         expect(written).toContain('- Detection confidence: 65% (manual review recommended)');
         expect(written).toContain('- Review note: This AI finding has a low confidence score. Verify the classification, title, and remediation against the code before acting on it.');
     });

@@ -38,6 +38,12 @@ export interface Finding {
     mappings?: CanonicalMappings;
     matchedSignals?: string[];
     resolverConfidence?: number;
+    aiReviewScores?: {
+        finder?: number;
+        verifier?: number;
+        skeptic?: number;
+        final?: number;
+    };
     likelihood?: 'LOW' | 'MEDIUM' | 'HIGH';
     likelihoodReasons?: string[];
     riskScore?: number;
@@ -73,6 +79,7 @@ interface AiCorroborationReview {
     id: string;
     verdict: 'support' | 'reject' | 'contradict' | 'clear' | 'unclear';
     reason?: string;
+    confidence?: number;
 }
 
 interface SeverityMetrics {
@@ -110,6 +117,46 @@ function normalizeLikelihood(value: unknown): FindingLikelihood | undefined {
     }
 
     return undefined;
+}
+
+function normalizeReviewConfidence(
+    value: unknown,
+    role: 'Verifier' | 'Skeptic',
+    verdict: string,
+): number | undefined {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        if (value > 1) {
+            return Math.max(0, Math.min(1, value / 100));
+        }
+        return Math.max(0, Math.min(1, value));
+    }
+
+    const normalizedVerdict = verdict.trim().toLowerCase();
+    if (!normalizedVerdict) {
+        return undefined;
+    }
+
+    if (role === 'Verifier') {
+        switch (normalizedVerdict) {
+            case 'support':
+            case 'reject':
+                return 0.9;
+            case 'unclear':
+                return 0.6;
+            default:
+                return undefined;
+        }
+    }
+
+    switch (normalizedVerdict) {
+        case 'clear':
+        case 'contradict':
+            return 0.88;
+        case 'unclear':
+            return 0.6;
+        default:
+            return undefined;
+    }
 }
 
 function getFindingLikelihood(finding: Finding): FindingLikelihood {
@@ -871,17 +918,31 @@ export class ScanEngine {
                 const verifier = verifierMap.get(finding.id);
                 const skeptic = skepticMap.get(finding.id);
                 if (verifier?.verdict === 'support' && skeptic?.verdict === 'clear') {
+                    const finalConfidence = Math.max(finding.confidence ?? 0.8, 0.92);
                     return {
                         ...finding,
-                        confidence: Math.max(finding.confidence ?? 0.8, 0.92),
+                        confidence: finalConfidence,
+                        aiReviewScores: {
+                            finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
+                            verifier: verifier.confidence,
+                            skeptic: skeptic.confidence,
+                            final: finalConfidence,
+                        },
                         corroboration: 'CORROBORATED' as const,
                     };
                 }
 
                 if (verifier?.verdict === 'support') {
+                    const finalConfidence = Math.max(finding.confidence ?? 0.8, 0.88);
                     return {
                         ...finding,
-                        confidence: Math.max(finding.confidence ?? 0.8, 0.88),
+                        confidence: finalConfidence,
+                        aiReviewScores: {
+                            finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
+                            verifier: verifier.confidence,
+                            skeptic: skeptic?.confidence,
+                            final: finalConfidence,
+                        },
                         corroboration: 'PARTIAL' as const,
                     };
                 }
@@ -889,12 +950,22 @@ export class ScanEngine {
                 if (verifier || skeptic) {
                     return {
                         ...finding,
+                        aiReviewScores: {
+                            finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
+                            verifier: verifier?.confidence,
+                            skeptic: skeptic?.confidence,
+                            final: finding.confidence ?? 0.8,
+                        },
                         corroboration: 'PARTIAL' as const,
                     };
                 }
 
                 return {
                     ...finding,
+                    aiReviewScores: {
+                        finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
+                        final: finding.confidence ?? 0.8,
+                    },
                     corroboration: 'UNVERIFIED' as const,
                 };
             });
@@ -1012,7 +1083,7 @@ export class ScanEngine {
 
         return `${roleInstruction}
 Respond with JSON only in this shape:
-{"reviews":[{"id":"candidate-id","verdict":"${params.expectedSupportVerdict}|${params.expectedContradictionVerdict}|unclear","reason":"short reason"}]}
+{"reviews":[{"id":"candidate-id","verdict":"${params.expectedSupportVerdict}|${params.expectedContradictionVerdict}|unclear","confidence":0.0,"reason":"short reason"}]}
 Review all candidates below and do not invent new findings.
 Language: ${params.language}
 Candidates:
@@ -1181,6 +1252,10 @@ ${params.code}`;
                             : '',
                     confidence: f.confidence ?? 0.8,
                     provenance: 'ai' as const,
+                    aiReviewScores: {
+                        finder: f.confidence ?? 0.8,
+                        final: f.confidence ?? 0.8,
+                    },
                     canonicalId: f.issue_id,
                     stride: normalizeStride(f.stride),
                     mappings: normalizeMappings(f.mappings),
@@ -1209,6 +1284,7 @@ ${params.code}`;
                         id: String(review.id ?? '').trim(),
                         verdict: String(review.verdict ?? '').trim().toLowerCase(),
                         reason: typeof review.reason === 'string' ? review.reason.trim() : undefined,
+                        confidence: normalizeReviewConfidence(review.confidence, role, String(review.verdict ?? '').trim().toLowerCase()),
                     }))
                     .filter((review: any) => review.id && ['support', 'reject', 'contradict', 'clear', 'unclear'].includes(review.verdict));
             }
@@ -1233,7 +1309,11 @@ ${params.code}`;
                 }
 
                 const fallbackVerdict: AiCorroborationReview['verdict'] = role === 'Verifier' ? 'support' : 'clear';
-                return [...matchedIds].map(id => ({ id, verdict: fallbackVerdict }));
+                return [...matchedIds].map(id => ({
+                    id,
+                    verdict: fallbackVerdict,
+                    confidence: normalizeReviewConfidence(undefined, role, fallbackVerdict),
+                }));
             }
         } catch {
             // Fall through to structured parse failure below.
