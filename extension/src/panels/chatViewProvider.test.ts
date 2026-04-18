@@ -291,7 +291,7 @@ describe('parseChatIntent', () => {
         expect(context).toContain('avoid describing pickle-based code execution unless other grounded context proves it');
     });
 
-    it('starts a fresh chat by default and offers restoring the previous one', () => {
+    it('starts a fresh chat by default while retaining restorable previous chat state', () => {
         const provider = new ChatViewProvider({
             getActive: () => ({
                 id: 'test-provider',
@@ -309,12 +309,12 @@ describe('parseChatIntent', () => {
             update: jest.fn(),
         } as any);
 
-        expect((provider as any).messages[0].content).toContain('Owlvex Assistant is ready.');
-        expect((provider as any).messages[1].content).toContain('Previous chat available');
-        expect((provider as any).messages[1].actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ kind: 'restorePreviousChat', label: 'Restore previous chat' }),
-            expect.objectContaining({ kind: 'dismissMessage', label: 'Keep this fresh chat' }),
-        ]));
+        expect((provider as any).messages).toEqual([]);
+        expect((provider as any).restorableMessages).toEqual([
+            { role: 'system', content: 'Owlvex Assistant is ready.', kind: 'advisory' },
+            { role: 'user', content: 'Old question' },
+            { role: 'assistant', content: 'Old answer', kind: 'advisory' },
+        ]);
     });
 
     it('extracts patched file content from fenced responses', () => {
@@ -675,6 +675,103 @@ describe('parseChatIntent', () => {
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: 'd:\\repo\\src\\userRepo.js' }),
             expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
+        ]));
+    });
+
+    it('keeps a single scan-level Fix code action for the latest scan results', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string) => {
+            if (command === PROFILE.commands.scanWorkspace) {
+                return {
+                    status: 'completed',
+                    completed: 2,
+                    totalFindings: 2,
+                    errors: [],
+                    results: [
+                        {
+                            uri: vscode.Uri.file('d:\\repo\\src\\users.js'),
+                            result: {
+                                score: 9,
+                                findings: [{
+                                    id: 'finding-users',
+                                    line: 5,
+                                    lineEnd: 5,
+                                    severity: 'HIGH',
+                                    framework: 'OWASP',
+                                    ruleCode: 'A01-MASS',
+                                    title: 'Mass Assignment',
+                                    explanation: 'Untrusted body is copied into persisted fields.',
+                                    threat: 'Privilege changes.',
+                                    fix: 'Allow-list writable fields.',
+                                    confidence: 0.93,
+                                    provenance: 'ai',
+                                    likelihood: 'HIGH',
+                                    riskScore: 9,
+                                }],
+                                positives: [],
+                                metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                                durationMs: 10,
+                                model: 'owlvex-test-model',
+                                provider: 'test-provider',
+                                warnings: [],
+                                summary: 'Finding in users.js',
+                            },
+                        },
+                        {
+                            uri: vscode.Uri.file('d:\\repo\\src\\redirect.js'),
+                            result: {
+                                score: 7,
+                                findings: [{
+                                    id: 'finding-redirect',
+                                    line: 8,
+                                    lineEnd: 8,
+                                    severity: 'MEDIUM',
+                                    framework: 'OWASP',
+                                    ruleCode: 'A01-REDIRECT',
+                                    title: 'Open Redirect',
+                                    explanation: 'Untrusted destination reaches redirect.',
+                                    threat: 'Phishing.',
+                                    fix: 'Allow-list destinations.',
+                                    confidence: 0.88,
+                                    provenance: 'ai',
+                                    likelihood: 'HIGH',
+                                    riskScore: 7,
+                                }],
+                                positives: [],
+                                metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                                durationMs: 12,
+                                model: 'owlvex-test-model',
+                                provider: 'test-provider',
+                                warnings: [],
+                                summary: 'Finding in redirect.js',
+                            },
+                        },
+                    ],
+                };
+            }
+
+            return undefined;
+        });
+
+        await (provider as any).handleQuickAction('scanFolder');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        const fixActions = finalMessage.actions.filter((action: any) => action.kind === 'generateFixPreview');
+        expect(fixActions).toHaveLength(0);
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Fix code', kind: 'generateBatchFixPreview' }),
         ]));
     });
 
