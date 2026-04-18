@@ -90,6 +90,8 @@ These expectations should be read together with:
 | `71-go-path-traversal-safe.go` | clean | fixed Go file path |
 | `72-go-ssrf-unsafe.go` | finding expected | request-derived Go outbound request |
 | `73-go-ssrf-safe.go` | clean | fixed outbound Go destination |
+| `74-go-jwt-validation-unsafe.go` | finding expected | Go ParseUnverified on request token |
+| `75-go-jwt-validation-safe.go` | clean | Go jwt.Parse with key function |
 
 ## Stabilization Rule
 

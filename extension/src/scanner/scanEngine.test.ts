@@ -1776,6 +1776,76 @@ if (process.env.NODE_ENV !== 'production') {
         expect(result.summary).toBe('No findings detected.');
     });
 
+    it('suppresses AI-only weak-jwt findings when Go uses jwt.Parse with a key function', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.1,
+                    summary: 'Weak JWT validation detected.',
+                    findings: [
+                        {
+                            id: 'ai-jwt-go-fp-1',
+                            line: 4,
+                            line_end: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A07-JWT',
+                            title: 'Weak JWT validation',
+                            explanation: 'The code parses a token without visible verification.',
+                            threat: 'Forged claims may be trusted.',
+                            fix: 'Verify signature and accepted algorithms.',
+                            confidence: 0.88,
+                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The code parses request-derived token claims.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'go',
+            fileName: 'd:\\repo\\jwt-safe.go',
+            getText: () => `func parse(r *http.Request, secret []byte) {
+    token := r.Header.Get("Authorization")
+    jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+        return secret, nil
+    })
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toContain('No findings');
+    });
+
     it('suppresses AI-only path traversal findings when Python enforces an absolute base-directory boundary', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),

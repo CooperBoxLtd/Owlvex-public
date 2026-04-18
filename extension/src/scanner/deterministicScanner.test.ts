@@ -770,6 +770,26 @@ func fetch() (*http.Response, error) {
 }`;
         expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'SR-001')).toHaveLength(0);
     });
+
+    it('detects Go ParseUnverified() on a request-derived token', () => {
+        const source = `
+func parse(r *http.Request) {
+    token := r.Header.Get("Authorization")
+    new(jwt.Parser).ParseUnverified(token, jwt.MapClaims{})
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'JW-001')).toHaveLength(1);
+    });
+
+    it('does not flag Go jwt.Parse() with a key function', () => {
+        const source = `
+func parse(r *http.Request, secret []byte) {
+    token := r.Header.Get("Authorization")
+    jwt.Parse(token, func(token *jwt.Token) (interface{}, error) {
+        return secret, nil
+    })
+}`;
+        expect(scanner.scan(source, 'go').filter(f => f.ruleCode === 'JW-001')).toHaveLength(0);
+    });
 });
 
 // ---------------------------------------------------------------------------

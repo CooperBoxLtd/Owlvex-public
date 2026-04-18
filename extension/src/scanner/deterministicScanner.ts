@@ -179,7 +179,7 @@ const CSHARP_HTTP_DIRECT_RE =
 const CSHARP_HTTP_VAR_RE =
     /\b(?:httpClient|client)\.(?:GetStringAsync|GetAsync|PostAsync)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
 const GO_REQUEST_ASSIGN_RE =
-    /\b([A-Za-z_][A-Za-z0-9_]*)\s*(?::=|=)\s*(?:r|req)\.(?:URL\.Query\(\)\.Get|FormValue)\s*\(\s*"[^"]+"\s*\)/g;
+    /\b([A-Za-z_][A-Za-z0-9_]*)\s*(?::=|=)\s*(?:r|req)\.(?:URL\.Query\(\)\.Get|FormValue|Header\.Get)\s*\(\s*"[^"]+"\s*\)/g;
 const GO_EXEC_DIRECT_RE =
     /\bexec\.Command\s*\(\s*"sh"\s*,\s*"-c"\s*,\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
 const GO_EXEC_CONCAT_RE =
@@ -198,6 +198,10 @@ const GO_HTTP_DIRECT_RE =
     /\b(?:http\.Get|client\.Get)\s*\(\s*(?:r|req)\.(?:URL\.Query\(\)\.Get|FormValue)\s*\(\s*"[^"]+"\s*\)\s*\)/g;
 const GO_HTTP_VAR_RE =
     /\b(?:http\.Get|client\.Get)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
+const GO_JWT_PARSE_UNVERIFIED_DIRECT_RE =
+    /\b(?:new\s*\(\s*jwt\.Parser\s*\)|[A-Za-z_][A-Za-z0-9_]*)\.ParseUnverified\s*\(\s*(?:r|req)\.(?:URL\.Query\(\)\.Get|FormValue|Header\.Get)\s*\(\s*"[^"]+"\s*\)/g;
+const GO_JWT_PARSE_UNVERIFIED_VAR_RE =
+    /\b(?:new\s*\(\s*jwt\.Parser\s*\)|[A-Za-z_][A-Za-z0-9_]*)\.ParseUnverified\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -2742,6 +2746,60 @@ function scanGoSsrfSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanGoJwtWeakValidationSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(GO_REQUEST_ASSIGN_RE.source, GO_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const directPattern = new RegExp(GO_JWT_PARSE_UNVERIFIED_DIRECT_RE.source, GO_JWT_PARSE_UNVERIFIED_DIRECT_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT Validation',
+            explanation:
+                'The Go code calls `ParseUnverified(...)` directly on request-controlled token input. Parsing claims without signature verification does not prove the token was issued by a trusted signer.',
+            threat:
+                'An attacker can forge arbitrary claims such as user ID, role, or tenant and have the application treat them as trusted identity data if downstream code accepts the parsed payload.',
+            fix:
+                'Replace `ParseUnverified(...)` with verified token handling such as `jwt.Parse(...)` or `jwt.ParseWithClaims(...)` using a key function and explicit algorithm checks before trusting any claims.',
+            canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-controlled Go token is parsed with ParseUnverified(...) without signature verification.'],
+        });
+    }
+
+    const varPattern = new RegExp(GO_JWT_PARSE_UNVERIFIED_VAR_RE.source, GO_JWT_PARSE_UNVERIFIED_VAR_RE.flags);
+    while ((match = varPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT Validation',
+            explanation:
+                'The Go code calls `ParseUnverified(...)` on a request-derived token variable. Parsing claims without signature verification does not prove the token was issued by a trusted signer.',
+            threat:
+                'An attacker can forge arbitrary claims such as user ID, role, or tenant and have the application treat them as trusted identity data if downstream code accepts the parsed payload.',
+            fix:
+                'Use verified token handling such as `jwt.Parse(...)` or `jwt.ParseWithClaims(...)` with a key function and explicit algorithm checks before trusting any claims.',
+            canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Go token variable reaches ParseUnverified(...) without visible verification.'],
+        });
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -2788,6 +2846,7 @@ export class DeterministicScanner {
                             ...scanGoSqlSinks(source),
                             ...scanGoPathTraversalSinks(source),
                             ...scanGoSsrfSinks(source),
+                            ...scanGoJwtWeakValidationSinks(source),
                         ]
             : [
                 ...scanPythonShellSinks(source),

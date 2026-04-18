@@ -325,6 +325,12 @@ function hasVerifiedJavaJwtDecode(snippet: string): boolean {
         && /\.build\s*\(\s*\)\s*\.verify\s*\(/.test(snippet);
 }
 
+function hasVerifiedGoJwtDecode(snippet: string): boolean {
+    return /\bjwt\.Parse(?:WithClaims)?\s*\(/.test(snippet)
+        && /\bfunc\s*\(\s*token\s+\*jwt\.Token\s*\)/.test(snippet)
+        && !/\bParseUnverified\s*\(/.test(snippet);
+}
+
 function hasParameterizedSqlUsage(snippet: string): boolean {
     const hasJsOrPythonBinding =
         /\.(?:query|execute|raw|executemany)\s*\(\s*['"`][\s\S]{0,220}?(?:\?|\$\d+|%s|@\w+)[\s\S]{0,220}?['"`]\s*,\s*(?:\[|\()/.test(snippet);
@@ -451,7 +457,7 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     }
 
     if (finding.canonicalId === 'owlvex.issue.weak_jwt_validation.001'
-        && (hasManualJwtVerification(snippet) || hasVerifiedPythonJwtDecode(snippet) || hasVerifiedJavaJwtDecode(snippet))) {
+        && (hasManualJwtVerification(snippet) || hasVerifiedPythonJwtDecode(snippet) || hasVerifiedJavaJwtDecode(snippet) || hasVerifiedGoJwtDecode(snippet))) {
         return true;
     }
 
