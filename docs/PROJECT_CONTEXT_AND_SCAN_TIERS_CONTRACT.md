@@ -153,6 +153,118 @@ Not allowed by default:
 
 ---
 
+## Framework Interpretation Boundary: `Clean Code`
+
+## Why this needs to be explicit
+
+`Clean Code` is easy to over-interpret.
+
+Without a bounded definition, it can drift into:
+
+- subjective style opinions
+- architecture taste masquerading as findings
+- duplicate security findings under softer labels
+- AI criticism that is not grounded in observable code behavior
+
+Owlvex must treat `Clean Code` as a bounded quality lens, not an open-ended invitation for the model to judge code by personal preference.
+
+---
+
+## What `Clean Code` means in Owlvex
+
+Within Owlvex, `Clean Code` means a **quality and defensive-engineering lens** focused on observable code properties such as:
+
+- readability
+- maintainability
+- clarity of intent
+- defensive engineering hygiene
+- safer implementation structure
+
+Its purpose is to improve explanation, remediation framing, and quality-oriented interpretation around code that is already being analyzed.
+
+It is not a substitute security taxonomy.
+
+---
+
+## What `Clean Code` is allowed to influence
+
+`Clean Code` may influence:
+
+- wording of explanations
+- remediation tone and framing
+- emphasis on maintainability and defensive engineering improvements
+- prioritization of concrete code-change advice over abstract criticism
+
+It may be used in:
+
+- `TARGETED_AI`
+- `REPO_AI`
+- remediation suggestions
+- report explanation language
+
+---
+
+## What `Clean Code` must not mean
+
+`Clean Code` must not be used as:
+
+- proof of a security defect
+- a replacement for deterministic rule truth
+- justification for suppressing a real security finding
+- an excuse for purely stylistic or taste-based criticism
+- an architecture-ideology engine
+
+Selecting `Clean Code` does not upgrade a finding to `PROVEN`.
+
+Selecting `Clean Code` does not authorize Owlvex to create findings based only on naming taste, formatting preference, or subjective design opinion.
+
+---
+
+## `Clean Code` scope boundaries
+
+The intended `Clean Code` scope includes bounded, observable concerns such as:
+
+- dangerous ambiguity in control flow or validation behavior
+- weak defensive structure around input handling
+- logging or redaction hygiene
+- unsafe defaults or error-handling hygiene
+- maintainability problems that materially increase defect risk or obscure security-relevant behavior
+
+The intended `Clean Code` scope excludes:
+
+- formatting preference
+- naming preference alone
+- personal architectural taste
+- generalized "this code feels bad" commentary
+- speculative criticism not tied to observable code properties
+
+---
+
+## `Clean Code` and security findings
+
+`Clean Code` must remain adjacent to security truth, not merged with it.
+
+That means:
+
+- real security findings remain security findings even when `Clean Code` is selected
+- `Clean Code` may improve how Owlvex explains safer implementation choices
+- `Clean Code` may not soften or suppress a structurally proven security defect
+- `Clean Code` should shape explanation style more than finding truth
+
+---
+
+## Operational rule
+
+If a `Clean Code` interpretation cannot be explained as a concrete, observable code-quality or defensive-engineering property, Owlvex should not emit it as a normal finding.
+
+When in doubt:
+
+- prefer no `Clean Code` finding over a subjective one
+- prefer a remediation note over a top-level issue
+- prefer explicit security framing when the problem is actually a security defect
+
+---
+
 ## Part 2: Three-Tier Scan Model
 
 ## Why the current hybrid model needs this
@@ -333,6 +445,82 @@ It should also make it easier to explain the product:
 - deterministic proof where Owlvex can prove
 - targeted AI where bounded reasoning helps
 - repo AI where broad context is needed
+
+---
+
+## Language Support Boundary
+
+## Core Rule
+
+Owlvex may analyze many languages, but it must only claim deterministic proof where a bounded rule contract exists for that language.
+
+Language count is not the primary product truth.
+
+The primary truth is:
+
+- where Owlvex has deterministic proof contracts
+- where Owlvex has only AI-assisted analysis
+
+This is a designed asymmetry, not a temporary embarrassment.
+
+---
+
+## Required product posture
+
+Owlvex should communicate language support like this:
+
+- many languages may be analyzable through AI-backed tiers
+- deterministic, proof-grade analysis is implemented only where structural certainty can be maintained
+- expanding to a new language requires explicit proof contracts, benchmarks, and false-positive guards
+
+The current proof-contract source of truth is:
+
+- [issueContracts.ts](/d:/Dev/repos/CodeScanner/extension/src/frameworks/issueContracts.ts:1)
+- [DETERMINISTIC_LANGUAGE_MATRIX.md](/d:/Dev/repos/CodeScanner/docs/DETERMINISTIC_LANGUAGE_MATRIX.md:1)
+
+The product must not imply that AI-backed language coverage and deterministic language coverage are equivalent.
+
+---
+
+## Expansion rule
+
+Owlvex should not expand languages as a flat checklist such as:
+
+- "next Java"
+- "next Go"
+- "next Rust"
+
+Instead, it should expand by reusing trusted issue families inside each language.
+
+The correct order is:
+
+1. choose a bounded language wave
+2. choose the issue families that port honestly into that language
+3. create language-specific proof contracts
+4. add safe and unsafe fixtures
+5. benchmark before making support claims
+
+---
+
+## Recommended language waves
+
+The next realistic deterministic language waves are:
+
+1. Python depth
+2. Java
+3. C#
+4. Go
+
+These languages are recommended because they map most naturally to the current trusted family set:
+
+- SQL injection
+- command injection
+- path traversal
+- SSRF
+- auth and token misuse
+- deserialization where applicable
+
+Lower-priority languages may still be analyzable through AI tiers, but should not be presented as proof-grade deterministic surfaces until the same contract discipline exists.
 
 ---
 

@@ -95,6 +95,7 @@ interface ChatState {
     projectContextSummary: string;
     workspaceSummary: string;
     lastScanTarget: string;
+    conversationStatus: string;
 }
 
 const CHAT_STATE_KEY = `${PROFILE.storagePrefix}.chat.messages`;
@@ -238,7 +239,7 @@ function buildFindingFallback(
     if (fixPrompt || hasPendingFixPreview) {
         lines.push(
             hasPendingFixPreview
-                ? 'A fix preview is already open. Review the diff, then choose Keep fix or Discard fix.'
+                ? 'A fix preview is already open for review. The file is still unchanged until you choose Keep fix or Discard fix.'
                 : 'Next step: choose Fix code to open a side-by-side remediation diff.'
         );
     }
@@ -712,6 +713,40 @@ function buildPendingFixPreviewActions(): ChatMessageAction[] {
     ];
 }
 
+function buildPendingFixPreviewMessage(finding: Finding, targetPath: string): string {
+    const fileLabel = vscode.workspace.asRelativePath(vscode.Uri.file(targetPath), false);
+    const findingLabel = finding.canonicalTitle || finding.title;
+    return [
+        `Fix preview ready for ${fileLabel}.`,
+        `Reviewing: ${findingLabel} at line ${finding.line}.`,
+        'A side-by-side diff is open now.',
+        'The original file has not changed yet.',
+        'Choose Keep fix to write the reviewed code into the file, or Discard fix to leave the file exactly as it was.',
+    ].join('\n');
+}
+
+function buildConversationStatus(options: {
+    pendingFixPreview?: PendingFixPreview;
+    latestActionableFinding?: Finding;
+    latestActionableTargetPath?: string;
+}): string {
+    if (options.pendingFixPreview) {
+        const finding = options.pendingFixPreview.finding;
+        const fileLabel = vscode.workspace.asRelativePath(vscode.Uri.file(options.pendingFixPreview.targetPath), false);
+        return `Reviewing fix preview: ${finding.canonicalTitle || finding.title} in ${fileLabel}.`;
+    }
+
+    if (options.latestActionableFinding) {
+        const finding = options.latestActionableFinding;
+        const fileLabel = options.latestActionableTargetPath
+            ? vscode.workspace.asRelativePath(vscode.Uri.file(options.latestActionableTargetPath), false)
+            : 'the current target file';
+        return `Focused on finding: ${finding.canonicalTitle || finding.title} in ${fileLabel}.`;
+    }
+
+    return 'Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.';
+}
+
 function getTopActionableFindingResult(
     items: Array<{ uri?: vscode.Uri; result?: ScanResult }>,
 ): { finding: Finding; targetPath?: string } | undefined {
@@ -920,7 +955,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
-                content: `Review fix ready for ${vscode.workspace.asRelativePath(document.uri, false)}. A side-by-side diff is open and the original file is unchanged until you choose Keep fix or Discard fix.`,
+                content: buildPendingFixPreviewMessage(finding, document.uri.fsPath),
                 kind: 'advisory',
                 actions: buildPendingFixPreviewActions(),
             };
@@ -985,7 +1020,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const originalFinding = this.pendingFixPreview.finding;
         this.messages.push({
             role: 'assistant',
-            content: `Kept the fix preview for ${vscode.workspace.asRelativePath(targetUri, false)}. Verifying the file now...`,
+            content: [
+                `Kept the reviewed fix for ${vscode.workspace.asRelativePath(targetUri, false)}.`,
+                `Applied change: ${originalFinding.canonicalTitle || originalFinding.title} at line ${originalFinding.line}.`,
+                'Verifying the updated file now...',
+            ].join('\n'),
             kind: 'advisory',
         });
         this.pendingFixPreview = undefined;
@@ -996,7 +1035,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (!rescanned) {
                 this.messages.push({
                     role: 'assistant',
-                    content: `Verification could not confirm the result for ${vscode.workspace.asRelativePath(targetUri, false)}. The fix was kept, but no completed rescan result was returned.`,
+                    content: `Verification could not confirm the result for ${vscode.workspace.asRelativePath(targetUri, false)}. The reviewed code was kept, but no completed rescan result was returned.`,
                     kind: 'advisory',
                 });
             } else {
@@ -1008,19 +1047,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 if (!matchingFinding) {
                     this.messages.push({
                         role: 'assistant',
-                        content: `Verification: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                        content: `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
                         kind: 'advisory',
                     });
                 } else if ((matchingFinding.riskScore ?? 0) < (originalFinding.riskScore ?? 0)) {
                     this.messages.push({
                         role: 'assistant',
-                        content: `Verification: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                        content: `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
                         kind: 'advisory',
                     });
                 } else {
                     this.messages.push({
                         role: 'assistant',
-                        content: `Verification: the finding is still present after the kept fix. Review the diff again or generate another fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
+                        content: `Verification complete: the finding is still present after the kept fix. Review the diff again or generate another fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
                         kind: 'advisory',
                     });
                 }
@@ -1396,10 +1435,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action.kind === 'discardFixPreview') {
+            const discardedPreview = this.pendingFixPreview;
             this.pendingFixPreview = undefined;
             this.messages.push({
                 role: 'assistant',
-                content: 'Discarded the current fix preview. The original file was left unchanged.',
+                content: discardedPreview
+                    ? `Discarded the fix preview for ${vscode.workspace.asRelativePath(vscode.Uri.file(discardedPreview.targetPath), false)}. The original file was left unchanged and no code was written.`
+                    : 'Discarded the current fix preview. The original file was left unchanged and no code was written.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -2003,6 +2045,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             projectContextSummary,
             workspaceSummary: this.getWorkspaceSummary(),
             lastScanTarget: this.storage.get<string>(LAST_SCAN_TARGET_KEY, 'No scan run yet'),
+            conversationStatus: buildConversationStatus({
+                pendingFixPreview: this.pendingFixPreview,
+                latestActionableFinding: this.latestActionableFinding,
+                latestActionableTargetPath: this.latestActionableTargetPath,
+            }),
         };
     }
 
@@ -2386,31 +2433,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       background: color-mix(in srgb, var(--vscode-editor-background) 30%, var(--vscode-sideBar-background));
     }
     .conversation-header {
-      padding: 8px 14px;
+      padding: 9px 14px;
       font-size: 11px;
       opacity: 0.72;
       border-bottom: 1px solid color-mix(in srgb, var(--vscode-sideBarSectionHeader-border) 70%, transparent);
+      background: color-mix(in srgb, var(--vscode-editorWidget-background) 52%, transparent);
     }
     .messages {
       flex: 1 1 auto;
       overflow-y: auto;
-      padding: 14px;
+      padding: 16px 14px 18px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
     }
     .msg {
       max-width: 100%;
-      padding: 10px 12px;
-      border-radius: 12px;
-      white-space: pre-wrap;
-      line-height: 1.45;
+      padding: 11px 12px;
+      border-radius: 14px;
+      line-height: 1.5;
       word-break: break-word;
       font-size: 12px;
+      box-sizing: border-box;
+    }
+    .msg-body {
+      white-space: pre-wrap;
+    }
+    .msg-body + .msg-actions {
+      margin-top: 10px;
     }
     .tag {
       display: inline-block;
-      margin-bottom: 6px;
+      margin-bottom: 7px;
       padding: 2px 8px;
       border-radius: 999px;
       font-size: 10px;
@@ -2430,14 +2484,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
-      margin-top: 8px;
+      margin-top: 10px;
     }
     .msg-action {
       border: 1px solid var(--vscode-button-border, var(--vscode-widget-border));
-      background: transparent;
+      background: color-mix(in srgb, var(--vscode-editorWidget-background) 55%, transparent);
       color: var(--vscode-textLink-foreground);
       border-radius: 999px;
-      padding: 4px 8px;
+      padding: 5px 9px;
       font-size: 11px;
     }
     .msg.user {
@@ -2445,25 +2499,32 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       max-width: 88%;
       background: var(--vscode-button-background);
       color: var(--vscode-button-foreground);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--vscode-button-background) 18%, transparent);
     }
     .msg.assistant, .msg.system {
       align-self: flex-start;
       background: var(--vscode-editorWidget-background);
       border: 1px solid var(--vscode-widget-border);
+      box-shadow: 0 1px 5px color-mix(in srgb, var(--vscode-editorWidget-background) 14%, transparent);
     }
     .composer {
       border-top: 1px solid var(--vscode-sideBarSectionHeader-border);
       padding: 12px;
       display: grid;
-      gap: 8px;
+      gap: 9px;
+      background: color-mix(in srgb, var(--vscode-editorWidget-background) 40%, transparent);
+    }
+    .composer-hint {
+      font-size: 11px;
+      opacity: 0.7;
     }
     textarea {
       width: 100%;
-      min-height: 88px;
+      min-height: 84px;
       resize: vertical;
       box-sizing: border-box;
-      border-radius: 10px;
-      padding: 10px 12px;
+      border-radius: 12px;
+      padding: 11px 12px;
       color: var(--vscode-input-foreground);
       background: var(--vscode-input-background);
       border: 1px solid var(--vscode-input-border);
@@ -2566,10 +2627,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       </details>
     </div>
     <div class="conversation" id="conversation">
-      <div class="conversation-header">Conversation. Drag this section edge to resize.</div>
+      <div class="conversation-header" id="conversationHeader">Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.</div>
       <div class="messages" id="messages"></div>
     </div>
     <div class="composer">
+      <div class="composer-hint">Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line.</div>
       <textarea id="prompt" placeholder="Ask Owlvex about this repo, a vulnerability, or what to scan next."></textarea>
       <div class="actions">
         <button class="secondary" id="clear">New Chat</button>
@@ -2592,6 +2654,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const providerStatusEl = document.getElementById('providerStatus');
     const providerHintEl = document.getElementById('providerHint');
     const lastScanEl = document.getElementById('lastScan');
+    const conversationHeaderEl = document.getElementById('conversationHeader');
     const scanScopeEl = document.getElementById('scanScope');
     const runScanEl = document.getElementById('runScan');
     const providerEl = document.getElementById('provider');
@@ -2611,6 +2674,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       providerStatusEl.textContent = state.providerStatus || 'Provider status: unknown';
       providerHintEl.textContent = state.providerHint || '';
       lastScanEl.textContent = 'Last scan: ' + (state.lastScanTarget || 'No scan run yet');
+      conversationHeaderEl.textContent = state.conversationStatus || 'Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.';
       if (settingsPanelEl && !state.providers.length) {
         settingsPanelEl.open = true;
       }
@@ -2654,6 +2718,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           div.appendChild(tag);
         }
         const text = document.createElement('div');
+        text.className = 'msg-body';
         text.textContent = message.content;
         div.appendChild(text);
         if (Array.isArray(message.actions) && message.actions.length) {

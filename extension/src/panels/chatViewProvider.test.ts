@@ -440,7 +440,7 @@ describe('parseChatIntent', () => {
             previewUri,
             `${PROFILE.displayLabel}: Fix Preview - SQL Injection`,
         );
-        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Review fix ready for');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Fix preview ready for');
         expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ id: 'apply-fix-preview', label: 'Keep fix', kind: 'applyFixPreview' }),
             expect.objectContaining({ id: 'discard-fix-preview', label: 'Discard fix', kind: 'discardFixPreview' }),
@@ -789,7 +789,7 @@ describe('parseChatIntent', () => {
             previewUri,
             expect.stringContaining('Fix Preview - Open Redirect'),
         );
-        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Choose Keep fix to write the reviewed code into the file');
     });
 
     it('treats apply changes as a diff preview request instead of a direct save', async () => {
@@ -855,7 +855,7 @@ describe('parseChatIntent', () => {
             expect.stringContaining('Fix Preview - Insecure deserialization of untrusted data'),
         );
         expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
-        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Choose Keep fix to write the reviewed code into the file');
     });
 
     it('falls back to grounded local finding context when the provider hits a rate limit', async () => {
@@ -1112,7 +1112,7 @@ describe('parseChatIntent', () => {
             previewUri,
             expect.stringContaining('Fix Preview - Open Redirect'),
         );
-        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Choose Keep fix to write the reviewed code into the file');
     });
 
     it('injects project context contract into advisory prompts when configured', async () => {
@@ -1282,7 +1282,7 @@ describe('parseChatIntent', () => {
             previewUri,
             expect.stringContaining('Fix Preview - Open Redirect'),
         );
-        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Choose Keep fix to write the reviewed code into the file');
     });
 
     it('applies a generated fix preview only when the file is unchanged', async () => {
@@ -1382,8 +1382,8 @@ describe('parseChatIntent', () => {
         ]));
         expect(vscode.window.showTextDocument).toHaveBeenCalledWith(expect.objectContaining({ uri: targetUri }), { preview: false });
         expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(3, PROFILE.commands.scanFile, expect.objectContaining({ fsPath: 'd:\\repo\\src\\target.js' }));
-        expect((provider as any).messages[(provider as any).messages.length - 2].content).toContain('Kept the fix preview');
-        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Verification: the reviewed finding is no longer present');
+        expect((provider as any).messages[(provider as any).messages.length - 2].content).toContain('Kept the reviewed fix');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Verification complete: the reviewed finding is no longer present');
         expect((provider as any).pendingFixPreview).toBeUndefined();
     });
 

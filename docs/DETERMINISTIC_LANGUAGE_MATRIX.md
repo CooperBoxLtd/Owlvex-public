@@ -4,6 +4,17 @@
 
 This matrix is the product-facing source of truth for what Owlvex currently proves deterministically by language and family.
 
+The machine-readable companion for this matrix is:
+
+- [issueContracts.ts](/d:/Dev/repos/CodeScanner/extension/src/frameworks/issueContracts.ts:1)
+
+That file is where Owlvex now records:
+
+- canonical issue family proof contracts
+- deterministic language claims
+- explicit not-claimed boundaries
+- safe-pattern expectations per family
+
 It exists to keep three things aligned:
 
 - engine scope
@@ -45,6 +56,17 @@ When a new deterministic language cell is added:
 4. add suppression coverage if the AI lane can still overclaim on the safe companion
 
 Do not mark a language/family cell as supported until all four are in place.
+
+## Contract Rule
+
+Every supported matrix cell should also line up with an explicit issue proof contract covering:
+
+- proof boundary
+- supported deterministic languages
+- not-claimed deterministic languages
+- safe patterns that must suppress the claim
+
+If a matrix cell and an issue proof contract disagree, the contract should be treated as stale and corrected in the same batch.
 
 ## Current Next Targets
 

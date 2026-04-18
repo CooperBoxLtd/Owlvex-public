@@ -332,6 +332,44 @@ function buildDeterministicPanel(
     return out;
 }
 
+function buildOverallPriorityLine(
+    findingsByFile: Array<{ file: string; result: ScanResult; packContext?: ScanResult['packContext'] }>,
+): string {
+    const firstRiskyFile = findingsByFile.find(item => item.result.findings.length > 0);
+    if (!firstRiskyFile) {
+        return 'Start with: no active findings were identified in this scan.';
+    }
+
+    const topFinding = [...firstRiskyFile.result.findings]
+        .sort((left, right) => riskRank(right) - riskRank(left))[0];
+    const title = topFinding.canonicalTitle || topFinding.title || 'Top finding';
+    return `Start with: ${title} in \`${firstRiskyFile.file}\` (${topFinding.riskScore ?? 'n/a'}/10 risk).`;
+}
+
+function buildScanTrustLine(results: ReportSnapshot['results']): string {
+    const findings = results.flatMap(item => item.result.findings);
+    if (!findings.length) {
+        return 'This scan did not produce active findings. Coverage and provider status are listed below.';
+    }
+
+    const deterministicCount = findings.filter(finding => finding.provenance === 'deterministic').length;
+    const repoAiCount = findings.filter(finding => (finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI')) === 'REPO_AI').length;
+    const targetedCount = findings.filter(finding => (finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI')) === 'TARGETED_AI').length;
+
+    const parts: string[] = [];
+    if (deterministicCount > 0) {
+        parts.push(`${deterministicCount} proven by static rules`);
+    }
+    if (targetedCount > 0) {
+        parts.push(`${targetedCount} reviewed with targeted AI`);
+    }
+    if (repoAiCount > 0) {
+        parts.push(`${repoAiCount} strengthened with repo context`);
+    }
+
+    return `What this scan established: ${parts.join('; ')}.`;
+}
+
 export async function generateWorkspaceScanReport(root: vscode.Uri, summary: FolderScanSummary): Promise<vscode.Uri> {
     return generateReportFromSnapshot(root, {
         targetLabel: root.fsPath,
@@ -461,21 +499,29 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         '',
         '## Summary',
         '',
+        `- ${buildOverallPriorityLine(findingsByFile)}`,
+        `- ${buildScanTrustLine(snapshot.results)}`,
+        '- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.',
+        '',
+        '## Scan Facts',
+        '',
         `- Files scanned: ${snapshot.results.length}`,
         `- Files with findings: ${snapshot.results.filter(item => item.result.findings.length > 0).length}`,
         `- Total findings: ${totalFindings}`,
         `- Average file risk score: ${averageScore.toFixed(1)}/10`,
         `- Static findings: ${deterministicItems.length}`,
-        `- Knowledge sources: ${packCoverageSummary}`,
-        `- Frameworks in scope: ${formatFrameworkSummary([...new Set(snapshot.results.flatMap(item => item.result.frameworks ?? []))])}`,
-        `- Errors: ${snapshot.errors.length}`,
-        `- Scan warnings: ${warnings.length}`,
-        `- Coverage: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Normal for the current provider and runtime state'}`,
         `- Analysis mode: ${totalFindings > 0 ? getScanTierDisplayLabel(getPrimaryScanTierLabel(snapshot.results.flatMap(item => item.result.findings))) : 'none'}`,
         `- Analysis mix: ${totalFindings > 0 ? summarizeScanTierCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to classify'}`,
         `- Evidence: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
+        '',
+        '## Coverage And Context',
+        '',
+        `- Coverage: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Normal for the current provider and runtime state'}`,
+        `- Knowledge sources: ${packCoverageSummary}`,
+        `- Frameworks in scope: ${formatFrameworkSummary([...new Set(snapshot.results.flatMap(item => item.result.frameworks ?? []))])}`,
         `- Project context: ${projectContextSummary}`,
-        '- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.',
+        `- Errors: ${snapshot.errors.length}`,
+        `- Scan warnings: ${warnings.length}`,
         '',
     ];
 
@@ -487,6 +533,10 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push('');
             lines.push(`- File risk score: ${item.result.score.toFixed(1)}/10`);
             lines.push(`- Findings: ${item.result.findings.length}`);
+            if (item.result.findings.length) {
+                const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];
+                lines.push(`- Start with: ${topFinding.canonicalTitle || topFinding.title} (${topFinding.riskScore ?? 'n/a'}/10 risk)`);
+            }
             lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
             lines.push(`- Coverage: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal for this file'}`);

@@ -97,18 +97,21 @@ describe('reportGenerator', () => {
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('# Owlvex Vulnerability Scan Report');
-        expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
-        expect(written).toContain('- Knowledge sources: Fresh Packs: 1');
-        expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
+        expect(written).toContain('- Start with: Unsanitized SQL query construction in `example.js` (7/10 risk).');
+        expect(written).toContain('- What this scan established: 1 reviewed with targeted AI.');
+        expect(written).toContain('- Average file risk score: 7.0/10');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Analysis mix: targeted_ai: 1');
         expect(written).toContain('- Evidence: corroborated: 1');
+        expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
+        expect(written).toContain('- Knowledge sources: Fresh Packs: 1');
+        expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Project context: inline project contract');
-        expect(written).toContain('- Average file risk score: 7.0/10');
         expect(written).toContain('- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
+        expect(written).toContain('- Start with: Unsanitized SQL query construction (7/10 risk)');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Knowledge sources: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Coverage: Normal for this file');
@@ -161,6 +164,7 @@ describe('reportGenerator', () => {
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Evidence: No findings to corroborate');
+        expect(written).toContain('- Start with: no active findings were identified in this scan.');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Errors');
@@ -217,6 +221,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Scan warnings: 1');
         expect(written).toContain('- Coverage: Partial AI coverage in this scan');
         expect(written).toContain('- Evidence: No findings to corroborate');
+        expect(written).toContain('- This scan did not produce active findings. Coverage and provider status are listed below.');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Warnings');
         expect(written).not.toContain('No deterministic findings. Backend or AI services were unavailable, so Owlvex returned local-only results.');
@@ -445,21 +450,29 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 
 ## Summary
 
+- Start with: Unsanitized SQL query construction in \`src\\tokens.js\` (9/10 risk).
+- What this scan established: 1 strengthened with repo context.
+- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue.
+
+## Scan Facts
+
 - Files scanned: 1
 - Files with findings: 1
 - Total findings: 1
 - Average file risk score: 9.0/10
 - Static findings: 0
-- Knowledge sources: Fresh Packs: 1
-- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
-- Errors: 0
-- Scan warnings: 0
-- Coverage: Normal for the current provider and runtime state
 - Analysis mode: Repo-context AI review
 - Analysis mix: repo_ai: 1
 - Evidence: corroborated: 1
+
+## Coverage And Context
+
+- Coverage: Normal for the current provider and runtime state
+- Knowledge sources: Fresh Packs: 1
+- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
 - Project context: inline project contract
-- Score guide: file risk score equals the highest remaining finding risk in that file; finding risk is the 0-10 risk of a specific issue."
+- Errors: 0
+- Scan warnings: 0"
 `);
         jest.useRealTimers();
     });
