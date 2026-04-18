@@ -38,6 +38,11 @@ describe('reportGenerator', () => {
                         skeptic: 0.9,
                         final: 0.93,
                     },
+                    aiReviewNotes: {
+                        finder: 'User input is concatenated into a query.',
+                        verifier: 'The code builds SQL text directly from user-controlled input.',
+                        skeptic: 'No parameter binding or escaping guard is visible around the query construction.',
+                    },
                     canonicalId: 'owlvex.issue.sql_injection.001',
                     canonicalTitle: 'Unsanitized SQL query construction',
                     canonicalFamily: 'family.injection_execution',
@@ -142,6 +147,9 @@ describe('reportGenerator', () => {
         expect(written).toContain('- AI pass scores: finder 88% | verifier 91% | skeptic 90% | final 93%');
         expect(written).toContain('- Detection confidence: 93%');
         expect(written).toContain('- Evidence: Validated by AI review');
+        expect(written).toContain('- Finder said: User input is concatenated into a query.');
+        expect(written).toContain('- Verifier said: The code builds SQL text directly from user-controlled input.');
+        expect(written).toContain('- Skeptic said: No parameter binding or escaping guard is visible around the query construction.');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
         expect(written).toContain('- What to change: Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Safe pattern: Use parameterized queries.');

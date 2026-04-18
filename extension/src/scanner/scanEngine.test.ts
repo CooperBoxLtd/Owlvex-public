@@ -297,6 +297,68 @@ describe('ScanEngine._parseAIResponse', () => {
     });
 });
 
+describe('ScanEngine AI throttling', () => {
+    afterEach(() => {
+        jest.useRealTimers();
+        jest.clearAllMocks();
+    });
+
+    it('waits before retrying after a 429 so AI passes do not burst the same file', async () => {
+        jest.useFakeTimers();
+        const throttledEngine = new ScanEngine(mockLicenceMgr, mockRegistry) as any;
+        const provider = {
+            complete: jest.fn()
+                .mockRejectedValueOnce(new Error('Azure Foundry error: 429'))
+                .mockResolvedValueOnce({ content: 'ok' }),
+        };
+        const request = {
+            systemPrompt: 'system',
+            userMessage: 'user',
+            model: 'test-model',
+            temperature: 0,
+        };
+
+        const resultPromise = throttledEngine._completeWithRateLimitHandling(provider, request);
+
+        await jest.advanceTimersByTimeAsync(0);
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(4999);
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(1);
+        await expect(resultPromise).resolves.toEqual({ content: 'ok' });
+        expect(provider.complete).toHaveBeenCalledTimes(2);
+    });
+
+    it('serializes concurrent AI requests instead of firing them at once', async () => {
+        jest.useFakeTimers();
+        const throttledEngine = new ScanEngine(mockLicenceMgr, mockRegistry) as any;
+        const provider = {
+            complete: jest.fn().mockResolvedValue({ content: 'ok' }),
+        };
+        const request = {
+            systemPrompt: 'system',
+            userMessage: 'user',
+            model: 'test-model',
+            temperature: 0,
+        };
+
+        const first = throttledEngine._completeWithRateLimitHandling(provider, request);
+        const second = throttledEngine._completeWithRateLimitHandling(provider, request);
+
+        await jest.advanceTimersByTimeAsync(0);
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(1199);
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+
+        await jest.advanceTimersByTimeAsync(1);
+        await Promise.all([first, second]);
+        expect(provider.complete).toHaveBeenCalledTimes(2);
+    });
+});
+
 describe('ScanEngine.scanDocument caching', () => {
     const createJsonResponse = (body: unknown, ok = true, status = 200) => ({
         ok,
@@ -2521,8 +2583,15 @@ class Demo {
 
         expect(complete).toHaveBeenCalledTimes(3);
         expect(complete.mock.calls[0][0].userMessage).toContain('Analyse this javascript code.');
+        expect(complete.mock.calls[0][0].userMessage).toContain('You are the Finder pass.');
+        expect(complete.mock.calls[0][0].userMessage).toContain('Your job is candidate discovery, not final confirmation.');
+        expect(complete.mock.calls[0][0].userMessage).toContain('Optimize for bounded recall');
         expect(complete.mock.calls[1][0].userMessage).toContain('You are the Verifier pass.');
+        expect(complete.mock.calls[1][0].userMessage).toContain('Your job is affirmative validation, not new discovery.');
+        expect(complete.mock.calls[1][0].userMessage).toContain('Prefer rejection over guesswork.');
         expect(complete.mock.calls[2][0].userMessage).toContain('You are the Skeptic pass.');
+        expect(complete.mock.calls[2][0].userMessage).toContain('Your job is adversarial falsification, not confirmation.');
+        expect(complete.mock.calls[2][0].userMessage).toContain('Prefer contradiction over ambiguity when a concrete safe pattern is visible.');
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].confidence).toBe(0.92);
         expect(result.findings[0].corroboration).toBe('CORROBORATED');
@@ -2531,6 +2600,11 @@ class Demo {
             verifier: 0.91,
             skeptic: 0.89,
             final: 0.92,
+        });
+        expect(result.findings[0].aiReviewNotes).toEqual({
+            finder: 'User-controlled input is executed through eval().',
+            verifier: 'The code sends request-controlled input into eval().',
+            skeptic: 'No guard or sanitizing parser is visible around eval().',
         });
         expect(result.warnings).toEqual([]);
     });

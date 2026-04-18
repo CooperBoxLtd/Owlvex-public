@@ -183,6 +183,27 @@ function formatAiPassScoreSummary(finding: ScanResult['findings'][number]): stri
     ].join(' | ');
 }
 
+function buildAiReviewTrailLines(finding: ScanResult['findings'][number]): string[] {
+    if (finding.provenance !== 'ai') {
+        return [];
+    }
+
+    const notes = finding.aiReviewNotes;
+    const lines: string[] = [];
+
+    if (notes?.finder) {
+        lines.push(`- Finder said: ${notes.finder}`);
+    }
+    if (notes?.verifier) {
+        lines.push(`- Verifier said: ${notes.verifier}`);
+    }
+    if (notes?.skeptic) {
+        lines.push(`- Skeptic said: ${notes.skeptic}`);
+    }
+
+    return lines;
+}
+
 function getCorroborationLabel(finding: ScanResult['findings'][number]): string {
     return finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED');
 }
@@ -731,6 +752,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                     lines.push(`- Detection confidence: ${formatPercent(getAiConfidence(finding))}${isLowConfidenceAiFinding(finding) ? ' (manual review recommended)' : ''}`);
                 }
                 lines.push(`- Evidence: ${getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'))}`);
+                lines.push(...buildAiReviewTrailLines(finding));
                 if (isLowConfidenceAiFinding(finding)) {
                     lines.push('- Review note: This AI finding has a low confidence score. Verify the classification, title, and remediation against the code before acting on it.');
                 }

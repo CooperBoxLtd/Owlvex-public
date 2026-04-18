@@ -44,6 +44,11 @@ export interface Finding {
         skeptic?: number;
         final?: number;
     };
+    aiReviewNotes?: {
+        finder?: string;
+        verifier?: string;
+        skeptic?: string;
+    };
     likelihood?: 'LOW' | 'MEDIUM' | 'HIGH';
     likelihoodReasons?: string[];
     riskScore?: number;
@@ -100,6 +105,8 @@ const RISK_MATRIX: Record<FindingSeverity, Record<FindingLikelihood, number>> = 
 };
 
 const MAX_CORROBORATION_CANDIDATES = 4;
+const AI_REQUEST_MIN_SPACING_MS = 1200;
+const AI_RATE_LIMIT_COOLDOWN_MS = 5000;
 
 function buildMetrics(findings: Finding[]): SeverityMetrics {
     return {
@@ -658,6 +665,8 @@ export class ScanEngine {
     private readonly deterministicScanner = new DeterministicScanner();
     private readonly licenceValidationCache = new Map<string, Promise<void>>();
     private readonly promptCache = new Map<string, Promise<PromptContext>>();
+    private aiRequestGate: Promise<void> = Promise.resolve();
+    private nextAiRequestEarliestAt = 0;
 
     constructor(
         private readonly licenceMgr: LicenceManager,
@@ -742,7 +751,15 @@ export class ScanEngine {
         try {
             aiResponse = await this._completeWithRateLimitHandling(provider, {
                 systemPrompt,
-                userMessage: `Analyse this ${language} code.\nResolve each finding to the closest Owlvex canonical issue when possible.\nInclude optional fields issue_id, stride, mappings, matched_signals, likelihood, likelihood_reasons, and plain_language_fix if you can determine them.\nFor plain_language_fix, explain the fix in simple everyday language in 1-2 sentences. Focus on what the developer should stop doing and what safe pattern should replace it.\nTreat severity as impact. Use likelihood only for exploitability in this specific code context, and keep it evidence-based: LOW, MEDIUM, or HIGH.\nUse grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.\nDeterministic findings are confirmed structural violations. AI-only findings should stay evidence-based and avoid overclaiming.\n${projectContext.combined ? `Project context contract:\n${projectContext.combined}\n` : ''}${buildDeterministicGroundingContext(deterministicFindings)}\n${groundedFrameworkContext ? `\n${groundedFrameworkContext}\n` : ''}${groundedAiIssueContext ? `\n${groundedAiIssueContext}\n` : ''}${groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : ''}\nCode:\n\n${code}`,
+                userMessage: this._buildFinderPrompt({
+                    language,
+                    code,
+                    projectContextContract: projectContext.combined,
+                    deterministicFindings,
+                    groundedFrameworkContext,
+                    groundedAiIssueContext,
+                    groundedRemediationContext,
+                }),
                 model: provider.selectedModel,
                 temperature: 0.1,
             });
@@ -928,6 +945,11 @@ export class ScanEngine {
                             skeptic: skeptic.confidence,
                             final: finalConfidence,
                         },
+                        aiReviewNotes: {
+                            finder: finding.aiReviewNotes?.finder,
+                            verifier: verifier.reason,
+                            skeptic: skeptic.reason,
+                        },
                         corroboration: 'CORROBORATED' as const,
                     };
                 }
@@ -943,6 +965,11 @@ export class ScanEngine {
                             skeptic: skeptic?.confidence,
                             final: finalConfidence,
                         },
+                        aiReviewNotes: {
+                            finder: finding.aiReviewNotes?.finder,
+                            verifier: verifier.reason,
+                            skeptic: skeptic?.reason,
+                        },
                         corroboration: 'PARTIAL' as const,
                     };
                 }
@@ -956,6 +983,11 @@ export class ScanEngine {
                             skeptic: skeptic?.confidence,
                             final: finding.confidence ?? 0.8,
                         },
+                        aiReviewNotes: {
+                            finder: finding.aiReviewNotes?.finder,
+                            verifier: verifier?.reason,
+                            skeptic: skeptic?.reason,
+                        },
                         corroboration: 'PARTIAL' as const,
                     };
                 }
@@ -965,6 +997,9 @@ export class ScanEngine {
                     aiReviewScores: {
                         finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
                         final: finding.confidence ?? 0.8,
+                    },
+                    aiReviewNotes: {
+                        finder: finding.aiReviewNotes?.finder,
                     },
                     corroboration: 'UNVERIFIED' as const,
                 };
@@ -1015,6 +1050,7 @@ export class ScanEngine {
 
         for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
             try {
+                await this._awaitAiRequestSlot();
                 return await provider.complete(req);
             } catch (error) {
                 if (!isRateLimitError(error) || attempt === maxAttempts) {
@@ -1023,11 +1059,37 @@ export class ScanEngine {
 
                 const retryAfterMs = extractRetryAfterMs(error);
                 const backoffMs = retryAfterMs ?? (2000 * (2 ** (attempt - 1)));
-                await sleep(backoffMs);
+                this._extendAiCooldown(Math.max(backoffMs, AI_RATE_LIMIT_COOLDOWN_MS));
             }
         }
 
         throw new Error('AI provider unavailable after retries.');
+    }
+
+    private async _awaitAiRequestSlot(): Promise<void> {
+        let releaseGate!: () => void;
+        const previousGate = this.aiRequestGate;
+        this.aiRequestGate = new Promise<void>(resolve => {
+            releaseGate = resolve;
+        });
+
+        await previousGate;
+        try {
+            const waitMs = Math.max(0, this.nextAiRequestEarliestAt - Date.now());
+            if (waitMs > 0) {
+                await sleep(waitMs);
+            }
+            this.nextAiRequestEarliestAt = Date.now() + AI_REQUEST_MIN_SPACING_MS;
+        } finally {
+            releaseGate();
+        }
+    }
+
+    private _extendAiCooldown(delayMs: number): void {
+        this.nextAiRequestEarliestAt = Math.max(
+            this.nextAiRequestEarliestAt,
+            Date.now() + Math.max(delayMs, AI_REQUEST_MIN_SPACING_MS),
+        );
     }
 
     private async _runAiReviewPass(params: {
@@ -1059,6 +1121,40 @@ export class ScanEngine {
         }
     }
 
+    private _buildFinderPrompt(params: {
+        language: string;
+        code: string;
+        projectContextContract?: string;
+        deterministicFindings: Finding[];
+        groundedFrameworkContext: string;
+        groundedAiIssueContext: string;
+        groundedRemediationContext: string;
+    }): string {
+        return [
+            `Analyse this ${params.language} code.`,
+            'You are the Finder pass.',
+            'Your job is candidate discovery, not final confirmation.',
+            'Optimize for bounded recall: nominate plausible security findings that are genuinely visible in the code, but do not claim proof unless the code is unambiguous.',
+            'Only return findings you can tie to concrete local evidence such as a source, sink, guard omission, dangerous API, query shape, or authorization gap.',
+            'Resolve each finding to the closest Owlvex canonical issue when possible.',
+            'Include optional fields issue_id, stride, mappings, matched_signals, likelihood, likelihood_reasons, and plain_language_fix if you can determine them.',
+            'For plain_language_fix, explain the fix in simple everyday language in 1-2 sentences. Focus on what the developer should stop doing and what safe pattern should replace it.',
+            'Treat severity as impact. Use likelihood only for exploitability in this specific code context, and keep it evidence-based: LOW, MEDIUM, or HIGH.',
+            'Use grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.',
+            'Deterministic findings are confirmed structural violations. Do not duplicate them as separate AI findings unless the AI candidate adds materially different evidence.',
+            'AI-only findings should stay evidence-based and avoid overclaiming.',
+            'Do not treat architecture taste, naming style, or generic code quality comments as security findings.',
+            'When the visible code is ambiguous, prefer a narrower title/explanation over a broader accusation.',
+            '',
+            params.projectContextContract ? `Project context contract:\n${params.projectContextContract}\n` : '',
+            buildDeterministicGroundingContext(params.deterministicFindings),
+            params.groundedFrameworkContext ? `\n${params.groundedFrameworkContext}\n` : '',
+            params.groundedAiIssueContext ? `\n${params.groundedAiIssueContext}\n` : '',
+            params.groundedRemediationContext ? `\nGrounded remediation guidance:\n${params.groundedRemediationContext}\n` : '',
+            `Code:\n\n${params.code}`,
+        ].filter(Boolean).join('\n');
+    }
+
     private _buildCorroborationPrompt(params: {
         role: 'Verifier' | 'Skeptic';
         expectedSupportVerdict: 'support' | 'clear';
@@ -1068,8 +1164,27 @@ export class ScanEngine {
         findings: Finding[];
     }): string {
         const roleInstruction = params.role === 'Verifier'
-            ? `You are the Verifier pass. Review each candidate finding only against the local code evidence. Return verdict "${params.expectedSupportVerdict}" only when the issue class is actually supported by the code. Return verdict "${params.expectedContradictionVerdict}" when the claim is not supported or is too broad for the visible code.`
-            : `You are the Skeptic pass. Try to disprove each candidate by looking for contradictory local evidence, guards, safe patterns, or missing required sinks. Return verdict "${params.expectedContradictionVerdict}" when stronger contradictory evidence exists. Return verdict "${params.expectedSupportVerdict}" when no meaningful contradiction is visible.`;
+            ? [
+                'You are the Verifier pass.',
+                'Your job is affirmative validation, not new discovery.',
+                'Review each candidate finding only against the local code evidence.',
+                `Return verdict "${params.expectedSupportVerdict}" only when the claimed issue class is concretely supported by the visible code.`,
+                `Return verdict "${params.expectedContradictionVerdict}" when the claim is unsupported, too broad for the code shown, missing a required sink/path, or mismatched to the issue class.`,
+                'Prefer rejection over guesswork.',
+                'Do not invent new findings, new lines, or speculative execution paths.',
+                'Treat deterministic findings as already proven; only assess the AI candidates provided.',
+                'A strong verifier reason should name the concrete local evidence that supports or defeats the claim.',
+            ].join(' ')
+            : [
+                'You are the Skeptic pass.',
+                'Your job is adversarial falsification, not confirmation.',
+                'Try to disprove each candidate by looking for contradictory local evidence, guards, safe patterns, ownership checks, allowlists, parameterization, verification steps, or missing required sinks.',
+                `Return verdict "${params.expectedContradictionVerdict}" when stronger contradictory evidence exists or when the visible code shows a meaningful safety control that defeats the claim.`,
+                `Return verdict "${params.expectedSupportVerdict}" only when you cannot find a meaningful contradiction in the visible code.`,
+                'Prefer contradiction over ambiguity when a concrete safe pattern is visible.',
+                'Do not invent new findings or speculative hidden code paths.',
+                'A strong skeptic reason should identify the guard, contradiction, or absence of contradiction that drove the decision.',
+            ].join(' ');
 
         const candidates = params.findings.map(finding => ({
             id: finding.id,
@@ -1255,6 +1370,9 @@ ${params.code}`;
                     aiReviewScores: {
                         finder: f.confidence ?? 0.8,
                         final: f.confidence ?? 0.8,
+                    },
+                    aiReviewNotes: {
+                        finder: typeof f.explanation === 'string' ? f.explanation : undefined,
                     },
                     canonicalId: f.issue_id,
                     stride: normalizeStride(f.stride),
