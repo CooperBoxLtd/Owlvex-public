@@ -82,12 +82,12 @@ describe('SidebarProvider', () => {
 
         const roots = provider.getChildren();
         expect(roots[0].label).toBe('File risk: 8.0/10');
-        expect(String(roots[0].tooltip)).toContain('Coverage posture: normal');
+        expect(String(roots[0].tooltip)).toContain('Coverage: normal');
         expect(String(roots[0].tooltip)).toContain('Analysis mode: Static proof');
         expect(String(roots[0].tooltip)).toContain('Analysis mix: static: 1');
         expect(String(roots[0].tooltip)).toContain('Evidence: proven: 1');
         expect(String(roots[0].tooltip)).toContain('Project context: inline project contract');
-        expect(String(roots[0].tooltip)).toContain('Fix first: Path traversal | HIGH/HIGH | 8/10');
+        expect(String(roots[0].tooltip)).toContain('Start with: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
         expect(severityNode).toBeTruthy();
         expect(severityNode?.label).toBe('Impact HIGH (1)');
@@ -106,10 +106,10 @@ describe('SidebarProvider', () => {
             'Confidence: Proven',
             'Evidence: Proven',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
-            'Fix: Resolve user paths against a fixed base directory.',
-            'Validate: Replay ../ payloads and confirm rejection.',
-            'Avoid: Strip ../ without canonical checks.',
-            'Sources: OWASP Path Traversal',
+            'Recommended fix: Resolve user paths against a fixed base directory.',
+            'Check: Replay ../ payloads and confirm rejection.',
+            'Avoid this: Strip ../ without canonical checks.',
+            'References: OWASP Path Traversal',
         ]));
         const discussNode = detailNodes.find(node => node.label === 'Discuss this finding');
         expect(discussNode?.command?.command).toBe('owlvex.discussFinding');
@@ -182,7 +182,7 @@ describe('SidebarProvider', () => {
         } as any);
 
         const roots = provider.getChildren();
-        expect(String(roots[0].tooltip)).toContain('Coverage posture: partial AI coverage or deterministic-only fallback');
+        expect(String(roots[0].tooltip)).toContain('Coverage: partial AI coverage or deterministic-only fallback');
         expect(String(roots[0].tooltip)).toContain('Analysis mix: none');
         expect(String(roots[0].tooltip)).toContain('Evidence: none');
     });

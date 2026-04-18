@@ -163,19 +163,19 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                 new FindingItem(
                     `File risk: ${this.lastResult.score.toFixed(1)}/10`,
                     [
-                        `${this.lastResult.findings.length} finding(s) | ${this.lastResult.model} | ${getRulePackModeLabel(this.lastResult.packContext)}`,
+                        `Scan: ${this.lastResult.findings.length} finding(s) | ${this.lastResult.model} | ${getRulePackModeLabel(this.lastResult.packContext)}`,
                         this.lastResult.frameworks?.length
                             ? `Frameworks in scope: ${formatFrameworkSummary(this.lastResult.frameworks)}`
                             : '',
                         hasPartialAiCoverage(this.lastResult)
-                            ? 'Coverage posture: partial AI coverage or deterministic-only fallback'
-                            : 'Coverage posture: normal',
+                            ? 'Coverage: partial AI coverage or deterministic-only fallback'
+                            : 'Coverage: normal',
                         `Analysis mode: ${getScanTierDisplayLabel(getPrimaryScanTierLabel(this.lastResult.findings))}`,
                         `Analysis mix: ${summarizeScanTierCounts(this.lastResult.findings)}`,
                         `Evidence: ${summarizeCorroborationCounts(this.lastResult.findings)}`,
                         `Project context: ${this.lastResult.projectContextSummary && this.lastResult.projectContextSummary !== 'none' ? this.lastResult.projectContextSummary : 'none'}`,
                         topRiskFinding
-                            ? `Fix first: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
+                            ? `Start with: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
                             : '',
                     ].filter(Boolean).join('\n'),
                     vscode.TreeItemCollapsibleState.None,
@@ -292,7 +292,7 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
             tooltip: `Owlvex evidence posture for this finding: ${getCorroborationDisplayLabel(getCorroborationLabel(finding))}`,
         },
         {
-            label: `Fix: ${remediation.remediation}`,
+            label: `Recommended fix: ${remediation.remediation}`,
             tooltip: remediation.remediation,
         },
     ];
@@ -326,21 +326,21 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
 
     if (remediation.validationSteps.length) {
         details.push({
-            label: `Validate: ${remediation.validationSteps.join(' | ')}`,
+            label: `Check: ${remediation.validationSteps.join(' | ')}`,
             tooltip: remediation.validationSteps.join('\n'),
         });
     }
 
     if (remediation.unsafeAlternatives.length) {
         details.push({
-            label: `Avoid: ${remediation.unsafeAlternatives.join(' | ')}`,
+            label: `Avoid this: ${remediation.unsafeAlternatives.join(' | ')}`,
             tooltip: remediation.unsafeAlternatives.join('\n'),
         });
     }
 
     if (remediation.refs.length) {
         details.push({
-            label: `Sources: ${remediation.refs.join(', ')}`,
+            label: `References: ${remediation.refs.join(', ')}`,
             tooltip: remediation.refs.join('\n'),
         });
     }

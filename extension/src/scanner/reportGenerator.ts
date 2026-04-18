@@ -465,12 +465,12 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Files with findings: ${snapshot.results.filter(item => item.result.findings.length > 0).length}`,
         `- Total findings: ${totalFindings}`,
         `- Average file risk score: ${averageScore.toFixed(1)}/10`,
-        `- Deterministic findings: ${deterministicItems.length}`,
-        `- Intelligence source coverage: ${packCoverageSummary}`,
+        `- Static findings: ${deterministicItems.length}`,
+        `- Knowledge sources: ${packCoverageSummary}`,
         `- Frameworks in scope: ${formatFrameworkSummary([...new Set(snapshot.results.flatMap(item => item.result.frameworks ?? []))])}`,
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
-        `- Coverage posture: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Full scan posture for current provider/runtime state'}`,
+        `- Coverage: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Normal for the current provider and runtime state'}`,
         `- Analysis mode: ${totalFindings > 0 ? getScanTierDisplayLabel(getPrimaryScanTierLabel(snapshot.results.flatMap(item => item.result.findings))) : 'none'}`,
         `- Analysis mix: ${totalFindings > 0 ? summarizeScanTierCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to classify'}`,
         `- Evidence: ${totalFindings > 0 ? summarizeCorroborationCounts(snapshot.results.flatMap(item => item.result.findings)) : 'No findings to corroborate'}`,
@@ -489,13 +489,13 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Findings: ${item.result.findings.length}`);
             lines.push(`- Frameworks in scope: ${formatFrameworkSummary(item.result.frameworks ?? [])}`);
             lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
-            lines.push(`- Coverage posture: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal coverage for this file'}`);
+            lines.push(`- Coverage: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal for this file'}`);
             lines.push(`- Analysis mode: ${item.result.findings.length ? getScanTierDisplayLabel(getPrimaryScanTierLabel(item.result.findings)) : 'none'}`);
             lines.push(`- Analysis mix: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
             lines.push(`- Evidence: ${summarizeCorroborationCounts(item.result.findings)}`);
             lines.push(`- Project context: ${item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none'}`);
             lines.push('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
-            lines.push(`- Intelligence source: ${describeRulePackRuntime(item.packContext)}`);
+            lines.push(`- Knowledge sources: ${describeRulePackRuntime(item.packContext)}`);
             lines.push('');
             lines.push('| Finding | Score Factors | Detection |');
             lines.push('| --- | --- | --- |');

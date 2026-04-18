@@ -98,8 +98,8 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('# Owlvex Vulnerability Scan Report');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
-        expect(written).toContain('- Intelligence source coverage: Fresh Packs: 1');
-        expect(written).toContain('- Coverage posture: Full scan posture for current provider/runtime state');
+        expect(written).toContain('- Knowledge sources: Fresh Packs: 1');
+        expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Analysis mix: targeted_ai: 1');
         expect(written).toContain('- Evidence: corroborated: 1');
@@ -110,8 +110,8 @@ describe('reportGenerator', () => {
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
-        expect(written).toContain('- Intelligence source: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
-        expect(written).toContain('- Coverage posture: Normal coverage for this file');
+        expect(written).toContain('- Knowledge sources: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
+        expect(written).toContain('- Coverage: Normal for this file');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Analysis mix: targeted_ai: 1');
         expect(written).toContain('- Evidence: corroborated: 1');
@@ -124,7 +124,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Confidence: Plausible');
         expect(written).toContain('- Evidence: Cross-checked');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
-        expect(written).toContain('- What to change: Separate query structure from untrusted data with parameter binding or ORM-safe APIs');
+        expect(written).toContain('- What to change: Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Safe pattern: Use parameterized queries.');
         expect(written).toContain('- Why likely: Dynamic SQL uses user-controlled input directly.');
         expect(written).toContain('- Matched signals: CWE:CWE-89, sql injection');
@@ -215,7 +215,7 @@ describe('reportGenerator', () => {
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Scan warnings: 1');
-        expect(written).toContain('- Coverage posture: Partial AI coverage in this scan');
+        expect(written).toContain('- Coverage: Partial AI coverage in this scan');
         expect(written).toContain('- Evidence: No findings to corroborate');
         expect(written).toContain('No detailed findings were returned.');
         expect(written).toContain('## Scan Warnings');
@@ -449,12 +449,12 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 - Files with findings: 1
 - Total findings: 1
 - Average file risk score: 9.0/10
-- Deterministic findings: 0
-- Intelligence source coverage: Fresh Packs: 1
+- Static findings: 0
+- Knowledge sources: Fresh Packs: 1
 - Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
 - Errors: 0
 - Scan warnings: 0
-- Coverage posture: Full scan posture for current provider/runtime state
+- Coverage: Normal for the current provider and runtime state
 - Analysis mode: Repo-context AI review
 - Analysis mix: repo_ai: 1
 - Evidence: corroborated: 1
