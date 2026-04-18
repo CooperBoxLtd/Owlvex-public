@@ -351,6 +351,23 @@ function hasSafeProcessExecution(snippet: string): boolean {
     return hasSafeJsProcess || hasSafePythonProcess || hasSafeJavaProcess || hasSafeCsharpProcess;
 }
 
+function hasPathBoundaryCheck(snippet: string): boolean {
+    const hasJsBoundaryCheck =
+        /\b(?:path\.)?(?:resolve|normalize)\s*\(/.test(snippet)
+        && /\.startsWith\s*\(\s*(?:baseDir|rootDir|uploadsDir|safeBase|allowedRoot)/.test(snippet);
+    const hasPythonBoundaryCheck =
+        /\bos\.path\.(?:abspath|realpath|normpath)\s*\(/.test(snippet)
+        && /\.startswith\s*\(\s*(?:base_dir|root_dir|uploads_dir|safe_base|allowed_root)/.test(snippet);
+    const hasJavaBoundaryCheck =
+        /\b(?:Paths?\.(?:get|of)|\w+\.normalize\s*\(\s*\)|\w+\.toAbsolutePath\s*\(\s*\))/.test(snippet)
+        && /\.startsWith\s*\(\s*(?:baseDir|rootDir|uploadsDir|safeBase|allowedRoot)/.test(snippet);
+    const hasCsharpBoundaryCheck =
+        /\bPath\.GetFullPath\s*\(/.test(snippet)
+        && /\.StartsWith\s*\(\s*(?:baseDir|rootDir|uploadsDir|safeBase|allowedRoot)/.test(snippet);
+
+    return hasJsBoundaryCheck || hasPythonBoundaryCheck || hasJavaBoundaryCheck || hasCsharpBoundaryCheck;
+}
+
 function isRouteMountShellSnippet(snippet: string): boolean {
     return /\bapp\.use\s*\(\s*['"]\//i.test(snippet)
         && !/\b(?:app|router)\.(?:post|put|patch|delete)\s*\(/i.test(snippet);
@@ -391,6 +408,10 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     }
 
     if (finding.canonicalId === 'owlvex.issue.command_injection.001' && hasSafeProcessExecution(snippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.path_traversal.001' && hasPathBoundaryCheck(snippet)) {
         return true;
     }
 

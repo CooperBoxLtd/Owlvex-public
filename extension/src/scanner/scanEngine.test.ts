@@ -1640,6 +1640,154 @@ if (process.env.NODE_ENV !== 'production') {
         expect(result.summary).toBe('No findings detected.');
     });
 
+    it('suppresses AI-only path traversal findings when Python enforces an absolute base-directory boundary', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 7.9,
+                    summary: 'Path traversal detected.',
+                    findings: [
+                        {
+                            id: 'ai-path-python-fp-1',
+                            line: 7,
+                            line_end: 7,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-PATH',
+                            title: 'Path Traversal',
+                            explanation: 'The code reads a file using request-derived path input.',
+                            threat: 'An attacker may escape the intended directory.',
+                            fix: 'Normalize the path and enforce a base-directory boundary.',
+                            confidence: 0.87,
+                            issue_id: 'owlvex.issue.path_traversal.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The file path is influenced by request data.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'python',
+            fileName: 'd:\\repo\\path-safe.py',
+            getText: () => `import os
+
+def read_file(request):
+    base_dir = os.path.abspath("/srv/uploads")
+    candidate = os.path.abspath(os.path.join(base_dir, request.args["name"]))
+    if not candidate.startswith(base_dir):
+        raise ValueError("invalid path")
+    with open(candidate, "r", encoding="utf-8") as handle:
+        return handle.read()
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only path traversal findings when C# enforces a full-path base-directory boundary', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 7.9,
+                    summary: 'Path traversal detected.',
+                    findings: [
+                        {
+                            id: 'ai-path-csharp-fp-1',
+                            line: 7,
+                            line_end: 7,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-PATH',
+                            title: 'Path Traversal',
+                            explanation: 'The code reads a file using request-derived path input.',
+                            threat: 'An attacker may escape the intended directory.',
+                            fix: 'Normalize the path and enforce a base-directory boundary.',
+                            confidence: 0.88,
+                            issue_id: 'owlvex.issue.path_traversal.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The file path is influenced by request data.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'csharp',
+            fileName: 'd:\\repo\\path-safe.cs',
+            getText: () => `using System.IO;
+class Demo {
+    public string Read() {
+        var baseDir = Path.GetFullPath("C:\\\\safe");
+        var candidate = Path.GetFullPath(Path.Combine(baseDir, Request.Query["name"]));
+        if (!candidate.StartsWith(baseDir)) {
+            return BadRequest();
+        }
+        return File.ReadAllText(candidate);
+    }
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
     it('deduplicates overlapping AI findings for the same canonical issue', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
