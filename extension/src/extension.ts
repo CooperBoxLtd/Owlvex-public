@@ -240,6 +240,31 @@ async function testCurrentProviderConnection(registry: ProviderRegistry): Promis
     };
 }
 
+async function testBackendConnection(apiUrl: string): Promise<{ success: boolean; latencyMs: number; message?: string }> {
+    const start = Date.now();
+    try {
+        const res = await fetch(`${apiUrl}/health`);
+        if (!res.ok) {
+            return {
+                success: false,
+                latencyMs: Date.now() - start,
+                message: `Backend health check failed (HTTP ${res.status})`,
+            };
+        }
+
+        return {
+            success: true,
+            latencyMs: Date.now() - start,
+        };
+    } catch (error: any) {
+        return {
+            success: false,
+            latencyMs: Date.now() - start,
+            message: error?.message || 'Backend health check failed.',
+        };
+    }
+}
+
 async function promptForSetting(
     settingKey: string,
     prompt: string,
@@ -370,7 +395,9 @@ export function activate(context: vscode.ExtensionContext) {
     initializeSecretStorage(context.secrets);
 
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
-    const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
+    const getConfiguredApiUrl = () => normalizeServiceUrl(
+        vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl,
+    );
 
     const licenceMgr = new LicenceManager(context.secrets);
     const registry = new ProviderRegistry();
@@ -551,7 +578,7 @@ export function activate(context: vscode.ExtensionContext) {
 
         let manifest;
         try {
-            manifest = await rulePackClient.syncManifest(apiUrl, licenceKey);
+            manifest = await rulePackClient.syncManifest(getConfiguredApiUrl(), licenceKey);
         } catch (error) {
             if (isRevocationLikeError(error)) {
                 await purgeRulePackState();
@@ -579,7 +606,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             try {
                 return {
-                    artifact: await rulePackClient.fetchPackArtifact(apiUrl, licenceKey, entry),
+                    artifact: await rulePackClient.fetchPackArtifact(getConfiguredApiUrl(), licenceKey, entry),
                     source: 'fresh',
                 };
             } catch {
@@ -705,7 +732,7 @@ export function activate(context: vscode.ExtensionContext) {
         };
     };
 
-    const chatView = new ChatViewProvider(registry, context.workspaceState);
+    const chatView = new ChatViewProvider(registry, context.workspaceState, licenceMgr);
     hydrateRulePackRuntimeFromCache();
 
     vscode.window.registerTreeDataProvider(PROFILE.findingsViewId, sidebar);
@@ -741,7 +768,7 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    licenceMgr.validate(apiUrl).then(() => {
+    licenceMgr.validate(getConfiguredApiUrl()).then(() => {
         statusBar.showIdle();
         void refreshRulePackRuntime();
     }).catch(async (error) => {
@@ -755,6 +782,75 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.configureBackend, async () => {
+            const currentApiUrl = getConfiguredApiUrl();
+            const entered = await vscode.window.showInputBox({
+                prompt: 'Enter the Owlvex backend URL for this environment',
+                placeHolder: PROFILE.defaultApiUrl,
+                value: currentApiUrl,
+                ignoreFocusOut: true,
+                validateInput: (value) => {
+                    const trimmed = value.trim();
+                    if (!trimmed) {
+                        return 'The backend URL is required.';
+                    }
+
+                    try {
+                        const parsed = new URL(normalizeServiceUrl(trimmed));
+                        if (!/^https?:$/i.test(parsed.protocol)) {
+                            return 'Use an http or https backend URL.';
+                        }
+                        return undefined;
+                    } catch {
+                        return 'Enter a valid backend URL.';
+                    }
+                },
+            });
+
+            if (!entered) {
+                return;
+            }
+
+            const normalizedApiUrl = normalizeServiceUrl(entered);
+            await persistProviderSetting('apiUrl', normalizedApiUrl);
+
+            const backend = await testBackendConnection(normalizedApiUrl);
+            if (!backend.success) {
+                vscode.window.showWarningMessage(
+                    `${PROFILE.displayLabel}: Backend URL saved, but the health check failed. ${backend.message ?? 'Check the URL and try again.'}`,
+                );
+                return;
+            }
+
+            const licenceKey = await licenceMgr.getKey();
+            if (!licenceKey) {
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms). Next step: enter a licence key.`,
+                );
+                return;
+            }
+
+            try {
+                const info = await licenceMgr.validate(normalizedApiUrl);
+                statusBar.showIdle();
+                void refreshRulePackRuntime();
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms) and licence validated for ${info.teamName} (${info.plan}).`,
+                );
+            } catch (error: any) {
+                if (isRevocationLikeError(error)) {
+                    licenceMgr.clearCachedInfo();
+                    await purgeRulePackState();
+                    statusBar.showUnlicensed();
+                }
+                vscode.window.showWarningMessage(
+                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms), but licence validation failed. ${error.message}`,
+                );
+            }
+        })
+    );
+
+    context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.enterLicence, async () => {
             const key = await vscode.window.showInputBox({
                 prompt: 'Enter your Owlvex licence key',
@@ -766,7 +862,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             await licenceMgr.storeKey(key);
             try {
-                const info = await licenceMgr.validate(apiUrl);
+                const info = await licenceMgr.validate(getConfiguredApiUrl());
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel} activated - ${info.plan} plan (${info.teamName})`
                 );
@@ -789,7 +885,7 @@ export function activate(context: vscode.ExtensionContext) {
             let allowedFrameworks = licenceMgr.getCachedInfo()?.features.frameworks;
             if (!allowedFrameworks?.length) {
                 try {
-                    const info = await licenceMgr.validate(apiUrl);
+                    const info = await licenceMgr.validate(getConfiguredApiUrl());
                     allowedFrameworks = info.features.frameworks;
                 } catch {
                     allowedFrameworks = FRAMEWORK_CATALOG.map(item => item.code);
@@ -1320,6 +1416,82 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
                 vscode.window.showErrorMessage(message?.trim() || `${providerName} connection failed. ${getProviderSetupSummary(registry.getActive().id)}`);
             }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.testTrialSetup, async () => {
+            const currentApiUrl = getConfiguredApiUrl();
+            const backend = await testBackendConnection(currentApiUrl);
+            const licenceKey = await licenceMgr.getKey();
+            let licenceSummary = 'No licence key entered yet.';
+            let licenceValid = false;
+
+            if (licenceKey && backend.success) {
+                try {
+                    const info = await licenceMgr.validate(currentApiUrl);
+                    licenceSummary = `Licence valid: ${info.teamName} (${info.plan})`;
+                    licenceValid = true;
+                    statusBar.showIdle();
+                    void refreshRulePackRuntime();
+                } catch (error: any) {
+                    licenceSummary = `Licence validation failed: ${error.message}`;
+                    if (isRevocationLikeError(error)) {
+                        licenceMgr.clearCachedInfo();
+                        await purgeRulePackState();
+                        statusBar.showUnlicensed();
+                    }
+                }
+            } else if (licenceKey) {
+                licenceSummary = 'Licence key stored, but backend is not reachable yet.';
+            }
+
+            const provider = registry.getActive();
+            const providerConfigured = await provider.isConfigured().catch(() => false);
+            let providerSummary = `${provider.name} is not configured yet.`;
+            let providerReady = false;
+
+            if (providerConfigured) {
+                const providerCheck = await provider.testConnection();
+                if (providerCheck.success) {
+                    providerSummary = `${provider.name} reachable (${providerCheck.latencyMs}ms) using ${provider.selectedModel}`;
+                    providerReady = true;
+                } else {
+                    providerSummary = providerCheck.message?.trim()
+                        || `${provider.name} is configured but the connection test failed.`;
+                }
+            }
+
+            const lines = [
+                `Backend: ${backend.success ? `reachable (${backend.latencyMs}ms)` : backend.message ?? 'unreachable'}`,
+                `Backend URL: ${currentApiUrl}`,
+                `Licence: ${licenceSummary}`,
+                `LLM: ${providerSummary}`,
+            ];
+
+            if (backend.success && licenceValid && providerReady) {
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: Trial setup is ready.\n${lines.join('\n')}`,
+                );
+                return {
+                    status: 'ready',
+                    backend: true,
+                    licence: true,
+                    provider: true,
+                    summary: lines,
+                };
+            }
+
+            vscode.window.showWarningMessage(
+                `${PROFILE.displayLabel}: Trial setup still needs attention.\n${lines.join('\n')}`,
+            );
+            return {
+                status: 'needs_attention',
+                backend: backend.success,
+                licence: licenceValid,
+                provider: providerReady,
+                summary: lines,
+            };
         })
     );
 

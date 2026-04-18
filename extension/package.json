@@ -58,6 +58,10 @@
         "title": "Owlvex: Setup AI Connection"
       },
       {
+        "command": "owlvex.configureBackend",
+        "title": "Owlvex: Configure Backend URL"
+      },
+      {
         "command": "owlvex.removeAIConnection",
         "title": "Owlvex: Remove AI Connection"
       },
@@ -68,6 +72,10 @@
       {
         "command": "owlvex.testAIConnection",
         "title": "Owlvex: Test AI Connection"
+      },
+      {
+        "command": "owlvex.testTrialSetup",
+        "title": "Owlvex: Test Trial Setup"
       },
       {
         "command": "owlvex.enterLicence",

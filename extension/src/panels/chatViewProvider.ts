@@ -1,4 +1,4 @@
-import * as vscode from 'vscode';
+﻿import * as vscode from 'vscode';
 import * as path from 'path';
 import { ProviderRegistry } from '../providers/registry';
 import { collectScannableFiles } from '../scanner/workspaceScanner';
@@ -10,6 +10,7 @@ import type { Finding, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 import { getProjectContextSummaryFromConfig, loadProjectContextInfo } from '../projectContext';
 import { createPreviewDocumentUri } from './previewDocumentProvider';
+import { LicenceManager } from '../licence/licenceManager';
 
 type ChatRole = 'user' | 'assistant' | 'system';
 type MessageKind = 'advisory' | 'scan';
@@ -102,6 +103,8 @@ interface ChatState {
     providers: Array<{ id: string; name: string }>;
     providerStatus: string;
     providerHint: string;
+    backendStatus: string;
+    licenceStatus: string;
     messages: ChatMessage[];
     editorSummary: string;
     frameworksLabel: string;
@@ -862,6 +865,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     constructor(
         private readonly registry: ProviderRegistry,
         private readonly storage: vscode.Memento,
+        private readonly licenceMgr: Pick<LicenceManager, 'getKey' | 'getCachedInfo'> = {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+        },
     ) {
         this.restorableMessages = this.getRestorableMessages();
         this.messages = buildDefaultChatMessages();
@@ -1612,8 +1619,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.postState(this.buildState(
             this.getFallbackModels(),
             [{ id: provider.id, name: provider.name }],
-            `Provider status: checking ${provider.name}...`,
+            `LLM status: checking ${provider.name}...`,
             getProviderSetupHint(provider.id),
+            `Backend: ${vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl}`,
+            'Licence: checking...',
         ));
         void this.pushResolvedState();
     }
@@ -1837,6 +1846,48 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 content: configured
                     ? `${provider.name} is configured and ready using ${provider.selectedModel}.`
                     : `${provider.name} still needs setup. ${getProviderSetupHint(provider.id)}`,
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'configureBackend') {
+            await vscode.commands.executeCommand(PROFILE.commands.configureBackend);
+            const apiUrl = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl;
+            this.messages.push({
+                role: 'system',
+                content: `Backend URL is set to ${apiUrl}.`,
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'enterLicence') {
+            await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
+            const licenceInfo = this.licenceMgr.getCachedInfo();
+            this.messages.push({
+                role: 'system',
+                content: licenceInfo
+                    ? `Licence is ready: ${licenceInfo.plan} plan for ${licenceInfo.teamName}.`
+                    : 'Licence setup finished. If validation failed, check the backend URL and try again.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'testTrialSetup') {
+            const result = await vscode.commands.executeCommand<any>(PROFILE.commands.testTrialSetup);
+            this.messages.push({
+                role: 'system',
+                content: result?.summary?.length
+                    ? result.summary.join('\n')
+                    : 'Trial setup check finished. Review the backend, licence, and LLM status above.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -2265,6 +2316,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         providers: Array<{ id: string; name: string }>,
         providerStatus: string,
         providerHint: string,
+        backendStatus: string,
+        licenceStatus: string,
     ): ChatState {
         const editorContext = this.buildEditorContext();
         const provider = this.registry.getActive();
@@ -2277,6 +2330,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             providers,
             providerStatus,
             providerHint,
+            backendStatus,
+            licenceStatus,
             messages: this.messages,
             editorSummary: editorContext.summary,
             frameworksLabel: formatFrameworkSummary(this.getFrameworks()),
@@ -2317,15 +2372,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         const models = await this.getModelsForProvider(provider);
         const providerStatus = configuredProviders.length
-            ? `Provider status: ${provider.name} is configured`
-            : `Provider status: no LLM provider configured`;
+            ? `LLM status: ${provider.name} is configured`
+            : 'LLM status: no provider configured';
         const providerHint = configuredProviders.length
             ? 'Configured providers only are shown here.'
             : `${getProviderSetupHint(provider.id)} Use "Configure LLM" to add your first provider.`;
+        const configuredApiUrl = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl;
+        const backendStatus = `Backend: ${configuredApiUrl}`;
+        const licenceKey = await this.licenceMgr.getKey().catch(() => undefined);
+        const cachedLicence = this.licenceMgr.getCachedInfo();
+        const licenceStatus = cachedLicence
+            ? `Licence: ${cachedLicence.plan} plan${cachedLicence.expiresAt ? ` · expires ${cachedLicence.expiresAt}` : ''}`
+            : licenceKey
+                ? 'Licence: key stored, validation pending'
+                : 'Licence: not connected';
         const visibleProviders = configuredProviders.length
             ? configuredProviders
             : [];
-        this.postState(this.buildState(models, visibleProviders, providerStatus, providerHint));
+        this.postState(this.buildState(models, visibleProviders, providerStatus, providerHint, backendStatus, licenceStatus));
     }
 
     private async getModelsForProvider(provider: ReturnType<ProviderRegistry['getActive']>): Promise<string[]> {
@@ -2851,15 +2915,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         <div class="settings-head">
           <span>Configuration</span>
           <div style="display:flex;align-items:center;gap:8px;">
-            <span class="settings-status" id="providerStatus">Provider status: checking...</span>
+            <span class="settings-status" id="providerStatus">LLM status: checking...</span>
             <button class="settings-close" id="closeSettings" type="button" aria-label="Close settings">&times;</button>
           </div>
         </div>
         <div class="settings-body">
+          <div class="meta" id="backendStatus">Backend: loading...</div>
+          <div class="meta" id="licenceStatus">Licence: loading...</div>
           <div class="meta" id="workspaceDetail">Workspace: loading...</div>
           <div class="meta" id="editor">Inspecting editor...</div>
           <div class="meta" id="projectContext">Project context: loading...</div>
           <div class="quick-actions">
+            <button class="chip" data-action="configureBackend">Configure Backend</button>
+            <button class="chip" data-action="enterLicence">Enter Licence</button>
+            <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
             <button class="chip" data-action="testAI">Test Connection</button>
             <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
             <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
@@ -2914,6 +2983,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const editorEl = document.getElementById('editor');
     const projectContextEl = document.getElementById('projectContext');
     const providerStatusEl = document.getElementById('providerStatus');
+    const backendStatusEl = document.getElementById('backendStatus');
+    const licenceStatusEl = document.getElementById('licenceStatus');
     const providerHintEl = document.getElementById('providerHint');
     const conversationHeaderEl = document.getElementById('conversationHeader');
     const scanScopeBottomEl = document.getElementById('scanScopeBottom');
@@ -2938,7 +3009,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       workspaceDetailEl.textContent = 'Workspace: ' + (state.workspaceSummary || 'No workspace folder open');
       editorEl.textContent = state.editorSummary || 'Active editor: none';
       projectContextEl.textContent = 'Project context: ' + (state.projectContextSummary || 'none');
-      providerStatusEl.textContent = state.providerStatus || 'Provider status: unknown';
+      providerStatusEl.textContent = state.providerStatus || 'LLM status: unknown';
+      backendStatusEl.textContent = state.backendStatus || 'Backend: unknown';
+      licenceStatusEl.textContent = state.licenceStatus || 'Licence: unknown';
       providerHintEl.textContent = state.providerHint || '';
       llmButtonEl.textContent = state.provider + ' · ' + state.model;
       conversationHeaderEl.textContent = state.conversationStatus || 'Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.';
@@ -3223,4 +3296,6 @@ function getNonce(): string {
     }
     return value;
 }
+
+
 
