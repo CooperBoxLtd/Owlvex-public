@@ -2431,7 +2431,7 @@ class Demo {
         expect(userMessage).toContain('Cheat-sheet guidance: OWASP SQL Injection Prevention Cheat Sheet');
     });
 
-    it('injects local project context into prompt building and AI requests', async () => {
+    it('keeps local project context out of backend prompt building while still using it in the AI request', async () => {
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
             get: (key: string, defaultValue?: any) => {
                 switch (key) {
@@ -2496,12 +2496,13 @@ class Demo {
         await engine.scanDocument(doc);
 
         const promptBuildBody = JSON.parse((global.fetch as jest.Mock).mock.calls[0][1].body);
-        expect(promptBuildBody.team_context).toContain('Project context contract:');
-        expect(promptBuildBody.team_context).toContain('Documents are tenant-scoped');
+        expect(promptBuildBody.team_context).toBeUndefined();
 
         const userMessage = complete.mock.calls[0][0].userMessage as string;
         expect(userMessage).toContain('Project context contract:');
         expect(userMessage).toContain('admin actions must use policy middleware');
+        const recordBody = JSON.parse((global.fetch as jest.Mock).mock.calls[1][1].body);
+        expect(recordBody.prompt_snapshot).toBeUndefined();
     });
 
     it('runs finder, verifier, and skeptic passes through the same provider sequentially', async () => {

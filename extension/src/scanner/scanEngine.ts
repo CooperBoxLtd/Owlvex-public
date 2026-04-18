@@ -717,7 +717,6 @@ export class ScanEngine {
                 language,
                 model: provider.selectedModel,
                 severityThreshold,
-                teamContext: projectContext.combined,
             });
         } catch (error: any) {
             return this._buildDeterministicOnlyResult(
@@ -833,7 +832,6 @@ export class ScanEngine {
                     token_count: aiResponse.tokenCount,
                     duration_ms: durationMs,
                     prompt_id: promptContext.templateId,
-                    prompt_snapshot: systemPrompt,
                 }),
             });
 
@@ -1234,7 +1232,6 @@ ${params.code}`;
         language: string;
         model: string;
         severityThreshold: string;
-        teamContext: string;
     }): Promise<PromptContext> {
         const cacheKey = JSON.stringify({
             apiUrl: params.apiUrl,
@@ -1242,7 +1239,6 @@ ${params.code}`;
             language: params.language,
             model: params.model,
             severityThreshold: params.severityThreshold,
-            teamContext: params.teamContext,
         });
         const cached = this.promptCache.get(cacheKey);
         if (cached) {
@@ -1267,7 +1263,6 @@ ${params.code}`;
         language: string;
         model: string;
         severityThreshold: string;
-        teamContext: string;
     }): Promise<PromptContext> {
         const promptRes = await fetch(`${params.apiUrl}/v1/prompts/build`, {
             method: 'POST',
@@ -1280,7 +1275,6 @@ ${params.code}`;
                 language: params.language,
                 model: params.model,
                 severity_threshold: params.severityThreshold,
-                team_context: params.teamContext,
             }),
         });
 
