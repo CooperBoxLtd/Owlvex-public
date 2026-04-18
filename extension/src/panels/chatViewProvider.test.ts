@@ -265,6 +265,32 @@ describe('parseChatIntent', () => {
         expect(summary).toContain('- Curated cheat-sheet pack: OWASP SQL Injection Prevention Cheat Sheet');
     });
 
+    it('adds an explicit mismatch note when the visible snippet contradicts a deserialization finding label', () => {
+        const context = buildFindingPromptContext({
+            id: 'finding-deserialization',
+            line: 8,
+            lineEnd: 8,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'DS-001',
+            title: 'Insecure deserialization of untrusted data',
+            explanation: 'Untrusted input is deserialized with pickle.',
+            threat: 'Remote code execution.',
+            fix: 'Use JSON for untrusted input.',
+            confidence: 0.92,
+            provenance: 'ai',
+        } as any, [
+            'import json',
+            '',
+            'def load_profile(request):',
+            '    return json.loads(request.body)',
+        ].join('\n'));
+
+        expect(context).toContain('Local code snippet:');
+        expect(context).toContain('Code/finding note: The visible snippet shows json.loads(...) rather than pickle.loads(...).');
+        expect(context).toContain('avoid describing pickle-based code execution unless other grounded context proves it');
+    });
+
     it('starts a fresh chat by default and offers restoring the previous one', () => {
         const provider = new ChatViewProvider({
             getActive: () => ({
@@ -829,6 +855,263 @@ describe('parseChatIntent', () => {
             expect.stringContaining('Fix Preview - Insecure deserialization of untrusted data'),
         );
         expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
+    });
+
+    it('falls back to grounded local finding context when the provider hits a rate limit', async () => {
+        const complete = jest.fn().mockRejectedValue(new Error('Azure Foundry error: 429'));
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\deser.py');
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).latestActionableFinding = {
+            id: 'finding-deserialization',
+            line: 4,
+            lineEnd: 4,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'A08-DESER',
+            title: 'Insecure deserialization of untrusted data',
+            explanation: 'Untrusted input is deserialized with pickle.',
+            threat: 'An attacker can craft a malicious payload that executes during deserialization.',
+            fix: 'Use JSON for untrusted input and validate the payload shape.',
+            confidence: 0.92,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+        };
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+
+        await (provider as any).handleUserMessage('ok explain me how this vulnerability can be exploited');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('falling back to grounded local context');
+        expect(finalMessage.content).toContain('How it can be abused: An attacker can craft a malicious payload');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+        ]));
+    });
+
+    it('falls back to grounded local finding context for follow-up explanation prompts when the provider fails', async () => {
+        const complete = jest.fn().mockRejectedValue(new Error('temporary upstream failure'));
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\ssrf.js');
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).latestActionableFinding = {
+            id: 'finding-ssrf',
+            line: 7,
+            lineEnd: 7,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'A10-SSRF',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation: 'The handler fetches a user-controlled destination.',
+            threat: 'An attacker can force the server to reach internal services or attacker-controlled hosts.',
+            fix: 'Allow only approved outbound hosts and block redirects to untrusted destinations.',
+            confidence: 0.93,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+        };
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+
+        await (provider as any).handleUserMessage('explain findings');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('falling back to grounded local context');
+        expect(finalMessage.content).toContain('What is wrong: The handler fetches a user-controlled destination.');
+        expect(finalMessage.content).not.toContain('Request failed: temporary upstream failure');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+        ]));
+    });
+
+    it('keeps Fix code available after an explanation follow-up for the active finding', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: 'This issue lets user input control the redirect destination without validation.',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).latestActionableFinding = {
+            id: 'finding-open-redirect',
+            line: 2,
+            lineEnd: 2,
+            severity: 'MEDIUM',
+            framework: 'OWASP',
+            ruleCode: 'A01-REDIRECT',
+            title: 'Open Redirect',
+            explanation: 'Untrusted destination reaches redirect.',
+            threat: 'Phishing.',
+            fix: 'Allow-list destinations.',
+            confidence: 0.88,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 7,
+        };
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+
+        await (provider as any).handleUserMessage('explain findings');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('redirect destination');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+        ]));
+    });
+
+    it('keeps Keep fix and Discard fix visible during diff-focused follow-ups', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: 'The preview is replacing the unsafe redirect with an allow-listed destination.',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        const finding = {
+            id: 'finding-open-redirect',
+            line: 2,
+            lineEnd: 2,
+            severity: 'MEDIUM',
+            framework: 'OWASP',
+            ruleCode: 'A01-REDIRECT',
+            title: 'Open Redirect',
+            explanation: 'Untrusted destination reaches redirect.',
+            threat: 'Phishing.',
+            fix: 'Allow-list destinations.',
+            confidence: 0.88,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 7,
+        };
+        (provider as any).latestActionableFinding = finding;
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+        (provider as any).pendingFixPreview = {
+            targetPath: targetUri.fsPath,
+            originalText: 'return res.redirect(req.query.next);',
+            patchedText: 'return res.redirect(allowList(req.query.next));',
+            finding,
+        };
+
+        await (provider as any).handleUserMessage('show me');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('allow-listed destination');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Keep fix', kind: 'applyFixPreview' }),
+            expect.objectContaining({ label: 'Discard fix', kind: 'discardFixPreview' }),
+        ]));
+    });
+
+    it('keeps the active fix target after discarding a preview so the user can regenerate it', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```javascript\nconst safeRedirect = allowList(req.query.next);\nreturn res.redirect(safeRedirect);\n```',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
+        const previewUri = { fsPath: 'untitled:redirect-fix.js', scheme: 'untitled', toString: () => 'untitled:redirect-fix.js' };
+        (vscode.window.activeTextEditor as any) = undefined;
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
+            if (input?.language === 'javascript') {
+                return { uri: previewUri };
+            }
+            return {
+                uri: targetUri,
+                languageId: 'javascript',
+                getText: () => [
+                    'function go(req, res) {',
+                    '  return res.redirect(req.query.next);',
+                    '}',
+                ].join('\n'),
+            };
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).latestActionableFinding = {
+            id: 'finding-open-redirect',
+            line: 2,
+            lineEnd: 2,
+            severity: 'MEDIUM',
+            framework: 'OWASP',
+            ruleCode: 'A01-REDIRECT',
+            title: 'Open Redirect',
+            explanation: 'Untrusted destination reaches redirect.',
+            threat: 'Phishing.',
+            fix: 'Allow-list destinations.',
+            confidence: 0.88,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 7,
+        };
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+
+        await (provider as any).handleUserMessage('fix this');
+        await (provider as any).handleMessageAction((provider as any).messages.length - 1, 'discard-fix-preview');
+        await (provider as any).handleUserMessage('do it');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            'vscode.diff',
+            targetUri,
+            previewUri,
+            expect.stringContaining('Fix Preview - Open Redirect'),
+        );
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Keep fix or Discard fix');
     });
 

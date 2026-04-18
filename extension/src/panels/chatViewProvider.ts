@@ -204,6 +204,55 @@ function looksLikeImplementRequest(prompt: string): boolean {
     return /\b(implement( this| the)? change|change it in the file|change the file|edit the file|apply( the)? fix|apply( the)? change|apply( the)? changes|apply it|make the change|make the changes|update the file|do it)\b/i.test(prompt);
 }
 
+function looksLikeFindingFollowUp(prompt: string): boolean {
+    return /\b(explain( the)? finding|explain findings|how( can| could)? (this|it) be exploit(?:ed)?|how is (this|it) exploit(?:ed)?|why is (this|it) dangerous|why is (this|it) vulnerable|this one|that one|the one in the diff|show me|why|how)\b/i.test(prompt);
+}
+
+function isRateLimitError(error: unknown): boolean {
+    return /\b429\b|rate limit/i.test(String((error as any)?.message ?? error ?? ''));
+}
+
+function buildFindingFallback(
+    prompt: string,
+    finding: Finding,
+    intro: string,
+    targetPath?: string,
+    hasPendingFixPreview = false,
+): { content: string; actions?: ChatMessageAction[] } {
+    const title = finding.canonicalTitle || finding.title;
+    const exploitPrompt = /\b(exploit(?:ed)?|abuse|attack(?:er)?|dangerous|why)\b/i.test(prompt);
+    const fixPrompt = looksLikeFixRequest(prompt) || looksLikeImplementRequest(prompt);
+    const lines: string[] = [
+        intro,
+        `Active finding: ${title} at line ${finding.line}.`,
+    ];
+
+    if (exploitPrompt) {
+        lines.push(`Why it matters: ${finding.explanation}`);
+        lines.push(`How it can be abused: ${finding.threat}`);
+    } else {
+        lines.push(`What is wrong: ${finding.explanation}`);
+        lines.push(`What to change: ${finding.fix}`);
+    }
+
+    if (fixPrompt || hasPendingFixPreview) {
+        lines.push(
+            hasPendingFixPreview
+                ? 'A fix preview is already open. Review the diff, then choose Keep fix or Discard fix.'
+                : 'Next step: use Fix code to open a side-by-side remediation diff.'
+        );
+    }
+
+    const actions = targetPath
+        ? [buildReviewFixAction(finding, targetPath)]
+        : undefined;
+
+    return {
+        content: lines.join('\n'),
+        actions,
+    };
+}
+
 function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions): boolean {
     if (options.injectedContext || options.suggestedFinding) {
         return true;
@@ -327,6 +376,7 @@ function buildLatestReportPromptContext(storage: vscode.Memento): EditorContext 
 
 export function buildFindingPromptContext(finding: Finding, snippet?: string): string {
     const remediation = resolveRemediationForFinding(finding);
+    const snippetConsistencyNote = buildSnippetConsistencyNote(finding, snippet);
     return [
         'Finding selected for discussion:',
         `Title: ${finding.canonicalTitle || finding.title}`,
@@ -346,8 +396,27 @@ export function buildFindingPromptContext(finding: Finding, snippet?: string): s
             ? `Likelihood reasons: ${(finding.likelihoodReasons ?? []).join(' | ')}`
             : '',
         snippet ? `Local code snippet:\n${snippet}` : 'Local code snippet: unavailable',
+        snippetConsistencyNote ? `Code/finding note: ${snippetConsistencyNote}` : '',
         'Help the user understand the issue in plain language, explain why the fix works, and show a safe replacement approach grounded in this finding.',
     ].filter(Boolean).join('\n');
+}
+
+function buildSnippetConsistencyNote(finding: Finding, snippet?: string): string | undefined {
+    if (!snippet) {
+        return undefined;
+    }
+
+    const title = `${finding.canonicalTitle || finding.title} ${finding.ruleCode || ''}`.toLowerCase();
+    const normalizedSnippet = snippet.toLowerCase();
+    const mentionsDeserialization = /deserial|pickle|unsafe loader/.test(title);
+    const usesJsonLoads = /json\.loads\s*\(/.test(normalizedSnippet);
+    const usesPickle = /pickle\.loads?\s*\(/.test(normalizedSnippet);
+
+    if (mentionsDeserialization && usesJsonLoads && !usesPickle) {
+        return 'The visible snippet shows json.loads(...) rather than pickle.loads(...). Call out that mismatch explicitly and avoid describing pickle-based code execution unless other grounded context proves it.';
+    }
+
+    return undefined;
 }
 
 function extractNearbyContextSources(context?: string): string[] {
@@ -588,6 +657,21 @@ function buildReviewFixAction(finding: Finding, targetPath?: string): ChatMessag
     };
 }
 
+function buildPendingFixPreviewActions(): ChatMessageAction[] {
+    return [
+        {
+            id: 'apply-fix-preview',
+            label: 'Keep fix',
+            kind: 'applyFixPreview',
+        },
+        {
+            id: 'discard-fix-preview',
+            label: 'Discard fix',
+            kind: 'discardFixPreview',
+        },
+    ];
+}
+
 function getTopActionableFindingResult(
     items: Array<{ uri?: vscode.Uri; result?: ScanResult }>,
 ): { finding: Finding; targetPath?: string } | undefined {
@@ -798,18 +882,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'assistant',
                 content: `Review fix ready for ${vscode.workspace.asRelativePath(document.uri, false)}. A side-by-side diff is open and the original file is unchanged until you choose Keep fix or Discard fix.`,
                 kind: 'advisory',
-                actions: [
-                    {
-                        id: 'apply-fix-preview',
-                        label: 'Keep fix',
-                        kind: 'applyFixPreview',
-                    },
-                    {
-                        id: 'discard-fix-preview',
-                        label: 'Discard fix',
-                        kind: 'discardFixPreview',
-                    },
-                ],
+                actions: buildPendingFixPreviewActions(),
             };
             this.pendingFixPreview = {
                 targetPath: document.uri.fsPath,
@@ -929,6 +1002,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         this.messages.push({ role: 'user', content: options.displayedPrompt ?? trimmed });
         this.messages.push({ role: 'assistant', content: 'Thinking...', kind: 'advisory' });
+        const canAnchorToCurrentFinding = !options.suggestedFinding && (
+            looksLikeFixRequest(trimmed)
+            || looksLikeImplementRequest(trimmed)
+            || looksLikeFindingFollowUp(trimmed)
+            || Boolean(this.pendingFixPreview)
+        );
         this.refresh();
 
         try {
@@ -948,8 +1027,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return;
             }
 
-            const autoSuggestedFinding = !options.suggestedFinding && looksLikeFixRequest(trimmed)
-                ? this.latestActionableFinding
+            const autoSuggestedFinding = canAnchorToCurrentFinding
+                ? (this.pendingFixPreview?.finding ?? this.latestActionableFinding)
                 : undefined;
             const autoTargetPath = this.getActiveFixTargetPath();
             if (!options.injectedContext && !options.suggestedFinding && looksLikeImplementRequest(trimmed) && autoSuggestedFinding && autoTargetPath) {
@@ -982,6 +1061,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     'When the user asks how to fix a finding, replace vulnerable code, or explain a scan result, explain the problem in plain language first and then show the safe replacement code.',
                     'When relevant, explicitly say what the current code is doing wrong, what to stop doing, and what safe pattern should replace it.',
                     'If the active file or latest scan already points to a concrete finding, ground the answer in that finding instead of answering generically.',
+                    'If the visible local code snippet appears to contradict the finding label, say that explicitly before giving advice and do not claim dangerous code paths that are not shown.',
                     `Open workspace folders: ${workspaceSummary}`,
                     scanContext.summary,
                     editorContext.summary,
@@ -1012,11 +1092,37 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 actions: this.buildFixFollowUpActions(trimmed, options.suggestedFinding ?? autoSuggestedFinding),
             };
         } catch (error: any) {
-            this.messages[this.messages.length - 1] = {
-                role: 'assistant',
-                content: `Request failed: ${error.message}`,
-                kind: 'advisory',
-            };
+            const fallbackFinding = options.suggestedFinding ?? this.pendingFixPreview?.finding ?? this.latestActionableFinding;
+            const fallbackTargetPath = this.getActiveFixTargetPath();
+            const canUseGroundedFallback = fallbackFinding && (
+                canAnchorToCurrentFinding
+                || looksLikeFixRequest(trimmed)
+                || looksLikeImplementRequest(trimmed)
+                || looksLikeFindingFollowUp(trimmed)
+            );
+            if (canUseGroundedFallback) {
+                const fallback = buildFindingFallback(
+                    trimmed,
+                    fallbackFinding,
+                    isRateLimitError(error)
+                        ? 'The provider hit a rate limit, so I am falling back to grounded local context for the active finding.'
+                        : `The provider request failed (${error.message}), so I am falling back to grounded local context for the active finding.`,
+                    fallbackTargetPath,
+                    Boolean(this.pendingFixPreview),
+                );
+                this.messages[this.messages.length - 1] = {
+                    role: 'assistant',
+                    content: fallback.content,
+                    kind: 'advisory',
+                    actions: fallback.actions,
+                };
+            } else {
+                this.messages[this.messages.length - 1] = {
+                    role: 'assistant',
+                    content: `Request failed: ${error.message}`,
+                    kind: 'advisory',
+                };
+            }
         }
 
         void this.persistState();
@@ -1284,7 +1390,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         if (action.kind === 'discardFixPreview') {
             this.pendingFixPreview = undefined;
-            this.latestActionableTargetPath = undefined;
             this.messages.push({
                 role: 'assistant',
                 content: 'Discarded the current fix preview. The original file was left unchanged.',
@@ -1805,7 +1910,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private buildFixFollowUpActions(prompt: string, suggestedFinding?: Finding): ChatMessageAction[] | undefined {
-        if (!looksLikeFixRequest(prompt)) {
+        if (this.pendingFixPreview && (looksLikeFixRequest(prompt) || looksLikeImplementRequest(prompt) || looksLikeFindingFollowUp(prompt))) {
+            return buildPendingFixPreviewActions();
+        }
+
+        if (!(looksLikeFixRequest(prompt) || looksLikeImplementRequest(prompt) || looksLikeFindingFollowUp(prompt))) {
             return undefined;
         }
 
