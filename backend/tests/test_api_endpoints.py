@@ -152,6 +152,34 @@ async def test_pack_artifact_hides_unentitled_pack(client):
     assert response.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_pack_manifest_rate_limits_repeated_requests(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"frameworks": ["OWASP", "STRIDE"]},
+    }
+
+    with patch("app.routers.packs.settings.pack_fetch_rate_limit", 2), \
+         patch("app.routers.packs.settings.rate_limit_window_seconds", 60), \
+         patch("app.routers.packs.validate_licence", return_value=mock_licence):
+        for _ in range(2):
+            response = await client.get(
+                "/v1/packs/manifest",
+                headers={"X-Licence-Key": "owlvex_lic_valid"},
+            )
+            assert response.status_code == 200
+
+        response = await client.get(
+            "/v1/packs/manifest",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+        )
+
+    assert response.status_code == 429
+
+
 # ---------------------------------------------------------------------------
 # /v1/licences/validate
 # ---------------------------------------------------------------------------
@@ -217,6 +245,38 @@ async def test_validate_licence_rejects_unexpected_fields(client):
         )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_validate_licence_rate_limits_repeated_requests(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "team",
+        "seats": 5,
+        "seats_used": 1,
+        "features": {"frameworks": ["OWASP"], "scans_per_day": 100},
+        "expires_at": None,
+    }
+    with patch("app.routers.licences.settings.licence_validate_rate_limit", 2), \
+         patch("app.routers.licences.settings.rate_limit_window_seconds", 60), \
+         patch("app.routers.licences.validate_licence", return_value=mock_result):
+        for _ in range(2):
+            response = await client.post(
+                "/v1/licences/validate",
+                headers={"X-Licence-Key": "owlvex_lic_validkey"},
+                json={},
+            )
+            assert response.status_code == 200
+
+        response = await client.post(
+            "/v1/licences/validate",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={},
+        )
+
+    assert response.status_code == 429
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +400,43 @@ async def test_build_prompt_rejects_unexpected_team_context_field(client):
         )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_build_prompt_rate_limits_repeated_requests(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"frameworks": ["OWASP", "CWE"]},
+    }
+    mock_prompt = {
+        "system_prompt": "Prompt",
+        "template_id": str(uuid.uuid4()),
+        "template_name": "Default",
+        "rules_loaded": 3,
+        "source": "template",
+    }
+    with patch("app.routers.prompts.settings.prompt_build_rate_limit", 2), \
+         patch("app.routers.prompts.settings.rate_limit_window_seconds", 60), \
+         patch("app.routers.prompts.validate_licence", return_value=mock_licence), \
+         patch("app.routers.prompts.build_prompt", return_value=mock_prompt):
+        for _ in range(2):
+            response = await client.post(
+                "/v1/prompts/build",
+                headers={"X-Licence-Key": "owlvex_lic_valid"},
+                json={"frameworks": ["OWASP"], "language": "python", "model": "gpt-4o"},
+            )
+            assert response.status_code == 200
+
+        response = await client.post(
+            "/v1/prompts/build",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+            json={"frameworks": ["OWASP"], "language": "python", "model": "gpt-4o"},
+        )
+
+    assert response.status_code == 429
 
 
 # ---------------------------------------------------------------------------

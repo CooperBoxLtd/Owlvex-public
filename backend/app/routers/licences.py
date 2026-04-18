@@ -1,7 +1,7 @@
 import hashlib
 import secrets
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -14,6 +14,7 @@ from app.services.licence_service import (
     hash_licence_key,
     record_seat_seen,
 )
+from app.services.rate_limit import rate_limiter
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/licences", tags=["licences"])
@@ -32,9 +33,14 @@ class ValidateRequest(BaseModel):
 @router.post("/validate")
 async def validate(
     body: ValidateRequest,
+    request: Request,
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
+    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    if not rate_limiter.allow("licence_validate", client_ip, settings.licence_validate_rate_limit, settings.rate_limit_window_seconds):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many licence validation requests")
+
     result = await validate_licence(db, x_licence_key)
 
     if not result["valid"]:

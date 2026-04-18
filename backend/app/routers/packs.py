@@ -6,9 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.session import get_db
 from app.services.licence_service import validate_licence
 from app.services.pack_service import get_pack_artifact, get_pack_signing_posture, list_available_packs
+from app.services.rate_limit import rate_limiter
+from app.config import get_settings
 
 router = APIRouter(prefix="/v1/packs", tags=["packs"])
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 def _client_ip(request: Request) -> str:
@@ -42,6 +45,9 @@ async def manifest(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
+    if not rate_limiter.allow("pack_fetch", _client_ip(request), settings.pack_fetch_rate_limit, settings.rate_limit_window_seconds):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many pack requests")
+
     lic = await validate_licence(db, x_licence_key)
     if not lic["valid"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])
@@ -70,6 +76,9 @@ async def get_pack(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
+    if not rate_limiter.allow("pack_fetch", _client_ip(request), settings.pack_fetch_rate_limit, settings.rate_limit_window_seconds):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many pack requests")
+
     lic = await validate_licence(db, x_licence_key)
     if not lic["valid"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])

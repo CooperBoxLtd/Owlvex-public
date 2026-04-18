@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock
 from app.main import app
 from app.db.session import Base, get_db
 from app.config import get_settings, Settings
+from app.services.rate_limit import clear_rate_limit_state
 
 # ---------------------------------------------------------------------------
 # Override settings for tests
@@ -33,7 +34,9 @@ TEST_SETTINGS = Settings(
 @pytest.fixture(autouse=True)
 def override_settings():
     app.dependency_overrides[get_settings] = lambda: TEST_SETTINGS
+    clear_rate_limit_state()
     yield
+    clear_rate_limit_state()
     app.dependency_overrides.clear()
 
 

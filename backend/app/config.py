@@ -26,6 +26,10 @@ class Settings(BaseSettings):
     environment: str = "development"
     owlvex_pack_signing_private_key_pem: str = ""
     owlvex_pack_signing_key_id: str = ""
+    licence_validate_rate_limit: int = 20
+    prompt_build_rate_limit: int = 30
+    pack_fetch_rate_limit: int = 60
+    rate_limit_window_seconds: int = 60
 
     @property
     def is_development(self) -> bool:
