@@ -83,6 +83,10 @@ const JWT_CUSTOM_UNVERIFIED_HELPER_CALL_RE =
     /\bdecodeJwtWithoutVerification\s*\(/g;
 const HARDCODED_SECRET_ASSIGN_RE =
     /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*(?:SECRET|TOKEN|API_KEY|PRIVATE_KEY|PASSWORD)[A-Za-z0-9_$]*)\s*=\s*['"`]([^'"`\r\n]{8,})['"`]/g;
+const REQUEST_TOKEN_ASSIGN_RE =
+    /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*((?:req|request)\.(?:headers(?:\[['"`][^'"`\]]+['"`]\]|\.[A-Za-z_$][A-Za-z0-9_$]*)|body\.[A-Za-z_$][A-Za-z0-9_$]*|query\.[A-Za-z_$][A-Za-z0-9_$]*))/gi;
+const HARD_CODED_TOKEN_COMPARE_RE =
+    /\b([A-Za-z_$][A-Za-z0-9_$]*)\s*(?:===|!==|==|!=)\s*['"`]([^'"`\r\n]{8,})['"`]/gi;
 const CORS_WILDCARD_ORIGIN_RE =
     /setHeader\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]\s*\)/g;
 const CORS_CREDENTIALS_TRUE_RE =
@@ -1460,6 +1464,79 @@ function scanHardcodedSecrets(source: string): InternalFinding[] {
     return found;
 }
 
+function scanHardcodedTokenValidation(source: string): InternalFinding[] {
+    const taintedTokenVars = new Set<string>();
+    const assignPattern = new RegExp(REQUEST_TOKEN_ASSIGN_RE.source, REQUEST_TOKEN_ASSIGN_RE.flags);
+    let match: RegExpExecArray | null;
+    while ((match = assignPattern.exec(source)) !== null) {
+        const variableName = match[1];
+        const sourceExpr = match[2] ?? '';
+        if (!/token/i.test(variableName) && !/token/i.test(sourceExpr)) { continue; }
+        taintedTokenVars.add(variableName);
+    }
+
+    if (taintedTokenVars.size === 0) {
+        const directCsrfHeaderPattern =
+            /req\.headers\[['"`][^'"`\]]*token[^'"`\]]*['"`]\][\s\S]{0,200}?['"`]([^'"`\r\n]{8,})['"`]/i;
+        const directMatch = directCsrfHeaderPattern.exec(source);
+        if (!directMatch) {
+            return [];
+        }
+
+        return [{
+            matchIndex: directMatch.index,
+            severity: 'HIGH',
+            ruleCode: 'SE-002',
+            title: 'Hardcoded token in source code',
+            explanation:
+                'The code validates request-controlled token input against a literal token value embedded in source. ' +
+                'That makes the token reusable by anyone who can read the repository or reverse engineer the application code.',
+            threat:
+                'An attacker who learns the checked-in token can replay it to bypass the intended token check and ' +
+                'perform state-changing or privileged actions that rely on that validation step.',
+            fix:
+                'Do not compare request tokens against literal values in source. Generate or load the expected token ' +
+                'from per-session state or managed configuration, and validate it without embedding the reusable token in code.',
+            canonicalId: 'owlvex.issue.hardcoded_token.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request token is validated against a reusable literal token committed in source code.'],
+        }];
+    }
+
+    const found: InternalFinding[] = [];
+    const comparePattern = new RegExp(HARD_CODED_TOKEN_COMPARE_RE.source, HARD_CODED_TOKEN_COMPARE_RE.flags);
+    while ((match = comparePattern.exec(source)) !== null) {
+        const variableName = match[1];
+        const tokenValue = match[2] ?? '';
+        if (!/token/i.test(variableName)) { continue; }
+        if (!taintedTokenVars.has(variableName)) { continue; }
+        if (tokenValue.length < 8) { continue; }
+
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SE-002',
+            title: 'Hardcoded token in source code',
+            explanation:
+                `The code validates request-controlled token input by comparing \`${variableName}\` against a literal token value embedded in source. ` +
+                'That makes the token reusable by anyone who can read the repository or reverse engineer the application code.',
+            threat:
+                'An attacker who learns the checked-in token can replay it to bypass the intended token check and ' +
+                'perform state-changing or privileged actions that rely on that validation step.',
+            fix:
+                'Do not compare request tokens against literal values in source. Generate or load the expected token ' +
+                'from per-session state or managed configuration, and validate it without embedding the reusable token in code.',
+            canonicalId: 'owlvex.issue.hardcoded_token.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request token is validated against a reusable literal token committed in source code.'],
+        });
+    }
+
+    return found;
+}
+
 function scanCorsSinks(source: string): InternalFinding[] {
     if (!CORS_WILDCARD_ORIGIN_RE.test(source) || !CORS_CREDENTIALS_TRUE_RE.test(source)) {
         return [];
@@ -1558,6 +1635,7 @@ export class DeterministicScanner {
                 ...scanOpenRedirectSinks(source),
                 ...scanJwtWeakValidationSinks(source),
                 ...scanHardcodedSecrets(source),
+                ...scanHardcodedTokenValidation(source),
                 ...scanCorsSinks(source),
                 ...scanCsrfSinks(source),
                 ...scanIdorSinks(source),

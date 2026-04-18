@@ -1118,3 +1118,32 @@ module.exports = { DEMO_SECRET };`;
         expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'SE-001')).toHaveLength(0);
     });
 });
+
+describe('DeterministicScanner - SE-002 hardcoded token validation', () => {
+    it('detects request token validation against a literal token in source', () => {
+        const source = `
+function requireCsrf(req, res, next) {
+  const token = req.headers['x-csrf-token'];
+  if (!token || token !== 'known-good-demo-token') {
+    return res.status(403).json({ error: 'csrf_invalid' });
+  }
+  next();
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'SE-002');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].canonicalId).toBe('owlvex.issue.hardcoded_token.001');
+        expect(findings[0].title).toBe('Hardcoded token in source code');
+    });
+
+    it('does not flag when request token is checked against session state', () => {
+        const source = `
+function requireCsrf(req, res, next) {
+  const token = req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrfToken) {
+    return res.status(403).json({ error: 'csrf_invalid' });
+  }
+  next();
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'SE-002')).toHaveLength(0);
+    });
+});

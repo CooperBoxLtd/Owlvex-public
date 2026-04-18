@@ -56,6 +56,15 @@
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
     {
+      "file": "src\\middleware\\csrf.js",
+      "requiredFindings": [
+        "Hardcoded token in source code"
+      ],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    {
       "file": "src\\server.js",
       "expectedState": "clean"
     }
