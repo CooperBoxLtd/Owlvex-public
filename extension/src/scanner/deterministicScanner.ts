@@ -22,12 +22,13 @@ import type { Finding } from './scanEngine';
 
 const SUPPORTED_LANGUAGES = new Set([
     'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
-    'python', 'java',
+    'python', 'java', 'csharp',
 ]);
 const JS_LIKE_LANGUAGES = new Set([
     'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
 ]);
 const JAVA_LANGUAGES = new Set(['java']);
+const CSHARP_LANGUAGES = new Set(['csharp']);
 
 // HTML-oriented sanitizers that are NOT valid for SQL context.
 const HTML_SANITIZERS = [
@@ -156,6 +157,26 @@ const JAVA_OBJECT_INPUT_ASSIGN_RE =
     /\bObjectInputStream\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*new\s+ObjectInputStream\s*\(\s*request\.getInputStream\s*\(\s*\)\s*\)\s*;/g;
 const JAVA_OBJECT_INPUT_READ_RE =
     /\b([A-Za-z_][A-Za-z0-9_]*)\.readObject\s*\(\s*\)/g;
+const CSHARP_REQUEST_ASSIGN_RE =
+    /\b(?:string|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:Request|request)\.(?:Query|Form)\s*\[\s*"[^"]+"\s*\]\s*;/g;
+const CSHARP_PROCESS_START_VAR_RE =
+    /\bProcess\.Start\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
+const CSHARP_PROCESS_START_CONCAT_RE =
+    /\bProcess\.Start\s*\(\s*"[^"\n]*"\s*,\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,120}?\)/g;
+const CSHARP_SQL_INLINE_CONCAT_RE =
+    /\bnew\s+SqlCommand\s*\(\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,160}?,/g;
+const CSHARP_SQL_ASSIGN_RE =
+    /\b(?:string|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,160}?;/g;
+const CSHARP_SQL_VAR_SINK_RE =
+    /\bnew\s+SqlCommand\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*,/g;
+const CSHARP_PATH_ASSIGN_RE =
+    /\b(?:var|string)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*Path\.Combine\s*\(([^)]*)\)\s*;/g;
+const CSHARP_FILE_SINK_RE =
+    /\bFile\.(?:ReadAllText|ReadAllBytes|OpenRead)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
+const CSHARP_HTTP_DIRECT_RE =
+    /\b(?:httpClient|client)\.(?:GetStringAsync|GetAsync|PostAsync)\s*\(\s*(?:Request|request)\.(?:Query|Form)\s*\[\s*"[^"]+"\s*\]\s*\)/g;
+const CSHARP_HTTP_VAR_RE =
+    /\b(?:httpClient|client)\.(?:GetStringAsync|GetAsync|PostAsync)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -2276,6 +2297,211 @@ function scanJavaDeserializationSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanCsharpShellSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(CSHARP_REQUEST_ASSIGN_RE.source, CSHARP_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const varPattern = new RegExp(CSHARP_PROCESS_START_VAR_RE.source, CSHARP_PROCESS_START_VAR_RE.flags);
+    while ((match = varPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The C# code passes a request-derived string into `Process.Start(...)`. That lets untrusted input influence the executed program or command line.',
+            threat:
+                'An attacker can influence what the server executes, potentially reading files, invoking unintended programs, or compromising the host account running the application.',
+            fix:
+                'Do not pass request input into raw process start calls. Use a fixed executable with explicit validated arguments, or replace the process invocation with a safe library API.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived C# variable reaches Process.Start(...).'],
+        });
+    }
+
+    const concatPattern = new RegExp(CSHARP_PROCESS_START_CONCAT_RE.source, CSHARP_PROCESS_START_CONCAT_RE.flags);
+    while ((match = concatPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The C# code builds a process argument string through concatenation before calling `Process.Start(...)`. Untrusted values become part of the executed command line.',
+            threat:
+                'An attacker can alter the executed command or arguments and influence what the server process touches or runs.',
+            fix:
+                'Replace raw command or argument concatenation with a fixed executable and explicit validated arguments, or avoid process invocation entirely.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A C# command or argument string is assembled through concatenation before Process.Start(...).'],
+        });
+    }
+
+    return found;
+}
+
+function scanCsharpSqlSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    let match: RegExpExecArray | null;
+
+    const inlinePattern = new RegExp(CSHARP_SQL_INLINE_CONCAT_RE.source, CSHARP_SQL_INLINE_CONCAT_RE.flags);
+    while ((match = inlinePattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation:
+                'A C# `SqlCommand` is created with SQL text built through string concatenation. Untrusted values become part of the raw query before it reaches the database driver.',
+            threat:
+                'An attacker can inject SQL syntax to change the query structure, expose data, or modify records.',
+            fix:
+                'Replace concatenated SQL with parameterized `SqlCommand` usage and bind values separately from the SQL text.',
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A C# SQL sink executes concatenated query text.'],
+        });
+    }
+
+    const queryVars = new Set<string>();
+    const assignPattern = new RegExp(CSHARP_SQL_ASSIGN_RE.source, CSHARP_SQL_ASSIGN_RE.flags);
+    while ((match = assignPattern.exec(source)) !== null) {
+        queryVars.add(match[1]);
+    }
+
+    const sinkPattern = new RegExp(CSHARP_SQL_VAR_SINK_RE.source, CSHARP_SQL_VAR_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!queryVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation:
+                'A C# `SqlCommand` uses a query variable that was built through string concatenation. Untrusted values become part of the raw SQL text before execution.',
+            threat:
+                'An attacker can inject SQL syntax to change the query structure, expose data, or modify records.',
+            fix:
+                'Use parameterized `SqlCommand` queries and pass user values as bound parameters instead of concatenating them into the SQL string.',
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A concatenated C# SQL query variable reaches a SqlCommand sink.'],
+        });
+    }
+
+    return found;
+}
+
+function scanCsharpPathTraversalSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    const pathVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(CSHARP_REQUEST_ASSIGN_RE.source, CSHARP_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const pathPattern = new RegExp(CSHARP_PATH_ASSIGN_RE.source, CSHARP_PATH_ASSIGN_RE.flags);
+    while ((match = pathPattern.exec(source)) !== null) {
+        const argsText = match[2] ?? '';
+        if ([...taintedVars].some(varName => new RegExp(`\\b${varName}\\b`).test(argsText))) {
+            pathVars.add(match[1]);
+        }
+    }
+
+    const sinkPattern = new RegExp(CSHARP_FILE_SINK_RE.source, CSHARP_FILE_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!pathVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'PT-001',
+            title: 'Path Traversal',
+            explanation:
+                'A C# filesystem path is built from request-derived input and then passed into a file-reading sink. Without a fixed identifier map or boundary check, attacker-controlled path fragments can escape the intended directory.',
+            threat:
+                'An attacker can read files outside the expected directory, including configuration, credentials, source code, or other tenant data if the process account can access them.',
+            fix:
+                'Bind file access to a fixed base directory or server-side identifier map, normalize before use, and reject any request-derived path that escapes the allowed boundary.',
+            canonicalId: 'owlvex.issue.path_traversal.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived C# file path reaches a filesystem sink without a visible boundary check.'],
+        });
+    }
+
+    return found;
+}
+
+function scanCsharpSsrfSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(CSHARP_REQUEST_ASSIGN_RE.source, CSHARP_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const directPattern = new RegExp(CSHARP_HTTP_DIRECT_RE.source, CSHARP_HTTP_DIRECT_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SR-001',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation:
+                'The C# code issues an outbound `HttpClient` request directly to request-controlled input without a visible trusted-destination guard.',
+            threat:
+                'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+            fix:
+                'Do not fetch arbitrary user-supplied URLs. Route outbound access through an allow-list or named integration, and validate protocol, hostname, and internal address ranges before making the request.',
+            canonicalId: 'owlvex.issue.ssrf.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived C# URL reaches an outbound HttpClient sink without a visible allowlist guard.'],
+        });
+    }
+
+    const varPattern = new RegExp(CSHARP_HTTP_VAR_RE.source, CSHARP_HTTP_VAR_RE.flags);
+    while ((match = varPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SR-001',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation:
+                'The C# code issues an outbound `HttpClient` request to a request-derived URL variable without a visible trusted-destination guard.',
+            threat:
+                'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+            fix:
+                'Do not fetch arbitrary user-supplied URLs. Route outbound access through an allow-list or named integration, and validate protocol, hostname, and internal address ranges before making the request.',
+            canonicalId: 'owlvex.issue.ssrf.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived C# URL variable reaches an outbound HttpClient sink without a visible allowlist guard.'],
+        });
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -2309,6 +2535,13 @@ export class DeterministicScanner {
                     ...scanJavaJwtWeakValidationSinks(source),
                     ...scanJavaDeserializationSinks(source),
                 ]
+                : CSHARP_LANGUAGES.has(language)
+                    ? [
+                        ...scanCsharpShellSinks(source),
+                        ...scanCsharpSqlSinks(source),
+                        ...scanCsharpPathTraversalSinks(source),
+                        ...scanCsharpSsrfSinks(source),
+                    ]
             : [
                 ...scanPythonShellSinks(source),
                 ...scanPythonSqlSinks(source),

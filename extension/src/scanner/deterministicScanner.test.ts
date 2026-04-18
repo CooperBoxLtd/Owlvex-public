@@ -41,6 +41,17 @@ class Demo {
 }`;
         expect(scanner.scan(source, 'java').length).toBeGreaterThan(0);
     });
+
+    it('returns findings for csharp when a supported sink shape is present', () => {
+        const source = `
+class Demo {
+    public void Run() {
+        string cmd = Request.Query["cmd"];
+        Process.Start(cmd);
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').length).toBeGreaterThan(0);
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -576,6 +587,101 @@ class Demo {
     }
 }`;
         expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'DS-001')).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// C# wave 1: shell injection, SQL injection, path traversal, SSRF
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner — C# wave 1', () => {
+    it('detects Process.Start() with a request-derived variable', () => {
+        const source = `
+class Demo {
+    public void Run() {
+        string cmd = Request.Query["cmd"];
+        Process.Start(cmd);
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'GR-001')).toHaveLength(1);
+    });
+
+    it('does not flag Process.Start() with a fixed executable and argument list', () => {
+        const source = `
+class Demo {
+    public void Run() {
+        string name = Request.Query["name"];
+        Process.Start("grep", name);
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'GR-001')).toHaveLength(0);
+    });
+
+    it('detects C# SqlCommand built through concatenation before execution', () => {
+        const source = `
+class Demo {
+    public void Load() {
+        string userId = Request.Query["id"];
+        string sql = "SELECT * FROM users WHERE id = '" + userId + "'";
+        var cmd = new SqlCommand(sql, conn);
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'SQ-001')).toHaveLength(1);
+    });
+
+    it('does not flag C# parameterized SqlCommand usage', () => {
+        const source = `
+class Demo {
+    public void Load() {
+        string userId = Request.Query["id"];
+        var cmd = new SqlCommand("SELECT * FROM users WHERE id = @id", conn);
+        cmd.Parameters.AddWithValue("@id", userId);
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'SQ-001')).toHaveLength(0);
+    });
+
+    it('detects Path.Combine() with request-derived input flowing into File.ReadAllText()', () => {
+        const source = `
+class Demo {
+    public string Read() {
+        string filename = Request.Query["file"];
+        var target = Path.Combine("/srv/files", filename);
+        return File.ReadAllText(target);
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'PT-001')).toHaveLength(1);
+    });
+
+    it('does not flag fixed C# file reads without request-derived path joins', () => {
+        const source = `
+class Demo {
+    public string Read() {
+        var target = Path.Combine("/srv/files", "logo.png");
+        return File.ReadAllText(target);
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'PT-001')).toHaveLength(0);
+    });
+
+    it('detects HttpClient.GetStringAsync() on a request-derived destination', () => {
+        const source = `
+class Demo {
+    public async Task<string> Fetch() {
+        string url = Request.Query["url"];
+        return await httpClient.GetStringAsync(url);
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'SR-001')).toHaveLength(1);
+    });
+
+    it('does not flag HttpClient.GetStringAsync() on a fixed trusted literal', () => {
+        const source = `
+class Demo {
+    public async Task<string> Fetch() {
+        return await httpClient.GetStringAsync("https://example.com/avatar.png");
+    }
+}`;
+        expect(scanner.scan(source, 'csharp').filter(f => f.ruleCode === 'SR-001')).toHaveLength(0);
     });
 });
 

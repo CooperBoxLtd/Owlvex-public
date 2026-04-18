@@ -74,6 +74,14 @@ These expectations should be read together with:
 | `55-java-jwt-validation-safe.java` | clean | Java JWT require/verify path |
 | `56-java-deserialization-unsafe.java` | finding expected | Java ObjectInputStream on request input |
 | `57-java-deserialization-safe.java` | clean | Java JSON parsing of request input |
+| `58-csharp-command-injection-unsafe.cs` | finding expected | C# Process.Start from request input |
+| `59-csharp-command-injection-safe.cs` | clean | C# Process.Start fixed executable and args |
+| `60-csharp-sqli-unsafe.cs` | finding expected | C# SQL built through string concatenation |
+| `61-csharp-sqli-safe.cs` | clean | C# SqlCommand parameter binding |
+| `62-csharp-path-traversal-unsafe.cs` | finding expected | request-derived C# file path |
+| `63-csharp-path-traversal-safe.cs` | clean | fixed C# file path |
+| `64-csharp-ssrf-unsafe.cs` | finding expected | request-derived C# outbound request |
+| `65-csharp-ssrf-safe.cs` | clean | fixed outbound C# destination |
 
 ## Stabilization Rule
 

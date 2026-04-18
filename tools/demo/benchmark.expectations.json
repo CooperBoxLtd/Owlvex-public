@@ -237,6 +237,50 @@
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
-    { "file": "57-java-deserialization-safe.java", "expectedState": "clean" }
+    { "file": "57-java-deserialization-safe.java", "expectedState": "clean" },
+    {
+      "file": "58-csharp-command-injection-unsafe.cs",
+      "language": "csharp",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "59-csharp-command-injection-safe.cs", "expectedState": "clean" },
+    {
+      "file": "60-csharp-sqli-unsafe.cs",
+      "language": "csharp",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `SQ-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "61-csharp-sqli-safe.cs", "expectedState": "clean" },
+    {
+      "file": "62-csharp-path-traversal-unsafe.cs",
+      "language": "csharp",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `PT-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "63-csharp-path-traversal-safe.cs", "expectedState": "clean" },
+    {
+      "file": "64-csharp-ssrf-unsafe.cs",
+      "language": "csharp",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `SR-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "65-csharp-ssrf-safe.cs", "expectedState": "clean" }
   ]
 }

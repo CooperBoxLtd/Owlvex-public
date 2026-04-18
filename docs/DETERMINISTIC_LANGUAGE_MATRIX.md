@@ -19,21 +19,21 @@ If a cell is marked as supported here, there should be:
 
 ## Current Matrix
 
-| Family | JavaScript / TypeScript | Python | Java | Notes |
-| --- | --- | --- | --- | --- |
-| Command injection | Yes | Yes | Yes | Python covers `os.system(...)` and `subprocess.*(..., shell=True)`; Java covers `Runtime.getRuntime().exec(...)` on request-derived command strings |
-| SQL injection | Yes | Yes | Yes | Python covers f-string SQL reaching `execute/query` sinks; Java covers concatenated SQL reaching `Statement.execute*` |
-| Path traversal | Yes | Yes | Yes | Python covers `os.path.join(...)`; Java covers `Paths.get(...)` / `Path.of(...)` into file-reading sinks |
-| SSRF | Yes | Yes | Yes | Python covers direct `requests.*(...)`; Java covers `new URL(requestInput).openStream()` and equivalent URL variables |
-| Weak JWT validation | Yes | Yes | Yes | Python covers `jwt.decode(..., options={"verify_signature": False})`; Java covers `JWT.decode(...)` on request-derived tokens |
-| Insecure deserialization | No | Yes | Yes | Python covers `pickle.loads(request.body)`; Java covers `ObjectInputStream` on request input |
-| IDOR / tenant isolation | Yes | No | No | Python and Java not yet implemented deterministically |
-| Open redirect | Yes | No | No | Python and Java not yet implemented deterministically |
-| CSRF | Yes | No | No | Python and Java not yet implemented deterministically |
-| CORS | Yes | No | No | Python and Java not yet implemented deterministically |
-| Cookie security | Yes | No | No | Python and Java not yet implemented deterministically |
-| Sensitive logging | Yes | No | No | Python and Java not yet implemented deterministically |
-| Debug mode | Yes | No | No | Python and Java not yet implemented deterministically |
+| Family | JavaScript / TypeScript | Python | Java | C# | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Command injection | Yes | Yes | Yes | Yes | Python covers `os.system(...)` and `subprocess.*(..., shell=True)`; Java covers `Runtime.getRuntime().exec(...)`; C# covers `Process.Start(...)` on request-derived command strings |
+| SQL injection | Yes | Yes | Yes | Yes | Python covers f-string SQL; Java covers concatenated SQL reaching `Statement.execute*`; C# covers concatenated SQL reaching `SqlCommand` |
+| Path traversal | Yes | Yes | Yes | Yes | Python covers `os.path.join(...)`; Java covers `Paths.get(...)` / `Path.of(...)`; C# covers `Path.Combine(...)` into file-reading sinks |
+| SSRF | Yes | Yes | Yes | Yes | Python covers direct `requests.*(...)`; Java covers `new URL(requestInput).openStream()`; C# covers `HttpClient.GetStringAsync(...)` on request-derived destinations |
+| Weak JWT validation | Yes | Yes | Yes | No | Python covers `jwt.decode(..., options={"verify_signature": False})`; Java covers `JWT.decode(...)` on request-derived tokens |
+| Insecure deserialization | No | Yes | Yes | No | Python covers `pickle.loads(request.body)`; Java covers `ObjectInputStream` on request input |
+| IDOR / tenant isolation | Yes | No | No | No | Python, Java, and C# not yet implemented deterministically |
+| Open redirect | Yes | No | No | No | Python, Java, and C# not yet implemented deterministically |
+| CSRF | Yes | No | No | No | Python, Java, and C# not yet implemented deterministically |
+| CORS | Yes | No | No | No | Python, Java, and C# not yet implemented deterministically |
+| Cookie security | Yes | No | No | No | Python, Java, and C# not yet implemented deterministically |
+| Sensitive logging | Yes | No | No | No | Python, Java, and C# not yet implemented deterministically |
+| Debug mode | Yes | No | No | No | Python, Java, and C# not yet implemented deterministically |
 
 ## Benchmark Rule
 
@@ -52,7 +52,7 @@ Recommended next deterministic language expansions:
 
 1. Python auth/session safe guards and framework-aware variants
 2. Java framework-aware safe guards and auth/session variants
-3. C# after Java using the same bounded family set
+3. C# auth/session and framework-aware safe guards
 
 ## Positioning Rule
 
