@@ -92,24 +92,30 @@ Current status:
 - fixed in the extension
 - scan recording now sends `prompt_id` only, not the full assembled prompt
 
-### 3. Open: scan comparison payloads are broader than ideal metadata
+### 3. Improved: scan comparison payloads are now metadata-shaped
 
 Severity: Medium
 
-Current behavior:
+Previous behavior:
 
-- `/v1/scans/compare` receives full findings arrays rather than a narrower diff-friendly summary
+- `/v1/scans/compare` accepted unrestricted finding dictionaries
 
-Why it matters:
+Why it mattered:
 
-- this is still not raw source code
-- but it is richer security content than a strict minimal-metadata contract
-- it increases retained issue detail on the backend side
+- this still was not raw source code
+- but it allowed richer security payloads than a strict metadata contract
+- nested fields could drift toward source-bearing or overly detailed content
 
-Recommended next step:
+Current status:
 
-- define the minimum comparison payload contract
-- decide whether comparison truly needs full normalized findings or only canonical issue summaries and deltas
+- improved in the backend contract
+- comparison findings are now constrained to a small allowed metadata shape
+- unexpected nested fields are rejected
+
+Remaining follow-up:
+
+- review whether all currently allowed comparison fields are necessary
+- keep comparison payloads aligned with the smallest useful diff contract
 
 ### 4. Open: live infra drift around secret-management model
 
@@ -205,8 +211,8 @@ Recommended next step:
 
 ### Priority 1
 
-- tighten scan comparison payloads
-- add backend route contract tests for metadata-only behavior
+- add backend route contract tests for metadata-only behavior on any new control-plane routes
+- keep comparison payload fields under explicit review as the diff feature evolves
 
 ### Priority 2
 

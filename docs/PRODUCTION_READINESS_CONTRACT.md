@@ -14,6 +14,8 @@ If this document conflicts with [IMPLEMENTATION_DESIGN.md](D:/Dev/repos/CodeScan
 
 For environment setup and deployment mechanics, see [DEPLOYMENT_ENVIRONMENTS.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_ENVIRONMENTS.md) and [FIRST_PRODUCTION_DEPLOY.md](D:/Dev/repos/CodeScanner/docs/FIRST_PRODUCTION_DEPLOY.md).
 
+For current customer-facing boundary wording and the current Azure secret-posture note, see [CUSTOMER_SECURITY_AND_DATA_BOUNDARY.md](D:/Dev/repos/CodeScanner/docs/CUSTOMER_SECURITY_AND_DATA_BOUNDARY.md) and [AZURE_SECRET_POSTURE_2026-04-18.md](D:/Dev/repos/CodeScanner/docs/AZURE_SECRET_POSTURE_2026-04-18.md).
+
 ## 1. Purpose
 
 Owlvex is production ready only when we can operate the product safely, repeatably, and honestly within its intended model:

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -15,6 +15,14 @@ router = APIRouter(prefix="/v1/scans", tags=["scans"])
 # Records metadata after the VS Code extension completes a scan.
 # Code is NEVER sent here.
 # ----------------------------------------------------------------
+class FindingsSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    critical: int = Field(default=0, ge=0)
+    high: int = Field(default=0, ge=0)
+    medium: int = Field(default=0, ge=0)
+    low: int = Field(default=0, ge=0)
+
+
 class RecordRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     file_name: str                          # filename only, no path
@@ -24,12 +32,23 @@ class RecordRequest(BaseModel):
     provider: str
     frameworks: list[str]
     score: float
-    findings_summary: dict                  # {critical:int, high:int, medium:int, low:int}
+    findings_summary: FindingsSummary
     finding_count: int
     token_count: Optional[int] = None
     duration_ms: Optional[int] = None
     prompt_id: Optional[str] = None
     user_email: Optional[str] = None
+
+
+class CompareFindingEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    issue_id: Optional[str] = None
+    canonical_title: Optional[str] = None
+    title: Optional[str] = None
+    line: Optional[int] = None
+    framework: Optional[str] = None
+    rule_code: Optional[str] = None
+    severity: Optional[str] = None
 
 
 @router.post("/record")
@@ -83,8 +102,8 @@ class CompareRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scan_a_id: str
     scan_b_id: str
-    findings_a: list[dict]
-    findings_b: list[dict]
+    findings_a: list[CompareFindingEntry]
+    findings_b: list[CompareFindingEntry]
     score_a: float
     score_b: float
 
@@ -110,8 +129,8 @@ async def compare(
         licence_id=lic["licence_id"],
         scan_a_id=body.scan_a_id,
         scan_b_id=body.scan_b_id,
-        findings_a=body.findings_a,
-        findings_b=body.findings_b,
+        findings_a=[item.model_dump(exclude_none=True) for item in body.findings_a],
+        findings_b=[item.model_dump(exclude_none=True) for item in body.findings_b],
         score_a=body.score_a,
         score_b=body.score_b,
     )

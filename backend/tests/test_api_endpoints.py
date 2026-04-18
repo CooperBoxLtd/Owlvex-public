@@ -397,6 +397,41 @@ async def test_record_scan_rejects_prompt_snapshot_field(client):
 
 
 @pytest.mark.asyncio
+async def test_record_scan_rejects_unexpected_findings_summary_fields(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"scans_per_day": None, "frameworks": ["OWASP"]},
+    }
+    with patch("app.routers.scans.validate_licence", return_value=mock_licence):
+        response = await client.post(
+            "/v1/scans/record",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+            json={
+                "file_name": "app.py",
+                "file_hash": "deadbeef" * 8,
+                "language": "python",
+                "model": "gpt-4o",
+                "provider": "openai",
+                "frameworks": ["OWASP"],
+                "score": 7.5,
+                "findings_summary": {
+                    "critical": 0,
+                    "high": 1,
+                    "medium": 2,
+                    "low": 0,
+                    "info": 99,
+                },
+                "finding_count": 3,
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_compare_scan_returns_extension_compatible_shape(client):
     mock_licence = {
         "valid": True,
@@ -481,6 +516,39 @@ async def test_compare_scan_rejects_unexpected_extra_fields(client):
                 "score_a": 6.0,
                 "score_b": 8.0,
                 "source_code": "should never be accepted here",
+            },
+        )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_compare_scan_rejects_nested_source_bearing_fields(client):
+    mock_licence = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "plan": "developer",
+        "team_name": "Test",
+        "features": {"comparison": True, "frameworks": ["OWASP"]},
+    }
+    with patch("app.routers.scans.validate_licence", return_value=mock_licence):
+        response = await client.post(
+            "/v1/scans/compare",
+            headers={"X-Licence-Key": "owlvex_lic_valid"},
+            json={
+                "scan_a_id": str(uuid.uuid4()),
+                "scan_b_id": str(uuid.uuid4()),
+                "findings_a": [
+                    {
+                        "issue_id": "owlvex.issue.nosql_injection.001",
+                        "title": "NoSQL Injection",
+                        "line": 12,
+                        "source_code": "db.users.find(req.body.filter)",
+                    }
+                ],
+                "findings_b": [],
+                "score_a": 6.0,
+                "score_b": 8.0,
             },
         )
 
