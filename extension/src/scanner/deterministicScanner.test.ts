@@ -196,6 +196,29 @@ return db.query(query);`;
         expect(scanner.scan(source, 'javascript')).toHaveLength(0);
     });
 
+    it('detects helper objects that return interpolated sql properties', () => {
+        const source = `
+function findUsersByEmailUnsafe(email) {
+  return {
+    sql: \`SELECT id, email FROM users WHERE email = '\${email}'\`,
+  };
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'SQ-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].canonicalId).toBe('owlvex.issue.sql_injection.001');
+    });
+
+    it('does not flag helper objects that expose parameterized sql plus params', () => {
+        const source = `
+function findUsersByEmailSafe(email) {
+  return {
+    sql: 'SELECT id, email FROM users WHERE email = ?',
+    params: [email],
+  };
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'SQ-001')).toHaveLength(0);
+    });
+
     it('does not flag a constant query template with no interpolation', () => {
         const source = 'db.query(`SELECT COUNT(*) FROM users`)';
         expect(scanner.scan(source, 'javascript')).toHaveLength(0);
@@ -1025,5 +1048,73 @@ def load_profile(request):
     return json.loads(request.body)
 `;
         expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'DS-001')).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// JW-001: Weak JWT validation (custom helper shapes)
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner - JW-001 weak jwt validation custom helpers', () => {
+    it('detects a decodeJwtWithoutVerification helper definition', () => {
+        const source = `
+function decodeSegment(segment) {
+  return JSON.parse(Buffer.from(segment, 'base64url').toString('utf8'));
+}
+
+function decodeJwtWithoutVerification(token) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 3) {
+    throw new Error('token_format_invalid');
+  }
+  return decodeSegment(parts[1]);
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'JW-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].canonicalId).toBe('owlvex.issue.weak_jwt_validation.001');
+    });
+
+    it('detects route usage of decodeJwtWithoutVerification', () => {
+        const source = `
+const { decodeJwtWithoutVerification, verifyJwtHmac } = require('./tokens');
+function handler(req, res) {
+  const claims = decodeJwtWithoutVerification(req.headers.authorization);
+  return res.json({ ok: true, claims });
+}`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'JW-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].likelihoodReasons).toContain('The route uses a helper that explicitly bypasses JWT signature verification.');
+    });
+
+    it('does not flag verifyJwtHmac helper usage', () => {
+        const source = `
+const { verifyJwtHmac } = require('./tokens');
+function handler(req, res) {
+  const claims = verifyJwtHmac(req.headers.authorization);
+  return res.json({ ok: true, claims });
+}`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'JW-001')).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// SE-001: Hardcoded secrets
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner - SE-001 hardcoded secrets', () => {
+    it('detects a hardcoded secret constant in source', () => {
+        const source = `
+const DEMO_SECRET = 'owlvex-demo-secret';
+module.exports = { DEMO_SECRET };`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'SE-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].canonicalId).toBe('owlvex.issue.hardcoded_secret.001');
+        expect(findings[0].title).toBe('Hardcoded secret in source code');
+        expect(findings[0].severity).toBe('CRITICAL');
+    });
+
+    it('does not flag runtime-loaded secrets', () => {
+        const source = `
+const DEMO_SECRET = process.env.DEMO_SECRET;
+module.exports = { DEMO_SECRET };`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'SE-001')).toHaveLength(0);
     });
 });

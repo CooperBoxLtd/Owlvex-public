@@ -11,15 +11,19 @@
         "Broken Access Control in getDocumentForTenant",
         "Sensitive data exposed in logs"
       ],
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 2"],
+      "requiredCorroborationPostureIncludes": ["proven: 2"]
     },
     {
       "file": "src\\lib\\tokens.js",
       "requiredFindings": [
-        "Hardcoded token in source code",
+        "Hardcoded secret in source code",
         "Weak JWT validation"
-      ]
+      ],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 2"],
+      "requiredCorroborationPostureIncludes": ["proven: 2"]
     },
     {
       "file": "src\\lib\\logger.js",
@@ -41,6 +45,15 @@
       "forbiddenFindings": [
         "Potential incomplete validation in '/fetch-safe' endpoint"
       ]
+    },
+    {
+      "file": "src\\routes\\auth.js",
+      "requiredFindings": [
+        "Weak JWT validation"
+      ],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
     {
       "file": "src\\server.js",

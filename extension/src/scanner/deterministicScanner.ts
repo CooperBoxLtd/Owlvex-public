@@ -46,6 +46,10 @@ const SQL_SINK_INLINE_PATTERN =
     /\.(query|execute|raw)\s*\(\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
 const SQL_SINK_INLINE_CONCAT_PATTERN =
     /\.(query|execute|raw)\s*\(\s*((?:'[^']*'|"[^"]*")\s*\+\s*[^,\n;)]+)/g;
+const SQL_OBJECT_TEMPLATE_RE =
+    /\bsql\s*:\s*`([^`]*\$\{[^}]+\}[^`]*)`/g;
+const SQL_OBJECT_CONCAT_RE =
+    /\bsql\s*:\s*((?:'[^']*'|"[^"]*")\s*\+\s*[^,\n}]+)/g;
 
 // SQ-001: SQL sink call with a plain variable as the first argument.
 // Catches db.query(queryVar) when queryVar was assigned a template literal or concat string.
@@ -73,6 +77,12 @@ const REDIRECT_VAR_SINK_RE =
     /\bres\.redirect\s*\(\s*([A-Za-z_$][A-Za-z0-9_$]*)\s*\)/g;
 const JWT_DECODE_RE =
     /\b[A-Za-z_$][A-Za-z0-9_$]*\.decode\s*\(\s*[^)]{0,200}\)/g;
+const JWT_CUSTOM_UNVERIFIED_HELPER_DEF_RE =
+    /\bfunction\s+decodeJwtWithoutVerification\s*\(/g;
+const JWT_CUSTOM_UNVERIFIED_HELPER_CALL_RE =
+    /\bdecodeJwtWithoutVerification\s*\(/g;
+const HARDCODED_SECRET_ASSIGN_RE =
+    /\b(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*(?:SECRET|TOKEN|API_KEY|PRIVATE_KEY|PASSWORD)[A-Za-z0-9_$]*)\s*=\s*['"`]([^'"`\r\n]{8,})['"`]/g;
 const CORS_WILDCARD_ORIGIN_RE =
     /setHeader\s*\(\s*['"]Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]\s*\)/g;
 const CORS_CREDENTIALS_TRUE_RE =
@@ -1114,6 +1124,26 @@ function scanSqlSinks(source: string): InternalFinding[] {
         }
     }
 
+    // Case C: helper objects that expose a raw `sql:` property with interpolation.
+    const objectTemplatePattern = new RegExp(SQL_OBJECT_TEMPLATE_RE.source, SQL_OBJECT_TEMPLATE_RE.flags);
+    while ((match = objectTemplatePattern.exec(source)) !== null) {
+        found.push(makeSqlFinding(
+            match.index,
+            templateContainsHtmlSanitizer(match[1], sanitizedVars),
+            'query helper',
+            match[1],
+        ));
+    }
+
+    const objectConcatPattern = new RegExp(SQL_OBJECT_CONCAT_RE.source, SQL_OBJECT_CONCAT_RE.flags);
+    while ((match = objectConcatPattern.exec(source)) !== null) {
+        found.push(makeSqlConcatFinding(
+            match.index,
+            'query helper',
+            match[1],
+        ));
+    }
+
     return found;
 }
 
@@ -1343,6 +1373,90 @@ function scanJwtWeakValidationSinks(source: string): InternalFinding[] {
             likelihoodReasons: ['The code decodes JWT claims without any visible signature verification.'],
         });
     }
+
+    const helperDefPattern = new RegExp(JWT_CUSTOM_UNVERIFIED_HELPER_DEF_RE.source, JWT_CUSTOM_UNVERIFIED_HELPER_DEF_RE.flags);
+    while ((match = helperDefPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT Validation',
+            explanation:
+                'The code defines a helper named `decodeJwtWithoutVerification(...)` that parses JWT payload claims ' +
+                'without proving the token signature was issued by a trusted signer. Parsing claims alone does not ' +
+                'authenticate the token.',
+            threat:
+                'An attacker can forge arbitrary claims such as user ID, role, or tenant and have the application ' +
+                'treat them as trusted identity data if downstream code accepts the decoded payload.',
+            fix:
+                'Replace decode-only JWT handling with signature verification and explicit issuer, audience, algorithm, ' +
+                'and expiry checks before trusting any claims.',
+            canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['The helper name and implementation indicate JWT claims are consumed without signature verification.'],
+        });
+    }
+
+    const helperCallPattern = new RegExp(JWT_CUSTOM_UNVERIFIED_HELPER_CALL_RE.source, JWT_CUSTOM_UNVERIFIED_HELPER_CALL_RE.flags);
+    while ((match = helperCallPattern.exec(source)) !== null) {
+        const prefix = source.slice(Math.max(0, match.index - 20), match.index);
+        if (/\bfunction\s*$/.test(prefix)) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT Validation',
+            explanation:
+                'The route trusts claims from `decodeJwtWithoutVerification(...)`, which indicates the token payload is ' +
+                'being consumed without signature verification.',
+            threat:
+                'An attacker can forge arbitrary claims such as user ID, role, or tenant and have the application ' +
+                'treat them as trusted identity data if downstream code accepts the decoded payload.',
+            fix:
+                'Call a verification helper that validates signature, issuer, audience, algorithm, and expiry before ' +
+                'using any JWT claims.',
+            canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['The route uses a helper that explicitly bypasses JWT signature verification.'],
+        });
+    }
+
+    return found;
+}
+
+function scanHardcodedSecrets(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const pattern = new RegExp(HARDCODED_SECRET_ASSIGN_RE.source, HARDCODED_SECRET_ASSIGN_RE.flags);
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(source)) !== null) {
+        const identifier = match[1];
+        const secretValue = match[2] ?? '';
+        if (/demo|example|sample|test/i.test(secretValue) === false && secretValue.length < 12) {
+            continue;
+        }
+
+        found.push({
+            matchIndex: match.index,
+            severity: 'CRITICAL',
+            ruleCode: 'SE-001',
+            title: 'Hardcoded secret in source code',
+            explanation:
+                `The code assigns a reusable secret-like value directly to \`${identifier}\` in source. ` +
+                'Checked-in secrets are exposed to anyone who can read the repository, build artifacts, or logs that include source snippets.',
+            threat:
+                'Attackers who obtain the code can reuse the secret to forge tokens, access protected integrations, ' +
+                'or impersonate trusted application components.',
+            fix:
+                'Move the secret into managed configuration or a secrets manager, rotate the exposed value, and ensure ' +
+                'the application loads it from the environment or secret store at runtime.',
+            canonicalId: 'owlvex.issue.hardcoded_secret.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A reusable secret-like value is committed directly in source code.'],
+        });
+    }
     return found;
 }
 
@@ -1443,6 +1557,7 @@ export class DeterministicScanner {
                 ...scanSsrfSinks(source),
                 ...scanOpenRedirectSinks(source),
                 ...scanJwtWeakValidationSinks(source),
+                ...scanHardcodedSecrets(source),
                 ...scanCorsSinks(source),
                 ...scanCsrfSinks(source),
                 ...scanIdorSinks(source),
