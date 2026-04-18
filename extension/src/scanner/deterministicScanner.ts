@@ -22,11 +22,12 @@ import type { Finding } from './scanEngine';
 
 const SUPPORTED_LANGUAGES = new Set([
     'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
-    'python',
+    'python', 'java',
 ]);
 const JS_LIKE_LANGUAGES = new Set([
     'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
 ]);
+const JAVA_LANGUAGES = new Set(['java']);
 
 // HTML-oriented sanitizers that are NOT valid for SQL context.
 const HTML_SANITIZERS = [
@@ -121,6 +122,30 @@ const PYTHON_REQUESTS_VAR_RE =
     /\brequests\.(?:get|post|put|delete|request)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
 const PYTHON_JWT_UNVERIFIED_RE =
     /\bjwt\.decode\s*\([\s\S]{0,240}?\boptions\s*=\s*\{[\s\S]{0,120}?['"]verify_signature['"]\s*:\s*False[\s\S]{0,120}?\}/g;
+const JAVA_REQUEST_ASSIGN_RE =
+    /\bString\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*request\.getParameter\s*\(\s*"[^"]+"\s*\)\s*;/g;
+const JAVA_RUNTIME_EXEC_VAR_RE =
+    /\bRuntime\.getRuntime\(\)\.exec\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
+const JAVA_RUNTIME_EXEC_CONCAT_RE =
+    /\bRuntime\.getRuntime\(\)\.exec\s*\(\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,120}?\)/g;
+const JAVA_SQL_INLINE_CONCAT_RE =
+    /\.(?:executeQuery|executeUpdate|execute|prepareStatement)\s*\(\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,160}?\)/g;
+const JAVA_SQL_ASSIGN_RE =
+    /\bString\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"[^"\n]*"\s*\+\s*[A-Za-z_][A-Za-z0-9_]*[\s\S]{0,160}?;/g;
+const JAVA_SQL_VAR_SINK_RE =
+    /\.(?:executeQuery|executeUpdate|execute)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
+const JAVA_PATH_ASSIGN_RE =
+    /\b(?:Path|File)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:Paths\.get|Path\.of|new File)\s*\(([^)]*)\)\s*;/g;
+const JAVA_FILE_SINK_RE =
+    /\b(?:Files\.(?:readString|readAllBytes|newInputStream)|new FileInputStream)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
+const JAVA_URL_ASSIGN_RE =
+    /\b(?:String|URI|URL)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*request\.getParameter\s*\(\s*"[^"]+"\s*\)\s*;/g;
+const JAVA_URL_OBJECT_ASSIGN_RE =
+    /\bURL\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*new URL\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)\s*;/g;
+const JAVA_URL_DIRECT_SSRF_RE =
+    /\bnew URL\s*\(\s*request\.getParameter\s*\(\s*"[^"]+"\s*\)\s*\)\.openStream\s*\(\s*\)/g;
+const JAVA_URL_OPEN_STREAM_RE =
+    /\b([A-Za-z_][A-Za-z0-9_]*)\.openStream\s*\(\s*\)/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -1919,6 +1944,220 @@ function scanPythonJwtWeakValidationSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanJavaShellSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(JAVA_REQUEST_ASSIGN_RE.source, JAVA_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const varPattern = new RegExp(JAVA_RUNTIME_EXEC_VAR_RE.source, JAVA_RUNTIME_EXEC_VAR_RE.flags);
+    while ((match = varPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The code passes a request-derived Java string into `Runtime.getRuntime().exec(...)`. ' +
+                'That string is executed as an operating-system command without a safe argument boundary.',
+            threat:
+                'An attacker can influence the executed command, potentially reading files, invoking unintended programs, or compromising the host account running the application.',
+            fix:
+                'Do not pass request input into raw command strings. Use a fixed executable with an explicit argument list and allow-list any user-controlled values before execution.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Java variable reaches Runtime.exec(...).'],
+        });
+    }
+
+    const concatPattern = new RegExp(JAVA_RUNTIME_EXEC_CONCAT_RE.source, JAVA_RUNTIME_EXEC_CONCAT_RE.flags);
+    while ((match = concatPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The code builds a Java command string through string concatenation and passes it into `Runtime.getRuntime().exec(...)`. ' +
+                'Untrusted values become part of the executed command text.',
+            threat:
+                'An attacker can alter the executed command or influence which files and programs the server process touches, leading to command execution or data exposure.',
+            fix:
+                'Replace the raw command string with a fixed executable and explicit argument list, and validate or allow-list any untrusted values before use.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Java command string is assembled through concatenation before Runtime.exec(...).'],
+        });
+    }
+
+    return found;
+}
+
+function scanJavaSqlSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    let match: RegExpExecArray | null;
+
+    const inlinePattern = new RegExp(JAVA_SQL_INLINE_CONCAT_RE.source, JAVA_SQL_INLINE_CONCAT_RE.flags);
+    while ((match = inlinePattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation:
+                'A Java SQL execution call receives SQL text built through string concatenation. Untrusted values become part of the raw query before it reaches the database driver.',
+            threat:
+                'An attacker can inject SQL syntax to change the query structure, read or modify data, or bypass application logic.',
+            fix:
+                'Replace the concatenated SQL with a `PreparedStatement` or equivalent parameterized query so untrusted values are bound separately from the SQL text.',
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Java SQL sink executes concatenated query text.'],
+        });
+    }
+
+    const queryVars = new Set<string>();
+    const assignPattern = new RegExp(JAVA_SQL_ASSIGN_RE.source, JAVA_SQL_ASSIGN_RE.flags);
+    while ((match = assignPattern.exec(source)) !== null) {
+        queryVars.add(match[1]);
+    }
+
+    const sinkPattern = new RegExp(JAVA_SQL_VAR_SINK_RE.source, JAVA_SQL_VAR_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!queryVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation:
+                'A Java SQL execution call uses a query variable that was built through string concatenation. Untrusted values become part of the raw SQL text before execution.',
+            threat:
+                'An attacker can inject SQL syntax to change the query structure, expose data, or alter records.',
+            fix:
+                'Use a `PreparedStatement` or another parameterized query API so values are passed separately from the SQL text.',
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A concatenated Java SQL query variable reaches an execution sink.'],
+        });
+    }
+
+    return found;
+}
+
+function scanJavaPathTraversalSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    const pathVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(JAVA_REQUEST_ASSIGN_RE.source, JAVA_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const pathPattern = new RegExp(JAVA_PATH_ASSIGN_RE.source, JAVA_PATH_ASSIGN_RE.flags);
+    while ((match = pathPattern.exec(source)) !== null) {
+        const argsText = match[2] ?? '';
+        if ([...taintedVars].some(varName => new RegExp(`\\b${varName}\\b`).test(argsText))) {
+            pathVars.add(match[1]);
+        }
+    }
+
+    const sinkPattern = new RegExp(JAVA_FILE_SINK_RE.source, JAVA_FILE_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!pathVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'PT-001',
+            title: 'Path Traversal',
+            explanation:
+                'A Java filesystem path is built from a request-derived filename and then passed into a file-reading sink. Without a fixed identifier map or boundary check, attacker-controlled path fragments can escape the intended directory.',
+            threat:
+                'An attacker can read files outside the expected directory, including configuration, credentials, source code, or other tenant data if the process account can access them.',
+            fix:
+                'Do not join raw request path fragments into filesystem paths. Map user input to known-safe identifiers, or resolve against a fixed base directory and reject any path that escapes that base before reading the file.',
+            canonicalId: 'owlvex.issue.path_traversal.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Java file path reaches a filesystem sink without a visible boundary check.'],
+        });
+    }
+
+    return found;
+}
+
+function scanJavaSsrfSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    const urlVars = new Map<string, string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(JAVA_URL_ASSIGN_RE.source, JAVA_URL_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const directPattern = new RegExp(JAVA_URL_DIRECT_SSRF_RE.source, JAVA_URL_DIRECT_SSRF_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SR-001',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation:
+                'The Java code opens a stream directly to a request-derived URL. That lets the caller choose where the server connects.',
+            threat:
+                'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+            fix:
+                'Do not fetch arbitrary user-supplied URLs. Parse the destination, constrain it to a trusted allowlist, and reject unapproved hosts, protocols, and internal address ranges before making the request.',
+            canonicalId: 'owlvex.issue.ssrf.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Java URL reaches an outbound network sink without a visible allowlist guard.'],
+        });
+    }
+
+    const urlObjectPattern = new RegExp(JAVA_URL_OBJECT_ASSIGN_RE.source, JAVA_URL_OBJECT_ASSIGN_RE.flags);
+    while ((match = urlObjectPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[2])) { continue; }
+        urlVars.set(match[1], match[2]);
+    }
+
+    const openStreamPattern = new RegExp(JAVA_URL_OPEN_STREAM_RE.source, JAVA_URL_OPEN_STREAM_RE.flags);
+    while ((match = openStreamPattern.exec(source)) !== null) {
+        if (!urlVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SR-001',
+            title: 'Server-side request forgery through untrusted destination',
+            explanation:
+                'The Java code opens a stream to a URL object created from request input without a visible trusted-destination guard.',
+            threat:
+                'An attacker can abuse the server as a network pivot to reach internal services, metadata endpoints, or attacker-controlled hosts that are not directly reachable from the outside.',
+            fix:
+                'Do not fetch arbitrary user-supplied URLs. Parse the destination, constrain it to a trusted allowlist, and reject unapproved hosts, protocols, and internal address ranges before making the request.',
+            canonicalId: 'owlvex.issue.ssrf.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Java URL object reaches an outbound network sink without a visible allowlist guard.'],
+        });
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -1943,6 +2182,13 @@ export class DeterministicScanner {
                 ...scanInsecureCookieSinks(source),
                 ...scanDebugModeSinks(source),
             ]
+            : JAVA_LANGUAGES.has(language)
+                ? [
+                    ...scanJavaShellSinks(source),
+                    ...scanJavaSqlSinks(source),
+                    ...scanJavaPathTraversalSinks(source),
+                    ...scanJavaSsrfSinks(source),
+                ]
             : [
                 ...scanPythonShellSinks(source),
                 ...scanPythonSqlSinks(source),

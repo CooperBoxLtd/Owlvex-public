@@ -171,6 +171,50 @@
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
-    { "file": "45-python-jwt-validation-safe.py", "expectedState": "clean" }
+    { "file": "45-python-jwt-validation-safe.py", "expectedState": "clean" },
+    {
+      "file": "46-java-command-injection-unsafe.java",
+      "language": "java",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "47-java-command-injection-safe.java", "expectedState": "clean" },
+    {
+      "file": "48-java-sqli-unsafe.java",
+      "language": "java",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `SQ-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "49-java-sqli-safe.java", "expectedState": "clean" },
+    {
+      "file": "50-java-path-traversal-unsafe.java",
+      "language": "java",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `PT-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "51-java-path-traversal-safe.java", "expectedState": "clean" },
+    {
+      "file": "52-java-ssrf-unsafe.java",
+      "language": "java",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `SR-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "53-java-ssrf-safe.java", "expectedState": "clean" }
   ]
 }

@@ -8,7 +8,6 @@ const scanner = new DeterministicScanner();
 describe('DeterministicScanner — language gating', () => {
     it('returns no findings for unsupported languages', () => {
         const source = 'System.out.println(input);';
-        expect(scanner.scan(source, 'java')).toHaveLength(0);
         expect(scanner.scan(source, 'go')).toHaveLength(0);
     });
 
@@ -30,6 +29,17 @@ describe('DeterministicScanner — language gating', () => {
     it('returns findings for python when a supported sink shape is present', () => {
         const source = 'import pickle\npickle.loads(request.body)';
         expect(scanner.scan(source, 'python').length).toBeGreaterThan(0);
+    });
+
+    it('returns findings for java when a supported sink shape is present', () => {
+        const source = `
+class Demo {
+    void run(HttpServletRequest request) throws Exception {
+        String cmd = request.getParameter("cmd");
+        Runtime.getRuntime().exec(cmd);
+    }
+}`;
+        expect(scanner.scan(source, 'java').length).toBeGreaterThan(0);
     });
 });
 
@@ -426,6 +436,103 @@ def parse_token(token, secret):
     return jwt.decode(token, secret, algorithms=["HS256"])
 `;
         expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'JW-001')).toHaveLength(0);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Java wave 1: shell injection, SQL injection, path traversal, SSRF
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner — Java wave 1', () => {
+    it('detects Runtime.exec() with a request-derived variable', () => {
+        const source = `
+class Demo {
+    void run(HttpServletRequest request) throws Exception {
+        String cmd = request.getParameter("cmd");
+        Runtime.getRuntime().exec(cmd);
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'GR-001')).toHaveLength(1);
+    });
+
+    it('does not flag ProcessBuilder with a fixed executable and arguments', () => {
+        const source = `
+class Demo {
+    void run(HttpServletRequest request) throws Exception {
+        String name = request.getParameter("name");
+        new ProcessBuilder("grep", name).start();
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'GR-001')).toHaveLength(0);
+    });
+
+    it('detects Java SQL built through concatenation before execution', () => {
+        const source = `
+class Demo {
+    void load(HttpServletRequest request, Statement stmt) throws Exception {
+        String userId = request.getParameter("id");
+        String sql = "SELECT * FROM users WHERE id = '" + userId + "'";
+        stmt.executeQuery(sql);
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'SQ-001')).toHaveLength(1);
+    });
+
+    it('does not flag Java prepared statements with parameter binding', () => {
+        const source = `
+class Demo {
+    void load(HttpServletRequest request, Connection conn) throws Exception {
+        String userId = request.getParameter("id");
+        PreparedStatement stmt = conn.prepareStatement("SELECT * FROM users WHERE id = ?");
+        stmt.setString(1, userId);
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'SQ-001')).toHaveLength(0);
+    });
+
+    it('detects Paths.get() with a request-derived filename flowing into Files.readString()', () => {
+        const source = `
+class Demo {
+    String read(HttpServletRequest request) throws Exception {
+        String filename = request.getParameter("file");
+        Path target = Paths.get("/srv/files", filename);
+        return Files.readString(target);
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'PT-001')).toHaveLength(1);
+    });
+
+    it('does not flag fixed Java file reads without request-derived path joins', () => {
+        const source = `
+class Demo {
+    String read() throws Exception {
+        Path target = Paths.get("/srv/files", "logo.png");
+        return Files.readString(target);
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'PT-001')).toHaveLength(0);
+    });
+
+    it('detects Java URL.openStream() on a request-derived destination', () => {
+        const source = `
+class Demo {
+    void fetch(HttpServletRequest request) throws Exception {
+        String url = request.getParameter("url");
+        URL target = new URL(url);
+        target.openStream();
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'SR-001')).toHaveLength(1);
+    });
+
+    it('does not flag Java URL.openStream() on a fixed trusted literal', () => {
+        const source = `
+class Demo {
+    void fetch() throws Exception {
+        URL target = new URL("https://example.com/avatar.png");
+        target.openStream();
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'SR-001')).toHaveLength(0);
     });
 });
 

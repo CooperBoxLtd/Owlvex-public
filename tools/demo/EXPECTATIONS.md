@@ -62,6 +62,14 @@ These expectations should be read together with:
 | `43-python-ssrf-safe.py` | clean | fixed outbound Python destination |
 | `44-python-jwt-validation-unsafe.py` | finding expected | Python JWT decode skips signature verification |
 | `45-python-jwt-validation-safe.py` | clean | Python JWT verification enforces signature checking |
+| `46-java-command-injection-unsafe.java` | finding expected | Java Runtime exec from request input |
+| `47-java-command-injection-safe.java` | clean | Java ProcessBuilder argument list |
+| `48-java-sqli-unsafe.java` | finding expected | Java SQL built through string concatenation |
+| `49-java-sqli-safe.java` | clean | Java PreparedStatement parameter binding |
+| `50-java-path-traversal-unsafe.java` | finding expected | request-derived Java file path |
+| `51-java-path-traversal-safe.java` | clean | fixed Java file path |
+| `52-java-ssrf-unsafe.java` | finding expected | request-derived Java outbound request |
+| `53-java-ssrf-safe.java` | clean | fixed outbound Java destination |
 
 ## Stabilization Rule
 
