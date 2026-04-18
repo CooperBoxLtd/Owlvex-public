@@ -52,6 +52,12 @@ These expectations should be read together with:
 | `33-command-injection-shell-safe.js` | clean | argument array without shell parsing |
 | `34-sqli-concat-unsafe.js` | finding expected | SQL built through string concatenation |
 | `35-sqli-concat-safe.js` | clean | parameter binding keeps value out of SQL text |
+| `36-python-command-injection-unsafe.py` | finding expected | shell execution from request input |
+| `37-python-command-injection-safe.py` | clean | argument list with shell disabled |
+| `38-python-sqli-unsafe.py` | finding expected | Python SQL f-string reaches execute |
+| `39-python-sqli-safe.py` | clean | parameterized Python SQL query |
+| `40-python-path-traversal-unsafe.py` | finding expected | request-derived Python file path |
+| `41-python-path-traversal-safe.py` | clean | fixed Python file path |
 
 ## Stabilization Rule
 

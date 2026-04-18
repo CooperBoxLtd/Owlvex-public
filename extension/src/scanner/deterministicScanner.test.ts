@@ -7,8 +7,7 @@ const scanner = new DeterministicScanner();
 // ---------------------------------------------------------------------------
 describe('DeterministicScanner — language gating', () => {
     it('returns no findings for unsupported languages', () => {
-        const source = 'exec(`cmd ${input}`)';
-        expect(scanner.scan(source, 'python')).toHaveLength(0);
+        const source = 'System.out.println(input);';
         expect(scanner.scan(source, 'java')).toHaveLength(0);
         expect(scanner.scan(source, 'go')).toHaveLength(0);
     });
@@ -26,6 +25,11 @@ describe('DeterministicScanner — language gating', () => {
     it('returns findings for javascriptreact', () => {
         const source = 'exec(`ls ${userInput}`)';
         expect(scanner.scan(source, 'javascriptreact').length).toBeGreaterThan(0);
+    });
+
+    it('returns findings for python when a supported sink shape is present', () => {
+        const source = 'import pickle\npickle.loads(request.body)';
+        expect(scanner.scan(source, 'python').length).toBeGreaterThan(0);
     });
 });
 
@@ -285,6 +289,100 @@ function loadUser(db, userId) {
         const findings = scanner.scan(source, 'javascript');
         expect(findings).toHaveLength(1);
         expect(findings[0].title).toContain('Ineffective Sanitizer');
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Python wave 1: shell injection, SQL injection, path traversal
+// ---------------------------------------------------------------------------
+describe('DeterministicScanner â€” Python wave 1', () => {
+    it('detects os.system() with request-derived input', () => {
+        const source = `
+import os
+
+def handler(request):
+    cmd = request.args.get("cmd")
+    os.system(cmd)
+`;
+        const findings = scanner.scan(source, 'python');
+        expect(findings.filter(f => f.ruleCode === 'GR-001')).toHaveLength(1);
+    });
+
+    it('detects subprocess.run() with shell=True and interpolated input', () => {
+        const source = `
+import subprocess
+
+def handler(request):
+    name = request.args.get("name")
+    subprocess.run(f"grep {name} /tmp/users.txt", shell=True)
+`;
+        const findings = scanner.scan(source, 'python');
+        expect(findings.filter(f => f.ruleCode === 'GR-001')).toHaveLength(1);
+    });
+
+    it('does not flag subprocess.run() with an argument list and shell disabled', () => {
+        const source = `
+import subprocess
+
+def handler(request):
+    name = request.args.get("name")
+    subprocess.run(["grep", name, "/tmp/users.txt"], shell=False)
+`;
+        expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'GR-001')).toHaveLength(0);
+    });
+
+    it('detects cursor.execute() with an inline f-string query', () => {
+        const source = `
+def load_user(cursor, request):
+    user_id = request.args.get("id")
+    cursor.execute(f"SELECT * FROM users WHERE id = '{user_id}'")
+`;
+        const findings = scanner.scan(source, 'python');
+        expect(findings.filter(f => f.ruleCode === 'SQ-001')).toHaveLength(1);
+    });
+
+    it('detects a query variable built as an f-string before execution', () => {
+        const source = `
+def load_user(cursor, request):
+    user_id = request.args.get("id")
+    query = f"SELECT * FROM users WHERE id = '{user_id}'"
+    cursor.execute(query)
+`;
+        const findings = scanner.scan(source, 'python');
+        expect(findings.filter(f => f.ruleCode === 'SQ-001')).toHaveLength(1);
+    });
+
+    it('does not flag parameterized Python SQL queries', () => {
+        const source = `
+def load_user(cursor, request):
+    user_id = request.args.get("id")
+    cursor.execute("SELECT * FROM users WHERE id = %s", [user_id])
+`;
+        expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'SQ-001')).toHaveLength(0);
+    });
+
+    it('detects os.path.join() with request-derived input flowing into open()', () => {
+        const source = `
+import os
+
+def download(request):
+    filename = request.args.get("file")
+    target = os.path.join("/srv/files", filename)
+    return open(target).read()
+`;
+        const findings = scanner.scan(source, 'python');
+        expect(findings.filter(f => f.ruleCode === 'PT-001')).toHaveLength(1);
+    });
+
+    it('does not flag safe Python file access without request-derived joins', () => {
+        const source = `
+import os
+
+def download():
+    target = os.path.join("/srv/files", "logo.png")
+    return open(target).read()
+`;
+        expect(scanner.scan(source, 'python').filter(f => f.ruleCode === 'PT-001')).toHaveLength(0);
     });
 });
 

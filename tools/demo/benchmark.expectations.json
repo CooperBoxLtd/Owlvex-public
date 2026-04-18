@@ -107,6 +107,30 @@
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
-    { "file": "35-sqli-concat-safe.js", "expectedState": "clean" }
+    { "file": "35-sqli-concat-safe.js", "expectedState": "clean" },
+    {
+      "file": "36-python-command-injection-unsafe.py",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "37-python-command-injection-safe.py", "expectedState": "clean" },
+    {
+      "file": "38-python-sqli-unsafe.py",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "39-python-sqli-safe.py", "expectedState": "clean" },
+    {
+      "file": "40-python-path-traversal-unsafe.py",
+      "expectedState": "finding",
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "41-python-path-traversal-safe.py", "expectedState": "clean" }
   ]
 }

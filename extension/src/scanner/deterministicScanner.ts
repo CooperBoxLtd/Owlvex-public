@@ -99,6 +99,22 @@ const CSRF_TOKEN_CHECK_RE =
     /\bcsrf(?:Token)?\b[\s\S]{0,80}(?:===|!==|==|!=)[\s\S]{0,80}\bcsrf(?:Token)?\b/i;
 const PICKLE_LOADS_RE =
     /\bpickle\.loads\s*\(\s*(?:request|req)\.body\s*\)/g;
+const PYTHON_OS_SYSTEM_RE =
+    /\bos\.system\s*\(\s*(?:f["'][^"'\n]*\{[^}\n]+\}[^"'\n]*["']|(?:request|req)\.(?:args|get_json\(\)|form)\b[\s\S]{0,120})\s*\)/g;
+const PYTHON_SUBPROCESS_SHELL_RE =
+    /\bsubprocess\.(?:run|Popen|call|check_output|check_call)\s*\(\s*(?:f["'][^"'\n]*\{[^}\n]+\}[^"'\n]*["']|(?:request|req)\.(?:args|get_json\(\)|form)\b[\s\S]{0,160})[\s\S]{0,200}?\bshell\s*=\s*True\b/g;
+const PYTHON_SQL_INLINE_FSTRING_RE =
+    /\b(?:db|conn|connection|cursor)\.(?:execute|executemany|query)\s*\(\s*f(['"])[^\n]{0,240}\{[^}\n]+\}[^\n]{0,240}\1/g;
+const PYTHON_SQL_ASSIGN_FSTRING_RE =
+    /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*f(['"])[^\n]{0,240}\{[^}\n]+\}[^\n]{0,240}\2/g;
+const PYTHON_SQL_VAR_SINK_RE =
+    /\b(?:db|conn|connection|cursor)\.(?:execute|executemany|query)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
+const PYTHON_REQUEST_ASSIGN_RE =
+    /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?:request|req)\.(?:args(?:\.get)?|form(?:\.get)?|json(?:\.get)?|GET(?:\.get)?|POST(?:\.get)?)\b[^\n]*/g;
+const PYTHON_PATH_ASSIGN_RE =
+    /([A-Za-z_][A-Za-z0-9_]*)\s*=\s*os\.path\.join\s*\(([^)]*)\)/g;
+const PYTHON_FILE_SINK_RE =
+    /\b(?:open|send_file|FileResponse)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -1620,6 +1636,202 @@ function scanDeserializationSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanPythonShellSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    let match: RegExpExecArray | null;
+    const taintedVars = new Set<string>();
+
+    const taintPattern = new RegExp(PYTHON_REQUEST_ASSIGN_RE.source, PYTHON_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const osSystemPattern = new RegExp(PYTHON_OS_SYSTEM_RE.source, PYTHON_OS_SYSTEM_RE.flags);
+    while ((match = osSystemPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The code passes request-derived or interpolated data into `os.system(...)`, which executes the string through the shell. ' +
+                'That lets attacker-controlled characters change the intended command.',
+            threat:
+                'An attacker can inject shell metacharacters to execute arbitrary commands, read files, pivot to other services, or fully compromise the host account running the app.',
+            fix:
+                'Avoid shell-parsed command strings. Use a fixed executable plus argument array with shell disabled, and validate or allow-list any user-controlled values before execution.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A shell-executed Python command string includes request-derived or interpolated data.'],
+        });
+    }
+
+    const osSystemVarPattern = /\bos\.system\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
+    while ((match = osSystemVarPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The code passes a request-derived variable into `os.system(...)`, which executes the string through the shell. ' +
+                'That lets attacker-controlled characters change the intended command.',
+            threat:
+                'An attacker can inject shell metacharacters to execute arbitrary commands, read files, pivot to other services, or fully compromise the host account running the app.',
+            fix:
+                'Avoid shell-parsed command strings. Use a fixed executable plus argument array with shell disabled, and validate or allow-list any user-controlled values before execution.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Python variable reaches os.system(...).'],
+        });
+    }
+
+    const subprocessPattern = new RegExp(PYTHON_SUBPROCESS_SHELL_RE.source, PYTHON_SUBPROCESS_SHELL_RE.flags);
+    while ((match = subprocessPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The code calls a Python subprocess API with `shell=True` and a request-derived or interpolated command string. ' +
+                'With shell parsing enabled, attacker-controlled characters alter the executed command.',
+            threat:
+                'An attacker can inject additional shell commands, read or modify files, and execute arbitrary OS-level behavior through the application process.',
+            fix:
+                'Use `subprocess.run([...], shell=False)` with a fixed executable and explicit argument list, and validate any untrusted values before passing them to the process.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Python subprocess call uses shell=True with a request-derived or interpolated command string.'],
+        });
+    }
+
+    const subprocessVarPattern =
+        /\bsubprocess\.(?:run|Popen|call|check_output|check_call)\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*[,)]([\s\S]{0,200}?\bshell\s*=\s*True\b)/g;
+    while ((match = subprocessVarPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'GR-001',
+            title: 'Command Injection',
+            explanation:
+                'The code calls a Python subprocess API with `shell=True` and a request-derived command variable. ' +
+                'With shell parsing enabled, attacker-controlled characters alter the executed command.',
+            threat:
+                'An attacker can inject additional shell commands, read or modify files, and execute arbitrary OS-level behavior through the application process.',
+            fix:
+                'Use `subprocess.run([...], shell=False)` with a fixed executable and explicit argument list, and validate any untrusted values before passing them to the process.',
+            canonicalId: 'owlvex.issue.command_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Python command variable reaches a subprocess call with shell=True.'],
+        });
+    }
+
+    return found;
+}
+
+function scanPythonSqlSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    let match: RegExpExecArray | null;
+
+    const inlinePattern = new RegExp(PYTHON_SQL_INLINE_FSTRING_RE.source, PYTHON_SQL_INLINE_FSTRING_RE.flags);
+    while ((match = inlinePattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation:
+                'A Python database call executes an f-string query. Interpolated values become part of the raw SQL text before it reaches the database driver.',
+            threat:
+                'An attacker can inject SQL syntax into the interpolated value to change the query structure, read or modify data, or bypass application logic.',
+            fix:
+                'Replace the f-string SQL with a parameterized query such as `cursor.execute("SELECT ... WHERE id = %s", [value])` so untrusted values stay out of the SQL text.',
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Python SQL execution sink uses an interpolated f-string query.'],
+        });
+    }
+
+    const fstringVars = new Set<string>();
+    const assignPattern = new RegExp(PYTHON_SQL_ASSIGN_FSTRING_RE.source, PYTHON_SQL_ASSIGN_FSTRING_RE.flags);
+    while ((match = assignPattern.exec(source)) !== null) {
+        fstringVars.add(match[1]);
+    }
+
+    const sinkPattern = new RegExp(PYTHON_SQL_VAR_SINK_RE.source, PYTHON_SQL_VAR_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!fstringVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation:
+                'A Python database call executes a query variable that was built as an f-string. Interpolated values become part of the raw SQL text before execution.',
+            threat:
+                'An attacker can inject SQL syntax into the interpolated value to change the query structure, read or modify data, or bypass application logic.',
+            fix:
+                'Replace the f-string SQL variable with a parameterized query and pass user values as bound parameters to the database driver.',
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Python SQL query variable built from an f-string reaches an execution sink.'],
+        });
+    }
+
+    return found;
+}
+
+function scanPythonPathTraversalSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(PYTHON_REQUEST_ASSIGN_RE.source, PYTHON_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const pathVars = new Set<string>();
+    const pathAssignPattern = new RegExp(PYTHON_PATH_ASSIGN_RE.source, PYTHON_PATH_ASSIGN_RE.flags);
+    while ((match = pathAssignPattern.exec(source)) !== null) {
+        if ([...taintedVars].some(varName => new RegExp(`\\b${varName}\\b`).test(match![2] ?? ''))) {
+            pathVars.add(match[1]);
+        }
+    }
+
+    const sinkPattern = new RegExp(PYTHON_FILE_SINK_RE.source, PYTHON_FILE_SINK_RE.flags);
+    while ((match = sinkPattern.exec(source)) !== null) {
+        if (!pathVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'PT-001',
+            title: 'Path Traversal',
+            explanation:
+                'A filesystem path is built with `os.path.join(...)` using request-derived input and then passed into a file-reading or file-serving sink. Without a fixed identifier map or boundary check, attacker-controlled path fragments can escape the intended directory.',
+            threat:
+                'An attacker can request files outside the allowed directory and read sensitive server-side content such as configuration, credentials, source code, or other tenant data.',
+            fix:
+                'Do not join raw request path fragments into filesystem paths. Map user input to known-safe identifiers, or resolve against a fixed base directory and reject any path that escapes that base before reading or serving the file.',
+            canonicalId: 'owlvex.issue.path_traversal.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Python path reaches a filesystem sink without a visible boundary check.'],
+        });
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -1645,6 +1857,9 @@ export class DeterministicScanner {
                 ...scanDebugModeSinks(source),
             ]
             : [
+                ...scanPythonShellSinks(source),
+                ...scanPythonSqlSinks(source),
+                ...scanPythonPathTraversalSinks(source),
                 ...scanDeserializationSinks(source),
             ];
 
