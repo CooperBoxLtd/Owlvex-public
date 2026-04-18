@@ -70,6 +70,10 @@ These expectations should be read together with:
 | `51-java-path-traversal-safe.java` | clean | fixed Java file path |
 | `52-java-ssrf-unsafe.java` | finding expected | request-derived Java outbound request |
 | `53-java-ssrf-safe.java` | clean | fixed outbound Java destination |
+| `54-java-jwt-validation-unsafe.java` | finding expected | Java JWT decode without verification |
+| `55-java-jwt-validation-safe.java` | clean | Java JWT require/verify path |
+| `56-java-deserialization-unsafe.java` | finding expected | Java ObjectInputStream on request input |
+| `57-java-deserialization-safe.java` | clean | Java JSON parsing of request input |
 
 ## Stabilization Rule
 

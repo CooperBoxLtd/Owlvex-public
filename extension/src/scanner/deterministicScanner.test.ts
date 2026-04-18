@@ -534,6 +534,49 @@ class Demo {
 }`;
         expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'SR-001')).toHaveLength(0);
     });
+
+    it('detects Java JWT.decode() on a request-derived token', () => {
+        const source = `
+class Demo {
+    void parse(HttpServletRequest request) {
+        String token = request.getHeader("Authorization");
+        DecodedJWT decoded = JWT.decode(token);
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'JW-001')).toHaveLength(1);
+    });
+
+    it('does not flag Java JWT.require(...).verify(token)', () => {
+        const source = `
+class Demo {
+    void parse(HttpServletRequest request, String secret) {
+        String token = request.getHeader("Authorization");
+        JWT.require(Algorithm.HMAC256(secret)).build().verify(token);
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'JW-001')).toHaveLength(0);
+    });
+
+    it('detects Java ObjectInputStream on request input', () => {
+        const source = `
+class Demo {
+    void load(HttpServletRequest request) throws Exception {
+        ObjectInputStream in = new ObjectInputStream(request.getInputStream());
+        Object value = in.readObject();
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'DS-001')).toHaveLength(1);
+    });
+
+    it('does not flag Jackson JSON parsing of request input', () => {
+        const source = `
+class Demo {
+    Profile load(HttpServletRequest request, ObjectMapper mapper) throws Exception {
+        return mapper.readValue(request.getInputStream(), Profile.class);
+    }
+}`;
+        expect(scanner.scan(source, 'java').filter(f => f.ruleCode === 'DS-001')).toHaveLength(0);
+    });
 });
 
 // ---------------------------------------------------------------------------

@@ -25,8 +25,8 @@ If a cell is marked as supported here, there should be:
 | SQL injection | Yes | Yes | Yes | Python covers f-string SQL reaching `execute/query` sinks; Java covers concatenated SQL reaching `Statement.execute*` |
 | Path traversal | Yes | Yes | Yes | Python covers `os.path.join(...)`; Java covers `Paths.get(...)` / `Path.of(...)` into file-reading sinks |
 | SSRF | Yes | Yes | Yes | Python covers direct `requests.*(...)`; Java covers `new URL(requestInput).openStream()` and equivalent URL variables |
-| Weak JWT validation | Yes | Yes | No | Python covers `jwt.decode(..., options={"verify_signature": False})` |
-| Insecure deserialization | No | Yes | No | Python currently covers `pickle.loads(request.body)` |
+| Weak JWT validation | Yes | Yes | Yes | Python covers `jwt.decode(..., options={"verify_signature": False})`; Java covers `JWT.decode(...)` on request-derived tokens |
+| Insecure deserialization | No | Yes | Yes | Python covers `pickle.loads(request.body)`; Java covers `ObjectInputStream` on request input |
 | IDOR / tenant isolation | Yes | No | No | Python and Java not yet implemented deterministically |
 | Open redirect | Yes | No | No | Python and Java not yet implemented deterministically |
 | CSRF | Yes | No | No | Python and Java not yet implemented deterministically |
@@ -51,10 +51,7 @@ Do not mark a language/family cell as supported until all four are in place.
 Recommended next deterministic language expansions:
 
 1. Python auth/session safe guards and framework-aware variants
-2. Java wave 2 for:
-   - weak JWT validation
-   - insecure deserialization
-   - framework-aware safe guards
+2. Java framework-aware safe guards and auth/session variants
 3. C# after Java using the same bounded family set
 
 ## Positioning Rule

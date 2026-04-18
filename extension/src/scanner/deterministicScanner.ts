@@ -123,7 +123,7 @@ const PYTHON_REQUESTS_VAR_RE =
 const PYTHON_JWT_UNVERIFIED_RE =
     /\bjwt\.decode\s*\([\s\S]{0,240}?\boptions\s*=\s*\{[\s\S]{0,120}?['"]verify_signature['"]\s*:\s*False[\s\S]{0,120}?\}/g;
 const JAVA_REQUEST_ASSIGN_RE =
-    /\bString\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*request\.getParameter\s*\(\s*"[^"]+"\s*\)\s*;/g;
+    /\bString\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*request\.(?:getParameter|getHeader)\s*\(\s*"[^"]+"\s*\)\s*;/g;
 const JAVA_RUNTIME_EXEC_VAR_RE =
     /\bRuntime\.getRuntime\(\)\.exec\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
 const JAVA_RUNTIME_EXEC_CONCAT_RE =
@@ -146,6 +146,16 @@ const JAVA_URL_DIRECT_SSRF_RE =
     /\bnew URL\s*\(\s*request\.getParameter\s*\(\s*"[^"]+"\s*\)\s*\)\.openStream\s*\(\s*\)/g;
 const JAVA_URL_OPEN_STREAM_RE =
     /\b([A-Za-z_][A-Za-z0-9_]*)\.openStream\s*\(\s*\)/g;
+const JAVA_JWT_DECODE_DIRECT_RE =
+    /\bJWT\.decode\s*\(\s*request\.(?:getHeader|getParameter)\(\s*"[^"]+"\s*\)\s*\)/g;
+const JAVA_JWT_DECODE_VAR_RE =
+    /\bJWT\.decode\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/g;
+const JAVA_OBJECT_INPUT_DIRECT_RE =
+    /\bnew\s+ObjectInputStream\s*\(\s*request\.getInputStream\s*\(\s*\)\s*\)\.readObject\s*\(\s*\)/g;
+const JAVA_OBJECT_INPUT_ASSIGN_RE =
+    /\bObjectInputStream\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*new\s+ObjectInputStream\s*\(\s*request\.getInputStream\s*\(\s*\)\s*\)\s*;/g;
+const JAVA_OBJECT_INPUT_READ_RE =
+    /\b([A-Za-z_][A-Za-z0-9_]*)\.readObject\s*\(\s*\)/g;
 
 // ==================== AC-001: IDOR / Access Control ====================
 
@@ -2158,6 +2168,114 @@ function scanJavaSsrfSinks(source: string): InternalFinding[] {
     return found;
 }
 
+function scanJavaJwtWeakValidationSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    const taintedVars = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const taintPattern = new RegExp(JAVA_REQUEST_ASSIGN_RE.source, JAVA_REQUEST_ASSIGN_RE.flags);
+    while ((match = taintPattern.exec(source)) !== null) {
+        taintedVars.add(match[1]);
+    }
+
+    const directPattern = new RegExp(JAVA_JWT_DECODE_DIRECT_RE.source, JAVA_JWT_DECODE_DIRECT_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT Validation',
+            explanation:
+                'The Java code calls `JWT.decode(...)` directly on request-controlled token input. Decoding claims only parses the token payload; it does not prove the token was issued by a trusted signer.',
+            threat:
+                'An attacker can forge arbitrary claims such as user ID, role, or tenant and have the application treat them as trusted identity data if downstream code accepts the decoded payload.',
+            fix:
+                'Replace decode-only handling with verified token processing that enforces signature, issuer, audience, expiry, and accepted algorithms before trusting any claims.',
+            canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-controlled Java token is passed to JWT.decode(...) without visible verification.'],
+        });
+    }
+
+    const varPattern = new RegExp(JAVA_JWT_DECODE_VAR_RE.source, JAVA_JWT_DECODE_VAR_RE.flags);
+    while ((match = varPattern.exec(source)) !== null) {
+        if (!taintedVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT Validation',
+            explanation:
+                'The Java code calls `JWT.decode(...)` on a request-derived token variable. Decoding claims only parses the payload; it does not verify signature or issuer trust.',
+            threat:
+                'An attacker can forge arbitrary claims such as user ID, role, or tenant and have the application treat them as trusted identity data if downstream code accepts the decoded payload.',
+            fix:
+                'Use verified token handling such as `JWT.require(...).build().verify(token)` with explicit issuer, audience, expiry, and algorithm constraints before trusting any claims.',
+            canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A request-derived Java token variable reaches JWT.decode(...) without visible verification.'],
+        });
+    }
+
+    return found;
+}
+
+function scanJavaDeserializationSinks(source: string): InternalFinding[] {
+    const found: InternalFinding[] = [];
+    let match: RegExpExecArray | null;
+
+    const directPattern = new RegExp(JAVA_OBJECT_INPUT_DIRECT_RE.source, JAVA_OBJECT_INPUT_DIRECT_RE.flags);
+    while ((match = directPattern.exec(source)) !== null) {
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'DS-001',
+            title: 'Insecure Deserialization',
+            explanation:
+                'The Java code deserializes request input with `ObjectInputStream.readObject()`. Java native object deserialization can instantiate attacker-controlled object graphs with unsafe behavior during deserialization.',
+            threat:
+                'An attacker can craft a malicious serialized payload that triggers gadget execution, privilege abuse, or server compromise during deserialization.',
+            fix:
+                'Do not deserialize untrusted input with `ObjectInputStream`. Replace it with a data-only format such as JSON and validate the payload shape before use.',
+            canonicalId: 'owlvex.issue.insecure_deserialization.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Java ObjectInputStream deserializes request-controlled input directly from the HTTP request body.'],
+        });
+    }
+
+    const inputVars = new Set<string>();
+    const assignPattern = new RegExp(JAVA_OBJECT_INPUT_ASSIGN_RE.source, JAVA_OBJECT_INPUT_ASSIGN_RE.flags);
+    while ((match = assignPattern.exec(source)) !== null) {
+        inputVars.add(match[1]);
+    }
+
+    const readPattern = new RegExp(JAVA_OBJECT_INPUT_READ_RE.source, JAVA_OBJECT_INPUT_READ_RE.flags);
+    while ((match = readPattern.exec(source)) !== null) {
+        if (!inputVars.has(match[1])) { continue; }
+        found.push({
+            matchIndex: match.index,
+            severity: 'HIGH',
+            ruleCode: 'DS-001',
+            title: 'Insecure Deserialization',
+            explanation:
+                'The Java code reads an object from an `ObjectInputStream` that was created from request input. Java native object deserialization can instantiate attacker-controlled object graphs with unsafe behavior during deserialization.',
+            threat:
+                'An attacker can craft a malicious serialized payload that triggers gadget execution, privilege abuse, or server compromise during deserialization.',
+            fix:
+                'Do not deserialize untrusted input with `ObjectInputStream`. Replace it with a data-only format such as JSON and validate the payload shape before use.',
+            canonicalId: 'owlvex.issue.insecure_deserialization.001',
+            framework: 'OWASP',
+            likelihood: 'HIGH',
+            likelihoodReasons: ['A Java ObjectInputStream created from request input is used to readObject().'],
+        });
+    }
+
+    return found;
+}
+
 export class DeterministicScanner {
     scan(source: string, language: string): Partial<Finding>[] {
         if (!SUPPORTED_LANGUAGES.has(language)) {
@@ -2188,6 +2306,8 @@ export class DeterministicScanner {
                     ...scanJavaSqlSinks(source),
                     ...scanJavaPathTraversalSinks(source),
                     ...scanJavaSsrfSinks(source),
+                    ...scanJavaJwtWeakValidationSinks(source),
+                    ...scanJavaDeserializationSinks(source),
                 ]
             : [
                 ...scanPythonShellSinks(source),

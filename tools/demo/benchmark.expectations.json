@@ -215,6 +215,28 @@
       "requiredScanTierPostureIncludes": ["static: 1"],
       "requiredCorroborationPostureIncludes": ["proven: 1"]
     },
-    { "file": "53-java-ssrf-safe.java", "expectedState": "clean" }
+    { "file": "53-java-ssrf-safe.java", "expectedState": "clean" },
+    {
+      "file": "54-java-jwt-validation-unsafe.java",
+      "language": "java",
+      "family": "Identity & Auth Failures",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `JW-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "55-java-jwt-validation-safe.java", "expectedState": "clean" },
+    {
+      "file": "56-java-deserialization-unsafe.java",
+      "language": "java",
+      "family": "Injection & Execution",
+      "expectedState": "finding",
+      "requiredDetectionIncludes": ["Deterministic `DS-001`"],
+      "requiredPrimaryScanMode": "Static proof",
+      "requiredScanTierPostureIncludes": ["static: 1"],
+      "requiredCorroborationPostureIncludes": ["proven: 1"]
+    },
+    { "file": "57-java-deserialization-safe.java", "expectedState": "clean" }
   ]
 }
