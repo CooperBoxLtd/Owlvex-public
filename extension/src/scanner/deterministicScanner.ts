@@ -1374,8 +1374,12 @@ function scanSsrfSinks(source: string): InternalFinding[] {
 function scanOpenRedirectSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
     let match: RegExpExecArray | null;
+    const hasRedirectAllowlist =
+        /\b(?:isSafeRedirect|isAllowedRedirect|isLocalRedirect|allowlistedRedirect|validateRedirectTarget)\s*\(/i.test(source)
+        || /\b(?:allowedRedirects|trustedRedirects|localRedirects)\s*(?:\.has|\.includes|\.contains|\.Contains)\s*\(/.test(source);
     const directPattern = new RegExp(OPEN_REDIRECT_DIRECT_RE.source, OPEN_REDIRECT_DIRECT_RE.flags);
     while ((match = directPattern.exec(source)) !== null) {
+        if (hasRedirectAllowlist) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'MEDIUM',
@@ -1406,6 +1410,7 @@ function scanOpenRedirectSinks(source: string): InternalFinding[] {
     const sinkPattern = new RegExp(REDIRECT_VAR_SINK_RE.source, REDIRECT_VAR_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
         if (!redirectVars.has(match[1])) { continue; }
+        if (hasRedirectAllowlist) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'MEDIUM',

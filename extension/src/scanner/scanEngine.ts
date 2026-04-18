@@ -368,6 +368,25 @@ function hasPathBoundaryCheck(snippet: string): boolean {
     return hasJsBoundaryCheck || hasPythonBoundaryCheck || hasJavaBoundaryCheck || hasCsharpBoundaryCheck;
 }
 
+function hasSafeRedirectConstraint(snippet: string): boolean {
+    const hasGuard =
+        /\b(?:isSafeRedirect|isAllowedRedirect|isLocalRedirect|allowlistedRedirect|validateRedirectTarget)\s*\(/i.test(snippet)
+        || /\b(?:allowedRedirects|trustedRedirects|localRedirects)\s*(?:\.has|\.includes|\.contains|\.Contains)\s*\(/.test(snippet);
+    const hasRedirectSink = /\b(?:res\.redirect|Response\.Redirect)\s*\(/.test(snippet);
+    const hasRejectPath = /\breturn\s+res\s*\.\s*status\s*\(\s*400\s*\)/i.test(snippet)
+        || /\bthrow\s+new\s+\w+/i.test(snippet)
+        || /\breturn\s+(?:BadRequest|Results\.BadRequest)\s*\(/i.test(snippet)
+        || /\breturn\s+redirect\s*\(\s*['"]\/['"]\s*\)/i.test(snippet);
+
+    return hasGuard && hasRedirectSink && hasRejectPath;
+}
+
+function hasVisibleCsrfTokenCheck(snippet: string): boolean {
+    return /\bcsrf(?:Token)?\b[\s\S]{0,120}(?:===|!==|==|!=)[\s\S]{0,120}\bcsrf(?:Token)?\b/i.test(snippet)
+        || /\bvalidateCsrf(?:Token)?\s*\(/i.test(snippet)
+        || /\bverifyCsrf(?:Token)?\s*\(/i.test(snippet);
+}
+
 function isRouteMountShellSnippet(snippet: string): boolean {
     return /\bapp\.use\s*\(\s*['"]\//i.test(snippet)
         && !/\b(?:app|router)\.(?:post|put|patch|delete)\s*\(/i.test(snippet);
@@ -415,6 +434,10 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
         return true;
     }
 
+    if (finding.canonicalId === 'owlvex.issue.open_redirect.001' && hasSafeRedirectConstraint(snippet)) {
+        return true;
+    }
+
     if (finding.canonicalId === 'owlvex.issue.sensitive_logging.001' && !hasLocalLogSink(localSnippet)) {
         return true;
     }
@@ -425,6 +448,10 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     }
 
     if (finding.canonicalId === 'owlvex.issue.csrf_missing_token.001' && isRouteMountShellSnippet(snippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.csrf_missing_token.001' && hasVisibleCsrfTokenCheck(snippet)) {
         return true;
     }
 

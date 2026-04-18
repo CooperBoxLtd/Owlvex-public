@@ -1788,6 +1788,150 @@ class Demo {
         expect(result.summary).toBe('No findings detected.');
     });
 
+    it('suppresses AI-only open-redirect findings when a redirect allowlist gates the destination', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 7.8,
+                    summary: 'Open redirect detected.',
+                    findings: [
+                        {
+                            id: 'ai-redirect-fp-1',
+                            line: 6,
+                            line_end: 6,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-REDIRECT',
+                            title: 'Open Redirect',
+                            explanation: 'The application redirects to a request-derived destination.',
+                            threat: 'An attacker may redirect users to a malicious site.',
+                            fix: 'Allow-list redirect destinations.',
+                            confidence: 0.86,
+                            issue_id: 'owlvex.issue.open_redirect.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The redirect target comes from request input.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\redirect-safe.js',
+            getText: () => `function handler(req, res) {
+    const next = req.query.next;
+    if (!allowedRedirects.has(next)) {
+        return res.status(400).send('invalid redirect');
+    }
+    return res.redirect(next);
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only csrf findings when the handler visibly validates a csrf token', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 7.7,
+                    summary: 'CSRF protection is missing.',
+                    findings: [
+                        {
+                            id: 'ai-csrf-fp-1',
+                            line: 5,
+                            line_end: 5,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-CSRF',
+                            title: 'Missing CSRF protection',
+                            explanation: 'The handler mutates server-side state using browser session identity without a visible token check.',
+                            threat: 'An attacker may force the browser to submit an unintended state-changing request.',
+                            fix: 'Validate a CSRF token before mutating server-side state.',
+                            confidence: 0.84,
+                            issue_id: 'owlvex.issue.csrf_missing_token.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The route changes state and uses session-backed identity.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\csrf-safe.js',
+            getText: () => `app.post('/transfer', (req, res) => {
+    const csrfToken = req.get('x-csrf-token');
+    const expectedCsrfToken = req.session.csrfToken;
+    if (csrfToken !== expectedCsrfToken) {
+        return res.status(403).send('invalid csrf token');
+    }
+    req.session.balance = 0;
+    return res.sendStatus(204);
+});
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
     it('deduplicates overlapping AI findings for the same canonical issue', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
