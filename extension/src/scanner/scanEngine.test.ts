@@ -1146,6 +1146,76 @@ def parse_token(token, secret):
         expect(result.summary).toContain('No findings');
     });
 
+    it('suppresses AI-only weak-jwt findings for verified Java JWT.require(...).verify(...) usage', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.8,
+                    summary: 'Weak JWT validation detected.',
+                    findings: [
+                        {
+                            id: 'ai-jwt-java-fp-1',
+                            line: 6,
+                            line_end: 6,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A07-JWT',
+                            title: 'Weak JWT validation',
+                            explanation: 'The code calls JWT.decode directly without verification.',
+                            threat: 'Forged claims may be trusted.',
+                            fix: 'Verify signature and accepted algorithms.',
+                            confidence: 0.92,
+                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The code calls JWT.decode directly without verification.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'java',
+            fileName: 'd:\\repo\\jwt-safe.java',
+            getText: () => `class Demo {
+    void parse(HttpServletRequest request, String secret) {
+        String token = request.getHeader("Authorization");
+        JWT.require(Algorithm.HMAC256(secret)).build().verify(token);
+    }
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toContain('No findings');
+    });
+
     it('suppresses AI-only debug-mode findings when debug activation is properly guarded', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
@@ -1346,6 +1416,220 @@ if (process.env.NODE_ENV !== 'production') {
   const body = await response.text();
   res.json({ ok: true, body });
 });
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only SSRF findings when a C# allowlist check gates HttpClient requests', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.4,
+                    summary: 'SSRF detected.',
+                    findings: [
+                        {
+                            id: 'ai-ssrf-csharp-fp-1',
+                            line: 8,
+                            line_end: 8,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A10-SSRF',
+                            title: 'Server-side request forgery through untrusted destination',
+                            explanation: 'The application issues an outbound request to a user-controlled URL.',
+                            threat: 'The server may connect to internal services.',
+                            fix: 'Allowlist outbound destinations.',
+                            confidence: 0.88,
+                            issue_id: 'owlvex.issue.ssrf.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The application fetches a request-derived URL.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'csharp',
+            fileName: 'd:\\repo\\ssrf-safe.cs',
+            getText: () => `class Demo {
+    public async Task<string> Fetch() {
+        string url = Request.Query["url"];
+        if (!allowlistedHosts.Contains(url)) {
+            return BadRequest();
+        }
+        return await httpClient.GetStringAsync(url);
+    }
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only SQL injection findings when a C# SqlCommand uses parameter binding', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.1,
+                    summary: 'SQL injection detected.',
+                    findings: [
+                        {
+                            id: 'ai-sqli-csharp-fp-1',
+                            line: 5,
+                            line_end: 5,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A03-SQL',
+                            title: 'SQL Injection',
+                            explanation: 'The code builds a database query from request input.',
+                            threat: 'An attacker may inject SQL.',
+                            fix: 'Use parameterized queries.',
+                            confidence: 0.89,
+                            issue_id: 'owlvex.issue.sql_injection.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The query uses request-derived input.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'csharp',
+            fileName: 'd:\\repo\\sql-safe.cs',
+            getText: () => `class Demo {
+    public void Load() {
+        string userId = Request.Query["id"];
+        var cmd = new SqlCommand("SELECT * FROM users WHERE id = @id", conn);
+        cmd.Parameters.AddWithValue("@id", userId);
+    }
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only command injection findings when Java uses ProcessBuilder with a fixed executable', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8.4,
+                    summary: 'Command injection detected.',
+                    findings: [
+                        {
+                            id: 'ai-cmd-java-fp-1',
+                            line: 5,
+                            line_end: 5,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A03-CMD',
+                            title: 'Command Injection',
+                            explanation: 'The code executes a command derived from request input.',
+                            threat: 'An attacker may control OS command execution.',
+                            fix: 'Avoid shell execution and validate input.',
+                            confidence: 0.9,
+                            issue_id: 'owlvex.issue.command_injection.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The command is influenced by request data.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'java',
+            fileName: 'd:\\repo\\cmd-safe.java',
+            getText: () => `class Demo {
+    void run(HttpServletRequest request) throws Exception {
+        String name = request.getParameter("name");
+        new ProcessBuilder("grep", name).start();
+    }
+}
 `,
         } as any;
 
@@ -1582,7 +1866,7 @@ if (process.env.NODE_ENV !== 'production') {
 
         const userMessage = complete.mock.calls[0][0].userMessage as string;
         expect(userMessage).toContain('Grounded candidate issues for AI-only analysis:');
-        expect(userMessage).toContain('owlvex.issue.sql_injection.001 | Unsanitized SQL query construction');
+        expect(userMessage).toContain('owlvex.issue.sql_injection.001 | SQL Injection');
         expect(userMessage).toContain('Signals matched in code: query');
         expect(userMessage).toContain('Cheat-sheet guidance: OWASP SQL Injection Prevention Cheat Sheet');
     });

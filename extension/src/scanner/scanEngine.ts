@@ -289,10 +289,18 @@ function hasScopedResourceConstraint(snippet: string): boolean {
         && /\b(?:id|docId|documentId|recordId)\b[\s\S]{0,120}===/i.test(snippet);
 }
 
-function hasAllowlistedOutboundFetch(snippet: string): boolean {
-    return /\bisAllowedOutboundUrl\s*\(/i.test(snippet)
-        && /\bfetch\s*\(/i.test(snippet)
-        && /\breturn\s+res\s*\.\s*status\s*\(\s*400\s*\)/i.test(snippet);
+function hasAllowlistedOutboundRequest(snippet: string): boolean {
+    const hasGuard = /\b(?:isAllowedOutboundUrl|isSafeOutboundUrl|allowlistedOutboundUrl|validateOutboundUrl)\s*\(/i.test(snippet)
+        || /\b(?:allowedHosts|trustedHosts|TRUSTED_HOSTS|allowlistedHosts)\s*(?:\.has|\.contains|\.Contains)\s*\(/.test(snippet);
+    const hasOutboundSink = /\bfetch\s*\(/i.test(snippet)
+        || /\brequests\.(?:get|post|put|delete|request)\s*\(/i.test(snippet)
+        || /\b(?:httpClient|client)\.(?:GetStringAsync|GetAsync|PostAsync)\s*\(/.test(snippet)
+        || /\bopenStream\s*\(/i.test(snippet);
+    const hasRejectPath = /\breturn\s+res\s*\.\s*status\s*\(\s*400\s*\)/i.test(snippet)
+        || /\bthrow\s+new\s+\w+/i.test(snippet)
+        || /\breturn\s+(?:BadRequest|Results\.BadRequest)\s*\(/i.test(snippet);
+
+    return hasGuard && hasOutboundSink && hasRejectPath;
 }
 
 function hasLocalLogSink(snippet: string): boolean {
@@ -309,6 +317,38 @@ function hasVerifiedPythonJwtDecode(snippet: string): boolean {
     return /\bjwt\.decode\s*\(/i.test(snippet)
         && /\balgorithms\s*=\s*\[[^\]]+\]/i.test(snippet)
         && !/verify_signature['"]?\s*:\s*false/i.test(snippet);
+}
+
+function hasVerifiedJavaJwtDecode(snippet: string): boolean {
+    return /\bJWT\.require\s*\(/.test(snippet)
+        && /\.build\s*\(\s*\)\s*\.verify\s*\(/.test(snippet);
+}
+
+function hasParameterizedSqlUsage(snippet: string): boolean {
+    const hasJsOrPythonBinding =
+        /\.(?:query|execute|raw|executemany)\s*\(\s*['"`][\s\S]{0,220}?(?:\?|\$\d+|%s|@\w+)[\s\S]{0,220}?['"`]\s*,\s*(?:\[|\()/.test(snippet);
+    const hasJavaBinding =
+        /\bPreparedStatement\b/.test(snippet)
+        || /\bprepareStatement\s*\(\s*"[\s\S]{0,220}?\?/.test(snippet)
+        || /\.set(?:String|Int|Long|Boolean|Object)\s*\(/.test(snippet);
+    const hasCsharpBinding =
+        /\bnew\s+SqlCommand\s*\(\s*"[\s\S]{0,220}?@\w+[\s\S]{0,220}?",/.test(snippet)
+        && /\.Parameters\.Add(?:WithValue)?\s*\(/.test(snippet);
+
+    return hasJsOrPythonBinding || hasJavaBinding || hasCsharpBinding;
+}
+
+function hasSafeProcessExecution(snippet: string): boolean {
+    const hasSafeJsProcess =
+        /\bexecFile\s*\(/.test(snippet)
+        || /\bspawn\s*\([\s\S]{0,220}?\{\s*[^}]*\bshell\s*:\s*false\b/.test(snippet);
+    const hasSafePythonProcess =
+        /\bsubprocess\.(?:run|Popen|call|check_output|check_call)\s*\(\s*\[/.test(snippet)
+        && /\bshell\s*=\s*False\b/.test(snippet);
+    const hasSafeJavaProcess = /\bnew\s+ProcessBuilder\s*\(/.test(snippet);
+    const hasSafeCsharpProcess = /\bProcess\.Start\s*\(\s*"[^"]+"\s*,/.test(snippet);
+
+    return hasSafeJsProcess || hasSafePythonProcess || hasSafeJavaProcess || hasSafeCsharpProcess;
 }
 
 function isRouteMountShellSnippet(snippet: string): boolean {
@@ -342,7 +382,15 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
         return true;
     }
 
-    if (finding.canonicalId === 'owlvex.issue.ssrf.001' && hasAllowlistedOutboundFetch(snippet)) {
+    if (finding.canonicalId === 'owlvex.issue.ssrf.001' && hasAllowlistedOutboundRequest(snippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.sql_injection.001' && hasParameterizedSqlUsage(snippet)) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.command_injection.001' && hasSafeProcessExecution(snippet)) {
         return true;
     }
 
@@ -351,7 +399,7 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     }
 
     if (finding.canonicalId === 'owlvex.issue.weak_jwt_validation.001'
-        && (hasManualJwtVerification(snippet) || hasVerifiedPythonJwtDecode(snippet))) {
+        && (hasManualJwtVerification(snippet) || hasVerifiedPythonJwtDecode(snippet) || hasVerifiedJavaJwtDecode(snippet))) {
         return true;
     }
 

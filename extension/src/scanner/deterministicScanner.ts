@@ -2460,6 +2460,10 @@ function scanCsharpSsrfSinks(source: string): InternalFinding[] {
 
     const directPattern = new RegExp(CSHARP_HTTP_DIRECT_RE.source, CSHARP_HTTP_DIRECT_RE.flags);
     while ((match = directPattern.exec(source)) !== null) {
+        if (/\b(?:allowlistedHosts|trustedHosts)\.(?:Contains|contains)\s*\(/.test(source)
+            || /\b(?:isAllowedOutboundUrl|isSafeOutboundUrl|validateOutboundUrl)\s*\(/i.test(source)) {
+            continue;
+        }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2481,6 +2485,11 @@ function scanCsharpSsrfSinks(source: string): InternalFinding[] {
     const varPattern = new RegExp(CSHARP_HTTP_VAR_RE.source, CSHARP_HTTP_VAR_RE.flags);
     while ((match = varPattern.exec(source)) !== null) {
         if (!taintedVars.has(match[1])) { continue; }
+        const varName = match[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        if (new RegExp(`\\b(?:allowlistedHosts|trustedHosts)\\.(?:Contains|contains)\\s*\\(\\s*${varName}\\s*\\)`).test(source)
+            || new RegExp(`\\b(?:isAllowedOutboundUrl|isSafeOutboundUrl|validateOutboundUrl)\\s*\\(\\s*${varName}\\s*\\)`, 'i').test(source)) {
+            continue;
+        }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
