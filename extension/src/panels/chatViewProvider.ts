@@ -2188,6 +2188,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       margin-top: 4px;
       font-size: 11px;
       opacity: 0.75;
+      line-height: 1.35;
     }
     .meta.compact {
       margin-top: 6px;
@@ -2196,12 +2197,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px;
-      margin-top: 10px;
+      margin-top: 8px;
     }
     .summary-card {
       border: 1px solid var(--vscode-widget-border);
       border-radius: 10px;
-      padding: 8px 10px;
+      padding: 7px 10px;
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 82%, transparent);
     }
     .summary-label {
@@ -2211,26 +2212,53 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       opacity: 0.68;
     }
     .summary-value {
-      margin-top: 4px;
+      margin-top: 3px;
       font-size: 11px;
       line-height: 1.35;
     }
-    .primary-actions {
+    .status-strip {
       display: flex;
       gap: 8px;
-      margin-top: 12px;
+      margin-top: 10px;
       flex-wrap: wrap;
+    }
+    .status-pill {
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 999px;
+      padding: 4px 8px;
+      font-size: 10px;
+      line-height: 1.3;
+      background: color-mix(in srgb, var(--vscode-editorWidget-background) 75%, transparent);
+      opacity: 0.9;
+    }
+    .assistant-actions {
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid color-mix(in srgb, var(--vscode-widget-border) 70%, transparent);
+      display: grid;
+      gap: 8px;
+    }
+    .assistant-actions-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      opacity: 0.68;
     }
     .scan-controls {
       display: flex;
       gap: 8px;
-      margin-top: 12px;
       flex-wrap: wrap;
       align-items: center;
     }
     .scan-scope {
       flex: 1 1 220px;
       min-width: 180px;
+    }
+    .action-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
     }
     .assistant-panel {
       margin-top: 8px;
@@ -2487,20 +2515,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 <div class="summary-value" id="scanProfile">Loading scan profile...</div>
               </div>
             </div>
-            <div class="meta compact" id="lastScan">Last scan target: none</div>
-            <div class="scan-controls">
-              <select id="scanScope" class="scan-scope" aria-label="Scan scope">
-                <option value="scanFile">Current file</option>
-                <option value="scanSelectedFiles">Selected files</option>
-                <option value="scanOpenEditors">Open editors</option>
-                <option value="scanFolder" selected>Workspace</option>
-              </select>
-              <button class="chip" id="runScan">Scan</button>
+            <div class="status-strip">
+              <div class="status-pill" id="lastScan">Last scan: none</div>
+              <div class="status-pill" id="projectContextBadge">Project context: none</div>
             </div>
-            <div class="primary-actions">
-              <button class="chip" data-action="scanReport">Create Report</button>
+            <div class="assistant-actions">
+              <div class="assistant-actions-label">Start here</div>
+              <div class="scan-controls">
+                <select id="scanScope" class="scan-scope" aria-label="Scan scope">
+                  <option value="scanFile">Current file</option>
+                  <option value="scanSelectedFiles">Selected files</option>
+                  <option value="scanOpenEditors">Open editors</option>
+                  <option value="scanFolder" selected>Workspace</option>
+                </select>
+                <button class="chip" id="runScan">Scan</button>
+              </div>
+              <div class="action-row">
+                <button class="chip" data-action="scanReport">Create Report</button>
+                <button class="chip" data-action="openProjectContext">Project Context</button>
+              </div>
             </div>
-            <div class="meta compact">For current file, selected files, or open editors, type it in chat or use the Command Palette.</div>
+            <div class="meta compact">Use the scan selector for the common path. For anything narrower, you can still ask in chat or use the Command Palette.</div>
           </div>
         </details>
       </div>
@@ -2522,7 +2557,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             <select id="model"></select>
           </div>
           <div class="quick-actions">
-            <button class="chip" data-action="openProjectContext">Project Context</button>
             <button class="chip" data-action="setupAI">Configure LLM</button>
             <button class="chip" data-action="testAI">Test Connection</button>
             <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
@@ -2553,6 +2587,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const workspaceDetailEl = document.getElementById('workspaceDetail');
     const editorEl = document.getElementById('editor');
     const projectContextEl = document.getElementById('projectContext');
+    const projectContextBadgeEl = document.getElementById('projectContextBadge');
     const scanProfileEl = document.getElementById('scanProfile');
     const providerStatusEl = document.getElementById('providerStatus');
     const providerHintEl = document.getElementById('providerHint');
@@ -2571,10 +2606,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       workspaceDetailEl.textContent = 'Workspace: ' + (state.workspaceSummary || 'No workspace folder open');
       editorEl.textContent = state.editorSummary || 'Active editor: none';
       projectContextEl.textContent = 'Project context: ' + (state.projectContextSummary || 'none');
+      projectContextBadgeEl.textContent = 'Project context: ' + (state.projectContextSummary || 'none');
       scanProfileEl.textContent = state.frameworksLabel + ' | ' + state.severityThreshold;
       providerStatusEl.textContent = state.providerStatus || 'Provider status: unknown';
       providerHintEl.textContent = state.providerHint || '';
-      lastScanEl.textContent = 'Last scan target: ' + (state.lastScanTarget || 'No scan run yet');
+      lastScanEl.textContent = 'Last scan: ' + (state.lastScanTarget || 'No scan run yet');
       if (settingsPanelEl && !state.providers.length) {
         settingsPanelEl.open = true;
       }
