@@ -134,10 +134,13 @@ function hasPartialAiCoverage(result: ScanResult): boolean {
 }
 
 function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
+    const scanTier = getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'));
+    const confidence = getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'));
+    const corroboration = getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'));
     return [
-        `mode ${(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI')).toLowerCase()}`,
-        `tier ${(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE')).toLowerCase()}`,
-        `corroboration ${(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED')).toLowerCase()}`,
+        `mode ${scanTier}`,
+        `confidence ${confidence}`,
+        `evidence ${corroboration}`,
         `impact ${finding.severity.toLowerCase()}`,
         `likelihood ${getFindingLikelihood(finding).toLowerCase()}`,
         `risk ${finding.riskScore ?? 'n/a'}/10`,
@@ -218,11 +221,11 @@ function getCorroborationDisplayLabel(value: string): string {
         case 'PROVEN':
             return 'Proven';
         case 'CORROBORATED':
-            return 'Corroborated';
+            return 'Cross-checked';
         case 'PARTIAL':
-            return 'Partial';
+            return 'Needs confirmation';
         case 'UNVERIFIED':
-            return 'Unverified';
+            return 'Not confirmed yet';
         default:
             return value;
     }

@@ -117,12 +117,12 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Evidence: corroborated: 1');
         expect(written).toContain('- Project context: inline project contract');
         expect(written).toContain('- Score guide: fix the highest finding risk first; the file risk score then drops to the next-highest remaining finding, and reaches 0 when no findings remain.');
-        expect(written).toContain('| Unsanitized SQL query construction | mode targeted_ai \\| tier plausible \\| corroboration corroborated \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence Plausible \\| evidence Cross-checked \\| impact high \\| likelihood medium \\| risk 7/10 | AI 93% |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Finding risk: HIGH impact / MEDIUM likelihood / 7/10');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Confidence: Plausible');
-        expect(written).toContain('- Evidence: Corroborated');
+        expect(written).toContain('- Evidence: Cross-checked');
         expect(written).toContain('- Why it matters: User input is concatenated into a query.');
         expect(written).toContain('- What to change: Separate query structure from untrusted data with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Safe pattern: Use parameterized queries.');

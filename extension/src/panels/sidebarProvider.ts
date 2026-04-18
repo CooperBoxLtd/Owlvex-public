@@ -54,11 +54,11 @@ function getCorroborationDisplayLabel(value: string): string {
         case 'PROVEN':
             return 'Proven';
         case 'CORROBORATED':
-            return 'Corroborated';
+            return 'Cross-checked';
         case 'PARTIAL':
-            return 'Partial';
+            return 'Needs confirmation';
         case 'UNVERIFIED':
-            return 'Unverified';
+            return 'Not confirmed yet';
         default:
             return value;
     }
@@ -388,7 +388,7 @@ class FindingItem extends vscode.TreeItem {
                 : finding.ruleCode;
             // Tooltip: include provenance context
             this.tooltip = isDeterministic
-                ? `[Deterministic] ${finding.explanation}`
+                ? `[Static proof] ${finding.explanation}`
                 : `[AI ${getAiConfidenceLabel(finding) ?? 'n/a'}] ${finding.explanation}`;
             // Navigate to line on click
             this.command = {

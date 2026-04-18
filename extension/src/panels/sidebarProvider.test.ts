@@ -95,7 +95,7 @@ describe('SidebarProvider', () => {
         const findingNode = provider.getChildren(severityNode)[0];
         expect(findingNode.collapsibleState).toBe(1);
         expect(findingNode.label).toBe('L12 Path traversal (8/10)');
-        expect(String(findingNode.tooltip)).toContain('[Deterministic] User input reaches filesystem APIs.');
+        expect(String(findingNode.tooltip)).toContain('[Static proof] User input reaches filesystem APIs.');
 
         const detailNodes = provider.getChildren(findingNode);
         expect(detailNodes.map(node => node.label)).toEqual(expect.arrayContaining([
@@ -161,7 +161,7 @@ describe('SidebarProvider', () => {
         expect(detailNodes.map(node => node.label)).toContain('AI confidence: 91%');
         expect(detailNodes.map(node => node.label)).toContain('Analysis mode: Targeted AI review');
         expect(detailNodes.map(node => node.label)).toContain('Confidence: Plausible');
-        expect(detailNodes.map(node => node.label)).toContain('Evidence: Corroborated');
+        expect(detailNodes.map(node => node.label)).toContain('Evidence: Cross-checked');
         expect(String(provider.getChildren()[0].tooltip)).toContain('Evidence: corroborated: 1');
     });
 
