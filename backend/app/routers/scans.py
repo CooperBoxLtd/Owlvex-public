@@ -83,7 +83,7 @@ async def record(
         provider=body.provider,
         frameworks=body.frameworks,
         score=body.score,
-        findings_summary=body.findings_summary,
+        findings_summary=body.findings_summary.model_dump(),
         finding_count=body.finding_count,
         token_count=body.token_count,
         duration_ms=body.duration_ms,

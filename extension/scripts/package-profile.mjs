@@ -23,6 +23,12 @@ const originalManifestText = fs.readFileSync(packageJsonPath, "utf8");
 const originalProfileSource = fs.readFileSync(profileSourcePath, "utf8");
 const manifest = JSON.parse(originalManifestText);
 const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
+const prodProfile = JSON.parse(fs.readFileSync(path.join(extensionRoot, "profiles", "prod.json"), "utf8"));
+
+if (manifest.name !== prodProfile.name || !originalProfileSource.includes(`"profileName": "prod"`)) {
+  console.error("Packaging must start from the checked-in prod baseline. Restore extension/package.json and src/profile.ts, then retry.");
+  process.exit(1);
+}
 
 const packagePath = path.join(extensionRoot, profile.packagePath);
 fs.mkdirSync(path.dirname(packagePath), { recursive: true });

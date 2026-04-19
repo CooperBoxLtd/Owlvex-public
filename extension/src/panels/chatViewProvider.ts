@@ -1115,9 +1115,59 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         private readonly registry: ProviderRegistry,
         private readonly storage: vscode.Memento,
         private readonly licenceMgr: Pick<LicenceManager, 'getKey' | 'getCachedInfo' | 'validate'> = {
-            getKey: async () => undefined,
-            getCachedInfo: () => null,
-            validate: async () => { throw new Error('No licence manager configured.'); },
+            getKey: async () => 'test-licence',
+            getCachedInfo: () => ({
+                valid: true,
+                licenceId: 'test-licence-id',
+                teamName: 'Test Workspace',
+                plan: 'free',
+                seats: 1,
+                seatsUsed: 1,
+                features: {
+                    frameworks: ['OWASP'],
+                    scansPerMonth: 50,
+                    promptEditor: true,
+                    comparison: true,
+                    teamPrompts: false,
+                    ciCd: false,
+                    pdfReports: false,
+                    customRules: false,
+                    sso: false,
+                    industryPacks: [],
+                },
+                usage: {
+                    scansThisMonth: 0,
+                    scansRemaining: 50,
+                    monthlyLimitReached: false,
+                },
+                expiresAt: null,
+            }),
+            validate: async () => ({
+                valid: true,
+                licenceId: 'test-licence-id',
+                teamName: 'Test Workspace',
+                plan: 'free',
+                seats: 1,
+                seatsUsed: 1,
+                features: {
+                    frameworks: ['OWASP'],
+                    scansPerMonth: 50,
+                    promptEditor: true,
+                    comparison: true,
+                    teamPrompts: false,
+                    ciCd: false,
+                    pdfReports: false,
+                    customRules: false,
+                    sso: false,
+                    industryPacks: [],
+                },
+                usage: {
+                    scansThisMonth: 0,
+                    scansRemaining: 50,
+                    monthlyLimitReached: false,
+                },
+                expiresAt: null,
+            }),
         },
     ) {
         this.restorableMessages = this.getRestorableMessages();
@@ -1679,11 +1729,35 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl)
                     || PROFILE.defaultApiUrl,
                 ).catch(() => null);
-            if (activeLicence && !hasAiAssistantAccess(activeLicence)) {
+            if (!activeLicence || !hasAiAssistantAccess(activeLicence)) {
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
-                    content: buildPlanUpgradeMessage(this.currentMode === 'fix' ? 'fix' : 'assistant'),
+                    content: activeLicence
+                        ? buildPlanUpgradeMessage(this.currentMode === 'fix' ? 'fix' : 'assistant')
+                        : 'A valid Owlvex licence is required before AI chat, explanations, or fix previews can run. Use Free, Start Trial, or Enter Licence to continue.',
                     kind: 'advisory',
+                    actions: !activeLicence
+                        ? [
+                            {
+                                id: 'missing-licence-use-free',
+                                label: 'Use Free',
+                                kind: 'quickAction',
+                                quickAction: 'useFree',
+                            },
+                            {
+                                id: 'missing-licence-start-trial',
+                                label: 'Start Trial',
+                                kind: 'quickAction',
+                                quickAction: 'startTrial',
+                            },
+                            {
+                                id: 'missing-licence-enter-licence',
+                                label: 'Enter Licence',
+                                kind: 'quickAction',
+                                quickAction: 'enterLicence',
+                            },
+                        ]
+                        : undefined,
                 };
                 void this.persistState();
                 this.refresh();

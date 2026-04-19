@@ -577,6 +577,42 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toBe('Good morning! I am ready to help.');
     });
 
+    it('blocks AI chat when no valid licence is available', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'This should not run.' });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+            validate: async () => { throw new Error('No licence manager configured.'); },
+        } as any);
+
+        await (provider as any).handleUserMessage('explain this vulnerability');
+
+        expect(complete).not.toHaveBeenCalled();
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('valid Owlvex licence is required');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Use Free', kind: 'quickAction', quickAction: 'useFree' }),
+            expect.objectContaining({ label: 'Start Trial', kind: 'quickAction', quickAction: 'startTrial' }),
+            expect.objectContaining({ label: 'Enter Licence', kind: 'quickAction', quickAction: 'enterLicence' }),
+        ]));
+    });
+
     it('does not reuse the latest report finding for fix actions in a fresh chat', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'Share the code you want to change.' });
         (vscode.window.activeTextEditor as any) = {

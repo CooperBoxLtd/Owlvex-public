@@ -835,7 +835,7 @@ async def test_record_scan_valid(client):
     mock_scan = MagicMock()
     mock_scan.id = str(uuid.uuid4())
     with patch("app.routers.scans.validate_licence", return_value=mock_licence), \
-         patch("app.routers.scans.record_scan", return_value=mock_scan):
+         patch("app.routers.scans.record_scan", return_value=mock_scan) as mock_record_scan:
         response = await client.post(
             "/v1/scans/record",
             headers={"X-Licence-Key": "owlvex_lic_valid"},
@@ -853,6 +853,12 @@ async def test_record_scan_valid(client):
         )
     assert response.status_code == 200
     assert "scan_id" in response.json()
+    assert mock_record_scan.call_args.kwargs["findings_summary"] == {
+        "critical": 0,
+        "high": 1,
+        "medium": 2,
+        "low": 0,
+    }
 
 
 @pytest.mark.asyncio

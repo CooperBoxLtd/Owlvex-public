@@ -87,6 +87,73 @@ run_schema_file() {
   fi
 }
 
+run_sql_scalar() {
+  local sql="$1"
+  local pg_host="$2"
+
+  if command -v psql >/dev/null 2>&1; then
+    PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" psql \
+      --host="${pg_host}" \
+      --port=5432 \
+      --username="owlvex" \
+      --dbname="owlvex" \
+      --command="${sql}" \
+      --tuples-only \
+      --no-align \
+      --no-password
+  else
+    docker run --rm \
+      -e PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" \
+      postgres:16 \
+      psql \
+        --host="${pg_host}" \
+        --port=5432 \
+        --username="owlvex" \
+        --dbname="owlvex" \
+        --command="${sql}" \
+        --tuples-only \
+        --no-align \
+        --no-password
+  fi
+}
+
+verify_required_schema() {
+  local pg_host="$1"
+  local required_tables=("customers" "usage_events")
+  local required_columns=(
+    "customers.pending_plan"
+    "customers.email_verified_at"
+    "customers.verification_code_hash"
+    "customers.verification_code_expires_at"
+    "licences.customer_id"
+  )
+
+  echo ""
+  echo "→ Verifying required schema..."
+
+  for table_name in "${required_tables[@]}"; do
+    local exists
+    exists="$(run_sql_scalar "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = '${table_name}');" "${pg_host}" | tr -d '\r' | xargs)"
+    if [[ "${exists}" != "t" ]]; then
+      echo "  ✗ Missing required table: ${table_name}" >&2
+      exit 1
+    fi
+    echo "  ✓ Table present: ${table_name}"
+  done
+
+  for qualified_column in "${required_columns[@]}"; do
+    local table_name="${qualified_column%%.*}"
+    local column_name="${qualified_column##*.}"
+    local exists
+    exists="$(run_sql_scalar "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${table_name}' AND column_name = '${column_name}');" "${pg_host}" | tr -d '\r' | xargs)"
+    if [[ "${exists}" != "t" ]]; then
+      echo "  ✗ Missing required column: ${qualified_column}" >&2
+      exit 1
+    fi
+    echo "  ✓ Column present: ${qualified_column}"
+  done
+}
+
 extract_deploy_output() {
   local field="$1"
 
@@ -156,6 +223,7 @@ else
   ACR_LOGIN_SERVER=$(az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --query loginServer -o tsv)
   API_HOST=$(az webapp show --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query defaultHostName -o tsv)
   API_URL="https://${API_HOST}"
+  PG_HOST=$(az postgres flexible-server show --resource-group "${RESOURCE_GROUP}" --name "${PREFIX}-db" --query fullyQualifiedDomainName -o tsv)
 fi
 
 echo ""
@@ -163,14 +231,13 @@ echo "→ Building and pushing Docker image..."
 if docker_available; then
   az acr login --name "${ACR_NAME}" --output none
 
-  docker build \
+  docker buildx build \
+    --platform linux/amd64 \
     --tag "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}" \
     --tag "${ACR_LOGIN_SERVER}/owlvex-api:latest" \
     --file "${REPO_ROOT}/backend/Dockerfile" \
+    --push \
     "${REPO_ROOT}"
-
-  docker push "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}"
-  docker push "${ACR_LOGIN_SERVER}/owlvex-api:latest"
 else
   echo "  âš  Docker daemon not available â€” using az acr build fallback"
   az acr build \
@@ -203,11 +270,13 @@ if [[ "${IMAGE_ONLY}" != "1" ]]; then
                   "${REPO_ROOT}/postgres/init/02_seed.sql" \
                   "${REPO_ROOT}/postgres/init/03_rules_extended.sql"; do
     if [[ -f "${SQL_FILE}" ]]; then
-      run_schema_file "${SQL_FILE}" "${PG_HOST}" || true
+      run_schema_file "${SQL_FILE}" "${PG_HOST}"
       echo "  ✓ Applied: $(basename "${SQL_FILE}")"
     fi
   done
 fi
+
+verify_required_schema "${PG_HOST}"
 
 echo ""
 echo "→ Waiting for health check..."

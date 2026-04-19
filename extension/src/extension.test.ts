@@ -117,6 +117,7 @@ describe('plan access helpers', () => {
     });
 
     it('blocks scans only when the backend says the monthly limit is reached', () => {
+        expect(canRunScan(null)).toBe(false);
         expect(canRunScan({ usage: { monthlyLimitReached: false } } as any)).toBe(true);
         expect(canRunScan({ usage: { monthlyLimitReached: true } } as any)).toBe(false);
         expect(buildScanLimitMessage({

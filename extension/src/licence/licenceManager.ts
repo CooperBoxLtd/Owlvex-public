@@ -174,7 +174,7 @@ export function hasPromptEditorAccess(info: LicenceInfo | null | undefined): boo
 
 export function canRunScan(info: LicenceInfo | null | undefined): boolean {
     if (!info) {
-        return true;
+        return false;
     }
     return !info.usage.monthlyLimitReached;
 }

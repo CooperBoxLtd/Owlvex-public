@@ -673,6 +673,22 @@ export function activate(context: vscode.ExtensionContext) {
 
     const ensureScanAllowedForSession = async (): Promise<LicenceInfo | null> => {
         const info = await ensureScanAllowed(licenceMgr, getConfiguredApiUrl);
+        if (!info) {
+            const action = await vscode.window.showInformationMessage(
+                `${PROFILE.displayLabel}: A valid licence is required before scans can run. Use Free, Start Trial, or Enter Licence to continue.`,
+                'Use Free',
+                'Start Trial',
+                'Enter Licence',
+            );
+            if (action === 'Use Free') {
+                await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'free');
+            } else if (action === 'Start Trial') {
+                await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'trial');
+            } else if (action === 'Enter Licence') {
+                await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
+            }
+            return null;
+        }
         if (info && !canRunScan(info)) {
             await handleLimitHit(info);
             return null;
@@ -681,6 +697,14 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const refreshIdleStatus = () => statusBar.showIdle(licenceMgr.getCachedInfo());
+    const refreshStoredKeyStatus = async () => {
+        const storedKey = await licenceMgr.getKey().catch(() => undefined);
+        if (storedKey) {
+            statusBar.showStoredKeyPending();
+        } else {
+            statusBar.showUnlicensed();
+        }
+    };
 
     const currentEntitlement = (): PackEntitlement | undefined => {
         const info = licenceMgr.getCachedInfo();
@@ -1048,10 +1072,11 @@ export function activate(context: vscode.ExtensionContext) {
         if (isRevocationLikeError(error)) {
             licenceMgr.clearCachedInfo();
             await purgeRulePackState();
+            statusBar.showUnlicensed();
         } else {
             hydrateRulePackRuntimeFromCache();
+            await refreshStoredKeyStatus();
         }
-        statusBar.showUnlicensed();
     });
 
     context.subscriptions.push(
@@ -1115,6 +1140,8 @@ export function activate(context: vscode.ExtensionContext) {
                     licenceMgr.clearCachedInfo();
                     await purgeRulePackState();
                     statusBar.showUnlicensed();
+                } else {
+                    await refreshStoredKeyStatus();
                 }
                 vscode.window.showWarningMessage(
                     `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms), but licence validation failed. ${error.message}`,
@@ -1201,7 +1228,7 @@ export function activate(context: vscode.ExtensionContext) {
                     await purgeRulePackState();
                 }
                 vscode.window.showWarningMessage(`${PROFILE.displayLabel}: ${error.message}`);
-                statusBar.showUnlicensed();
+                await refreshStoredKeyStatus();
             }
         })
     );
@@ -1230,7 +1257,7 @@ export function activate(context: vscode.ExtensionContext) {
                     await purgeRulePackState();
                 }
                 vscode.window.showErrorMessage(`Licence validation failed: ${error.message}`);
-                statusBar.showUnlicensed();
+                await refreshStoredKeyStatus();
             }
         })
     );

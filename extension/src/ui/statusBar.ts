@@ -81,6 +81,14 @@ export class StatusBar {
         this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     }
 
+    showStoredKeyPending(): void {
+        this.licenceInfo = null;
+        this.item.text = `$(shield) ${PROFILE.statusBarLabel}: Key Stored`;
+        this.item.command = PROFILE.commands.testTrialSetup;
+        this.item.tooltip = 'A licence key is stored locally. Click to re-check backend, licence, and LLM setup.';
+        this.item.backgroundColor = undefined;
+    }
+
     dispose(): void {
         this.item.dispose();
     }
