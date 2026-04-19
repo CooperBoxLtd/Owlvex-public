@@ -228,6 +228,9 @@ Turn the current implicit hybrid scan model into an explicit three-tier system, 
 - ensure project context can be included only in AI-backed tiers, never as deterministic proof input
 - surface scan tier visibly in reports, sidebar, and future scan summaries
 - add benchmark or regression coverage to prevent tier labels from drifting silently
+- make the bottom working-scope dropdown the explicit AI context boundary as well as the scan target selector
+- keep AI repo access aligned with visible scope modes such as `Active file`, `Selected files`, `Open editors`, and `Workspace`
+- surface context provenance so users can tell whether an answer used active-file, nearby-file, or workspace context
 
 ### Likely Files
 
@@ -246,6 +249,8 @@ Turn the current implicit hybrid scan model into an explicit three-tier system, 
 - broad exploratory AI paths map cleanly to `REPO_AI`
 - project context remains local by default and never upgrades a finding to `PROVEN`
 - users can tell from the UI/report what kind of scan produced a finding
+- users can tell from the same visible scope control what AI is allowed to inspect
+- scan scope and AI context scope do not silently diverge
 
 ## Workstream 0.87: Fix Benchmarking
 

@@ -245,6 +245,8 @@ Current remediation posture:
 
 **Project-grounded AI assistance** - future workflow where users can provide a local TDD-style project context contract so the AI lane better understands goals, roles, architecture, trust boundaries, and critical flows without changing the deterministic truth boundary.
 
+**Working-scope-controlled AI access** - the assistant's bottom scope dropdown should define both what Owlvex scans and what AI is allowed to inspect as context. `Active file`, `Selected files`, `Open editors`, and `Workspace` should act as explicit AI context boundaries rather than letting repo access become an invisible always-on mode.
+
 **Trial onboarding** - configure backend, enter a licence, configure an LLM, and verify whether the AI-backed path is ready without editing settings files by hand.
 
 ---

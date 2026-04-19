@@ -116,7 +116,11 @@ interface ChatState {
     conversationStatus: string;
     hasRestorableChat: boolean;
     restorableMessageCount: number;
+    workingScope: WorkingScope;
+    workingScopeLabel: string;
 }
+
+type WorkingScope = 'scanFile' | 'scanSelectedFiles' | 'scanOpenEditors' | 'scanFolder';
 
 function normalizeReviewedPath(filePath: string): string {
     return path.normalize(filePath).toLowerCase();
@@ -132,8 +136,11 @@ function getReviewedPathSet(preview: PendingFixPreview): Set<string> {
 const CHAT_STATE_KEY = `${PROFILE.storagePrefix}.chat.messages`;
 const LAST_SCAN_TARGET_KEY = `${PROFILE.storagePrefix}.chat.lastScanTarget`;
 const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
+const WORKING_SCOPE_KEY = `${PROFILE.storagePrefix}.chat.workingScope`;
 const MAX_PERSISTED_MESSAGES = 40;
 const CONTEXT_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cs', '.go', '.rs', '.php', '.rb', '.cpp', '.c', '.h'];
+const DEFAULT_WORKING_SCOPE: WorkingScope = 'scanFolder';
+const WORKSPACE_CONTEXT_FILES = ['README.md', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml'];
 
 interface ImportedSymbolContext {
     specifier: string;
@@ -218,6 +225,27 @@ function getPrimaryScanTierLabel(findings: Finding[]): string {
 
 function buildDefaultChatMessages(): ChatMessage[] {
     return [];
+}
+
+function isWorkingScope(value: string): value is WorkingScope {
+    return value === 'scanFile'
+        || value === 'scanSelectedFiles'
+        || value === 'scanOpenEditors'
+        || value === 'scanFolder';
+}
+
+function getWorkingScopeLabel(scope: WorkingScope): string {
+    switch (scope) {
+        case 'scanFile':
+            return 'Current file';
+        case 'scanSelectedFiles':
+            return 'Selected files';
+        case 'scanOpenEditors':
+            return 'Open editors';
+        case 'scanFolder':
+        default:
+            return 'Workspace';
+    }
 }
 
 function riskRank(finding: Finding): number {
@@ -873,6 +901,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private latestActionableFinding?: Finding;
     private latestActionableTargetPath?: string;
     private latestActionableItems: ActionableFindingTarget[] = [];
+    private lastSelectedScopePaths: string[] = [];
 
     constructor(
         private readonly registry: ProviderRegistry,
@@ -922,6 +951,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 await this.handleSetModel(String(message.model ?? ''));
             }
 
+            if (message?.type === 'chat:setWorkingScope') {
+                await this.handleSetWorkingScope(String(message.scope ?? ''));
+            }
+
             if (message?.type === 'chat:action') {
                 await this.handleQuickAction(String(message.action ?? ''));
             }
@@ -938,6 +971,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     setLastScanTarget(value: string): void {
         void this.storage.update(LAST_SCAN_TARGET_KEY, value);
+        this.refresh();
+    }
+
+    private getWorkingScope(): WorkingScope {
+        const stored = this.storage.get<string>(WORKING_SCOPE_KEY, DEFAULT_WORKING_SCOPE);
+        return isWorkingScope(stored) ? stored : DEFAULT_WORKING_SCOPE;
+    }
+
+    private async handleSetWorkingScope(scope: string): Promise<void> {
+        if (!isWorkingScope(scope)) {
+            return;
+        }
+
+        await this.storage.update(WORKING_SCOPE_KEY, scope);
         this.refresh();
     }
 
@@ -1399,8 +1446,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const workspaceSummary = workspaceFolders.length
                 ? workspaceFolders.map(folder => folder.name).join(', ')
                 : 'No workspace folder is currently open.';
-            const editorContext = this.buildEditorContext();
-            const scanContext = this.buildScanContext();
+            const workingScope = this.getWorkingScope();
+            const editorContext = await this.buildWorkingScopeContext(workingScope);
+            const scanContext = this.buildScanContext(workingScope);
             const projectContext = await loadProjectContextInfo();
             const autoInjectedContext = !options.injectedContext && autoSuggestedFinding
                 ? buildFindingPromptContext(autoSuggestedFinding, this.buildActiveSnippetForFinding(autoSuggestedFinding))
@@ -1419,6 +1467,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     'If the active file or latest scan already points to a concrete finding, ground the answer in that finding instead of answering generically.',
                     'If the visible local code snippet appears to contradict the finding label, say that explicitly before giving advice and do not claim dangerous code paths that are not shown.',
                     `Open workspace folders: ${workspaceSummary}`,
+                    `Working scope: ${getWorkingScopeLabel(workingScope)}`,
                     scanContext.summary,
                     editorContext.summary,
                     projectContext.combined
@@ -1514,6 +1563,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return { handled: true, response: 'Folder scan did not complete.', kind: 'scan' };
             }
             const topActionable = getTopActionableFindingResult(result.results ?? []);
+            this.lastSelectedScopePaths = (result.results ?? [])
+                .map((item: any) => item?.uri?.fsPath)
+                .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
             this.latestActionableItems = getActionableFindingResults(result.results ?? []);
             this.latestActionableFinding = topActionable?.finding;
             this.latestActionableTargetPath = topActionable?.targetPath;
@@ -1546,6 +1598,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return { handled: true, response: 'Selected-files scan did not complete.', kind: 'scan' };
             }
             const topActionable = getTopActionableFindingResult(result.results ?? []);
+            this.lastSelectedScopePaths = (result.results ?? [])
+                .map((item: any) => item?.uri?.fsPath)
+                .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
             this.latestActionableItems = getActionableFindingResults(result.results ?? []);
             this.latestActionableFinding = topActionable?.finding;
             this.latestActionableTargetPath = topActionable?.targetPath;
@@ -1803,14 +1858,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async buildFindingContextBundle(finding: Finding): Promise<FindingContextBundle> {
+        const workingScope = this.getWorkingScope();
         const editor = vscode.window.activeTextEditor;
         const snippet = this.buildActiveSnippetForFinding(finding);
-        const nearbyContext = editor ? await buildNearbyProjectContext(editor.document, finding) : undefined;
+        const nearbyContext = (workingScope === 'scanOpenEditors' || workingScope === 'scanFolder') && editor
+            ? await buildNearbyProjectContext(editor.document, finding)
+            : undefined;
         const latestReportContext = buildLatestReportPromptContext(this.storage);
         const groundedFrameworks = getGroundedFrameworkLabels(this.getFrameworks());
         const groundedCheatSheets = finding.canonicalId
             ? getGroundedCheatSheetLabelsForIssueIds([finding.canonicalId]).slice(0, 2)
             : [];
+        const workingScopeContext = await this.buildWorkingScopeContext(workingScope);
         const sourceActions: ChatMessageAction[] = [];
 
         if (editor) {
@@ -1840,6 +1899,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return {
             promptContext: [
                 buildFindingPromptContext(finding, snippet),
+                workingScopeContext.promptContext,
                 nearbyContext ?? 'Nearby project context: none',
                 latestReportContext?.promptContext ?? 'Latest report context: none',
             ].join('\n\n'),
@@ -1850,7 +1910,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 hasLatestReportContext: Boolean(latestReportContext),
                 groundedFrameworks,
                 groundedCheatSheets,
-            }),
+            }) + `\n- Working scope: ${getWorkingScopeLabel(workingScope)}`,
             sourceActions,
         };
     }
@@ -2051,6 +2111,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     ?.flatMap((item: any) => item.result.findings)
                     ?.slice()
                     ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.lastSelectedScopePaths = (result?.results ?? [])
+                    .map((item: any) => item?.uri?.fsPath)
+                    .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
                 this.latestActionableTargetPath = getTopActionableFindingResult(result?.results ?? [])?.targetPath;
                 this.latestActionableItems = getActionableFindingResults(result?.results ?? []);
                 this.messages[this.messages.length - 1] = {
@@ -2380,6 +2443,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const editorContext = this.buildEditorContext();
         const provider = this.registry.getActive();
         const projectContextSummary = getProjectContextSummaryFromConfig();
+        const workingScope = this.getWorkingScope();
         return {
             provider: provider.name,
             providerId: provider.id,
@@ -2404,6 +2468,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }),
             hasRestorableChat: Boolean(this.restorableMessages?.length),
             restorableMessageCount: Math.max(0, (this.restorableMessages?.length ?? 0) - 1),
+            workingScope,
+            workingScopeLabel: getWorkingScopeLabel(workingScope),
         };
     }
 
@@ -2492,6 +2558,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return candidates[0]?.uri;
     }
 
+    private async buildWorkingScopeContext(scope: WorkingScope): Promise<EditorContext> {
+        switch (scope) {
+            case 'scanFile':
+                return this.buildEditorContext();
+            case 'scanOpenEditors':
+                return this.buildOpenEditorsContext();
+            case 'scanSelectedFiles':
+                return this.buildSelectedFilesContext();
+            case 'scanFolder':
+            default:
+                return this.buildWorkspaceRepoContext();
+        }
+    }
+
     private buildEditorContext(): EditorContext {
         const editor = vscode.window.activeTextEditor;
         if (!editor) {
@@ -2527,14 +2607,149 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         };
     }
 
-    private buildScanContext(): EditorContext {
+    private async buildOpenEditorsContext(): Promise<EditorContext> {
+        const editors = vscode.window.visibleTextEditors
+            .map(editor => editor.document)
+            .filter(document => Boolean(document?.uri?.fsPath))
+            .filter((document, index, all) => all.findIndex(item => item.uri.fsPath === document.uri.fsPath) === index)
+            .slice(0, 4);
+
+        if (!editors.length) {
+            return {
+                summary: 'Working scope: Open editors (none available)',
+                promptContext: 'Working scope: Open editors\nNo open editors are available for AI context.',
+            };
+        }
+
+        return {
+            summary: `Working scope: Open editors (${editors.length} file${editors.length === 1 ? '' : 's'})`,
+            promptContext: [
+                `Working scope: Open editors`,
+                ...editors.map(document => {
+                    const relativePath = vscode.workspace.asRelativePath(document.uri, false);
+                    const fullText = document.getText();
+                    const excerpt = fullText.length > 4000
+                        ? `${fullText.slice(0, 4000)}\n\n[truncated after 4000 characters]`
+                        : fullText;
+                    return [
+                        `Open editor: ${relativePath}`,
+                        `Language: ${document.languageId}`,
+                        `Excerpt:\n${excerpt}`,
+                    ].join('\n');
+                }),
+            ].join('\n\n'),
+        };
+    }
+
+    private async buildSelectedFilesContext(): Promise<EditorContext> {
+        const uniquePaths = [...new Set(this.lastSelectedScopePaths.map(item => path.normalize(item)))].slice(0, 4);
+        if (!uniquePaths.length) {
+            const fallback = this.buildEditorContext();
+            return {
+                summary: 'Working scope: Selected files (no selected-file batch available, falling back to current file)',
+                promptContext: [
+                    'Working scope: Selected files',
+                    'Selected-file context is not yet available in chat because no selected-files batch has been scanned in this session.',
+                    fallback.promptContext,
+                ].join('\n\n'),
+            };
+        }
+
+        const documents = await Promise.all(uniquePaths.map(async filePath => {
+            try {
+                return await vscode.workspace.openTextDocument(vscode.Uri.file(filePath));
+            } catch {
+                return undefined;
+            }
+        }));
+
+        const availableDocs = documents.filter((doc): doc is vscode.TextDocument => Boolean(doc)).slice(0, 4);
+        if (!availableDocs.length) {
+            return {
+                summary: 'Working scope: Selected files (files unavailable)',
+                promptContext: 'Working scope: Selected files\nThe last selected-file batch is no longer available on disk.',
+            };
+        }
+
+        return {
+            summary: `Working scope: Selected files (${availableDocs.length} file${availableDocs.length === 1 ? '' : 's'})`,
+            promptContext: [
+                'Working scope: Selected files',
+                ...availableDocs.map(document => {
+                    const relativePath = vscode.workspace.asRelativePath(document.uri, false);
+                    const fullText = document.getText();
+                    const excerpt = fullText.length > 4000
+                        ? `${fullText.slice(0, 4000)}\n\n[truncated after 4000 characters]`
+                        : fullText;
+                    return [
+                        `Selected file: ${relativePath}`,
+                        `Language: ${document.languageId}`,
+                        `Excerpt:\n${excerpt}`,
+                    ].join('\n');
+                }),
+            ].join('\n\n'),
+        };
+    }
+
+    private async buildWorkspaceRepoContext(): Promise<EditorContext> {
+        const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
+        if (!workspaceFolders.length) {
+            return {
+                summary: 'Working scope: Workspace (no workspace folder open)',
+                promptContext: 'Working scope: Workspace\nNo workspace folder is open.',
+            };
+        }
+
+        const rootSections = await Promise.all(workspaceFolders.slice(0, 3).map(async folder => {
+            let entries: Array<[string, vscode.FileType]> = [];
+            try {
+                entries = await vscode.workspace.fs.readDirectory(folder.uri);
+            } catch {
+                entries = [];
+            }
+            const visibleEntries = entries
+                .filter(([name]) => !name.startsWith('.'))
+                .slice(0, 12)
+                .map(([name, fileType]) => `${name}${fileType === vscode.FileType.Directory ? '/' : ''}`);
+
+            const keyFileSections = await Promise.all(WORKSPACE_CONTEXT_FILES.map(async fileName => {
+                const target = vscode.Uri.joinPath(folder.uri, fileName);
+                const content = await tryReadWorkspaceFile(target);
+                if (content === undefined) {
+                    return undefined;
+                }
+                const excerpt = content.length > 3000
+                    ? `${content.slice(0, 3000)}\n\n[truncated after 3000 characters]`
+                    : content;
+                return `${fileName}:\n${excerpt}`;
+            }));
+
+            return [
+                `Workspace folder: ${folder.name}`,
+                visibleEntries.length ? `Top-level entries: ${visibleEntries.join(', ')}` : 'Top-level entries: unavailable',
+                ...keyFileSections.filter((section): section is string => Boolean(section)),
+            ].join('\n\n');
+        }));
+
+        return {
+            summary: `Working scope: Workspace (${workspaceFolders.map(folder => folder.name).join(', ')})`,
+            promptContext: [
+                'Working scope: Workspace',
+                'AI may use repo-level structure and key root files within the open workspace.',
+                ...rootSections,
+            ].join('\n\n'),
+        };
+    }
+
+    private buildScanContext(scope: WorkingScope): EditorContext {
         const frameworks = this.getFrameworks();
         const severity = this.getSeverityThreshold();
         const projectContextSummary = getProjectContextSummaryFromConfig();
 
         return {
-            summary: `Active scan profile: frameworks=${frameworks.join(', ') || 'none'}, severity threshold=${severity}`,
+            summary: `Active scan profile: scope=${getWorkingScopeLabel(scope)}, frameworks=${frameworks.join(', ') || 'none'}, severity threshold=${severity}`,
             promptContext: [
+                `Working scope: ${getWorkingScopeLabel(scope)}`,
                 `Security frameworks in scope: ${frameworks.join(', ') || 'none configured'}`,
                 `Severity threshold: ${severity}`,
                 projectContextSummary !== 'none'
@@ -3074,6 +3289,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       providerHintEl.textContent = state.providerHint || '';
       llmButtonEl.textContent = state.provider + ' · ' + state.model;
       conversationHeaderEl.textContent = state.conversationStatus || 'Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.';
+      if (scanScopeBottomEl && state.workingScope) {
+        scanScopeBottomEl.value = state.workingScope;
+      }
       if (settingsPanelEl && !state.providers.length) {
         settingsPanelEl.hidden = false;
       }
@@ -3201,6 +3419,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
     modelEl.addEventListener('change', () => {
       vscode.postMessage({ type: 'chat:setModel', model: modelEl.value });
+    });
+    scanScopeBottomEl.addEventListener('change', () => {
+      vscode.postMessage({ type: 'chat:setWorkingScope', scope: scanScopeBottomEl.value });
     });
     document.querySelectorAll('[data-action]').forEach((button) => {
       button.addEventListener('click', () => {

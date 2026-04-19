@@ -437,6 +437,39 @@ This is more honest than flattening everything into one generic "AI finding."
 
 ---
 
+## Working Scope Rule
+
+Owlvex should use one visible working-scope control for both scanning and AI context access.
+
+The current product direction is that the bottom scope dropdown in the assistant shell is not just a scan target selector.
+
+It should define the allowed AI context boundary too.
+
+Intended modes:
+
+- `Active file`
+  - AI may use only the active file and the active finding context
+- `Selected files`
+  - AI may use only the selected files and their local finding context
+- `Open editors`
+  - AI may use the currently open working set
+- `Workspace`
+  - AI may inspect repo structure, nearby files, helpers, manifests, and other workspace context needed for the request
+
+This is preferable to a hidden always-on repo access mode because it keeps:
+
+- context scope explicit
+- privacy posture understandable
+- scan scope and AI scope aligned
+
+The user-facing rule should be:
+
+> the same visible working-scope control defines both what Owlvex scans and what AI is allowed to use as context
+
+Responses should continue to identify the context used, especially when AI answers depend on broader workspace context.
+
+---
+
 ## Privacy rule
 
 The move to three tiers does **not** change the code boundary.

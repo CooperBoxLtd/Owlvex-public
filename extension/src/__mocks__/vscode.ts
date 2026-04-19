@@ -31,6 +31,7 @@ export const workspace = {
     workspaceFolders: [],
     fs: {
         readFile: jest.fn(),
+        readDirectory: jest.fn(),
         writeFile: jest.fn(),
     },
 };
@@ -69,6 +70,7 @@ export class Selection extends Range {
 }
 
 export const TextEditorRevealType = { InCenter: 2 };
+export const FileType = { Unknown: 0, File: 1, Directory: 2, SymbolicLink: 64 };
 
 export class DiagnosticCollection {
     set = jest.fn();

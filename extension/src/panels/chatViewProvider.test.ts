@@ -8,6 +8,9 @@ describe('parseChatIntent', () => {
         jest.clearAllMocks();
         resetRulePackRuntime();
         (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath ?? String(uri));
+        (vscode.workspace.workspaceFolders as any) = [];
+        (vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
+        (vscode.workspace.fs.readFile as jest.Mock).mockReset();
     });
 
     it('routes repo scan report requests to report creation', () => {
@@ -1257,6 +1260,91 @@ describe('parseChatIntent', () => {
         expect(request.systemPrompt).toContain('Project context contract available: inline project contract');
         expect(request.userMessage).toContain('Project context contract:');
         expect(request.userMessage).toContain('All document reads must be tenant-scoped.');
+    });
+
+    it('uses workspace repo context when the working scope is workspace', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'This looks like a small Node test app.' });
+        (vscode.workspace.workspaceFolders as any) = [{ name: 'demo-app', uri: vscode.Uri.file('d:\\repo') }];
+        (vscode.workspace.fs as any).readDirectory = jest.fn().mockResolvedValue([
+            ['README.md', vscode.FileType.File],
+            ['package.json', vscode.FileType.File],
+            ['src', vscode.FileType.Directory],
+        ]);
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            const filePath = String(uri.fsPath);
+            if (filePath.endsWith('README.md')) {
+                return Buffer.from('# Demo App\nA small API used for benchmark testing.');
+            }
+            if (filePath.endsWith('package.json')) {
+                return Buffer.from(JSON.stringify({ name: 'demo-app', scripts: { start: 'node src/server.js' } }, null, 2));
+            }
+            throw new Error('not found');
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                if (key === `${PROFILE.storagePrefix}.chat.workingScope`) {
+                    return 'scanFolder';
+                }
+                return defaultValue;
+            }),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('what is this app doing?');
+
+        const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Working scope: Workspace');
+        expect(request.userMessage).toContain('Working scope: Workspace');
+        expect(request.userMessage).toContain('Workspace folder: demo-app');
+        expect(request.userMessage).toContain('README.md:');
+        expect(request.userMessage).toContain('package.json:');
+    });
+
+    it('keeps repo overview out of chat prompts when the working scope is current file', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'This file looks like a route.' });
+        (vscode.window.activeTextEditor as any) = {
+            document: {
+                uri: vscode.Uri.file('d:\\repo\\src\\app.js'),
+                languageId: 'javascript',
+                getText: () => 'export function run() { return true; }',
+            },
+            selection: { isEmpty: true },
+        };
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                if (key === `${PROFILE.storagePrefix}.chat.workingScope`) {
+                    return 'scanFile';
+                }
+                return defaultValue;
+            }),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('what is this app doing?');
+
+        const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Working scope: Current file');
+        expect(request.userMessage).toContain('Active file: d:\\repo\\src\\app.js');
+        expect(request.userMessage).not.toContain('Workspace folder:');
+        expect(request.userMessage).not.toContain('README.md:');
     });
 
     it('runs the project context quick action and reports readiness', async () => {
