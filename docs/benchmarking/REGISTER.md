@@ -18,6 +18,8 @@ Each entry should answer:
 | Demo-app stabilization benchmark | proof/product | `tools/demo-app/benchmark.expectations.json` | live | Repo-style benchmark behavior stays aligned with the trusted surface |
 | Demo AI benchmark | AI/product | `tools/demo/ai-benchmark.expectations.json` | live | AI lane can be scored on unsafe recall, safe quietness, family match, and lane fit |
 | AI benchmark evaluator | AI/tooling | `tools/evaluate-ai-benchmark.mjs` | live | AI benchmark results are repeatable and reviewable |
+| Fix benchmark starter manifest | remediation/product | `tools/fix-benchmark/fix-benchmark.expectations.json` | live | Fix attempts can be measured against explicit safety properties instead of ad hoc review |
+| Fix benchmark evaluator | remediation/tooling | `tools/evaluate-fix-benchmark.mjs` | live | Fix-quality results are repeatable and reviewable |
 | Baseline layout | governance | `docs/benchmarking/references/BASELINE_LAYOUT.md` | live | Every benchmark claim can point to its source and artifact location |
 
 ## External Benchmark Anchors

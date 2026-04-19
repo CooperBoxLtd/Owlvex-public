@@ -294,6 +294,7 @@
     "benchmark:generate-reports": "npm run compile && node ./scripts/generate-stabilization-reports.mjs",
     "benchmark:refresh-and-evaluate": "npm run benchmark:generate-reports && npm run benchmark:stabilization:demo && npm run benchmark:stabilization:demo-app",
     "benchmark:ai-demo": "node ../tools/evaluate-ai-benchmark.mjs",
+    "benchmark:fix-demo": "node ../tools/evaluate-fix-benchmark.mjs",
     "benchmark:stabilization:demo": "node ../tools/evaluate-stabilization-report.mjs demo",
     "benchmark:stabilization:demo-app": "node ../tools/evaluate-stabilization-report.mjs demo-app",
     "benchmark:compare-reports": "node ../tools/compare-stabilization-evals.mjs",

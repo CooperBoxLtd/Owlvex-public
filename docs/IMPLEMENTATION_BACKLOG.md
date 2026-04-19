@@ -196,6 +196,18 @@ This workstream exists because richer canonical remediation is a better long-ter
 - use richer canonical remediation as the default grounding source for fix previews, not just explanation surfaces
 - keep canonical remediation provenance auditable and benchmarkable
 
+### Current Direction
+
+- the canonical remediation resolver now carries richer normalized fields into chat and fix-discussion prompts:
+  - recommended steps
+  - validation guidance
+  - unsafe alternatives
+  - concise curated cheat-sheet grounding
+- the next implementation slices should push the same richer contract further into:
+  - fix benchmarking
+  - sidebar UX
+  - family-by-family remediation-pack fidelity reviews
+
 ### Likely Files
 
 - [extension/src/frameworks/remediationResolver.ts](D:/Dev/repos/CodeScanner/extension/src/frameworks/remediationResolver.ts)
@@ -272,6 +284,11 @@ This workstream exists because detection quality and fix quality are different c
   - family-appropriate safe pattern visibility
 - keep fix benchmarking separate from detection benchmarking in reporting and release language
 - add a client-readable explanation of when Owlvex fix generation is strong enough to trust and when manual review is still required
+
+### Current Direction
+
+- a starter fix benchmark manifest and evaluator now exist under `tools/fix-benchmark/`
+- the next step is wiring real fix runs and post-fix rescans into that property-based contract
 
 ### Likely Files
 

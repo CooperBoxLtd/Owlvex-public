@@ -17,7 +17,9 @@ export const window = {
     withProgress: jest.fn(),
 };
 
-export const workspace = {
+const workspaceFoldersState: any[] = [];
+
+export const workspace: any = {
     getConfiguration: jest.fn(() => ({
         get: jest.fn((key: string, defaultValue?: any) => defaultValue),
         update: jest.fn(),
@@ -28,7 +30,11 @@ export const workspace = {
     openTextDocument: jest.fn(),
     applyEdit: jest.fn(),
     asRelativePath: jest.fn((uri: any) => String(uri)),
-    workspaceFolders: [],
+    workspaceFolders: workspaceFoldersState,
+    getWorkspaceFolder: jest.fn((uri: any) => {
+        const filePath = String(uri?.fsPath ?? '');
+        return workspaceFoldersState.find(folder => filePath.toLowerCase().startsWith(String(folder?.uri?.fsPath ?? '').toLowerCase()));
+    }),
     fs: {
         readFile: jest.fn(),
         readDirectory: jest.fn(),

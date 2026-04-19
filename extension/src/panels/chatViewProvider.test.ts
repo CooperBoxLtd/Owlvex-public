@@ -1,4 +1,7 @@
+import * as path from 'path';
+import * as os from 'os';
 import * as vscode from 'vscode';
+import * as fs from 'fs/promises';
 import { ChatViewProvider, buildFindingContextSummary, buildFindingPromptContext, buildGroundedRemediationHighlights, buildNearbyProjectContext, extractPatchedFileContent, parseChatIntent } from './chatViewProvider';
 import { configureRulePackRuntime, resetRulePackRuntime } from '../frameworks/rulePackRegistry';
 import { PROFILE } from '../profile';
@@ -137,14 +140,18 @@ describe('parseChatIntent', () => {
                         summary: 'Use placeholders and values arrays.',
                         recommended_actions: ['Replace string-built SQL with placeholders.'],
                     }],
-                    validation_steps: [],
-                    unsafe_alternatives: [],
-                    references: [],
+                    validation_steps: ['Replay SQL metacharacter payloads.'],
+                    unsafe_alternatives: ['Manual quote escaping.'],
+                    references: [{
+                        label: 'OWASP SQL Injection Prevention Cheat Sheet',
+                        kind: 'cheat-sheet',
+                        publisher: 'OWASP',
+                    }],
                     provenance: {
                         source_type: 'hybrid',
                         curation_method: 'manual',
                         review_status: 'reviewed',
-                        sources: [],
+                        sources: [{ label: 'OWASP SQL Injection Prevention Cheat Sheet', kind: 'cheat-sheet' }],
                     },
                 }],
             },
@@ -172,6 +179,10 @@ describe('parseChatIntent', () => {
         expect(context).toContain('Finding selected for discussion:');
         expect(context).toContain('Title: SQL Injection');
         expect(context).toContain('Suggested remediation: Use placeholders and values arrays.');
+        expect(context).toContain('Recommended steps: Replace string-built SQL with placeholders.');
+        expect(context).toContain('Validate with: Replay SQL metacharacter payloads.');
+        expect(context).toContain('Avoid: Manual quote escaping.');
+        expect(context).toContain('Canonical grounding: OWASP SQL Injection Prevention Cheat Sheet');
         expect(context).toContain('Likelihood reasons: User input reaches the query sink directly.');
         expect(context).toContain('Local code snippet:');
     });
@@ -1316,6 +1327,85 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('package.json:');
     });
 
+    it('prefers a targeted repo module when the repo question names it', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'The demo app is a small Express app with paired safe and unsafe routes.' });
+        (vscode.workspace.workspaceFolders as any) = [{ name: 'CodeScanner', uri: vscode.Uri.file('d:\\repo') }];
+        (vscode.workspace.fs as any).readDirectory = jest.fn().mockImplementation(async (uri: any) => {
+            const filePath = String(uri.fsPath).toLowerCase();
+            if (filePath === 'd:\\repo') {
+                return [
+                    ['tools', vscode.FileType.Directory],
+                    ['docs', vscode.FileType.Directory],
+                    ['README.md', vscode.FileType.File],
+                ];
+            }
+            if (filePath === 'd:\\repo\\tools') {
+                return [
+                    ['demo-app', vscode.FileType.Directory],
+                    ['demo', vscode.FileType.Directory],
+                ];
+            }
+            if (filePath === 'd:\\repo\\tools\\demo-app') {
+                return [
+                    ['README.md', vscode.FileType.File],
+                    ['package.json', vscode.FileType.File],
+                    ['src', vscode.FileType.Directory],
+                ];
+            }
+            if (filePath === 'd:\\repo\\docs' || filePath === 'd:\\repo\\tools\\demo') {
+                return [];
+            }
+            if (filePath === 'd:\\repo\\tools\\demo-app\\src') {
+                return [
+                    ['server.js', vscode.FileType.File],
+                ];
+            }
+            return [];
+        });
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            const filePath = String(uri.fsPath).toLowerCase();
+            if (filePath.endsWith('tools\\demo-app\\readme.md')) {
+                return Buffer.from('# Owlvex Demo App\nA small intentionally vulnerable training app for repo-context validation.');
+            }
+            if (filePath.endsWith('tools\\demo-app\\package.json')) {
+                return Buffer.from(JSON.stringify({ name: 'owlvex-demo-app', main: 'src/server.js' }, null, 2));
+            }
+            if (filePath.endsWith('tools\\demo-app\\src\\server.js')) {
+                return Buffer.from("const express = require('express');\napp.use('/documents', documentRoutes);");
+            }
+            throw new Error('not found');
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                if (key === `${PROFILE.storagePrefix}.chat.workingScope`) {
+                    return 'scanFolder';
+                }
+                return defaultValue;
+            }),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('what is the demo app supposed to do?');
+
+        const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Interaction mode: Repo Q&A');
+        expect(request.userMessage).toContain('Targeted repo focus: tools/demo-app');
+        expect(request.userMessage).toContain('Module path: tools/demo-app');
+        expect(request.userMessage).toContain('tools/demo-app');
+        expect(request.userMessage).toContain('src/server.js:');
+        expect(request.userMessage).toContain('Prefer this module/app as the primary interpretation target.');
+        expect(request.userMessage).not.toContain('Workspace folder: CodeScanner');
+    });
+
     it('keeps repo overview out of chat prompts when the working scope is current file', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'This file looks like a route.' });
         (vscode.window.activeTextEditor as any) = {
@@ -1577,6 +1667,119 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 2].content).toContain('Kept the reviewed fix');
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Verification complete: the reviewed finding is no longer present');
         expect((provider as any).pendingFixPreview).toBeUndefined();
+    });
+
+    it('records a fix benchmark result automatically for matching benchmark files after verification', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```javascript\nconst query = db.query(\"SELECT * FROM users WHERE id = ?\", [req.query.id]);\n```',
+        });
+        const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'owlvex-fix-benchmark-'));
+        const benchmarkDir = path.join(tempRoot, 'tools', 'fix-benchmark');
+        await fs.mkdir(benchmarkDir, { recursive: true });
+        await fs.writeFile(
+            path.join(benchmarkDir, 'fix-benchmark.expectations.json'),
+            JSON.stringify({
+                name: 'owlvex-fix-demo-benchmark',
+                expectations: [
+                    { caseId: 'FIX-SQ-001', file: 'tools/demo/06-sqli-unsafe.js' },
+                ],
+            }, null, 2),
+            'utf8',
+        );
+        const targetUri = vscode.Uri.file(path.join(tempRoot, 'tools', 'demo', '06-sqli-unsafe.js'));
+        const previewUri = { fsPath: 'untitled:sqli-fix.js', scheme: 'untitled', toString: () => 'untitled:sqli-fix.js' };
+        const originalText = 'const query = "SELECT * FROM users WHERE id = " + req.query.id;';
+        (vscode.workspace.workspaceFolders as any) = [{ name: 'CodeScanner', uri: vscode.Uri.file(tempRoot) }];
+        (vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({ name: 'CodeScanner', uri: vscode.Uri.file(tempRoot) });
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
+            if (input?.language === 'javascript') {
+                return { uri: previewUri };
+            }
+            return {
+                uri: targetUri,
+                getText: () => originalText,
+            };
+        });
+        (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
+        (vscode.window.showTextDocument as jest.Mock).mockResolvedValue({ revealRange: jest.fn() });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 0,
+                        findings: [],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: 'No findings detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
+
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [({
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            })],
+        };
+        const storage = {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        };
+
+        const provider = new ChatViewProvider(registry as any, storage as any);
+        await provider.generateFixPreview({
+            id: 'finding-sqli',
+            line: 1,
+            lineEnd: 1,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'SQ-001',
+            title: 'SQL Injection',
+            explanation: 'Untrusted request data is concatenated into SQL.',
+            threat: 'Attackers can alter database queries.',
+            fix: 'Use parameterized queries.',
+            confidence: 0.95,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+            canonicalId: 'owlvex.issue.sql_injection.001',
+            canonicalTitle: 'SQL Injection',
+        } as any, targetUri.fsPath);
+
+        await provider.applyPendingFixPreview();
+
+        const resultsPath = path.join(benchmarkDir, 'fix-benchmark.latest.json');
+        const parsed = JSON.parse(await fs.readFile(resultsPath, 'utf8'));
+        expect(parsed.benchmark).toBe('owlvex-fix-demo-benchmark');
+        expect(parsed.runs).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                caseId: 'FIX-SQ-001',
+                attempted: true,
+                previewGenerated: true,
+                appliedCleanly: true,
+                filesChanged: ['tools/demo/06-sqli-unsafe.js'],
+                syntaxValid: true,
+                targetFindingRemoved: true,
+                introducedHighRiskFindings: false,
+            }),
+        ]));
+        await fs.rm(tempRoot, { recursive: true, force: true });
     });
 
     it('opens a source action from a context summary message', async () => {

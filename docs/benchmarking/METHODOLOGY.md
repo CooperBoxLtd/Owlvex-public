@@ -48,6 +48,15 @@ Measures:
 - whether the fix avoids introducing new serious findings
 - whether the visible change matches the family-appropriate safe pattern
 
+Starter remediation benchmark signals should be recorded explicitly, even before full automation exists:
+
+- preview generated
+- files changed
+- applied cleanly
+- syntax valid
+- target finding removed
+- new high-risk findings introduced or not
+
 ## Method Rules
 
 ### Safe / unsafe pairing

@@ -122,6 +122,11 @@ Current product direction:
 
 - scan-time AI grounding can consume curated framework and remediation guidance
 - fix preview generation is grounded first in canonical remediation and local code context
+- canonical remediation now carries richer normalized fix guidance into chat and fix prompts, including:
+  - recommended steps
+  - validation guidance
+  - unsafe alternatives
+  - concise curated cheat-sheet grounding
 - OWASP-style cheat-sheet content should continue to flow into the product through the canonical remediation layer rather than through raw prompt stuffing by default
 
 ### Deterministic Benchmark Tool
@@ -135,6 +140,7 @@ Lives under `tools/owlvex-benchmark/`. Provides:
 - confidence and status reporting
 - separate AI eval tooling for uncovered issue classes that are not part of the deterministic release gate
 - a separate benchmarking department under `docs/benchmarking/` to govern deterministic, AI, external, and future remediation benchmarks
+- a starter remediation benchmark lane under `tools/fix-benchmark/` for measuring preview quality, scope discipline, finding removal, and post-fix safety
 
 This is the mechanism that defines what Owlvex can claim with certainty. No deterministic rule ships without benchmark coverage.
 

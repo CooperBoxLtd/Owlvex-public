@@ -449,6 +449,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Suggested steps: Replace string-built SQL with placeholders. | Allow-list dynamic sort fields.');
         expect(written).toContain('- Validate with: Replay the injection payload and confirm it is treated as data.');
         expect(written).toContain('- Avoid: Manual quote escaping.');
+        expect(written).toContain('- Canonical grounding: OWASP SQL Injection Prevention Cheat Sheet');
         expect(written).toContain('## Findings By File');
     });
 

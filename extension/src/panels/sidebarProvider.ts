@@ -210,6 +210,8 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                 const remediation = resolveRemediationForFinding(f);
                 const hasDetails = Boolean(
                     remediation.frameworkVariant
+                    || remediation.recommendedActions.length
+                    || remediation.cheatSheetGuidance.length
                     || remediation.validationSteps.length
                     || remediation.unsafeAlternatives.length
                     || remediation.refs.length
@@ -324,6 +326,13 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
         });
     }
 
+    if (remediation.recommendedActions.length) {
+        details.push({
+            label: `Suggested steps: ${remediation.recommendedActions.join(' | ')}`,
+            tooltip: remediation.recommendedActions.join('\n'),
+        });
+    }
+
     if (remediation.validationSteps.length) {
         details.push({
             label: `Check: ${remediation.validationSteps.join(' | ')}`,
@@ -342,6 +351,13 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
         details.push({
             label: `References: ${remediation.refs.join(', ')}`,
             tooltip: remediation.refs.join('\n'),
+        });
+    }
+
+    if (remediation.cheatSheetGuidance.length) {
+        details.push({
+            label: `Canonical grounding: ${remediation.cheatSheetGuidance.join(' || ')}`,
+            tooltip: remediation.cheatSheetGuidance.join('\n'),
         });
     }
 

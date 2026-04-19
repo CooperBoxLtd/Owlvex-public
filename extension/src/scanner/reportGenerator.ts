@@ -103,6 +103,8 @@ function isLowConfidenceAiFinding(finding: ScanResult['findings'][number]): bool
 
 function getCanonicalRemediation(finding: ScanResult['findings'][number]): {
     remediation: string;
+    recommendedActions: string[];
+    cheatSheetGuidance: string[];
     refs: string[];
     modelNote?: string;
     frameworkVariant?: { framework: string; summary: string; recommendedActions: string[] };
@@ -320,6 +322,20 @@ function buildSafePatternLine(
 
     if (remediation.modelNote) {
         return remediation.modelNote;
+    }
+
+    return undefined;
+}
+
+function buildRecommendedStepsLine(
+    remediation: ReturnType<typeof getCanonicalRemediation>,
+): string | undefined {
+    if (remediation.recommendedActions.length) {
+        return remediation.recommendedActions.join(' | ');
+    }
+
+    if (remediation.frameworkVariant?.recommendedActions.length) {
+        return remediation.frameworkVariant.recommendedActions.join(' | ');
     }
 
     return undefined;
@@ -768,16 +784,18 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 if (safePattern) {
                     lines.push(`- Safe pattern: ${safePattern}`);
                 }
-                if (remediation.frameworkVariant) {
-                    if (remediation.frameworkVariant.recommendedActions.length) {
-                        lines.push(`- Suggested steps: ${remediation.frameworkVariant.recommendedActions.join(' | ')}`);
-                    }
+                const recommendedSteps = buildRecommendedStepsLine(remediation);
+                if (recommendedSteps) {
+                    lines.push(`- Suggested steps: ${recommendedSteps}`);
                 }
                 if (remediation.validationSteps.length) {
                     lines.push(`- Validate with: ${remediation.validationSteps.join(' | ')}`);
                 }
                 if (remediation.unsafeAlternatives.length) {
                     lines.push(`- Avoid: ${remediation.unsafeAlternatives.join(' | ')}`);
+                }
+                if (remediation.cheatSheetGuidance.length) {
+                    lines.push(`- Canonical grounding: ${remediation.cheatSheetGuidance.join(' || ')}`);
                 }
                 if (likelihoodReasons.length) {
                     lines.push(`- Why likely: ${likelihoodReasons.join(' | ')}`);

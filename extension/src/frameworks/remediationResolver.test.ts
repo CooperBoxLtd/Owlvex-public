@@ -61,8 +61,10 @@ describe('remediationResolver', () => {
 
         expect(remediation.remediation).toBe('Resolve request-derived filenames against a fixed base path.');
         expect(remediation.frameworkVariant?.framework).toBe('Express');
+        expect(remediation.recommendedActions).toContain('Map user choices to known-safe file identifiers.');
         expect(remediation.validationSteps).toContain('Replay ../ payloads and confirm rejection.');
         expect(remediation.unsafeAlternatives).toContain('Strip ../ tokens without canonical boundary checks.');
+        expect(remediation.cheatSheetGuidance).toEqual([]);
         expect(remediation.modelNote).toBe('Normalize input.');
     });
 

@@ -1,0 +1,39 @@
+{
+  "benchmark": "owlvex-fix-demo-benchmark",
+  "description": "Template for recording a fix benchmark run. Duplicate this file and fill in the run entries after generating real fix previews.",
+  "runs": [
+    {
+      "caseId": "FIX-SQ-001",
+      "attempted": false,
+      "previewGenerated": false,
+      "appliedCleanly": false,
+      "filesChanged": [],
+      "syntaxValid": null,
+      "targetFindingRemoved": null,
+      "introducedHighRiskFindings": null,
+      "notes": ""
+    },
+    {
+      "caseId": "FIX-GR-003",
+      "attempted": false,
+      "previewGenerated": false,
+      "appliedCleanly": false,
+      "filesChanged": [],
+      "syntaxValid": null,
+      "targetFindingRemoved": null,
+      "introducedHighRiskFindings": null,
+      "notes": ""
+    },
+    {
+      "caseId": "FIX-GR-002",
+      "attempted": false,
+      "previewGenerated": false,
+      "appliedCleanly": false,
+      "filesChanged": [],
+      "syntaxValid": null,
+      "targetFindingRemoved": null,
+      "introducedHighRiskFindings": null,
+      "notes": ""
+    }
+  ]
+}

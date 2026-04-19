@@ -1,0 +1,48 @@
+{
+  "name": "owlvex-fix-demo-benchmark",
+  "description": "Starter remediation benchmark for review-first fix previews on selected demo cases.",
+  "expectations": [
+    {
+      "caseId": "FIX-SQ-001",
+      "file": "tools/demo/06-sqli-unsafe.js",
+      "issueId": "SQ-001",
+      "expectedFindingAnyOfIncludes": ["sql injection", "string-built sql", "query concatenation"],
+      "expectedFixProperties": {
+        "scope": "same_file",
+        "previewRequired": true,
+        "findingRemoved": true,
+        "syntaxValid": true,
+        "noNewHighRiskFindings": true
+      },
+      "scenario": "Replace string-built SQL with parameterized query construction without changing unrelated files."
+    },
+    {
+      "caseId": "FIX-GR-003",
+      "file": "tools/demo/22-ssrf-unsafe.js",
+      "issueId": "GR-003",
+      "expectedFindingAnyOfIncludes": ["server-side request forgery", "ssrf", "outbound request"],
+      "expectedFixProperties": {
+        "scope": "same_file",
+        "previewRequired": true,
+        "findingRemoved": true,
+        "syntaxValid": true,
+        "noNewHighRiskFindings": true
+      },
+      "scenario": "Constrain outbound destination handling without widening the change outside the reviewed file."
+    },
+    {
+      "caseId": "FIX-GR-002",
+      "file": "tools/demo/28-path-traversal-unsafe.js",
+      "issueId": "GR-002",
+      "expectedFindingAnyOfIncludes": ["path traversal", "unsafe path join", "untrusted path"],
+      "expectedFixProperties": {
+        "scope": "same_file",
+        "previewRequired": true,
+        "findingRemoved": true,
+        "syntaxValid": true,
+        "noNewHighRiskFindings": true
+      },
+      "scenario": "Normalize and constrain filesystem access without expanding the fix to unrelated files."
+    }
+  ]
+}

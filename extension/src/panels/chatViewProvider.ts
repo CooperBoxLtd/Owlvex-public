@@ -1,5 +1,6 @@
 ﻿import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { ProviderRegistry } from '../providers/registry';
 import { collectScannableFiles } from '../scanner/workspaceScanner';
 import { formatFrameworkSummary } from '../frameworks/catalog';
@@ -141,6 +142,46 @@ const CHAT_STATE_KEY = `${PROFILE.storagePrefix}.chat.messages`;
 const LAST_SCAN_TARGET_KEY = `${PROFILE.storagePrefix}.chat.lastScanTarget`;
 const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
 const WORKING_SCOPE_KEY = `${PROFILE.storagePrefix}.chat.workingScope`;
+const FIX_BENCHMARK_MANIFEST_RELATIVE_PATH = path.join('tools', 'fix-benchmark', 'fix-benchmark.expectations.json');
+const FIX_BENCHMARK_RESULTS_RELATIVE_PATH = path.join('tools', 'fix-benchmark', 'fix-benchmark.latest.json');
+
+interface FixBenchmarkExpectation {
+    caseId: string;
+    file: string;
+}
+
+interface FixBenchmarkManifest {
+    name?: string;
+    expectations?: FixBenchmarkExpectation[];
+}
+
+interface FixBenchmarkRunRecord {
+    caseId: string;
+    attempted: boolean;
+    previewGenerated: boolean;
+    appliedCleanly: boolean;
+    filesChanged: string[];
+    syntaxValid: boolean | null;
+    targetFindingRemoved: boolean | null;
+    introducedHighRiskFindings: boolean | null;
+    notes?: string;
+}
+
+interface FixBenchmarkResultsFile {
+    benchmark?: string;
+    description?: string;
+    runs: FixBenchmarkRunRecord[];
+}
+
+interface FixBenchmarkUpdate {
+    targetUri: vscode.Uri;
+    finding: Finding;
+    reviewedPaths: string[];
+    appliedCleanly: boolean;
+    rescanned?: ScanResult;
+    matchingFinding?: Finding;
+    notes?: string;
+}
 const MAX_PERSISTED_MESSAGES = 40;
 const CONTEXT_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cs', '.go', '.rs', '.php', '.rb', '.cpp', '.c', '.h'];
 const DEFAULT_WORKING_SCOPE: WorkingScope = 'scanFolder';
@@ -521,8 +562,20 @@ export function buildFindingPromptContext(finding: Finding, snippet?: string): s
         `Risk: ${finding.riskScore ?? 'n/a'}/10`,
         `Why it matters: ${finding.explanation || 'No explanation provided.'}`,
         `Suggested remediation: ${remediation.remediation}`,
+        remediation.recommendedActions.length
+            ? `Recommended steps: ${remediation.recommendedActions.join(' | ')}`
+            : '',
         remediation.frameworkVariant
             ? `Framework-specific guidance: ${remediation.frameworkVariant.framework} | ${remediation.frameworkVariant.summary}`
+            : '',
+        remediation.validationSteps.length
+            ? `Validate with: ${remediation.validationSteps.join(' | ')}`
+            : '',
+        remediation.unsafeAlternatives.length
+            ? `Avoid: ${remediation.unsafeAlternatives.join(' | ')}`
+            : '',
+        remediation.cheatSheetGuidance.length
+            ? `Canonical grounding: ${remediation.cheatSheetGuidance.join(' || ')}`
             : '',
         (finding.likelihoodReasons ?? []).length
             ? `Likelihood reasons: ${(finding.likelihoodReasons ?? []).join(' | ')}`
@@ -668,6 +721,114 @@ async function tryReadWorkspaceFile(uri: vscode.Uri): Promise<string | undefined
     } catch {
         return undefined;
     }
+}
+
+interface WorkspaceFolderMatch {
+    uri: vscode.Uri;
+    label: string;
+    score: number;
+}
+
+function buildWorkspacePathTokenSet(prompt: string): Set<string> {
+    const normalized = prompt
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .split(/\s+/)
+        .map(token => token.trim())
+        .filter(token => token.length >= 3)
+        .filter(token => !new Set([
+            'what', 'does', 'this', 'that', 'suppose', 'supposed', 'should', 'would', 'could', 'repo', 'repository',
+            'workspace', 'project', 'folder', 'directory', 'module', 'application', 'app', 'work', 'doing', 'explain',
+            'tell', 'about', 'with', 'from', 'into', 'general',
+        ]).has(token));
+
+    return new Set(normalized);
+}
+
+function scoreWorkspacePathLabel(prompt: string, promptTokens: Set<string>, label: string): number {
+    if (!promptTokens.size) {
+        return 0;
+    }
+
+    const normalizedPrompt = prompt.toLowerCase();
+    const normalizedLabel = normalizeToken(label.replace(/[\\/]+/g, ' '));
+    let score = 0;
+    for (const token of promptTokens) {
+        const normalizedToken = normalizeToken(token);
+        if (!normalizedToken) {
+            continue;
+        }
+        if (normalizedLabel === normalizedToken) {
+            score += 10;
+        } else if (normalizedLabel.includes(normalizedToken)) {
+            score += 6;
+        }
+    }
+
+    if (normalizedPrompt.includes(' app') || normalizedPrompt.endsWith('app') || normalizedPrompt.includes(' application')) {
+        if (/(^|[\\/.-])app($|[\\/.-])/.test(label.toLowerCase())) {
+            score += 4;
+        }
+    }
+
+    const leafName = label.split(/[\\/]+/g).pop()?.toLowerCase() ?? '';
+    if (new Set(['src', 'lib', 'app', 'routes', 'controllers', 'services']).has(leafName)) {
+        score -= 3;
+    }
+
+    return score;
+}
+
+async function collectWorkspaceDirectoryCandidates(
+    folder: vscode.WorkspaceFolder,
+    prompt: string,
+    maxDepth = 3,
+): Promise<WorkspaceFolderMatch[]> {
+    const promptTokens = buildWorkspacePathTokenSet(prompt);
+    if (!promptTokens.size) {
+        return [];
+    }
+
+    const queue: Array<{ uri: vscode.Uri; relativePath: string; depth: number }> = [{ uri: folder.uri, relativePath: '', depth: 0 }];
+    const results: WorkspaceFolderMatch[] = [];
+    const skippedNames = new Set(['node_modules', 'dist', 'build', 'coverage', '.git', '.owlvex', 'tmp-layne']);
+
+    while (queue.length) {
+        const current = queue.shift()!;
+        let entries: Array<[string, vscode.FileType]> = [];
+        try {
+            entries = await vscode.workspace.fs.readDirectory(current.uri);
+        } catch {
+            continue;
+        }
+
+        for (const [name, fileType] of entries) {
+            if (fileType !== vscode.FileType.Directory || name.startsWith('.') || skippedNames.has(name)) {
+                continue;
+            }
+
+            const childRelativePath = current.relativePath ? `${current.relativePath}/${name}` : name;
+            const childUri = vscode.Uri.joinPath(current.uri, name);
+            const score = scoreWorkspacePathLabel(prompt, promptTokens, childRelativePath);
+            if (score > 0) {
+                results.push({
+                    uri: childUri,
+                    label: childRelativePath,
+                    score,
+                });
+            }
+
+            if (current.depth + 1 < maxDepth) {
+                queue.push({
+                    uri: childUri,
+                    relativePath: childRelativePath,
+                    depth: current.depth + 1,
+                });
+            }
+        }
+    }
+
+    return results.sort((left, right) => right.score - left.score || left.label.localeCompare(right.label));
 }
 
 async function resolveLocalImportUri(baseFile: vscode.Uri, specifier: string): Promise<vscode.Uri | undefined> {
@@ -1099,6 +1260,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     'Do not include explanation before or after the code.',
                     'Preserve unrelated behavior and formatting where practical.',
                     'Make the smallest safe change that addresses the finding.',
+                    'Follow the grounded canonical remediation contract in the user context, including safe pattern, validation intent, and avoid guidance when relevant.',
                 ].join('\n'),
                 userMessage: [
                     `Generate a fix preview for this finding in the current file.`,
@@ -1203,6 +1365,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         'Do not include explanation before or after the code.',
                         'Preserve unrelated behavior and formatting where practical.',
                         'Make the smallest safe changes that address all listed findings in this file.',
+                        'Follow the grounded canonical remediation contract in the user context, including safe pattern, validation intent, and avoid guidance when relevant.',
                     ].join('\n'),
                     userMessage: [
                         'Generate a fix preview for all of these findings in the current file.',
@@ -1281,11 +1444,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
-        const reviewedPaths = getReviewedPathSet(this.pendingFixPreview);
+        const reviewedPathSet = getReviewedPathSet(this.pendingFixPreview);
+        const reviewedPaths = this.pendingFixPreview.reviewedPaths?.length
+            ? [...this.pendingFixPreview.reviewedPaths]
+            : this.pendingFixPreview.changes?.map(change => change.targetPath) ?? [this.pendingFixPreview.targetPath];
 
         if ((this.pendingFixPreview.changes?.length ?? 0) > 1) {
             const changes = this.pendingFixPreview.changes!;
-            const unexpectedChange = changes.find(change => !reviewedPaths.has(normalizeReviewedPath(change.targetPath)));
+            const unexpectedChange = changes.find(change => !reviewedPathSet.has(normalizeReviewedPath(change.targetPath)));
             if (unexpectedChange) {
                 this.messages.push({
                     role: 'assistant',
@@ -1339,7 +1505,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
-        if (!reviewedPaths.has(normalizeReviewedPath(this.pendingFixPreview.targetPath))) {
+        if (!reviewedPathSet.has(normalizeReviewedPath(this.pendingFixPreview.targetPath))) {
             this.messages.push({
                 role: 'assistant',
                 content: 'Owlvex blocked the fix preview because the reviewed file scope no longer matches the preview target. Regenerate the preview before applying it.',
@@ -1403,11 +1569,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     content: `Verification could not confirm the result for ${vscode.workspace.asRelativePath(targetUri, false)}. The reviewed code was kept, but no completed rescan result was returned.`,
                     kind: 'advisory',
                 });
+                await this.recordFixBenchmarkResult({
+                    targetUri,
+                    finding: originalFinding,
+                    reviewedPaths,
+                    appliedCleanly: true,
+                    notes: 'Fix kept, but verification scan did not return a completed result.',
+                });
             } else {
                 const matchingFinding = rescanned.findings.find(candidate =>
-                    (originalFinding.canonicalId && candidate.canonicalId === originalFinding.canonicalId)
-                    || candidate.title === originalFinding.title
-                    || (!!originalFinding.canonicalTitle && candidate.canonicalTitle === originalFinding.canonicalTitle)
+                    this.isSameFindingFamily(candidate, originalFinding)
                 );
                 if (!matchingFinding) {
                     this.messages.push({
@@ -1428,12 +1599,30 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         kind: 'advisory',
                     });
                 }
+                await this.recordFixBenchmarkResult({
+                    targetUri,
+                    finding: originalFinding,
+                    reviewedPaths,
+                    appliedCleanly: true,
+                    rescanned,
+                    matchingFinding,
+                    notes: matchingFinding
+                        ? 'Fix kept and verification scan completed; the target finding still matched after the rescan.'
+                        : 'Fix kept and verification scan completed; the target finding was no longer present.',
+                });
             }
         } catch (error: any) {
             this.messages.push({
                 role: 'assistant',
                 content: `Verification scan failed after keeping the fix for ${vscode.workspace.asRelativePath(targetUri, false)}: ${error.message}`,
                 kind: 'advisory',
+            });
+            await this.recordFixBenchmarkResult({
+                targetUri,
+                finding: originalFinding,
+                reviewedPaths,
+                appliedCleanly: true,
+                notes: `Verification scan failed: ${error.message}`,
             });
         }
         void this.persistState();
@@ -1495,7 +1684,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const workingScope = this.getWorkingScope();
             const editorContext = this.currentMode === 'general'
                 ? { summary: 'Working context: not injected by default in General mode', promptContext: 'Working context: not injected by default in General mode.' }
-                : await this.buildWorkingScopeContext(workingScope);
+                : await this.buildWorkingScopeContext(workingScope, this.currentMode === 'repo' ? trimmed : undefined);
             const scanContext = this.currentMode === 'general'
                 ? { summary: 'Scan context: not injected by default in General mode', promptContext: 'Scan context: not injected by default in General mode.' }
                 : this.buildScanContext(workingScope);
@@ -2402,6 +2591,100 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         await this.storage.update(CHAT_STATE_KEY, persisted);
     }
 
+    private async recordFixBenchmarkResult(update: FixBenchmarkUpdate): Promise<void> {
+        const workspaceFolder = typeof vscode.workspace.getWorkspaceFolder === 'function'
+            ? vscode.workspace.getWorkspaceFolder(update.targetUri)
+            : (vscode.workspace.workspaceFolders ?? []).find(folder =>
+                normalizeReviewedPath(update.targetUri.fsPath).startsWith(normalizeReviewedPath(folder.uri.fsPath)),
+            );
+        const workspaceRoot = workspaceFolder?.uri.fsPath;
+        if (!workspaceRoot) {
+            return;
+        }
+
+        const manifestPath = path.join(workspaceRoot, FIX_BENCHMARK_MANIFEST_RELATIVE_PATH);
+        let manifestRaw: string;
+        try {
+            manifestRaw = await fs.readFile(manifestPath, 'utf8');
+        } catch {
+            return;
+        }
+
+        let manifest: FixBenchmarkManifest;
+        try {
+            manifest = JSON.parse(manifestRaw) as FixBenchmarkManifest;
+        } catch {
+            return;
+        }
+
+        const relativeTargetPath = normalizeReviewedPath(path.relative(workspaceRoot, update.targetUri.fsPath));
+        const expectation = (manifest.expectations ?? []).find(candidate =>
+            normalizeReviewedPath(candidate.file) === relativeTargetPath,
+        );
+        if (!expectation) {
+            return;
+        }
+
+        const resultsPath = path.join(workspaceRoot, FIX_BENCHMARK_RESULTS_RELATIVE_PATH);
+        let results: FixBenchmarkResultsFile = {
+            benchmark: manifest.name,
+            runs: [],
+        };
+        try {
+            const existingRaw = await fs.readFile(resultsPath, 'utf8');
+            results = JSON.parse(existingRaw) as FixBenchmarkResultsFile;
+            if (!Array.isArray(results.runs)) {
+                results.runs = [];
+            }
+        } catch {
+            results = {
+                benchmark: manifest.name,
+                description: 'Latest auto-recorded fix benchmark results captured from Owlvex review-and-verify flows.',
+                runs: [],
+            };
+        }
+
+        const changedFiles = update.reviewedPaths.map(filePath =>
+            path.relative(workspaceRoot, filePath).replace(/\\/g, '/'),
+        );
+        const introducedHighRiskFindings = update.rescanned
+            ? update.rescanned.findings.some(candidate =>
+                severityRank(candidate.severity) >= severityRank('HIGH')
+                && !this.isSameFindingFamily(candidate, update.finding),
+            )
+            : null;
+
+        const nextRun: FixBenchmarkRunRecord = {
+            caseId: expectation.caseId,
+            attempted: true,
+            previewGenerated: true,
+            appliedCleanly: update.appliedCleanly,
+            filesChanged: changedFiles,
+            syntaxValid: update.rescanned ? true : null,
+            targetFindingRemoved: update.rescanned ? !update.matchingFinding : null,
+            introducedHighRiskFindings,
+            notes: update.notes,
+        };
+
+        const existingIndex = results.runs.findIndex(run => run.caseId === expectation.caseId);
+        if (existingIndex >= 0) {
+            results.runs[existingIndex] = nextRun;
+        } else {
+            results.runs.push(nextRun);
+        }
+
+        await fs.mkdir(path.dirname(resultsPath), { recursive: true });
+        await fs.writeFile(resultsPath, JSON.stringify(results, null, 2), 'utf8');
+    }
+
+    private isSameFindingFamily(candidate: Finding, reference: Finding): boolean {
+        return (
+            (!!reference.canonicalId && candidate.canonicalId === reference.canonicalId)
+            || candidate.title === reference.title
+            || (!!reference.canonicalTitle && candidate.canonicalTitle === reference.canonicalTitle)
+        );
+    }
+
     private getRestorableMessages(): ChatMessage[] | undefined {
         const archived = this.storage.get<ChatMessage[]>(CHAT_STATE_KEY, []);
         if (!Array.isArray(archived) || archived.length <= 1) {
@@ -2664,7 +2947,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         return candidates[0]?.uri;
     }
 
-    private async buildWorkingScopeContext(scope: WorkingScope): Promise<EditorContext> {
+    private async buildWorkingScopeContext(scope: WorkingScope, promptForRepoTarget?: string): Promise<EditorContext> {
         switch (scope) {
             case 'scanFile':
                 return this.buildEditorContext();
@@ -2674,7 +2957,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return this.buildSelectedFilesContext();
             case 'scanFolder':
             default:
-                return this.buildWorkspaceRepoContext();
+                return this.buildWorkspaceRepoContext(promptForRepoTarget);
         }
     }
 
@@ -2797,13 +3080,74 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         };
     }
 
-    private async buildWorkspaceRepoContext(): Promise<EditorContext> {
+    private async buildWorkspaceRepoContext(promptForRepoTarget?: string): Promise<EditorContext> {
         const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
         if (!workspaceFolders.length) {
             return {
                 summary: 'Working scope: Workspace (no workspace folder open)',
                 promptContext: 'Working scope: Workspace\nNo workspace folder is open.',
             };
+        }
+
+        if (promptForRepoTarget && looksLikeRepoQuestion(promptForRepoTarget)) {
+            const targetMatches = (await Promise.all(workspaceFolders.slice(0, 3).map(folder => collectWorkspaceDirectoryCandidates(folder, promptForRepoTarget))))
+                .flat()
+                .sort((left, right) =>
+                    right.score - left.score
+                    || right.label.length - left.label.length
+                    || left.label.localeCompare(right.label),
+                );
+            const bestMatch = targetMatches[0];
+            if (bestMatch && bestMatch.score >= 6) {
+                let entries: Array<[string, vscode.FileType]> = [];
+                try {
+                    entries = await vscode.workspace.fs.readDirectory(bestMatch.uri);
+                } catch {
+                    entries = [];
+                }
+                const visibleEntries = entries
+                    .filter(([name]) => !name.startsWith('.'))
+                    .slice(0, 12)
+                    .map(([name, fileType]) => `${name}${fileType === vscode.FileType.Directory ? '/' : ''}`);
+
+                const readmeUri = vscode.Uri.joinPath(bestMatch.uri, 'README.md');
+                const packageUri = vscode.Uri.joinPath(bestMatch.uri, 'package.json');
+                const readme = await tryReadWorkspaceFile(readmeUri);
+                const packageJson = await tryReadWorkspaceFile(packageUri);
+                let mainSection: string | undefined;
+                if (packageJson) {
+                    try {
+                        const parsed = JSON.parse(packageJson) as { main?: string; scripts?: Record<string, string>; description?: string };
+                        const mainFile = typeof parsed.main === 'string' && parsed.main.trim() ? parsed.main.trim() : undefined;
+                        if (mainFile) {
+                            const mainUri = vscode.Uri.joinPath(bestMatch.uri, ...mainFile.split(/[\\/]+/g));
+                            const mainContent = await tryReadWorkspaceFile(mainUri);
+                            if (mainContent !== undefined) {
+                                const excerpt = mainContent.length > 3000
+                                    ? `${mainContent.slice(0, 3000)}\n\n[truncated after 3000 characters]`
+                                    : mainContent;
+                                mainSection = `${mainFile}:\n${excerpt}`;
+                            }
+                        }
+                    } catch {
+                        // Ignore malformed package.json during repo summary.
+                    }
+                }
+
+                return {
+                    summary: `Working scope: Workspace (targeted module ${bestMatch.label})`,
+                    promptContext: [
+                        'Working scope: Workspace',
+                        `Targeted repo focus: ${bestMatch.label}`,
+                        'Prefer this module/app as the primary interpretation target. Use broader repo identity only as secondary background.',
+                        `Module path: ${bestMatch.label}`,
+                        visibleEntries.length ? `Module entries: ${visibleEntries.join(', ')}` : 'Module entries: unavailable',
+                        readme ? `README.md:\n${readme.length > 3000 ? `${readme.slice(0, 3000)}\n\n[truncated after 3000 characters]` : readme}` : '',
+                        packageJson ? `package.json:\n${packageJson.length > 3000 ? `${packageJson.slice(0, 3000)}\n\n[truncated after 3000 characters]` : packageJson}` : '',
+                        mainSection ?? '',
+                    ].filter(Boolean).join('\n\n'),
+                };
+            }
         }
 
         const rootSections = await Promise.all(workspaceFolders.slice(0, 3).map(async folder => {

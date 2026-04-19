@@ -28,13 +28,13 @@ describe('SidebarProvider', () => {
                     unsafe_alternatives: ['Strip ../ without canonical checks.'],
                     references: [{
                         label: 'OWASP Path Traversal',
-                        kind: 'official-doc',
+                        kind: 'cheat-sheet',
                     }],
                     provenance: {
                         source_type: 'hybrid',
                         curation_method: 'manual',
                         review_status: 'reviewed',
-                        sources: [{ label: 'OWASP Path Traversal', kind: 'official-doc' }],
+                        sources: [{ label: 'OWASP Path Traversal', kind: 'cheat-sheet' }],
                     },
                 }],
             },
@@ -107,6 +107,7 @@ describe('SidebarProvider', () => {
             'Evidence: Proven',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
             'Recommended fix: Resolve user paths against a fixed base directory.',
+            'Suggested steps: Map user choices to identifiers. | Verify the resolved path stays under the storage root.',
             'Check: Replay ../ payloads and confirm rejection.',
             'Avoid this: Strip ../ without canonical checks.',
             'References: OWASP Path Traversal',

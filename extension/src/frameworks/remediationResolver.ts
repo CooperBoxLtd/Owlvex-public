@@ -14,8 +14,10 @@ export interface ResolvedRemediation {
     refs: string[];
     modelNote?: string;
     frameworkVariant?: RemediationFrameworkVariant;
+    recommendedActions: string[];
     validationSteps: string[];
     unsafeAlternatives: string[];
+    cheatSheetGuidance: string[];
 }
 
 interface CuratedCheatSheetEntry {
@@ -102,6 +104,14 @@ export function resolveRemediationForFinding(finding: Finding): ResolvedRemediat
     const packRemediation = finding.canonicalId ? getCanonicalRemediationByIssueId(finding.canonicalId) : undefined;
     const canonicalIssue = finding.canonicalId ? getCanonicalIssueById(finding.canonicalId) : undefined;
     const frameworkVariant = selectFrameworkVariant(packRemediation, finding.framework);
+    const cheatSheetGuidance = finding.canonicalId
+        ? getGroundedCheatSheetGuidanceForIssueIds([finding.canonicalId]).slice(0, 2).map(entry => [
+            entry.label,
+            entry.focus ? `Focus: ${entry.focus}` : '',
+            entry.common_actions?.length ? `Actions: ${entry.common_actions.slice(0, 2).join(' | ')}` : '',
+            entry.avoid?.length ? `Avoid: ${entry.avoid.slice(0, 1).join(' | ')}` : '',
+        ].filter(Boolean).join(' | '))
+        : [];
     const groundedSummary = frameworkVariant?.summary
         ?? packRemediation?.canonicalFixSummary
         ?? canonicalIssue?.remediationSummary
@@ -115,8 +125,10 @@ export function resolveRemediationForFinding(finding: Finding): ResolvedRemediat
         return {
             remediation: modelFix || 'No fix returned.',
             refs: [],
+            recommendedActions: [],
             validationSteps: [],
             unsafeAlternatives: [],
+            cheatSheetGuidance,
         };
     }
 
@@ -125,8 +137,10 @@ export function resolveRemediationForFinding(finding: Finding): ResolvedRemediat
         refs,
         modelNote: !modelFix || modelFix === groundedSummary ? undefined : modelFix,
         frameworkVariant,
+        recommendedActions: frameworkVariant?.recommendedActions ?? [],
         validationSteps: packRemediation?.validationSteps ?? [],
         unsafeAlternatives: packRemediation?.unsafeAlternatives ?? [],
+        cheatSheetGuidance,
     };
 }
 
