@@ -171,3 +171,14 @@ class Comparison(Base):
     licence = relationship("Licence", back_populates="comparisons")
     scan_a  = relationship("ScanHistory", foreign_keys=[scan_a_id])
     scan_b  = relationship("ScanHistory", foreign_keys=[scan_b_id])
+
+
+class UsageEvent(Base):
+    __tablename__ = "usage_events"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    licence_id  = Column(UUID(as_uuid=True), ForeignKey("licences.id", ondelete="CASCADE"), nullable=False)
+    user_email  = Column(String(200))
+    event_name  = Column(String(80), nullable=False)
+    event_data  = Column("metadata", JSONB, default=dict)
+    created_at  = Column(TIMESTAMP(timezone=True), server_default=func.now())

@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     licence_validate_rate_limit: int = 20
     prompt_build_rate_limit: int = 30
     pack_fetch_rate_limit: int = 60
+    usage_event_rate_limit: int = 120
     rate_limit_window_seconds: int = 60
 
     @property

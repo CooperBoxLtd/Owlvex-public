@@ -59,6 +59,93 @@ INSERT INTO licences (
 ) ON CONFLICT (licence_key_hash) DO NOTHING;
 
 -- ============================================================
+-- Free / Trial / Developer dev seed licences for pricing work
+-- Keys:
+--   owlvex_lic_FREE_DEV_SEED
+--   owlvex_lic_TRIAL_DEV_SEED
+--   owlvex_lic_DEVELOPER_DEV_SEED
+-- ============================================================
+INSERT INTO licences (
+    licence_key_hash,
+    team_name,
+    email,
+    plan,
+    seats,
+    seats_used,
+    features,
+    industry_packs,
+    is_active,
+    expires_at
+) VALUES
+(
+    '8752e4c86773ab775567e53e8103d1d2f072ff63e7c2790f0fad95dcb14a3829',
+    'Owlvex Free Dev',
+    'free@owlvex.local',
+    'free',
+    1,
+    0,
+    '{
+        "frameworks": ["OWASP"],
+        "scans_per_day": 50,
+        "prompt_editor": false,
+        "comparison": false,
+        "team_prompts": false,
+        "ci_cd": false,
+        "pdf_reports": false,
+        "custom_rules": false,
+        "sso": false
+    }'::jsonb,
+    '{}',
+    true,
+    '2030-01-01T00:00:00Z'
+),
+(
+    '085a70880da0e90296e94495cfb2e145929a9c3f74624be677bb2c9f90c5101d',
+    'Owlvex Trial Dev',
+    'trial@owlvex.local',
+    'trial',
+    1,
+    0,
+    '{
+        "frameworks": ["OWASP","STRIDE","MITRE","CWE","CLEANCODE","NIST","PCIDSS"],
+        "scans_per_day": null,
+        "prompt_editor": true,
+        "comparison": true,
+        "team_prompts": true,
+        "ci_cd": true,
+        "pdf_reports": true,
+        "custom_rules": false,
+        "sso": false
+    }'::jsonb,
+    '{}',
+    true,
+    '2030-01-01T00:00:00Z'
+),
+(
+    'a3109dfce61ae4eb6c346c0b436e716e31e9116d15bc13b73927baf2d9e6b348',
+    'Owlvex Developer Dev',
+    'developer@owlvex.local',
+    'developer',
+    1,
+    0,
+    '{
+        "frameworks": ["OWASP","STRIDE","MITRE","CWE","CLEANCODE"],
+        "scans_per_day": null,
+        "prompt_editor": true,
+        "comparison": true,
+        "team_prompts": false,
+        "ci_cd": false,
+        "pdf_reports": false,
+        "custom_rules": false,
+        "sso": false
+    }'::jsonb,
+    '{}',
+    true,
+    '2030-01-01T00:00:00Z'
+)
+ON CONFLICT (licence_key_hash) DO NOTHING;
+
+-- ============================================================
 -- Baseline prompt template for OWASP scanning
 -- ============================================================
 INSERT INTO prompt_templates (

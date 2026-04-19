@@ -152,6 +152,18 @@ CREATE TABLE comparisons (
 );
 
 -- ============================================================
+-- USAGE EVENTS — product telemetry for pricing/trial flows
+-- ============================================================
+CREATE TABLE usage_events (
+    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    licence_id  UUID         NOT NULL REFERENCES licences(id) ON DELETE CASCADE,
+    user_email  VARCHAR(200),
+    event_name  VARCHAR(80)  NOT NULL,
+    metadata    JSONB        DEFAULT '{}',
+    created_at  TIMESTAMPTZ  DEFAULT NOW()
+);
+
+-- ============================================================
 -- INDEXES
 -- ============================================================
 CREATE INDEX idx_rules_framework     ON rules(framework_id);
@@ -162,3 +174,5 @@ CREATE INDEX idx_licence_key_hash    ON licences(licence_key_hash);
 CREATE INDEX idx_team_prompts_lic    ON team_prompts(licence_id);
 CREATE INDEX idx_licence_seats_lic   ON licence_seats(licence_id);
 CREATE INDEX idx_comparisons_licence ON comparisons(licence_id);
+CREATE INDEX idx_usage_events_licence ON usage_events(licence_id);
+CREATE INDEX idx_usage_events_name ON usage_events(event_name);

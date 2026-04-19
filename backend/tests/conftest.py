@@ -191,6 +191,16 @@ def _create_sqlite_tables(conn):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """))
+    conn.execute(__import__('sqlalchemy').text("""
+        CREATE TABLE IF NOT EXISTS usage_events (
+            id TEXT PRIMARY KEY,
+            licence_id TEXT NOT NULL,
+            user_email TEXT,
+            event_name TEXT NOT NULL,
+            metadata TEXT DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
 
 
 @pytest_asyncio.fixture

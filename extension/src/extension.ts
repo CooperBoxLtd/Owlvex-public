@@ -104,6 +104,8 @@ function normalizeScanResult(result: ScanResult): ScanResult {
     };
 }
 
+type UsageEventName = 'scan_run' | 'finding_viewed' | 'fix_viewed' | 'second_scan' | 'session_return';
+
 const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
 
 function normalizeStoredScanRecord(item: { scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }): StoredScanRecord {
@@ -265,6 +267,47 @@ async function testBackendConnection(apiUrl: string): Promise<{ success: boolean
     }
 }
 
+async function trackUsageEvent(
+    licenceMgr: LicenceManager,
+    getApiUrl: () => string,
+    eventName: UsageEventName,
+    metadata: Record<string, unknown> = {},
+): Promise<void> {
+    try {
+        const licenceKey = await licenceMgr.getKey();
+        if (!licenceKey) {
+            return;
+        }
+
+        const response = await fetch(`${getApiUrl()}/v1/usage/events`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Licence-Key': licenceKey,
+            },
+            body: JSON.stringify({
+                event_name: eventName,
+                metadata,
+            }),
+        });
+
+        if (!response.ok) {
+            console.debug(`${PROFILE.displayLabel}: usage event ${eventName} failed with HTTP ${response.status}`);
+        }
+    } catch (error) {
+        console.debug(`${PROFILE.displayLabel}: usage event ${eventName} failed`, error);
+    }
+}
+
+function buildFindingUsageMetadata(finding: any): Record<string, unknown> {
+    return {
+        rule_code: finding?.ruleCode ?? finding?.rule_code ?? null,
+        canonical_id: finding?.canonicalId ?? finding?.issue_id ?? null,
+        severity: finding?.severity ?? null,
+        scan_tier: finding?.scanTier ?? finding?.scan_tier ?? null,
+    };
+}
+
 async function promptForSetting(
     settingKey: string,
     prompt: string,
@@ -400,6 +443,8 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     const licenceMgr = new LicenceManager(context.secrets);
+    const previousSessionAt = context.globalState.get<string>(`${PROFILE.storagePrefix}.lastSessionAt`);
+    let sessionScanCount = 0;
     const registry = new ProviderRegistry();
     const scanEngine = new ScanEngine(licenceMgr, registry);
     const rulePackClient = new RulePackClient(context.workspaceState);
@@ -422,6 +467,13 @@ export function activate(context: vscode.ExtensionContext) {
     const persistScans = async () => {
         await context.workspaceState.update(SCAN_STORE_KEY, serializeScanStore());
     };
+
+    if (previousSessionAt) {
+        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'session_return', {
+            previous_session_at: previousSessionAt,
+        });
+    }
+    void context.globalState.update(`${PROFILE.storagePrefix}.lastSessionAt`, new Date().toISOString());
 
     const currentEntitlement = (): PackEntitlement | undefined => {
         const info = licenceMgr.getCachedInfo();
@@ -747,6 +799,7 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'finding_viewed', buildFindingUsageMetadata(finding));
             await chatView.discussFinding(finding);
         })
     );
@@ -758,6 +811,7 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'fix_viewed', buildFindingUsageMetadata(finding));
             await chatView.generateFixPreview(finding);
         })
     );
@@ -957,6 +1011,15 @@ export function activate(context: vscode.ExtensionContext) {
                 sidebar.refresh(result);
                 statusBar.showResult(result);
                 chatView.setLastScanTarget(`File: ${vscode.workspace.asRelativePath(editor.document.uri, false)}`);
+                sessionScanCount += 1;
+                void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
+                    scope: 'file',
+                    file_count: 1,
+                    finding_count: result.findings.length,
+                });
+                if (sessionScanCount === 2) {
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'file' });
+                }
 
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: File risk ${result.score.toFixed(1)}/10 - ${result.findings.length} finding(s)${(result.warnings ?? []).length ? ` (${(result.warnings ?? []).length} warning(s))` : ''}`
@@ -1010,6 +1073,15 @@ export function activate(context: vscode.ExtensionContext) {
                     sidebar.refresh(topResult.result);
                     statusBar.showResult(topResult.result);
                     chatView.setLastScanTarget(`Selected files: ${enrichedResults.length} file(s)`);
+                    sessionScanCount += 1;
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
+                        scope: 'selected_files',
+                        file_count: enrichedResults.length,
+                        finding_count: totalFindings,
+                    });
+                    if (sessionScanCount === 2) {
+                        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'selected_files' });
+                    }
                 } else {
                     statusBar.showIdle();
                 }
@@ -1081,6 +1153,15 @@ export function activate(context: vscode.ExtensionContext) {
                     sidebar.refresh(topResult.result);
                     statusBar.showResult(topResult.result);
                     chatView.setLastScanTarget(`Open editors: ${enrichedResults.length} file(s)`);
+                    sessionScanCount += 1;
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
+                        scope: 'open_editors',
+                        file_count: enrichedResults.length,
+                        finding_count: totalFindings,
+                    });
+                    if (sessionScanCount === 2) {
+                        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'open_editors' });
+                    }
                     await persistLastReportSnapshot({
                         targetLabel: `${enrichedResults.length} open editor(s)`,
                         outputRoot: vscode.Uri.file(path.dirname(enrichedResults[0].uri.fsPath)),
@@ -1524,6 +1605,15 @@ export function activate(context: vscode.ExtensionContext) {
                 results: summary.results,
             });
             chatView.setLastScanTarget(`Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`);
+            sessionScanCount += 1;
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
+                scope: 'workspace',
+                file_count: summary.completed,
+                finding_count: summary.totalFindings,
+            });
+            if (sessionScanCount === 2) {
+                void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'workspace' });
+            }
 
             const msg = `${PROFILE.displayLabel}: Scanned ${summary.completed} file(s) in ${root.fsPath} - ${summary.totalFindings} finding(s)`;
             if (summary.errors.length) {

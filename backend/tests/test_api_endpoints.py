@@ -389,6 +389,57 @@ async def test_generate_licence_rejects_unexpected_fields(client):
 
 
 # ---------------------------------------------------------------------------
+# /v1/usage/events
+# ---------------------------------------------------------------------------
+@pytest.mark.asyncio
+async def test_usage_event_records_valid_event(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {"frameworks": ["OWASP"], "scans_per_day": None},
+        "expires_at": None,
+    }
+    with patch("app.routers.usage.validate_licence", return_value=mock_result):
+        response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={"event_name": "scan_run", "metadata": {"scope": "file", "finding_count": 2}},
+        )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["ok"] is True
+    assert data["event_name"] == "scan_run"
+    assert data["licence_id"] == mock_result["licence_id"]
+
+
+@pytest.mark.asyncio
+async def test_usage_event_rejects_unexpected_fields(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {"frameworks": ["OWASP"], "scans_per_day": None},
+        "expires_at": None,
+    }
+    with patch("app.routers.usage.validate_licence", return_value=mock_result):
+        response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={"event_name": "scan_run", "metadata": {}, "source_code": "should not be accepted"},
+        )
+
+    assert response.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # /v1/prompts/build
 # ---------------------------------------------------------------------------
 @pytest.mark.asyncio

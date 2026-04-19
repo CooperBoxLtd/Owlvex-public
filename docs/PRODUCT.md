@@ -91,6 +91,10 @@ The execution plane. Provides:
   - licence entry
   - provider setup
   - trial-readiness checks
+- early pricing/plan instrumentation for:
+  - free
+  - trial
+  - developer
 
 Lives in `extension/`.
 
@@ -99,6 +103,7 @@ Lives in `extension/`.
 The control plane. Handles:
 
 - licence validation and plan enforcement
+- usage-event ingestion for pricing, trial, and upgrade telemetry
 - prompt assembly and framework template delivery
 - issue catalog and rule metadata
 - scan metadata recording without raw source upload
@@ -143,6 +148,12 @@ Lives under `tools/owlvex-benchmark/`. Provides:
 - a separate benchmarking department under `docs/benchmarking/` to govern deterministic, AI, external, and future remediation benchmarks
 - a starter remediation benchmark lane under `tools/fix-benchmark/` for measuring preview quality, scope discipline, finding removal, and post-fix safety
 - benchmark-mapped fixes can now auto-record a latest remediation benchmark result after `Keep fix` and a completed verification rescan
+- extension-side usage instrumentation now has a dedicated backend contract for:
+  - `scan_run`
+  - `finding_viewed`
+  - `fix_viewed`
+  - `second_scan`
+  - `session_return`
 
 This is the mechanism that defines what Owlvex can claim with certainty. No deterministic rule ships without benchmark coverage.
 

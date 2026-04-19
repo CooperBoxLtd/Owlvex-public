@@ -87,6 +87,7 @@ Use Azure `dev` for:
 - backend changes
 - extension-to-backend integration testing
 - dev licence and prompt-flow changes
+- pricing, trial, and usage-event validation
 - pre-release validation
 
 Do not use Azure `prod` for these day-to-day tasks.

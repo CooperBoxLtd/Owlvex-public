@@ -122,6 +122,11 @@ The current priority order is:
 Current operating decision for this phase:
 
 - keep trials free
+- move pricing implementation toward:
+  - free
+  - trial
+  - developer
+  - later teams
 - keep billing disabled by default
 - document billing-path security work now, but defer billing enablement work until the product is intentionally moved into a billable phase
 - stop using Azure production as the day-to-day development environment
@@ -142,6 +147,40 @@ The current phase should also make demos and trials work without engineer hand-h
 - licence setup is visible in the shell
 - provider setup is part of the normal workflow
 - one setup check can confirm whether the trial path is ready
+- day-to-day product work should now happen against Azure `dev`, including pricing, trial, and telemetry changes
+
+## Workstream 0.88: Pricing, Trial, And Usage Metering
+
+### Goal
+
+Turn the current free-trial / developer packaging into a real product contract backed by plan-aware licences and observable product-usage events.
+
+### Tasks
+
+- make `free`, `trial`, and `developer` first-class licence plans for dev and production seeding
+- add a backend usage-event contract for product telemetry without weakening the metadata-only backend boundary
+- emit extension-side usage events for key value moments:
+  - `scan_run`
+  - `finding_viewed`
+  - `fix_viewed`
+  - `second_scan`
+  - `session_return`
+- prepare free-tier and trial-tier enforcement from explicit plan features instead of ad hoc assumptions
+- keep billing disabled while the free/trial path is being validated
+
+### Current Direction
+
+- backend now has a dedicated `/v1/usage/events` contract in the local worktree
+- dev seed data now includes explicit `free`, `trial`, and `developer` licences
+- extension command paths now emit basic usage events in the local worktree
+- the next step after code merge is deploying the updated backend to Azure `dev` and validating the telemetry loop end to end
+
+### Acceptance Criteria
+
+- free, trial, and developer plans exist as real licence shapes
+- usage events are recorded without requiring raw source upload
+- extension scan/fix flows emit observable telemetry to the Owlvex control plane
+- Azure `dev` is the default place to validate pricing and trial work before any production exposure
 
 ## Workstream 0.85: Benchmarking Department
 

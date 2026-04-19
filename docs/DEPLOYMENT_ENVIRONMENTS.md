@@ -58,6 +58,7 @@ Development Azure is the shared hosted environment for:
 - backend iteration
 - extension-to-backend integration testing
 - dev licence and prompt-flow validation
+- pricing, trial, and usage-metering validation
 - safe pre-release deploy validation
 
 Expected backend URL shape:
