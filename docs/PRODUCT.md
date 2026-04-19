@@ -282,6 +282,13 @@ Current remediation posture:
 
 **Customer entry direction** - Owlvex should support a lightweight registration path where a user installs the extension, chooses Free or Trial, registers with email, verifies that email, receives or is issued a tracked licence, and continues setup in-product. Marketplace distribution and automated payment are later workstreams, not prerequisites for this early customer-entry model.
 
+**Early customer operations** - Owlvex also needs a fast internal support surface to inspect customers, pending registrations, and issued licences by email. A read-only admin view or tool is part of early-customer readiness because support and recovery should not require manual database browsing.
+
+That support surface should also cover:
+- resend verification for pending registrations
+- deactivate a licence by email
+- rotate a licence and issue a fresh key
+
 ---
 
 ## Demo Assets

@@ -203,6 +203,14 @@ Move Free and Trial entry from manual or anonymous key handoff toward a lightwei
   - tracked licence issuance
   - extension-side licence storage
 - add an internal ops/runbook path for manual support, resend, or recovery before payment automation exists
+- add a fast read-only admin lookup surface for:
+  - recent customers
+  - pending registrations
+  - licences by email
+- extend the early admin surface with:
+  - resend verification
+  - licence deactivate
+  - licence rotate by email
 - keep marketplace discovery and billing out of scope for this workstream
 
 ### Acceptance Criteria

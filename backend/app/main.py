@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.session import get_engine, check_db_connection
-from app.routers import health, licences, prompts, scans, billing, policies, packs, usage
+from app.routers import health, licences, prompts, scans, billing, policies, packs, usage, admin
 
 # ----------------------------------------------------------------
 # Structured JSON logging
@@ -88,3 +88,4 @@ app.include_router(policies.router)
 app.include_router(billing.router)
 app.include_router(packs.router)
 app.include_router(usage.router)
+app.include_router(admin.router)

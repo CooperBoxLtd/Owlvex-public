@@ -397,6 +397,128 @@ async def test_generate_licence_rejects_unexpected_fields(client):
 
 
 @pytest.mark.asyncio
+async def test_admin_overview_requires_admin_key(client):
+    response = await client.get("/v1/admin/overview")
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_admin_overview_returns_recent_customers(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "overview-user@example.com", "plan": "free"},
+    )
+    assert registration.status_code == 201
+    verification_code = registration.json()["verification_code"]
+    verification = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "overview-user@example.com", "code": verification_code},
+    )
+    assert verification.status_code == 201
+
+    response = await client.get(
+        "/v1/admin/overview",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["count"] >= 1
+    assert any(customer["email"] == "overview-user@example.com" for customer in data["customers"])
+
+
+@pytest.mark.asyncio
+async def test_admin_customer_lookup_returns_licence_state(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "lookup-user@example.com", "plan": "trial", "name": "Lookup User"},
+    )
+    assert registration.status_code == 201
+    verification_code = registration.json()["verification_code"]
+    verification = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "lookup-user@example.com", "code": verification_code},
+    )
+    assert verification.status_code == 201
+
+    response = await client.get(
+        "/v1/admin/customer",
+        params={"email": "lookup-user@example.com"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["email"] == "lookup-user@example.com"
+    assert data["email_verified_at"] is not None
+    assert data["licences"][0]["plan"] == "trial"
+
+
+@pytest.mark.asyncio
+async def test_admin_resend_verification_returns_new_code(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "pending-user@example.com", "plan": "free"},
+    )
+    assert registration.status_code == 201
+
+    response = await client.post(
+        "/v1/admin/resend-verification",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"email": "pending-user@example.com"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["email"] == "pending-user@example.com"
+    assert isinstance(data.get("verification_code"), str)
+
+
+@pytest.mark.asyncio
+async def test_admin_deactivate_licence_marks_active_licence_inactive(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "deactivate-user@example.com", "plan": "free"},
+    )
+    verification_code = registration.json()["verification_code"]
+    await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "deactivate-user@example.com", "code": verification_code},
+    )
+
+    response = await client.post(
+        "/v1/admin/licence/deactivate",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"email": "deactivate-user@example.com"},
+    )
+    assert response.status_code == 200
+    assert response.json()["deactivated"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_rotate_licence_issues_new_key(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "rotate-user@example.com", "plan": "trial"},
+    )
+    verification_code = registration.json()["verification_code"]
+    verified = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "rotate-user@example.com", "code": verification_code},
+    )
+    old_key = verified.json()["licence_key"]
+
+    response = await client.post(
+        "/v1/admin/licence/rotate",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"email": "rotate-user@example.com"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["licence_key"].startswith("owlvex_lic_")
+    assert data["licence_key"] != old_key
+
+
+@pytest.mark.asyncio
 async def test_register_free_licence_creates_tracked_access(client):
     response = await client.post(
         "/v1/licences/register",
