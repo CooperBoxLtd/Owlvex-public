@@ -165,6 +165,11 @@ The packaging/profile rule should stay simple:
 - dev builds or dev profiles point to dev
 - prod builds or release profiles point to prod
 
+Current package outputs:
+
+- `npm run package:dev` -> `Owlvex Dev` with Azure dev backend default
+- `npm run package:prod` -> `Owlvex` with Azure prod backend default
+
 ## Recommended Operating Pattern
 
 Use this workflow:

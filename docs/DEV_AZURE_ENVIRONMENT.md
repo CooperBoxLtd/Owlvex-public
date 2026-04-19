@@ -91,6 +91,19 @@ Use Azure `dev` for:
 
 Do not use Azure `prod` for these day-to-day tasks.
 
+## Step 7: Use The Dev Extension Profile
+
+For an internal dev build that defaults to Azure `dev`, package:
+
+```bash
+cd extension
+npm run package:dev
+```
+
+That package defaults `owlvexDev.apiUrl` to:
+
+- `https://owlvexdev-api.azurewebsites.net`
+
 ## Bottom Line
 
 Owlvex should now have two explicit hosted targets:

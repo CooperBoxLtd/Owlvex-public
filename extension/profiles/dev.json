@@ -1,7 +1,7 @@
 {
   "name": "owlvex-dev",
   "displayName": "Owlvex Dev",
-  "description": "Internal Owlvex development build wired to the ml30 control plane",
+  "description": "Internal Owlvex development build wired to the Azure dev control plane",
   "publisher": "owlvex",
   "statusBarLabel": "Owlvex Dev",
   "activityBarIcon": "media/owlvex-dev.svg",
@@ -14,6 +14,6 @@
   "chatViewId": "owlvexDev.chat",
   "comparisonPanelId": "owlvexDevComparison",
   "commandPrefix": "owlvexDev",
-  "apiUrl": "http://192.168.50.35:8000",
+  "apiUrl": "https://owlvexdev-api.azurewebsites.net",
   "packagePath": "dist/owlvex-dev.vsix"
 }
