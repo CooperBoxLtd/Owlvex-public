@@ -14,6 +14,7 @@ import { LicenceManager } from '../licence/licenceManager';
 
 type ChatRole = 'user' | 'assistant' | 'system';
 type MessageKind = 'advisory' | 'scan';
+type ConversationMode = 'scan' | 'repo' | 'fix' | 'general';
 
 interface ChatMessage {
     role: ChatRole;
@@ -118,6 +119,9 @@ interface ChatState {
     restorableMessageCount: number;
     workingScope: WorkingScope;
     workingScopeLabel: string;
+    activeMode: ConversationMode;
+    activeModeLabel: string;
+    activeModeHint: string;
 }
 
 type WorkingScope = 'scanFile' | 'scanSelectedFiles' | 'scanOpenEditors' | 'scanFolder';
@@ -246,6 +250,38 @@ function getWorkingScopeLabel(scope: WorkingScope): string {
         default:
             return 'Workspace';
     }
+}
+
+function getConversationModeLabel(mode: ConversationMode): string {
+    switch (mode) {
+        case 'scan':
+            return 'Scan';
+        case 'fix':
+            return 'Fix';
+        case 'general':
+            return 'General';
+        case 'repo':
+        default:
+            return 'Repo Q&A';
+    }
+}
+
+function getConversationModeHint(mode: ConversationMode): string {
+    switch (mode) {
+        case 'scan':
+            return 'Scanner behavior: findings, reports, and scan-backed evidence.';
+        case 'fix':
+            return 'Fix behavior: finding-anchored remediation and previewed code changes.';
+        case 'general':
+            return 'General behavior: free-form help without implicit scan or repo-grounded claims.';
+        case 'repo':
+        default:
+            return 'Repo Q&A behavior: grounded explanation, not an implied scan result.';
+    }
+}
+
+function looksLikeRepoQuestion(prompt: string): boolean {
+    return /\b(repo|repository|workspace|project|codebase|app|application|module|folder|directory|readme|package\.json|server\.js|route|routes|middleware|helper|entrypoint|what does .* do|how does .* work|where is|which file|explain the app)\b/i.test(prompt);
 }
 
 function riskRank(finding: Finding): number {
@@ -902,6 +938,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private latestActionableTargetPath?: string;
     private latestActionableItems: ActionableFindingTarget[] = [];
     private lastSelectedScopePaths: string[] = [];
+    private currentMode: ConversationMode = 'general';
 
     constructor(
         private readonly registry: ProviderRegistry,
@@ -989,6 +1026,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     async discussFinding(finding: Finding): Promise<void> {
+        this.currentMode = 'fix';
         this.latestActionableFinding = finding;
         const discussionContext = await this.buildFindingContextBundle(finding);
         await this.show();
@@ -1009,6 +1047,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     async generateFixPreview(finding: Finding, targetPath?: string, options: GenerateFixPreviewOptions = {}): Promise<void> {
+        this.currentMode = 'fix';
         this.latestActionableFinding = finding;
         this.latestActionableTargetPath = targetPath ?? this.latestActionableTargetPath;
         let document = vscode.window.activeTextEditor?.document;
@@ -1111,6 +1150,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     async generateBatchFixPreview(items: ActionableFindingTarget[], options: GenerateFixPreviewOptions = {}): Promise<void> {
+        this.currentMode = 'fix';
         const validItems = items.filter(item => item.targetPath);
         if (!validItems.length) {
             vscode.window.showWarningMessage('No actionable files were available for a combined fix preview.');
@@ -1235,6 +1275,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     async applyPendingFixPreview(): Promise<void> {
+        this.currentMode = 'fix';
         if (!this.pendingFixPreview) {
             vscode.window.showWarningMessage('Generate a fix preview before applying one.');
             return;
@@ -1405,17 +1446,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         this.messages.push({ role: 'user', content: options.displayedPrompt ?? trimmed });
         this.messages.push({ role: 'assistant', content: 'Thinking...', kind: 'advisory' });
-        const canAnchorToCurrentFinding = !options.suggestedFinding && (
+        const hasCurrentFindingAnchor = Boolean(this.pendingFixPreview?.finding || this.latestActionableFinding);
+        const canAnchorToCurrentFinding = !options.suggestedFinding && hasCurrentFindingAnchor && (
             looksLikeFixRequest(trimmed)
             || looksLikeImplementRequest(trimmed)
             || looksLikeFindingFollowUp(trimmed)
             || Boolean(this.pendingFixPreview)
         );
+        const inferredMode = this.inferConversationMode(trimmed, options, canAnchorToCurrentFinding);
         this.refresh();
 
         try {
             const localAction = await this.tryHandleLocalAction(trimmed);
             if (localAction.handled) {
+                this.currentMode = 'scan';
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     content: localAction.response || 'Completed.',
@@ -1435,6 +1479,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 : undefined;
             const autoTargetPath = this.getActiveFixTargetPath();
             if (!options.injectedContext && !options.suggestedFinding && looksLikeImplementRequest(trimmed) && autoSuggestedFinding && autoTargetPath) {
+                this.currentMode = 'fix';
                 await this.generateFixPreview(autoSuggestedFinding, autoTargetPath, { reuseCurrentTurn: true });
                 void this.persistState();
                 this.refresh();
@@ -1442,37 +1487,59 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
 
             const provider = this.registry.getActive();
+            this.currentMode = inferredMode;
             const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
             const workspaceSummary = workspaceFolders.length
                 ? workspaceFolders.map(folder => folder.name).join(', ')
                 : 'No workspace folder is currently open.';
             const workingScope = this.getWorkingScope();
-            const editorContext = await this.buildWorkingScopeContext(workingScope);
-            const scanContext = this.buildScanContext(workingScope);
-            const projectContext = await loadProjectContextInfo();
+            const editorContext = this.currentMode === 'general'
+                ? { summary: 'Working context: not injected by default in General mode', promptContext: 'Working context: not injected by default in General mode.' }
+                : await this.buildWorkingScopeContext(workingScope);
+            const scanContext = this.currentMode === 'general'
+                ? { summary: 'Scan context: not injected by default in General mode', promptContext: 'Scan context: not injected by default in General mode.' }
+                : this.buildScanContext(workingScope);
+            const projectContext = this.currentMode === 'general'
+                ? { summary: 'none', combined: '' }
+                : await loadProjectContextInfo();
             const autoInjectedContext = !options.injectedContext && autoSuggestedFinding
                 ? buildFindingPromptContext(autoSuggestedFinding, this.buildActiveSnippetForFinding(autoSuggestedFinding))
                 : undefined;
-            const latestReportContext = shouldUseLatestScanContext(trimmed, options)
-                ? buildLatestReportPromptContext(this.storage)
-                : undefined;
+            const latestReportContext = this.currentMode === 'general'
+                ? undefined
+                : shouldUseLatestScanContext(trimmed, options)
+                    ? buildLatestReportPromptContext(this.storage)
+                    : undefined;
 
             const response = await provider.complete({
                 systemPrompt: [
                     'You are Owlvex Assistant, an in-editor AI teammate focused on security and repository-level guidance.',
                     'Be concise, practical, and specific.',
+                    `Interaction mode: ${getConversationModeLabel(this.currentMode)}`,
+                    getConversationModeHint(this.currentMode),
                     'These chat responses are advisory guidance unless the user explicitly triggers a scan action.',
                     'When the user asks how to fix a finding, replace vulnerable code, or explain a scan result, explain the problem in plain language first and then show the safe replacement code.',
                     'When relevant, explicitly say what the current code is doing wrong, what to stop doing, and what safe pattern should replace it.',
                     'If the active file or latest scan already points to a concrete finding, ground the answer in that finding instead of answering generically.',
                     'If the visible local code snippet appears to contradict the finding label, say that explicitly before giving advice and do not claim dangerous code paths that are not shown.',
-                    `Open workspace folders: ${workspaceSummary}`,
-                    `Working scope: ${getWorkingScopeLabel(workingScope)}`,
-                    scanContext.summary,
-                    editorContext.summary,
-                    projectContext.combined
-                        ? `Project context contract available: ${projectContext.summary}`
-                        : 'Project context contract: none',
+                    this.currentMode === 'general'
+                        ? 'In General mode, answer as a normal assistant. Do not imply repo inspection, scan evidence, or finding posture unless the user explicitly asks for repo or security analysis.'
+                        : this.currentMode === 'repo'
+                        ? 'In Repo Q&A mode, explain the repo or module behavior grounded in the selected working scope and do not present the answer as a vulnerability result unless the user explicitly asks for security analysis.'
+                        : this.currentMode === 'fix'
+                            ? 'In Fix mode, stay anchored to the active finding or preview scope. Do not imply that a fresh scan was run unless one actually happened.'
+                            : 'In Scan mode, keep the answer aligned to the scan action or scan-backed evidence already produced.',
+                    ...(this.currentMode === 'general'
+                        ? ['Repo grounding: off by default in General mode.']
+                        : [
+                            `Open workspace folders: ${workspaceSummary}`,
+                            `Working scope: ${getWorkingScopeLabel(workingScope)}`,
+                            scanContext.summary,
+                            editorContext.summary,
+                            projectContext.combined
+                                ? `Project context contract available: ${projectContext.summary}`
+                                : 'Project context contract: none',
+                        ]),
                     autoSuggestedFinding
                         ? `Active finding for follow-up: ${autoSuggestedFinding.canonicalTitle || autoSuggestedFinding.title} at line ${autoSuggestedFinding.line}`
                         : 'Active finding for follow-up: none',
@@ -1481,9 +1548,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 userMessage: [
                     trimmed,
                     options.injectedContext ?? autoInjectedContext ?? 'Injected discussion context: none',
-                    scanContext.promptContext,
-                    projectContext.combined ? `Project context contract:\n${projectContext.combined}` : 'Project context contract: none',
-                    editorContext.promptContext,
+                    ...(this.currentMode === 'general'
+                        ? ['Repo context: not injected by default in General mode.']
+                        : [
+                            scanContext.promptContext,
+                            projectContext.combined ? `Project context contract:\n${projectContext.combined}` : 'Project context contract: none',
+                            editorContext.promptContext,
+                        ]),
                     latestReportContext?.promptContext ?? 'Latest report context: none',
                 ].join('\n\n'),
                 model: provider.selectedModel,
@@ -1749,6 +1820,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action.kind === 'openSource' && action.path) {
+            this.currentMode = 'repo';
             const document = await vscode.workspace.openTextDocument(vscode.Uri.file(action.path));
             const editor = await vscode.window.showTextDocument(document, { preview: false });
             if (typeof action.line === 'number' && action.line > 0) {
@@ -1759,11 +1831,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action.kind === 'applyFixPreview') {
+            this.currentMode = 'fix';
             await this.applyPendingFixPreview();
             return;
         }
 
         if (action.kind === 'discardFixPreview') {
+            this.currentMode = 'fix';
             const discardedPreview = this.pendingFixPreview;
             this.pendingFixPreview = undefined;
             this.messages.push({
@@ -1779,16 +1853,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action.kind === 'generateFixPreview' && action.finding) {
+            this.currentMode = 'fix';
             await this.generateFixPreview(action.finding, action.path);
             return;
         }
 
         if (action.kind === 'generateBatchFixPreview' && action.findings?.length) {
+            this.currentMode = 'fix';
             await this.generateBatchFixPreview(action.findings);
             return;
         }
 
         if (action.kind === 'explainScore') {
+            this.currentMode = 'scan';
             this.latestActionableFinding = findTopFindingInCalibrationRecords(action.calibrationRecords) ?? this.latestActionableFinding;
             await vscode.commands.executeCommand(PROFILE.commands.reviewRiskCalibration, action.calibrationRecords);
             this.messages.push({
@@ -1924,12 +2001,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             content: `Model switched to ${model}.`,
             kind: 'advisory',
         });
+        this.currentMode = 'general';
         void this.persistState();
         this.refresh();
     }
 
     private async handleQuickAction(action: string): Promise<void> {
         if (!action) return;
+
+        if (action === 'scanFile' || action === 'scanSelectedFiles' || action === 'scanOpenEditors' || action === 'scanFolder' || action === 'scanReport' || action === 'reviewRiskCalibration') {
+            this.currentMode = 'scan';
+        } else {
+            this.currentMode = 'general';
+        }
 
         if (action === 'selectFrameworks') {
             await vscode.commands.executeCommand(PROFILE.commands.selectFrameworks);
@@ -2333,6 +2417,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.latestActionableFinding = undefined;
         this.latestActionableTargetPath = undefined;
         this.latestActionableItems = [];
+        this.currentMode = 'general';
+    }
+
+    private inferConversationMode(prompt: string, options: UserPromptOptions = {}, canAnchorToCurrentFinding = false): ConversationMode {
+        if (parseChatIntent(prompt)) {
+            return 'scan';
+        }
+
+        if (
+            Boolean(this.pendingFixPreview)
+            || Boolean(options.suggestedFinding)
+            || looksLikeFixRequest(prompt)
+            || looksLikeImplementRequest(prompt)
+            || (canAnchorToCurrentFinding && looksLikeFindingFollowUp(prompt))
+        ) {
+            return 'fix';
+        }
+
+        return looksLikeRepoQuestion(prompt) ? 'repo' : 'general';
     }
 
     private getLatestReportFinding(): Finding | undefined {
@@ -2470,6 +2573,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             restorableMessageCount: Math.max(0, (this.restorableMessages?.length ?? 0) - 1),
             workingScope,
             workingScopeLabel: getWorkingScopeLabel(workingScope),
+            activeMode: this.currentMode,
+            activeModeLabel: getConversationModeLabel(this.currentMode),
+            activeModeHint: getConversationModeHint(this.currentMode),
         };
     }
 
@@ -2997,6 +3103,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       border-bottom: 1px solid color-mix(in srgb, var(--vscode-sideBarSectionHeader-border) 70%, transparent);
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 52%, transparent);
     }
+    .mode-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 14px 0;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .mode-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      font-weight: 600;
+    }
+    .mode-hint {
+      opacity: 0.86;
+    }
     .messages {
       flex: 1 1 auto;
       overflow-y: auto;
@@ -3218,6 +3344,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <button class="link-button" id="dismissHistory">Hide</button>
         </div>
       </div>
+      <div class="mode-row">
+        <span class="mode-badge" id="modeBadge">Mode: General</span>
+        <span class="mode-hint" id="modeHint">General behavior: free-form help without implicit scan or repo-grounded claims.</span>
+      </div>
       <div class="conversation-header" id="conversationHeader">Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.</div>
       <div class="messages" id="messages"></div>
     </div>
@@ -3261,6 +3391,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const licenceStatusEl = document.getElementById('licenceStatus');
     const providerHintEl = document.getElementById('providerHint');
     const conversationHeaderEl = document.getElementById('conversationHeader');
+    const modeBadgeEl = document.getElementById('modeBadge');
+    const modeHintEl = document.getElementById('modeHint');
     const scanScopeBottomEl = document.getElementById('scanScopeBottom');
     const runScanBottomEl = document.getElementById('runScanBottom');
     const providerEl = document.getElementById('provider');
@@ -3288,6 +3420,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       licenceStatusEl.textContent = state.licenceStatus || 'Licence: unknown';
       providerHintEl.textContent = state.providerHint || '';
       llmButtonEl.textContent = state.provider + ' · ' + state.model;
+      modeBadgeEl.textContent = 'Mode: ' + (state.activeModeLabel || 'General');
+      modeHintEl.textContent = state.activeModeHint || '';
       conversationHeaderEl.textContent = state.conversationStatus || 'Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.';
       if (scanScopeBottomEl && state.workingScope) {
         scanScopeBottomEl.value = state.workingScope;

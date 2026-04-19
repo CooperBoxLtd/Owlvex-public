@@ -558,6 +558,9 @@ describe('parseChatIntent', () => {
         await (provider as any).handleUserMessage("morning you're good ?");
 
         const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Interaction mode: General');
+        expect(request.systemPrompt).toContain('Repo grounding: off by default in General mode.');
+        expect(request.userMessage).toContain('Repo context: not injected by default in General mode.');
         expect(request.systemPrompt).toContain('Latest report: none');
         expect(request.userMessage).toContain('Latest report context: none');
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toBe('Good morning! I am ready to help.');
@@ -773,6 +776,8 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         const fixActions = finalMessage.actions.filter((action: any) => action.kind === 'generateFixPreview');
         expect(fixActions).toHaveLength(0);
+        const state = (provider as any).buildState([], [], '', '', '', '');
+        expect(state.activeModeLabel).toBe('Scan');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Fix code', kind: 'generateBatchFixPreview' }),
         ]));
@@ -821,6 +826,7 @@ describe('parseChatIntent', () => {
         await (provider as any).handleUserMessage('show me how to fix the code');
 
         const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Interaction mode: Fix');
         expect(request.systemPrompt).toContain('Active finding for follow-up: Insecure Direct Object Reference at line 7');
         expect(request.userMessage).toContain('Finding selected for discussion:');
         expect(request.userMessage).toContain('Title: Insecure Direct Object Reference');
@@ -1257,6 +1263,7 @@ describe('parseChatIntent', () => {
         await (provider as any).handleUserMessage('how should this repo handle document access?');
 
         const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Interaction mode: Repo Q&A');
         expect(request.systemPrompt).toContain('Project context contract available: inline project contract');
         expect(request.userMessage).toContain('Project context contract:');
         expect(request.userMessage).toContain('All document reads must be tenant-scoped.');
