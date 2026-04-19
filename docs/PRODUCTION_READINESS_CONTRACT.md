@@ -148,7 +148,7 @@ Exit criteria:
 Required:
 
 - Free and Trial entry paths are understandable to a new customer without custom engineering help
-- customer registration and licence issuance are traceable to a known identity, at minimum an email address
+- customer registration and licence issuance are traceable to a verified identity, at minimum a verified email address
 - extension onboarding can guide a user from registration through licence, backend, and provider setup
 - manual operator steps are documented when automation is not yet complete
 

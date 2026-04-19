@@ -46,7 +46,7 @@ Current product shape:
 - backend provides licence, prompt, catalog, and metadata services
 - backend must not receive raw source code for scanning
 - extension now supports a trial-oriented onboarding path for backend, licence, and provider configuration
-- the next customer-entry direction is lightweight email-based registration for Free and Trial so licences are issued to a known customer identity
+- the next customer-entry direction is lightweight email-based registration plus verification for Free and Trial so licences are issued only to a verified customer identity
 - AI-backed findings now expose multi-pass corroboration detail through finder, verifier, and skeptic roles
 
 ## Build Principles
@@ -149,7 +149,7 @@ The current phase should also make demos and trials work without engineer hand-h
 - provider setup is part of the normal workflow
 - one setup check can confirm whether the trial path is ready
 - day-to-day product work should now happen against Azure `dev`, including pricing, trial, and telemetry changes
-- early customer entry should move away from anonymous licence distribution and toward email-based registration plus tracked licence issuance
+- early customer entry should move away from anonymous licence distribution and toward email-based registration, verification, and tracked licence issuance
 
 ## Workstream 0.88: Pricing, Trial, And Usage Metering
 
@@ -192,12 +192,12 @@ Move Free and Trial entry from manual or anonymous key handoff toward a lightwei
 
 ### Tasks
 
-- define a lightweight customer registration contract using email as the primary identifier
+- define a lightweight customer registration contract using verified email as the primary identifier
 - add backend customer/licence issuance flow for:
   - free
   - trial
   - later developer upgrades
-- make the extension onboarding path ask for email registration before Free or Trial licence issuance
+- make the extension onboarding path ask for email registration and verification before Free or Trial licence issuance
 - keep the first implementation intentionally light:
   - email registration
   - tracked licence issuance
@@ -207,7 +207,7 @@ Move Free and Trial entry from manual or anonymous key handoff toward a lightwei
 
 ### Acceptance Criteria
 
-- Free and Trial entry can be tied to a known email identity
+- Free and Trial entry can be tied to a verified email identity
 - issued licences are traceable to a customer record
 - a new user can register, receive a licence, and continue setup from inside the extension
 - early customer support can recover or reissue a licence without ad hoc database edits

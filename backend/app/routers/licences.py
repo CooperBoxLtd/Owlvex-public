@@ -1,3 +1,5 @@
+import hashlib
+import secrets
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
@@ -14,6 +16,7 @@ from app.services.licence_service import (
     record_seat_seen,
 )
 from app.services.rate_limit import allow_control_plane_request
+from app.services.email_service import send_verification_email
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/licences", tags=["licences"])
@@ -78,6 +81,12 @@ class RegisterRequest(BaseModel):
     plan: str = Field(pattern="^(free|trial)$")
     name: Optional[str] = None
     company: Optional[str] = None
+
+
+class VerifyRegistrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=32)
 
 
 PLAN_FEATURES = {
@@ -158,9 +167,9 @@ async def _get_or_create_customer(
     result = await db.execute(select(Customer).where(Customer.email == email))
     customer = result.scalar_one_or_none()
     if customer:
-        if name and not customer.name:
+        if name:
             customer.name = name
-        if company and not customer.company:
+        if company:
             customer.company = company
         return customer
 
@@ -185,6 +194,33 @@ async def _deactivate_existing_plan_licences(db: AsyncSession, *, email: str, pl
     )
     for licence in result.scalars().all():
         licence.is_active = False
+
+
+def _generate_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"
+
+
+def _hash_verification_code(code: str) -> str:
+    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+
+
+def _build_registration_response(
+    *,
+    email: str,
+    plan: str,
+    verification_code: str | None,
+    settings,
+) -> dict:
+    response = {
+        "status": "verification_required",
+        "email": email,
+        "plan": plan,
+        "delivery": "email" if settings.sendgrid_api_key else "development_inline",
+        "expires_in_minutes": settings.email_verification_code_minutes,
+    }
+    if not settings.sendgrid_api_key and settings.is_development and verification_code:
+        response["verification_code"] = verification_code
+    return response
 
 
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
@@ -248,7 +284,7 @@ async def register(
     if not allow_control_plane_request(
         "licence_register",
         request,
-        limit=settings.licence_validate_rate_limit,
+        limit=settings.licence_register_rate_limit,
         window_seconds=settings.rate_limit_window_seconds,
         trust_forwarded_for=settings.trust_forwarded_for,
     ):
@@ -264,20 +300,74 @@ async def register(
         name=body.name,
         company=body.company,
     )
-    await _deactivate_existing_plan_licences(db, email=str(body.email), plan=plan)
+    verification_code = _generate_verification_code()
+    customer.pending_plan = plan
+    customer.verification_code_hash = _hash_verification_code(verification_code)
+    customer.verification_code_expires_at = (
+        datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=settings.email_verification_code_minutes)
+    )
+
+    if settings.sendgrid_api_key:
+        try:
+            send_verification_email(
+                to_email=str(body.email),
+                verification_code=verification_code,
+                plan=plan,
+            )
+        except RuntimeError as exc:
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    elif not settings.is_development:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification delivery is not configured.",
+        )
+
+    await db.commit()
+    return _build_registration_response(
+        email=str(body.email),
+        plan=plan,
+        verification_code=verification_code,
+        settings=settings,
+    )
+
+
+@router.post("/verify-email", status_code=status.HTTP_201_CREATED)
+async def verify_email_registration(
+    body: VerifyRegistrationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Customer).where(Customer.email == str(body.email)))
+    customer = result.scalar_one_or_none()
+    if not customer or not customer.verification_code_hash or not customer.pending_plan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending registration found for this email")
+
+    now = datetime.now(timezone.utc)
+    if not customer.verification_code_expires_at or customer.verification_code_expires_at < now:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code has expired")
+
+    if _hash_verification_code(body.code.strip()) != customer.verification_code_hash:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code is invalid")
+
+    plan = customer.pending_plan
+    await _deactivate_existing_plan_licences(db, email=customer.email, plan=plan)
 
     raw_key = generate_licence_key()
     key_hash = hash_licence_key(raw_key)
-    team_name = _default_team_name_for_registration(str(body.email), body.company, body.name)
+    team_name = _default_team_name_for_registration(customer.email, customer.company, customer.name)
     expires_dt = None
     if plan == "trial":
-        expires_dt = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=7)
+        expires_dt = now.replace(microsecond=0) + timedelta(days=7)
+
+    customer.email_verified_at = now
+    customer.verification_code_hash = None
+    customer.verification_code_expires_at = None
+    customer.pending_plan = None
 
     licence = Licence(
         customer_id=customer.id,
         licence_key_hash=key_hash,
         team_name=team_name,
-        email=str(body.email),
+        email=customer.email,
         plan=plan,
         seats=1,
         features=PLAN_FEATURES[plan],

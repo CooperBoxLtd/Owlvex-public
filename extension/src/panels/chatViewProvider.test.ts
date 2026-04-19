@@ -1975,7 +1975,7 @@ describe('parseChatIntent', () => {
 
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Owlvex plans:');
-        expect(finalMessage.content).toContain('Free: register with email');
+        expect(finalMessage.content).toContain('Free: register and verify your email');
         expect(finalMessage.content).toContain('Developer: full individual workflow');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Use Free', kind: 'quickAction', quickAction: 'useFree' }),
@@ -2049,6 +2049,7 @@ describe('parseChatIntent', () => {
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.registerAccess, 'trial');
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Trial onboarding:');
+        expect(finalMessage.content).toContain('Verify the email code');
         expect(finalMessage.content).toContain('Configure your LLM connection');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Register Trial', kind: 'quickAction', quickAction: 'startTrial' }),
@@ -2081,6 +2082,7 @@ describe('parseChatIntent', () => {
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.registerAccess, 'free');
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Free onboarding:');
+        expect(finalMessage.content).toContain('Verify the email code');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Use Free', kind: 'quickAction', quickAction: 'useFree' }),
             expect.objectContaining({ label: 'Configure Backend', kind: 'quickAction', quickAction: 'configureBackend' }),

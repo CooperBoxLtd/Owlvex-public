@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { buildLicenceBadgeLabel, buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, isTrialEndingSoon } from './licence/licenceManager';
 import {
     buildRegistrationSuccessMessage,
+    buildVerificationPromptMessage,
     buildUsefulnessPromptMessage,
     clearProviderConnection,
     getProviderConnectionSettingKeys,
@@ -152,6 +153,25 @@ describe('plan access helpers', () => {
             usage: { scansToday: 0 },
             expiresAt: '2026-04-26T00:00:00Z',
         } as any)).toContain('Trial started for trial-user@example.com');
+    });
+
+    it('builds verification prompt messaging for email and dev-inline delivery', () => {
+        expect(buildVerificationPromptMessage({
+            status: 'verification_required',
+            plan: 'trial',
+            email: 'trial-user@example.com',
+            delivery: 'email',
+            expires_in_minutes: 15,
+        } as any)).toContain('A verification code was sent to trial-user@example.com');
+
+        expect(buildVerificationPromptMessage({
+            status: 'verification_required',
+            plan: 'free',
+            email: 'free-user@example.com',
+            delivery: 'development_inline',
+            expires_in_minutes: 15,
+            verification_code: '123456',
+        } as any)).toContain('Verification code: 123456');
     });
 
     it('builds richer licence status summaries for trial and free plans', () => {

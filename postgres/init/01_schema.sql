@@ -68,6 +68,10 @@ CREATE TABLE customers (
     name        VARCHAR(200),
     company     VARCHAR(200),
     source      VARCHAR(50)  DEFAULT 'extension',
+    pending_plan VARCHAR(20),
+    email_verified_at TIMESTAMPTZ,
+    verification_code_hash VARCHAR(64),
+    verification_code_expires_at TIMESTAMPTZ,
     created_at  TIMESTAMPTZ  DEFAULT NOW(),
     updated_at  TIMESTAMPTZ  DEFAULT NOW()
 );

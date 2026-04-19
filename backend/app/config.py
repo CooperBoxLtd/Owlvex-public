@@ -29,10 +29,12 @@ class Settings(BaseSettings):
     billing_enabled: bool = False
     trust_forwarded_for: bool = False
     licence_validate_rate_limit: int = 20
+    licence_register_rate_limit: int = 10
     prompt_build_rate_limit: int = 30
     pack_fetch_rate_limit: int = 60
     usage_event_rate_limit: int = 120
     rate_limit_window_seconds: int = 60
+    email_verification_code_minutes: int = 15
 
     @property
     def is_development(self) -> bool:

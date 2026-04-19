@@ -405,10 +405,11 @@ async def test_register_free_licence_creates_tracked_access(client):
 
     assert response.status_code == 201
     data = response.json()
-    assert data["licence_key"].startswith("owlvex_lic_")
-    assert data["plan"] == "free"
+    assert data["status"] == "verification_required"
     assert data["email"] == "free-user@example.com"
-    assert data["expires_at"] is None
+    assert data["plan"] == "free"
+    assert data["delivery"] == "development_inline"
+    assert isinstance(data.get("verification_code"), str)
 
 
 @pytest.mark.asyncio
@@ -420,10 +421,10 @@ async def test_register_trial_licence_sets_expiry(client):
 
     assert response.status_code == 201
     data = response.json()
+    assert data["status"] == "verification_required"
     assert data["plan"] == "trial"
     assert data["email"] == "trial-user@example.com"
-    assert data["team_name"] == "Trial User's Workspace"
-    assert data["expires_at"] is not None
+    assert data["expires_in_minutes"] > 0
 
 
 @pytest.mark.asyncio
@@ -444,6 +445,44 @@ async def test_register_licence_rejects_unexpected_fields(client):
     )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_verify_email_registration_issues_licence(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "verify-user@example.com", "plan": "trial", "name": "Verify User"},
+    )
+    assert registration.status_code == 201
+    verification_code = registration.json()["verification_code"]
+
+    response = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "verify-user@example.com", "code": verification_code},
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["licence_key"].startswith("owlvex_lic_")
+    assert data["plan"] == "trial"
+    assert data["team_name"] == "Verify User's Workspace"
+    assert data["expires_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_verify_email_registration_rejects_invalid_code(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "wrong-code@example.com", "plan": "free"},
+    )
+    assert registration.status_code == 201
+
+    response = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "wrong-code@example.com", "code": "000000"},
+    )
+
+    assert response.status_code == 400
 
 
 # ---------------------------------------------------------------------------

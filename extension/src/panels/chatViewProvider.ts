@@ -2330,6 +2330,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     : [
                         'Trial onboarding:',
                         '- Register a tracked trial with your email',
+                        '- Verify the email code to activate the licence',
                         '- Confirm the backend is reachable',
                         '- Configure your LLM connection',
                         '- Run a real scan to experience the full workflow',
@@ -2391,6 +2392,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     : [
                         'Free onboarding:',
                         '- Register Free access with your email',
+                        '- Verify the email code to activate the licence',
                         '- Confirm the backend is reachable',
                         '- Run a deterministic scan to validate value quickly',
                     ].join('\n'),
@@ -2435,8 +2437,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'system',
                 content: [
                     'Owlvex plans:',
-                    '- Free: register with email, then use deterministic scanning and reports with capped daily usage',
-                    '- Trial: register with email for 7-day full product access, including AI assistant and fix previews',
+                    '- Free: register and verify your email, then use deterministic scanning and reports with capped daily usage',
+                    '- Trial: register and verify your email for 7-day full product access, including AI assistant and fix previews',
                     '- Developer: full individual workflow with ongoing AI-assisted use',
                     '',
                     'Upgrade path:',

@@ -121,6 +121,10 @@ def _create_sqlite_tables(conn):
             name TEXT,
             company TEXT,
             source TEXT DEFAULT 'extension',
+            pending_plan TEXT,
+            email_verified_at TIMESTAMP,
+            verification_code_hash TEXT,
+            verification_code_expires_at TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )

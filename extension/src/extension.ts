@@ -117,6 +117,15 @@ type UsageEventName =
 const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
 
 interface RegisterAccessResponse {
+    status: 'verification_required';
+    plan: string;
+    email: string;
+    delivery: 'email' | 'development_inline';
+    expires_in_minutes: number;
+    verification_code?: string;
+}
+
+interface VerifyRegistrationResponse {
     customer_id: string;
     licence_id: string;
     licence_key: string;
@@ -419,6 +428,25 @@ export function buildRegistrationSuccessMessage(
     return `${heading}\n${summary}\n${buildPlanNextStepGuidance(info).join('\n')}`;
 }
 
+export function buildVerificationPromptMessage(
+    registration: RegisterAccessResponse,
+): string {
+    const lines = [
+        registration.delivery === 'email'
+            ? `A verification code was sent to ${registration.email}.`
+            : `Development verification code generated for ${registration.email}.`,
+        `Plan: ${registration.plan}`,
+        `Expires in: ${registration.expires_in_minutes} minute(s)`,
+    ];
+
+    if (registration.verification_code) {
+        lines.push(`Verification code: ${registration.verification_code}`);
+    }
+
+    lines.push('Enter the verification code to activate your licence.');
+    return lines.join('\n');
+}
+
 export function getProviderConnectionSettingKeys(providerId: string): string[] {
     switch (providerId) {
         case 'azure-foundry':
@@ -531,6 +559,25 @@ async function registerTrackedAccessRequest(
     }
 
     return await readJsonResponse(response, 'Registration response returned invalid JSON') as RegisterAccessResponse;
+}
+
+async function verifyTrackedAccessRequest(
+    apiUrl: string,
+    payload: { email: string; code: string },
+): Promise<VerifyRegistrationResponse> {
+    const response = await fetch(`${apiUrl}/v1/licences/verify-email`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        throw new Error(await readErrorResponse(response, 'Verification failed'));
+    }
+
+    return await readJsonResponse(response, 'Verification response returned invalid JSON') as VerifyRegistrationResponse;
 }
 
 export function activate(context: vscode.ExtensionContext) {
@@ -1123,10 +1170,28 @@ export function activate(context: vscode.ExtensionContext) {
                     plan: selectedPlan,
                 });
 
-                await licenceMgr.storeKey(registration.licence_key);
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: ${buildVerificationPromptMessage(registration)}`,
+                );
+                const code = await vscode.window.showInputBox({
+                    prompt: `Enter the verification code sent to ${registration.email}`,
+                    placeHolder: '123456',
+                    ignoreFocusOut: true,
+                    value: registration.verification_code ?? '',
+                });
+                if (!code) {
+                    vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Registration is pending until you verify the email code.`);
+                    return;
+                }
+
+                const verified = await verifyTrackedAccessRequest(getConfiguredApiUrl(), {
+                    email: registration.email,
+                    code: code.trim(),
+                });
+                await licenceMgr.storeKey(verified.licence_key);
                 const info = await licenceMgr.validate(getConfiguredApiUrl());
                 vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel}: ${buildRegistrationSuccessMessage(selectedPlan, registration.email, info)}`,
+                    `${PROFILE.displayLabel}: ${buildRegistrationSuccessMessage(selectedPlan, verified.email, info)}`,
                 );
                 refreshIdleStatus();
                 void refreshRulePackRuntime();

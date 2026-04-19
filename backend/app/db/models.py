@@ -75,13 +75,17 @@ class PromptTemplate(Base):
 class Customer(Base):
     __tablename__ = "customers"
 
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    email       = Column(String(200), nullable=False, unique=True)
-    name        = Column(String(200))
-    company     = Column(String(200))
-    source      = Column(String(50), default="extension")
-    created_at  = Column(TIMESTAMP(timezone=True), server_default=func.now())
-    updated_at  = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+    id                           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email                        = Column(String(200), nullable=False, unique=True)
+    name                         = Column(String(200))
+    company                      = Column(String(200))
+    source                       = Column(String(50), default="extension")
+    pending_plan                 = Column(String(20))
+    email_verified_at            = Column(TIMESTAMP(timezone=True))
+    verification_code_hash       = Column(String(64))
+    verification_code_expires_at = Column(TIMESTAMP(timezone=True))
+    created_at                   = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at                   = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
     licences    = relationship("Licence", back_populates="customer")
 
