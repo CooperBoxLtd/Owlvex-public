@@ -1263,6 +1263,39 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.removeLicence, async () => {
+            const storedKey = await licenceMgr.getKey();
+            if (!storedKey) {
+                licenceMgr.clearCachedInfo();
+                await purgeRulePackState();
+                statusBar.showUnlicensed();
+                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No stored licence key was found.`);
+                return;
+            }
+
+            await licenceMgr.deleteKey();
+            licenceMgr.clearCachedInfo();
+            await purgeRulePackState();
+            statusBar.showUnlicensed();
+
+            vscode.window.showInformationMessage(
+                `${PROFILE.displayLabel}: Removed the stored licence key for this profile. You can now re-register or enter a different licence.`,
+                'Use Free',
+                'Start Trial',
+                'Enter Licence',
+            ).then(async (action) => {
+                if (action === 'Use Free') {
+                    await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'free');
+                } else if (action === 'Start Trial') {
+                    await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'trial');
+                } else if (action === 'Enter Licence') {
+                    await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
+                }
+            });
+        })
+    );
+
+    context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.selectFrameworks, async () => {
             const currentSelection = config.get<string[]>('frameworks', ['OWASP', 'STRIDE']);
             let allowedFrameworks = licenceMgr.getCachedInfo()?.features.frameworks;

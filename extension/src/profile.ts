@@ -29,6 +29,7 @@ export const PROFILE = {
         "testAI": "owlvex.testAIConnection",
         "testTrialSetup": "owlvex.testTrialSetup",
         "enterLicence": "owlvex.enterLicence",
+        "removeLicence": "owlvex.removeLicence",
         "registerAccess": "owlvex.registerAccess",
         "compareScans": "owlvex.compareScans",
         "reviewRiskCalibration": "owlvex.reviewRiskCalibration",
