@@ -1,6 +1,8 @@
 # Secrets — never commit
 .env
 infra/.env.azure
+infra/.env.dev
+infra/.env.prod
 
 # Python
 __pycache__/

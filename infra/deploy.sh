@@ -87,6 +87,22 @@ run_schema_file() {
   fi
 }
 
+extract_deploy_output() {
+  local field="$1"
+
+  if command -v powershell.exe >/dev/null 2>&1; then
+    printf '%s' "${DEPLOY_OUTPUT}" | powershell.exe -NoProfile -Command "\$inputJson = [Console]::In.ReadToEnd(); \$obj = \$inputJson | ConvertFrom-Json; Write-Output \$obj.properties.outputs.${field}.value" | tr -d '\r'
+    return
+  fi
+
+  echo "Unable to parse Azure deployment output: powershell.exe is required." >&2
+  exit 1
+}
+
+docker_available() {
+  command -v docker >/dev/null 2>&1 && docker version >/dev/null 2>&1
+}
+
 echo ""
 echo "=================================================="
 echo "  Owlvex — Azure deployment"
@@ -130,9 +146,9 @@ if [[ "${IMAGE_ONLY}" != "1" ]]; then
       imageTag="${IMAGE_TAG}" \
     --output json)
 
-  ACR_LOGIN_SERVER=$(echo "${DEPLOY_OUTPUT}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['properties']['outputs']['acrLoginServer']['value'])")
-  API_URL=$(echo "${DEPLOY_OUTPUT}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['properties']['outputs']['apiUrl']['value'])")
-  PG_HOST=$(echo "${DEPLOY_OUTPUT}" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['properties']['outputs']['postgresHost']['value'])")
+  ACR_LOGIN_SERVER=$(extract_deploy_output "acrLoginServer")
+  API_URL=$(extract_deploy_output "apiUrl")
+  PG_HOST=$(extract_deploy_output "postgresHost")
   echo "  ✓ ACR          : ${ACR_LOGIN_SERVER}"
   echo "  ✓ Postgres     : ${PG_HOST}"
   echo "  ✓ API URL      : ${API_URL}"
@@ -144,16 +160,28 @@ fi
 
 echo ""
 echo "→ Building and pushing Docker image..."
-az acr login --name "${ACR_NAME}" --output none
+if docker_available; then
+  az acr login --name "${ACR_NAME}" --output none
 
-docker build \
-  --tag "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}" \
-  --tag "${ACR_LOGIN_SERVER}/owlvex-api:latest" \
-  --file "${REPO_ROOT}/backend/Dockerfile" \
-  "${REPO_ROOT}"
+  docker build \
+    --tag "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}" \
+    --tag "${ACR_LOGIN_SERVER}/owlvex-api:latest" \
+    --file "${REPO_ROOT}/backend/Dockerfile" \
+    "${REPO_ROOT}"
 
-docker push "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}"
-docker push "${ACR_LOGIN_SERVER}/owlvex-api:latest"
+  docker push "${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}"
+  docker push "${ACR_LOGIN_SERVER}/owlvex-api:latest"
+else
+  echo "  âš  Docker daemon not available â€” using az acr build fallback"
+  az acr build \
+    --registry "${ACR_NAME}" \
+    --image "owlvex-api:${IMAGE_TAG}" \
+    --image "owlvex-api:latest" \
+    --file "${REPO_ROOT}/backend/Dockerfile" \
+    "${REPO_ROOT}" \
+    --no-logs \
+    --output none
+fi
 echo "  ✓ Image pushed: ${ACR_LOGIN_SERVER}/owlvex-api:${IMAGE_TAG}"
 
 echo ""

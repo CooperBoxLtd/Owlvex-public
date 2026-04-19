@@ -5,8 +5,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -f "${SCRIPT_DIR}/.env.dev" ]]; then
+  set -a
   # shellcheck disable=SC1091
   source "${SCRIPT_DIR}/.env.dev"
+  set +a
 fi
 
 export DEPLOY_ENV="${DEPLOY_ENV:-development}"
