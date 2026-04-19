@@ -295,6 +295,32 @@ describe('ScanEngine._parseAIResponse', () => {
         const result = engine.parse(JSON.stringify(payload));
         expect(result.findings[0].plainLanguageFix).toBe('Keep the SQL static and send the value separately.');
     });
+
+    it('sharpens outbound timeout advisories so fixed external calls are explained as availability issues, not SSRF-style flow', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                title: 'Outbound request lacks timeout and error handling',
+                explanation: 'The handler makes an external network call with http.Get and ignores the returned response and error.',
+                threat: 'The upstream could hang and block the handler.',
+                fix: 'Add timeout handling.',
+                plain_language_fix: undefined,
+                plainLanguageFix: undefined,
+                issue_id: 'owlvex.issue.missing_timeout.001',
+                matched_signals: ['http.Get', 'no timeout', 'ignored error', 'external network dependency'],
+            }],
+        };
+
+        const result = engine.parse(JSON.stringify(payload));
+
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.missing_timeout.001');
+        expect(result.findings[0].explanation).toMatch(/fixed outbound HTTP request/i);
+        expect(result.findings[0].explanation).toMatch(/does not show response cleanup/i);
+        expect(result.findings[0].threat).toMatch(/denial-of-service pressure/i);
+        expect(result.findings[0].fix).toMatch(/close the response body/i);
+        expect(result.findings[0].plainLanguageFix).toMatch(/destination fixed/i);
+    });
 });
 
 describe('ScanEngine AI throttling', () => {
@@ -1552,6 +1578,79 @@ if (process.env.NODE_ENV !== 'production') {
     }
 }
 `,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only SSRF findings when the outbound Go request uses a fixed literal URL', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 6.8,
+                    summary: 'Possible SSRF detected.',
+                    findings: [
+                        {
+                            id: 'ai-ssrf-go-fixed-url-1',
+                            line: 7,
+                            line_end: 7,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A10-SSRF',
+                            title: 'Server-side request forgery through untrusted destination',
+                            explanation: 'The application sends an outbound request to a request-derived URL.',
+                            threat: 'Attackers may pivot the server toward internal services.',
+                            fix: 'Allowlist outbound destinations.',
+                            confidence: 0.79,
+                            issue_id: 'owlvex.issue.ssrf.001',
+                            likelihood: 'HIGH',
+                            likelihood_reasons: ['The application fetches a request-derived URL.'],
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'go',
+            fileName: 'd:\\repo\\73-go-ssrf-safe.go',
+            getText: () => `package demo
+
+import (
+    "net/http"
+)
+
+func FetchAvatar(w http.ResponseWriter, r *http.Request) {
+    http.Get("https://example.com/avatar.png")
+    w.WriteHeader(http.StatusNoContent)
+}`,
         } as any;
 
         const result = await engine.scanDocument(doc);
@@ -2832,5 +2931,75 @@ class Demo {
         expect(result.warnings.join('\n')).toContain('AI corroboration partial: verifier pass unavailable');
         expect(result.warnings.join('\n')).toContain('AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.');
         expect(complete).toHaveBeenCalledTimes(5);
+    });
+
+    it('drops corroboration warnings when the final finding set is purely deterministic', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const complete = jest.fn()
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 9,
+                    summary: 'Potential object access issue detected.',
+                    findings: [
+                        {
+                            id: 'ai-idor-1',
+                            line: 5,
+                            line_end: 5,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-IDOR',
+                            title: 'Missing object-level authorization',
+                            explanation: 'A caller-supplied object identifier reaches the database lookup without an explicit ownership check.',
+                            threat: 'Attackers can access records that do not belong to them.',
+                            fix: 'Bind the object lookup to the authenticated principal or enforce an authorization check before the query.',
+                            confidence: 0.84,
+                            issue_id: 'owlvex.issue.idor.001',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            })
+            .mockRejectedValue(new Error('Azure Foundry error: 400'));
+        const provider = {
+            id: 'azure-foundry',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\idor.js',
+            getText: () => `function handler(currentUser, docId, db) {
+  const doc = db.query('SELECT * FROM docs WHERE id = ?', [docId]);
+  return doc;
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].ruleCode).toBe('AC-001');
+        expect(result.warnings.some(warning => /AI corroboration partial:/i.test(warning))).toBe(false);
+        expect(complete).toHaveBeenCalledTimes(3);
     });
 });

@@ -41,6 +41,12 @@ For the current AI lane, production readiness also requires that corroboration p
 - degraded or partial AI coverage must be surfaced clearly in user-facing reports
 - AI reasoning trails, when shown, must remain clearly AI-only and must not be presented as deterministic proof
 
+For remediation quality, production readiness also depends on a stable grounded-remediation contract:
+
+- canonical remediation must remain the primary normalization layer for product-facing fix guidance
+- canonical remediation should align with curated OWASP-style guidance closely enough that fix behavior is not driven by prompt drift alone
+- fix generation quality should be evaluated through a dedicated benchmark lane rather than inferred only from detection quality
+
 ## 2. Non-Negotiable Production Boundaries
 
 These must be true in production at all times:
@@ -217,6 +223,24 @@ Required:
 - AI-assisted or generated pack content is explicitly marked and human-reviewed before release
 
 Exit criteria:
+
+- canonical remediation entries for promoted issue families are rich enough to support reports, sidebar guidance, chat explanation, and fix generation from the same contract
+- curated OWASP-style cheat-sheet guidance is reflected through the canonical remediation layer rather than left as isolated prompt-only text
+- fix-generation grounding is auditable through canonical remediation provenance
+
+## 4.9 Remediation Benchmark Readiness
+
+Required:
+
+- remediation quality is measured separately from detection quality
+- fix generation is evaluated against declared success properties, not anecdotal patch quality
+- release confidence can state which issue families have benchmarked remediation quality and which do not
+
+Exit criteria:
+
+- there is a dedicated fix benchmark schema and corpus
+- benchmark outputs distinguish detection score from fix score
+- promoted fix flows can demonstrate issue removal, scope discipline, and code-validity preservation for the covered families
 
 - production pack schemas require provenance fields for curated entries
 - release validation fails when trusted-source metadata is missing

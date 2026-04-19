@@ -34,6 +34,8 @@ Instead, it formalizes that hybrid system into:
 - **Project Context Contract** for better AI understanding of the codebase
 - **Three explicit scan tiers** for better execution clarity
 
+Those tiers describe the final product posture for a finding or file. AI may be attempted in the background, but if only deterministic findings survive into the final result, the file should still read as `Static proof` rather than as a degraded AI result.
+
 ---
 
 ## Part 1: Project Context Contract
@@ -118,6 +120,8 @@ The Project Context Contract should be used only as AI context for:
 - `TARGETED_AI` scans
 - `REPO_AI` scans
 - fix generation and remediation explanation
+
+In the current product direction, fix generation should still be grounded first by the canonical remediation contract and local code evidence. Project context helps the AI understand architecture and intent; it does not replace canonical remediation or deterministic truth.
 
 It may also help:
 

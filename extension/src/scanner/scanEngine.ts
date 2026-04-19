@@ -314,6 +314,27 @@ function sanitizeAiFinding(finding: Finding): Finding {
         };
     }
 
+    if (finding.canonicalId === 'owlvex.issue.missing_timeout.001') {
+        const normalizedText = [
+            finding.title,
+            finding.explanation,
+            finding.threat,
+            finding.fix,
+            ...(finding.matchedSignals ?? []),
+        ].join(' ').toLowerCase();
+        const looksLikeOutboundHttpCall = /\b(http\.get|client\.get|fetch|external network|outbound request|outbound http|response cleanup|ignored error)\b/i.test(normalizedText);
+
+        if (looksLikeOutboundHttpCall) {
+            return {
+                ...finding,
+                explanation: 'The code makes a fixed outbound HTTP request without an explicit timeout, ignores the returned error, and does not show response cleanup. A slow or failing upstream can hold handler resources longer than necessary, and any returned response body should be closed.',
+                threat: 'A slow or unreachable upstream can create avoidable denial-of-service pressure by tying up request handling longer than expected. Ignoring the response also risks leaking network resources if a body is returned.',
+                fix: 'Use a configured HTTP client with an explicit timeout, check the returned error before continuing, and close the response body when a response is returned.',
+                plainLanguageFix: finding.plainLanguageFix || 'Keep the destination fixed if it is supposed to be fixed, but make the request with a timeout, handle failures, and close the response body before returning.',
+            };
+        }
+    }
+
     return finding;
 }
 
@@ -356,6 +377,14 @@ function hasAllowlistedOutboundRequest(snippet: string): boolean {
         || /\breturn\s+(?:BadRequest|Results\.BadRequest)\s*\(/i.test(snippet);
 
     return hasGuard && hasOutboundSink && hasRejectPath;
+}
+
+function hasFixedLiteralOutboundRequest(snippet: string): boolean {
+    return /\bfetch\s*\(\s*['"`][^'"`\r\n]+['"`]\s*\)/i.test(snippet)
+        || /\brequests\.(?:get|post|put|delete|request)\s*\(\s*['"`][^'"`\r\n]+['"`]/i.test(snippet)
+        || /\b(?:httpClient|client)\.(?:GetStringAsync|GetAsync|PostAsync)\s*\(\s*["'][^"'\r\n]+["']\s*\)/i.test(snippet)
+        || /\b(?:http\.Get|client\.Get)\s*\(\s*["'][^"'\r\n]+["']\s*\)/i.test(snippet)
+        || /\bnew\s+URL\s*\(\s*["'][^"'\r\n]+["']\s*\)\s*\.openStream\s*\(/i.test(snippet);
 }
 
 function hasLocalLogSink(snippet: string): boolean {
@@ -486,7 +515,8 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
         return true;
     }
 
-    if (finding.canonicalId === 'owlvex.issue.ssrf.001' && hasAllowlistedOutboundRequest(snippet)) {
+    if (finding.canonicalId === 'owlvex.issue.ssrf.001'
+        && (hasAllowlistedOutboundRequest(snippet) || hasFixedLiteralOutboundRequest(snippet))) {
         return true;
     }
 
@@ -640,6 +670,10 @@ function isRateLimitError(error: unknown): boolean {
 
 function hasRateLimitWarning(warnings: string[]): boolean {
     return warnings.some(warning => /\b429\b|rate limit/i.test(warning));
+}
+
+function isAiCorroborationWarning(warning: string): boolean {
+    return /^AI corroboration partial:/i.test(warning);
 }
 
 function extractRetryAfterMs(error: unknown): number | undefined {
@@ -802,9 +836,14 @@ export class ScanEngine {
             code,
             findings: filteredAiFindings,
         });
-        warnings.push(...corroboratedAi.warnings);
         const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, corroboratedAi.findings)
             .map(finding => enrichFindingRisk(finding));
+        const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
+        warnings.push(
+            ...corroboratedAi.warnings.filter(warning =>
+                hasAiFindingsInFinalResult || !isAiCorroborationWarning(warning),
+            ),
+        );
         const mergedMetrics = buildMetrics(allFindings);
         const calculatedScore = calculateScoreFromFindings(allFindings);
         const summary = allFindings.length

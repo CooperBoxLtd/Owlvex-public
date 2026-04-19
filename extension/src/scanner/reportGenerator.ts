@@ -141,6 +141,10 @@ function hasPartialAiCoverage(result: ScanResult): boolean {
     );
 }
 
+function usesAiForFindings(result: ScanResult): boolean {
+    return result.findings.some(finding => finding.provenance === 'ai');
+}
+
 function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     const scanTier = getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'));
     const confidence = getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'));
@@ -722,6 +726,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Analysis mode: ${item.result.findings.length ? getScanTierDisplayLabel(getPrimaryScanTierLabel(item.result.findings)) : 'none'}`);
             lines.push(`- Analysis mix: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
             lines.push(`- Evidence: ${summarizeCorroborationCounts(item.result.findings)}`);
+            if (!usesAiForFindings(item.result)) {
+                lines.push('- AI review: not used for the final finding set in this file');
+            }
             lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
             lines.push(`- Knowledge sources: ${buildKnowledgeSourceDetail(item.packContext)}`);
             lines.push('');

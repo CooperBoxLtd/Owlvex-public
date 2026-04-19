@@ -6,6 +6,7 @@ Purpose:
 
 - define what Owlvex is allowed to claim
 - separate proof benchmarking from AI benchmarking
+- separate remediation benchmarking from detection benchmarking
 - keep internal benchmark work aligned with product truth
 - make benchmark methodology explainable to clients
 
@@ -35,5 +36,6 @@ It is the mechanism that defines what Owlvex can say honestly about:
 
 - deterministic proof
 - AI quality
+- remediation quality
 - scan-tier fit
 - release confidence

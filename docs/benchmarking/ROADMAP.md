@@ -33,3 +33,15 @@ Deliverables:
 
 - selected Juliet / SARD slices where useful
 - AI calibration references to SecurityEval / CyberSecEval
+
+## Phase 5: Remediation Benchmarking
+
+Deliverables:
+
+- fix benchmark schema
+- first remediation corpus and scorecard
+- property-based fix scoring:
+  - finding removal
+  - scope discipline
+  - parse or build safety
+  - no new serious findings

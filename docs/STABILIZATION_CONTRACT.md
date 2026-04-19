@@ -27,6 +27,7 @@ During stabilization:
 - AI findings must be clearly constrained and normalized
 - partial or degraded scans must say so explicitly
 - no new issue family should be added unless it has benchmark coverage and a clear trust story
+- deterministic-only final outcomes must not be described as if degraded AI findings were part of the kept file result
 
 ---
 
@@ -172,6 +173,7 @@ During stabilization:
 5. AI-only findings must be suppressible when local code evidence contradicts them.
 6. Partial AI coverage caused by provider failure must be visible to the user.
 7. Regressions found in the demo corpus or demo app must become permanent test cases.
+8. Deterministic benchmark files must not leak irrelevant AI corroboration warnings into file-level reporting.
 
 ---
 
@@ -237,6 +239,7 @@ The intended confidence behavior is:
 - finder plus verifier support with no meaningful contradiction -> stronger corroboration
 - one pass supports and another disputes -> confidence must be reduced or the claim suppressed
 - skeptic finds stronger contradictory local evidence -> suppress or downgrade the claim
+- if AI review runs but no AI finding survives into the final file result, the file should still read as `Static proof` and may explicitly say AI review was not used for the final finding set
 
 Owlvex may expose the multi-pass reasoning trail for AI-backed findings in reports, but that trail must remain AI-only.
 

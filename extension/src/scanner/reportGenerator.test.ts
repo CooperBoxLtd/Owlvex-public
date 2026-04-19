@@ -315,6 +315,46 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Confidence: 1 verified | 1 partially validated | 1 need manual review');
     });
 
+    it('states when AI review was not used for the final finding set in a static-proof file', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+        const snapshot = {
+            targetLabel: 'src/probes/static-only.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\static-only.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                provenance: 'deterministic',
+                                scanTier: 'STATIC',
+                                confidenceTier: 'PROVEN',
+                                corroboration: 'PROVEN',
+                                ruleCode: 'AC-001',
+                                title: 'Missing object-level authorization',
+                                canonicalTitle: 'Missing object-level authorization',
+                                canonicalId: 'owlvex.issue.idor.001',
+                                aiReviewScores: undefined,
+                                aiReviewNotes: undefined,
+                            },
+                        ],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Analysis mode: Static proof');
+        expect(written).toContain('- AI review: not used for the final finding set in this file');
+        expect(written).not.toContain('- AI pass scores:');
+    });
+
     it('normalizes string-based stride and matched signals without crashing', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('console.log("ok");'));

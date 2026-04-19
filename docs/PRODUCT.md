@@ -81,7 +81,8 @@ The execution plane. Provides:
 - AI chat for advisory guidance, plain-language fix explanations, and concrete replacement code when the user asks how to remediate a finding
 - AI-assisted reasoning that can expand from file-level context to nearby project context when the issue or proposed fix depends on code outside the active file
 - future project-context upload or paste flow so users can give Owlvex TDD-style architectural grounding, goals, and security expectations for the repo
-- future controlled remediation flow that can propose file changes for a finding, show a diff, and let the user decide whether to apply it
+- controlled remediation flow that can propose file changes for a finding, show a diff, and let the user decide whether to apply it
+- review-scoped fix application that blocks writes when the reviewed file set no longer matches the preview target
 - report creation with concise per-file findings, remediation guidance, and scan errors/warnings when present
 - scan comparison
 - provider and model switching
@@ -117,6 +118,12 @@ Owlvex now maintains versioned local grounded-data assets that can later become 
 
 These packs are intended to make the AI lane more data-backed over time, especially for framework-guided interpretation and remediation guidance.
 
+Current product direction:
+
+- scan-time AI grounding can consume curated framework and remediation guidance
+- fix preview generation is grounded first in canonical remediation and local code context
+- OWASP-style cheat-sheet content should continue to flow into the product through the canonical remediation layer rather than through raw prompt stuffing by default
+
 ### Deterministic Benchmark Tool
 
 Lives under `tools/owlvex-benchmark/`. Provides:
@@ -127,6 +134,7 @@ Lives under `tools/owlvex-benchmark/`. Provides:
 - aggregate gate: `19/19` suites and `82/82` cases passing
 - confidence and status reporting
 - separate AI eval tooling for uncovered issue classes that are not part of the deterministic release gate
+- a separate benchmarking department under `docs/benchmarking/` to govern deterministic, AI, external, and future remediation benchmarks
 
 This is the mechanism that defines what Owlvex can claim with certainty. No deterministic rule ships without benchmark coverage.
 
@@ -139,11 +147,19 @@ This is the mechanism that defines what Owlvex can claim with certainty. No dete
 1. Extension reads local settings such as provider, model, frameworks, and severity threshold.
 2. Extension may validate backend reachability and licence state with the Owlvex backend.
 3. Extension runs the deterministic scanner locally before any AI call.
-4. Extension requests an assembled system prompt from the backend.
-5. Extension may include local project-context contract data when the selected scan tier benefits from architectural grounding.
+4. If the AI-backed path is available, extension requests an assembled system prompt from the backend.
+5. Extension may include local project-context contract data and grounded remediation or framework context when the selected scan tier benefits from architectural grounding.
 6. Extension sends source code plus prompt directly to the selected AI provider.
-7. Extension merges AI findings with deterministic findings.
-8. Extension applies diagnostics, updates the sidebar, and records scan metadata with the backend.
+7. AI candidates are reviewed through the current multi-pass corroboration flow:
+   - finder
+   - verifier
+   - skeptic
+8. Extension merges surviving AI findings with deterministic findings, with deterministic findings leading when there is overlap or conflict.
+9. The product reports the final file posture honestly:
+   - `Static proof` when only deterministic findings survive
+   - AI-backed tiers only when AI findings survive into the final result
+   - file-level wording may say AI review was not used for the final finding set even if background AI work was attempted
+10. Extension applies diagnostics, updates the sidebar, and records scan metadata with the backend.
 
 The current onboarding path for AI-backed use is:
 
@@ -189,7 +205,7 @@ In practical terms, framework selection currently means:
 - what external mappings should be shown
 - what threat-model or compliance vocabulary should be emphasized
 - what prompt context should shape AI-assisted reasoning, especially for AI-only findings
-- what curated framework-pack and cheat-sheet guidance can be injected into AI scan and remediation prompts
+- what curated framework-pack and canonical remediation guidance can shape AI scan and remediation prompts
 - what bounded candidate issues the AI lane should prefer before inventing a new label
 
 It does **not** mean that every selected framework becomes its own separate source of detection truth.
@@ -217,6 +233,13 @@ OpenAI, Anthropic, Azure AI Foundry, Ollama, Mistral, Google Gemini, Groq, and c
 **Advisory chat** - exploratory guidance clearly distinguished from formal scan output. This is the place for plain-language fix explanations grounded in the active file or latest scan.
 
 **Review-first remediation** - Owlvex can generate a candidate patch for the active finding, show the proposed diff, and apply changes only after explicit user approval.
+
+Current remediation posture:
+
+- fix previews are grounded in canonical remediation plus local code context
+- the preview is review-only until the user chooses `Keep fix`
+- Owlvex blocks apply if the reviewed file scope no longer matches the preview target
+- canonical remediation is the main normalization layer for fix guidance; richer OWASP-aligned canonical content is still an active improvement track
 
 **Context-aware AI assistance** - when file-only analysis is not enough, Owlvex should gather nearby project context such as imports, referenced helpers, and related files before presenting higher-confidence AI reasoning or code changes.
 

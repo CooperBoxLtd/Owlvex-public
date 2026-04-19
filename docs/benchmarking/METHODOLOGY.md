@@ -38,6 +38,16 @@ Measures:
 
 - how Owlvex compares to recognized external benchmark slices
 
+### 4. Remediation benchmark
+
+Measures:
+
+- whether a generated fix removes the target finding
+- whether the fix stays inside the reviewed scope
+- whether the code remains syntactically or operationally valid
+- whether the fix avoids introducing new serious findings
+- whether the visible change matches the family-appropriate safe pattern
+
 ## Method Rules
 
 ### Safe / unsafe pairing
@@ -86,6 +96,7 @@ External benchmarks do not fully measure:
 - safe-pair quietness in Owlvex UX
 - `STATIC` vs `TARGETED_AI` vs `REPO_AI` fit
 - report quality and provenance framing
+- remediation quality after a generated patch
 
 That is why Owlvex needs native benchmarks even when it uses external anchors.
 
@@ -97,3 +108,5 @@ When a benchmark result is disputed:
 2. inspect the expected manifest
 3. inspect the generated report
 4. decide whether the fixture, expectation, or scanner behavior is wrong
+
+For remediation disputes, the comparison bar should usually be a property-based contract rather than one exact patch. The question is not "did the model reproduce our preferred code verbatim?" but "did the reviewed fix remove the issue safely, stay in scope, and preserve code validity?"

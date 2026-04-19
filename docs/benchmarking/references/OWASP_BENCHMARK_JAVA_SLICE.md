@@ -63,6 +63,11 @@ The first slice should map included OWASP Benchmark Java areas to the current de
 | --- | --- | --- | --- |
 | Command Injection | `owlvex.issue.command_injection.001` | `GR-001` | in scope now |
 | Path Traversal | `owlvex.issue.path_traversal.001` | `PT-001` | in scope now |
+
+Concrete fixture inventory for this mapping:
+
+- [OWASP_BENCHMARK_JAVA_CASE_INVENTORY.md](D:/Dev/repos/CodeScanner/docs/benchmarking/references/OWASP_BENCHMARK_JAVA_CASE_INVENTORY.md)
+- [owasp-benchmark-java-slice.manifest.json](D:/Dev/repos/CodeScanner/docs/benchmarking/references/owasp-benchmark-java-slice.manifest.json)
 | SQL Injection | `owlvex.issue.sql_injection.001` | `SQ-001` | in scope now |
 
 Adjacent Java deterministic families that are real in Owlvex but not part of the first OWASP Java external slice:

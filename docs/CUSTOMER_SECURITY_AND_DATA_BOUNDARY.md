@@ -50,6 +50,14 @@ For AI-backed scanning and review, Owlvex can send:
   - verifier
   - skeptic
 
+For fix preview generation, Owlvex currently grounds the model with:
+
+- the active finding and local snippet
+- nearby local code context when needed
+- canonical remediation guidance
+
+The current product direction is for OWASP-style cheat-sheet guidance to strengthen the canonical remediation layer rather than require raw cheat-sheet text to be injected directly into every fix prompt.
+
 This provider is chosen and configured by the user.
 
 ## What is sent to Owlvex backend
@@ -132,6 +140,8 @@ Owlvex keeps deterministic proof separate from AI-backed reasoning.
   - finder
   - verifier
   - skeptic
+
+When AI review is attempted but no AI finding survives into the final file result, the file may still be presented as `Static proof` and may explicitly say that AI review was not used for the final finding set.
 
 That reasoning trail is for AI-reviewed findings only.
 

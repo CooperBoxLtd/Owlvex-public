@@ -180,6 +180,39 @@ This workstream exists to make Owlvex's quality claims explicit across:
 - the repo has a client-readable benchmark explanation
 - external benchmark adoption has a declared plan instead of ad hoc references
 
+## Workstream 0.86: Canonical Remediation Fidelity
+
+### Goal
+
+Improve Owlvex canonical remediation so it matches trusted OWASP-style guidance more faithfully and becomes the primary contract for reports, chat, sidebar guidance, and fix generation.
+
+This workstream exists because richer canonical remediation is a better long-term architecture than relying on raw cheat-sheet text injection at each prompt surface.
+
+### Tasks
+
+- enrich canonical remediation entries for high-value issue families with clearer safe patterns, unsafe alternatives, and validation steps
+- tighten the mapping between canonical issue families and curated OWASP cheat-sheet guidance
+- make framework-specific variants more consistent where the family behavior differs by language or framework
+- use richer canonical remediation as the default grounding source for fix previews, not just explanation surfaces
+- keep canonical remediation provenance auditable and benchmarkable
+
+### Likely Files
+
+- [extension/src/frameworks/remediationResolver.ts](D:/Dev/repos/CodeScanner/extension/src/frameworks/remediationResolver.ts)
+- [extension/src/frameworks/rulePackRegistry.ts](D:/Dev/repos/CodeScanner/extension/src/frameworks/rulePackRegistry.ts)
+- [extension/data/remediation](D:/Dev/repos/CodeScanner/extension/data/remediation)
+- [extension/data/cheatsheets](D:/Dev/repos/CodeScanner/extension/data/cheatsheets)
+- [extension/src/panels/chatViewProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/chatViewProvider.ts)
+- [extension/src/scanner/reportGenerator.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/reportGenerator.ts)
+
+### Acceptance Criteria
+
+- major canonical issue families carry richer normalized remediation guidance
+- canonical remediation aligns more closely with curated OWASP guidance without dumping raw source text into product copy
+- fix preview prompts consume canonical remediation as the primary grounded remediation contract
+- report, sidebar, and chat surfaces stay consistent because they are reading the same richer canonical contract
+- remediation quality can be benchmarked against declared family-level expectations
+
 ## Workstream 0: Project Context And Scan Tiers
 
 ### Goal
@@ -213,6 +246,41 @@ Turn the current implicit hybrid scan model into an explicit three-tier system, 
 - broad exploratory AI paths map cleanly to `REPO_AI`
 - project context remains local by default and never upgrades a finding to `PROVEN`
 - users can tell from the UI/report what kind of scan produced a finding
+
+## Workstream 0.87: Fix Benchmarking
+
+### Goal
+
+Create a dedicated benchmark lane for remediation quality so Owlvex can measure whether generated fixes remove the target issue safely, stay in scope, and preserve code validity.
+
+This workstream exists because detection quality and fix quality are different contracts and should not be scored as one blended signal.
+
+### Tasks
+
+- define a fix benchmark schema with expected finding, expected fix properties, and scoring rules
+- create a dedicated fix benchmark corpus with unsafe fixtures and expected remediation properties
+- score fixes on:
+  - finding removal
+  - build or parse safety
+  - reviewed-file scope adherence
+  - no new serious finding introduction
+  - family-appropriate safe pattern visibility
+- keep fix benchmarking separate from detection benchmarking in reporting and release language
+- add a client-readable explanation of when Owlvex fix generation is strong enough to trust and when manual review is still required
+
+### Likely Files
+
+- [docs/benchmarking/ROADMAP.md](D:/Dev/repos/CodeScanner/docs/benchmarking/ROADMAP.md)
+- [docs/benchmarking/METHODOLOGY.md](D:/Dev/repos/CodeScanner/docs/benchmarking/METHODOLOGY.md)
+- [tools/owlvex-benchmark](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark)
+- [extension/src/panels/chatViewProvider.ts](D:/Dev/repos/CodeScanner/extension/src/panels/chatViewProvider.ts)
+
+### Acceptance Criteria
+
+- Owlvex has an explicit fix benchmark contract rather than only ad hoc fix reviews
+- fix quality can be compared against declared success properties instead of opinion
+- benchmark results distinguish detection quality from remediation quality
+- benchmark outputs can explain which issue families or scan tiers are fix-ready and which still require heavier review
 
 ## Workstream 0.5: Deterministic Engine Depth
 

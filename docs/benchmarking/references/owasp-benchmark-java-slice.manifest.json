@@ -1,0 +1,66 @@
+{
+  "benchmark": "OWASP Benchmark Java",
+  "sliceLabel": "owlvex-java-first-slice",
+  "type": "proof-external",
+  "includedAreas": [
+    {
+      "owaspArea": "Command Injection",
+      "canonicalIssue": "owlvex.issue.command_injection.001",
+      "ruleCode": "GR-001",
+      "fixtures": {
+        "unsafe": "tools/demo/46-java-command-injection-unsafe.java",
+        "safe": "tools/demo/47-java-command-injection-safe.java"
+      },
+      "status": "mapped-now"
+    },
+    {
+      "owaspArea": "SQL Injection",
+      "canonicalIssue": "owlvex.issue.sql_injection.001",
+      "ruleCode": "SQ-001",
+      "fixtures": {
+        "unsafe": "tools/demo/48-java-sqli-unsafe.java",
+        "safe": "tools/demo/49-java-sqli-safe.java"
+      },
+      "status": "mapped-now"
+    },
+    {
+      "owaspArea": "Path Traversal",
+      "canonicalIssue": "owlvex.issue.path_traversal.001",
+      "ruleCode": "PT-001",
+      "fixtures": {
+        "unsafe": "tools/demo/50-java-path-traversal-unsafe.java",
+        "safe": "tools/demo/51-java-path-traversal-safe.java"
+      },
+      "status": "mapped-now"
+    }
+  ],
+  "adjacentOwlvexJavaFamilies": [
+    {
+      "canonicalIssue": "owlvex.issue.ssrf.001",
+      "ruleCode": "SR-001",
+      "fixtures": {
+        "unsafe": "tools/demo/52-java-ssrf-unsafe.java",
+        "safe": "tools/demo/53-java-ssrf-safe.java"
+      },
+      "status": "adjacent-not-in-first-owasp-slice"
+    },
+    {
+      "canonicalIssue": "owlvex.issue.weak_jwt_validation.001",
+      "ruleCode": "JW-001",
+      "fixtures": {
+        "unsafe": "tools/demo/54-java-jwt-validation-unsafe.java",
+        "safe": "tools/demo/55-java-jwt-validation-safe.java"
+      },
+      "status": "adjacent-not-in-first-owasp-slice"
+    },
+    {
+      "canonicalIssue": "owlvex.issue.insecure_deserialization.001",
+      "ruleCode": "DS-001",
+      "fixtures": {
+        "unsafe": "tools/demo/56-java-deserialization-unsafe.java",
+        "safe": "tools/demo/57-java-deserialization-safe.java"
+      },
+      "status": "adjacent-not-in-first-owasp-slice"
+    }
+  ]
+}
