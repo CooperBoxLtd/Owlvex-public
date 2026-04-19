@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
+import { buildLicenceBadgeLabel, buildLicenceStatusSummary, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess } from './licence/licenceManager';
 import {
+    buildUsefulnessPromptMessage,
     clearProviderConnection,
     getProviderConnectionSettingKeys,
     normalizeComparisonDiff,
     providerAllowsOptionalApiKey,
     resolveConnectedModelSelection,
+    shouldPromptUsefulnessFeedback,
 } from './extension';
 
 describe('normalizeComparisonDiff', () => {
@@ -86,5 +89,73 @@ describe('provider setup helpers', () => {
         expect(updateMock).toHaveBeenCalledWith('foundry.deployments', undefined, vscode.ConfigurationTarget.Global);
         expect(deleteMock).toHaveBeenCalledWith('owlvex.foundry.apiKey');
         expect(deleteMock).toHaveBeenCalledWith('owlvex.azure-foundry.apiKey');
+    });
+});
+
+describe('plan access helpers', () => {
+    it('blocks AI assistant access for free plans only', () => {
+        expect(hasAiAssistantAccess({ plan: 'free' } as any)).toBe(false);
+        expect(hasAiAssistantAccess({ plan: 'trial' } as any)).toBe(true);
+        expect(hasAiAssistantAccess({ plan: 'developer' } as any)).toBe(true);
+    });
+
+    it('uses feature flags for comparison and prompt editor access', () => {
+        expect(hasComparisonAccess({ features: { comparison: false } } as any)).toBe(false);
+        expect(hasComparisonAccess({ features: { comparison: true } } as any)).toBe(true);
+        expect(hasPromptEditorAccess({ plan: 'free', features: { promptEditor: false } } as any)).toBe(false);
+        expect(hasPromptEditorAccess({ plan: 'trial', features: { promptEditor: true } } as any)).toBe(true);
+    });
+
+    it('returns clear upgrade messages for gated capabilities', () => {
+        expect(buildPlanUpgradeMessage('assistant')).toContain('Trial or Developer plans');
+        expect(buildPlanUpgradeMessage('fix')).toContain('fix previews');
+        expect(buildPlanUpgradeMessage('comparison')).toContain('Scan comparison');
+    });
+
+    it('blocks scans only when the backend says the daily limit is reached', () => {
+        expect(canRunScan({ usage: { dailyLimitReached: false } } as any)).toBe(true);
+        expect(canRunScan({ usage: { dailyLimitReached: true } } as any)).toBe(false);
+        expect(buildScanLimitMessage({
+            plan: 'free',
+            features: { scansPerDay: 50 },
+            usage: { scansToday: 50, dailyLimitReached: true },
+        } as any)).toContain('50/50');
+    });
+
+    it('only shows the usefulness prompt once after the first successful free or trial scan', () => {
+        expect(shouldPromptUsefulnessFeedback({ plan: 'free' } as any, 1, false)).toBe(true);
+        expect(shouldPromptUsefulnessFeedback({ plan: 'trial' } as any, 1, false)).toBe(true);
+        expect(shouldPromptUsefulnessFeedback({ plan: 'developer' } as any, 1, false)).toBe(false);
+        expect(shouldPromptUsefulnessFeedback({ plan: 'free' } as any, 2, false)).toBe(false);
+        expect(shouldPromptUsefulnessFeedback({ plan: 'free' } as any, 1, true)).toBe(false);
+    });
+
+    it('uses plan-aware usefulness prompt wording', () => {
+        expect(buildUsefulnessPromptMessage({ plan: 'trial' } as any)).toContain('during your trial');
+        expect(buildUsefulnessPromptMessage({ plan: 'free' } as any)).toBe('Was this useful?');
+    });
+
+    it('builds richer licence status summaries for trial and free plans', () => {
+        const trialSummary = buildLicenceStatusSummary({
+            plan: 'trial',
+            teamName: 'Dev Team',
+            expiresAt: '2026-04-26T00:00:00Z',
+            features: { scansPerDay: null },
+            usage: { scansToday: 3 },
+        } as any, new Date('2026-04-19T10:00:00Z'));
+        expect(trialSummary).toContain('Licence: Trial');
+        expect(trialSummary).toContain('Dev Team');
+        expect(trialSummary).toContain('7 days left');
+
+        const freeSummary = buildLicenceStatusSummary({
+            plan: 'free',
+            teamName: 'Starter',
+            features: { scansPerDay: 50 },
+            usage: { scansToday: 4 },
+            expiresAt: null,
+        } as any);
+        expect(freeSummary).toContain('4/50 scans today');
+        expect(buildLicenceBadgeLabel({ plan: 'trial', expiresAt: '2026-04-20T00:00:00Z' } as any, new Date('2026-04-19T10:00:00Z'))).toBe('Trial · 1d left');
+        expect(buildLicenceBadgeLabel({ plan: 'developer' } as any)).toBe('Developer');
     });
 });

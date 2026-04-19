@@ -11,7 +11,7 @@ import type { Finding, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 import { getProjectContextSummaryFromConfig, loadProjectContextInfo } from '../projectContext';
 import { createPreviewDocumentUri } from './previewDocumentProvider';
-import { LicenceManager } from '../licence/licenceManager';
+import { buildLicenceStatusSummary, buildPlanUpgradeMessage, hasAiAssistantAccess, LicenceManager } from '../licence/licenceManager';
 
 type ChatRole = 'user' | 'assistant' | 'system';
 type MessageKind = 'advisory' | 'scan';
@@ -1104,9 +1104,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     constructor(
         private readonly registry: ProviderRegistry,
         private readonly storage: vscode.Memento,
-        private readonly licenceMgr: Pick<LicenceManager, 'getKey' | 'getCachedInfo'> = {
+        private readonly licenceMgr: Pick<LicenceManager, 'getKey' | 'getCachedInfo' | 'validate'> = {
             getKey: async () => undefined,
             getCachedInfo: () => null,
+            validate: async () => { throw new Error('No licence manager configured.'); },
         },
     ) {
         this.restorableMessages = this.getRestorableMessages();
@@ -1657,6 +1658,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             ? 'scan'
                             : 'advisory'),
                     actions: localAction.actions,
+                };
+                void this.persistState();
+                this.refresh();
+                return;
+            }
+
+            const activeLicence = this.licenceMgr.getCachedInfo()
+                ?? await this.licenceMgr.validate(
+                    vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl)
+                    || PROFILE.defaultApiUrl,
+                ).catch(() => null);
+            if (!hasAiAssistantAccess(activeLicence)) {
+                this.messages[this.messages.length - 1] = {
+                    role: 'assistant',
+                    content: buildPlanUpgradeMessage(this.currentMode === 'fix' ? 'fix' : 'assistant'),
+                    kind: 'advisory',
                 };
                 void this.persistState();
                 this.refresh();
@@ -2895,7 +2912,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const licenceKey = await this.licenceMgr.getKey().catch(() => undefined);
         const cachedLicence = this.licenceMgr.getCachedInfo();
         const licenceStatus = cachedLicence
-            ? `Licence: ${cachedLicence.plan} plan${cachedLicence.expiresAt ? ` · expires ${cachedLicence.expiresAt}` : ''}`
+            ? buildLicenceStatusSummary(cachedLicence)
             : licenceKey
                 ? 'Licence: key stored, validation pending'
                 : 'Licence: not connected';

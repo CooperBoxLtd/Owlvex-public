@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { PROFILE } from '../profile';
 import type { ScanResult } from '../scanner/scanEngine';
 import { getRulePackModeLabel } from '../packs/packRuntime';
+import { buildLicenceBadgeLabel, buildLicenceStatusSummary, LicenceInfo } from '../licence/licenceManager';
 
 function getAiConfidenceLabel(finding: ScanResult['findings'][number] | undefined): string | undefined {
     if (!finding || finding.provenance !== 'ai') {
@@ -13,6 +14,7 @@ function getAiConfidenceLabel(finding: ScanResult['findings'][number] | undefine
 
 export class StatusBar {
     private readonly item: vscode.StatusBarItem;
+    private licenceInfo: LicenceInfo | null = null;
 
     constructor() {
         this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
@@ -21,10 +23,17 @@ export class StatusBar {
         this.item.show();
     }
 
-    showIdle(): void {
-        this.item.text = `$(shield) ${PROFILE.statusBarLabel}`;
-        this.item.tooltip = 'Click to scan current file';
+    showIdle(info?: LicenceInfo | null): void {
+        if (info !== undefined) {
+            this.licenceInfo = info;
+        }
+        const planBadge = buildLicenceBadgeLabel(this.licenceInfo);
+        this.item.text = `$(shield) ${PROFILE.statusBarLabel}${planBadge ? `: ${planBadge}` : ''}`;
+        this.item.tooltip = this.licenceInfo
+            ? `${buildLicenceStatusSummary(this.licenceInfo)} | Click to scan current file`
+            : 'Click to scan current file';
         this.item.backgroundColor = undefined;
+        this.item.command = PROFILE.commands.scanFile;
     }
 
     showScanning(): void {
@@ -65,6 +74,7 @@ export class StatusBar {
     }
 
     showUnlicensed(): void {
+        this.licenceInfo = null;
         this.item.text = `$(shield-x) ${PROFILE.statusBarLabel}: No Licence`;
         this.item.command = PROFILE.commands.enterLicence;
         this.item.tooltip = 'Click to enter your licence key';

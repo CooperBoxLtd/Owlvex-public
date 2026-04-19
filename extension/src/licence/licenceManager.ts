@@ -22,7 +22,125 @@ export interface LicenceInfo {
         sso: boolean;
         industryPacks: string[];
     };
+    usage: {
+        scansToday: number;
+        scansRemaining: number | null;
+        dailyLimitReached: boolean;
+    };
     expiresAt: string | null;
+}
+
+function titleCasePlan(plan: string | null | undefined): string {
+    if (!plan) {
+        return 'Unknown';
+    }
+
+    return plan.charAt(0).toUpperCase() + plan.slice(1);
+}
+
+export function getDaysUntilExpiry(expiresAt: string | null | undefined, now = new Date()): number | null {
+    if (!expiresAt) {
+        return null;
+    }
+
+    const expiry = new Date(expiresAt);
+    if (Number.isNaN(expiry.getTime())) {
+        return null;
+    }
+
+    const diffMs = expiry.getTime() - now.getTime();
+    return Math.max(0, Math.ceil(diffMs / (24 * 60 * 60 * 1000)));
+}
+
+export function buildLicenceStatusSummary(info: LicenceInfo | null | undefined, now = new Date()): string {
+    if (!info) {
+        return 'Licence: not connected';
+    }
+
+    const parts = [`Licence: ${titleCasePlan(info.plan)}`];
+    if (info.teamName) {
+        parts.push(info.teamName);
+    }
+
+    if (info.plan === 'trial') {
+        const daysLeft = getDaysUntilExpiry(info.expiresAt, now);
+        if (daysLeft !== null) {
+            parts.push(`${daysLeft} day${daysLeft === 1 ? '' : 's'} left`);
+        }
+    } else if (info.expiresAt) {
+        parts.push(`expires ${info.expiresAt.slice(0, 10)}`);
+    }
+
+    if (typeof info.features?.scansPerDay === 'number') {
+        const scansToday = info.usage?.scansToday ?? 0;
+        parts.push(`${scansToday}/${info.features.scansPerDay} scans today`);
+    }
+
+    return parts.join(' · ');
+}
+
+export function buildLicenceBadgeLabel(info: LicenceInfo | null | undefined, now = new Date()): string | undefined {
+    if (!info) {
+        return undefined;
+    }
+
+    if (info.plan === 'trial') {
+        const daysLeft = getDaysUntilExpiry(info.expiresAt, now);
+        if (daysLeft !== null) {
+            return `Trial · ${daysLeft}d left`;
+        }
+        return 'Trial';
+    }
+
+    return titleCasePlan(info.plan);
+}
+
+export function isFreePlan(info: LicenceInfo | null | undefined): boolean {
+    return info?.plan === 'free';
+}
+
+export function hasAiAssistantAccess(info: LicenceInfo | null | undefined): boolean {
+    return !isFreePlan(info);
+}
+
+export function hasComparisonAccess(info: LicenceInfo | null | undefined): boolean {
+    return Boolean(info?.features.comparison);
+}
+
+export function hasPromptEditorAccess(info: LicenceInfo | null | undefined): boolean {
+    return Boolean(info?.features.promptEditor) || hasAiAssistantAccess(info);
+}
+
+export function canRunScan(info: LicenceInfo | null | undefined): boolean {
+    if (!info) {
+        return true;
+    }
+    return !info.usage.dailyLimitReached;
+}
+
+export function buildScanLimitMessage(info: LicenceInfo | null | undefined): string {
+    if (!info || !info.usage.dailyLimitReached) {
+        return 'Scanning is available.';
+    }
+
+    const limit = info.features.scansPerDay;
+    const used = info.usage.scansToday;
+    const capText = typeof limit === 'number' ? `${used}/${limit}` : `${used}`;
+    return `You have reached today's scan limit for the ${info.plan} plan (${capText}). Start a trial or upgrade to Developer for higher or unlimited usage.`;
+}
+
+export function buildPlanUpgradeMessage(capability: 'assistant' | 'fix' | 'comparison' | 'prompt-editor'): string {
+    switch (capability) {
+        case 'comparison':
+            return 'Scan comparison is part of the Trial, Developer, or Team plans. Free still includes deterministic scanning and reports.';
+        case 'prompt-editor':
+            return 'The guided AI assistant is part of the Trial or Developer plans. Free still includes deterministic scanning and report generation.';
+        case 'fix':
+            return 'AI-assisted fix previews are part of the Trial or Developer plans. Free still includes deterministic scanning and report generation.';
+        case 'assistant':
+        default:
+            return 'The AI assistant is part of the Trial or Developer plans. Free still includes deterministic scanning and report generation.';
+    }
 }
 
 export class LicenceManager {
@@ -82,6 +200,11 @@ export class LicenceManager {
                 customRules: data.features.custom_rules,
                 sso: data.features.sso,
                 industryPacks: data.features.industry_packs,
+            },
+            usage: {
+                scansToday: data.usage?.scans_today ?? 0,
+                scansRemaining: data.usage?.scans_remaining ?? null,
+                dailyLimitReached: Boolean(data.usage?.daily_limit_reached),
             },
             expiresAt: data.expires_at,
         };

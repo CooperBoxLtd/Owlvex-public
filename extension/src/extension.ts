@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { LicenceManager } from './licence/licenceManager';
+import { buildLicenceStatusSummary, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, LicenceInfo, LicenceManager } from './licence/licenceManager';
 import { getProviderApiKeySecretName, ProviderRegistry, persistProviderSetting } from './providers/registry';
 import { ScanEngine, ScanResult } from './scanner/scanEngine';
 import { DiagnosticsProvider } from './diagnostics/diagnosticsProvider';
@@ -104,7 +104,15 @@ function normalizeScanResult(result: ScanResult): ScanResult {
     };
 }
 
-type UsageEventName = 'scan_run' | 'finding_viewed' | 'fix_viewed' | 'second_scan' | 'session_return';
+type UsageEventName =
+    | 'scan_run'
+    | 'finding_viewed'
+    | 'fix_viewed'
+    | 'second_scan'
+    | 'session_return'
+    | 'limit_hit'
+    | 'feedback_positive'
+    | 'feedback_negative';
 
 const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
 
@@ -335,6 +343,57 @@ async function promptForSetting(
     return normalized;
 }
 
+async function resolveLicenceInfoForAccess(
+    licenceMgr: LicenceManager,
+    getApiUrl: () => string,
+): Promise<LicenceInfo | null> {
+    const cached = licenceMgr.getCachedInfo();
+    if (cached) {
+        return cached;
+    }
+
+    try {
+        return await licenceMgr.validate(getApiUrl());
+    } catch {
+        return null;
+    }
+}
+
+async function ensureScanAllowed(
+    licenceMgr: LicenceManager,
+    getApiUrl: () => string,
+): Promise<LicenceInfo | null> {
+    return resolveLicenceInfoForAccess(licenceMgr, getApiUrl);
+}
+
+export function shouldPromptUsefulnessFeedback(
+    info: LicenceInfo | null | undefined,
+    sessionScanCount: number,
+    alreadyPrompted: boolean,
+): boolean {
+    if (alreadyPrompted || !info) {
+        return false;
+    }
+
+    if (!['free', 'trial'].includes(info.plan)) {
+        return false;
+    }
+
+    return sessionScanCount === 1;
+}
+
+export function buildUsefulnessPromptMessage(info: LicenceInfo | null | undefined): string {
+    if (!info) {
+        return 'Was this useful?';
+    }
+
+    if (info.plan === 'trial') {
+        return 'Was this useful so far during your trial?';
+    }
+
+    return 'Was this useful?';
+}
+
 export function getProviderConnectionSettingKeys(providerId: string): string[] {
     switch (providerId) {
         case 'azure-foundry':
@@ -445,6 +504,8 @@ export function activate(context: vscode.ExtensionContext) {
     const licenceMgr = new LicenceManager(context.secrets);
     const previousSessionAt = context.globalState.get<string>(`${PROFILE.storagePrefix}.lastSessionAt`);
     let sessionScanCount = 0;
+    let usefulnessFeedbackPrompted = false;
+    const limitHitEventKeys = new Set<string>();
     const registry = new ProviderRegistry();
     const scanEngine = new ScanEngine(licenceMgr, registry);
     const rulePackClient = new RulePackClient(context.workspaceState);
@@ -474,6 +535,61 @@ export function activate(context: vscode.ExtensionContext) {
         });
     }
     void context.globalState.update(`${PROFILE.storagePrefix}.lastSessionAt`, new Date().toISOString());
+
+    const maybePromptUsefulnessFeedback = async (
+        info: LicenceInfo | null | undefined,
+        metadata: Record<string, unknown>,
+    ): Promise<void> => {
+        if (!shouldPromptUsefulnessFeedback(info, sessionScanCount, usefulnessFeedbackPrompted)) {
+            return;
+        }
+
+        usefulnessFeedbackPrompted = true;
+        const choice = await vscode.window.showInformationMessage(
+            buildUsefulnessPromptMessage(info),
+            'Helpful',
+            'Not yet',
+        );
+
+        if (choice === 'Helpful') {
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'feedback_positive', metadata);
+        } else if (choice === 'Not yet') {
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'feedback_negative', metadata);
+        }
+    };
+
+    const handleLimitHit = async (info: LicenceInfo): Promise<void> => {
+        const limitKey = `${info.licenceId}:${info.usage.scansToday}:${info.features.scansPerDay ?? 'unlimited'}`;
+        if (!limitHitEventKeys.has(limitKey)) {
+            limitHitEventKeys.add(limitKey);
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'limit_hit', {
+                plan: info.plan,
+                scans_today: info.usage.scansToday,
+                scans_remaining: info.usage.scansRemaining,
+                scans_per_day: info.features.scansPerDay,
+            });
+        }
+
+        const choice = await vscode.window.showInformationMessage(
+            buildScanLimitMessage(info),
+            'Enter Trial Key',
+            'Later',
+        );
+        if (choice === 'Enter Trial Key') {
+            await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
+        }
+    };
+
+    const ensureScanAllowedForSession = async (): Promise<LicenceInfo | null> => {
+        const info = await ensureScanAllowed(licenceMgr, getConfiguredApiUrl);
+        if (info && !canRunScan(info)) {
+            await handleLimitHit(info);
+            return null;
+        }
+        return info;
+    };
+
+    const refreshIdleStatus = () => statusBar.showIdle(licenceMgr.getCachedInfo());
 
     const currentEntitlement = (): PackEntitlement | undefined => {
         const info = licenceMgr.getCachedInfo();
@@ -799,6 +915,12 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
+            const licenceInfo = await resolveLicenceInfoForAccess(licenceMgr, getConfiguredApiUrl);
+            if (!hasAiAssistantAccess(licenceInfo)) {
+                vscode.window.showInformationMessage(buildPlanUpgradeMessage('assistant'));
+                return;
+            }
+
             void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'finding_viewed', buildFindingUsageMetadata(finding));
             await chatView.discussFinding(finding);
         })
@@ -808,6 +930,12 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(PROFILE.commands.generateFixPreview, async (finding?: any) => {
             if (!finding) {
                 await chatView.show();
+                return;
+            }
+
+            const licenceInfo = await resolveLicenceInfoForAccess(licenceMgr, getConfiguredApiUrl);
+            if (!hasAiAssistantAccess(licenceInfo)) {
+                vscode.window.showInformationMessage(buildPlanUpgradeMessage('fix'));
                 return;
             }
 
@@ -823,7 +951,7 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     licenceMgr.validate(getConfiguredApiUrl()).then(() => {
-        statusBar.showIdle();
+        refreshIdleStatus();
         void refreshRulePackRuntime();
     }).catch(async (error) => {
         if (isRevocationLikeError(error)) {
@@ -886,10 +1014,10 @@ export function activate(context: vscode.ExtensionContext) {
 
             try {
                 const info = await licenceMgr.validate(normalizedApiUrl);
-                statusBar.showIdle();
+                refreshIdleStatus();
                 void refreshRulePackRuntime();
                 vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms) and licence validated for ${info.teamName} (${info.plan}).`,
+                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms) and ${buildLicenceStatusSummary(info)}.`,
                 );
             } catch (error: any) {
                 if (isRevocationLikeError(error)) {
@@ -918,9 +1046,9 @@ export function activate(context: vscode.ExtensionContext) {
             try {
                 const info = await licenceMgr.validate(getConfiguredApiUrl());
                 vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel} activated - ${info.plan} plan (${info.teamName})`
+                    `${PROFILE.displayLabel} activated - ${buildLicenceStatusSummary(info)}`
                 );
-                statusBar.showIdle();
+                refreshIdleStatus();
                 void refreshRulePackRuntime();
             } catch (error: any) {
                 if (isRevocationLikeError(error)) {
@@ -985,6 +1113,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.scanFile, async (requestedUri?: vscode.Uri): Promise<ScanFileCommandResult> => {
+            const allowed = await ensureScanAllowedForSession();
+            if (!allowed) {
+                return { status: 'cancelled' };
+            }
             const fileUri = await resolveScanFileTarget(requestedUri);
             if (!fileUri) {
                 return { status: 'cancelled' };
@@ -1020,6 +1152,10 @@ export function activate(context: vscode.ExtensionContext) {
                 if (sessionScanCount === 2) {
                     void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'file' });
                 }
+                void maybePromptUsefulnessFeedback(allowed, {
+                    scope: 'file',
+                    finding_count: result.findings.length,
+                });
 
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: File risk ${result.score.toFixed(1)}/10 - ${result.findings.length} finding(s)${(result.warnings ?? []).length ? ` (${(result.warnings ?? []).length} warning(s))` : ''}`
@@ -1036,6 +1172,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.scanSelectedFiles, async (requestedUris?: vscode.Uri[] | vscode.Uri, selectedUris?: vscode.Uri[]): Promise<ScanSelectedFilesCommandResult> => {
+            const allowed = await ensureScanAllowedForSession();
+            if (!allowed) {
+                return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
             const normalizedRequested = Array.isArray(selectedUris) && selectedUris.length
                 ? selectedUris
                 : Array.isArray(requestedUris)
@@ -1082,8 +1222,13 @@ export function activate(context: vscode.ExtensionContext) {
                     if (sessionScanCount === 2) {
                         void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'selected_files' });
                     }
+                    void maybePromptUsefulnessFeedback(allowed, {
+                        scope: 'selected_files',
+                        file_count: enrichedResults.length,
+                        finding_count: totalFindings,
+                    });
                 } else {
-                    statusBar.showIdle();
+                    refreshIdleStatus();
                 }
 
                 if (summary.status === 'completed' && enrichedResults.length) {
@@ -1122,6 +1267,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.scanOpenEditors, async (): Promise<ScanOpenEditorsCommandResult> => {
+            const allowed = await ensureScanAllowedForSession();
+            if (!allowed) {
+                return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
             const fileUris = collectOpenEditorUris();
             if (!fileUris.length) {
                 vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No supported open editors were available to scan.`);
@@ -1162,6 +1311,11 @@ export function activate(context: vscode.ExtensionContext) {
                     if (sessionScanCount === 2) {
                         void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'open_editors' });
                     }
+                    void maybePromptUsefulnessFeedback(allowed, {
+                        scope: 'open_editors',
+                        file_count: enrichedResults.length,
+                        finding_count: totalFindings,
+                    });
                     await persistLastReportSnapshot({
                         targetLabel: `${enrichedResults.length} open editor(s)`,
                         outputRoot: vscode.Uri.file(path.dirname(enrichedResults[0].uri.fsPath)),
@@ -1169,7 +1323,7 @@ export function activate(context: vscode.ExtensionContext) {
                         results: enrichedResults,
                     });
                 } else {
-                    statusBar.showIdle();
+                    refreshIdleStatus();
                 }
 
                 if (summary.status === 'completed' && enrichedResults.length) {
@@ -1511,9 +1665,9 @@ export function activate(context: vscode.ExtensionContext) {
             if (licenceKey && backend.success) {
                 try {
                     const info = await licenceMgr.validate(currentApiUrl);
-                    licenceSummary = `Licence valid: ${info.teamName} (${info.plan})`;
+                    licenceSummary = `Licence valid: ${buildLicenceStatusSummary(info)}`;
                     licenceValid = true;
-                    statusBar.showIdle();
+                    refreshIdleStatus();
                     void refreshRulePackRuntime();
                 } catch (error: any) {
                     licenceSummary = `Licence validation failed: ${error.message}`;
@@ -1578,6 +1732,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.scanWorkspace, async (requestedRoot?: vscode.Uri): Promise<ScanWorkspaceCommandResult> => {
+            const allowed = await ensureScanAllowedForSession();
+            if (!allowed) {
+                return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
             const root = requestedRoot ?? await pickScanRoot();
             if (!root) {
                 return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
@@ -1614,6 +1772,11 @@ export function activate(context: vscode.ExtensionContext) {
             if (sessionScanCount === 2) {
                 void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'workspace' });
             }
+            void maybePromptUsefulnessFeedback(allowed, {
+                scope: 'workspace',
+                file_count: summary.completed,
+                finding_count: summary.totalFindings,
+            });
 
             const msg = `${PROFILE.displayLabel}: Scanned ${summary.completed} file(s) in ${root.fsPath} - ${summary.totalFindings} finding(s)`;
             if (summary.errors.length) {
@@ -1628,6 +1791,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.scanWorkspaceReport, async (): Promise<ReportCommandResult> => {
+            const allowed = await ensureScanAllowedForSession();
+            if (!allowed) {
+                return { status: 'cancelled' };
+            }
             try {
                 const lastSnapshot = restoreLastReportSnapshot();
                 const options: vscode.QuickPickItem[] = [];
@@ -1711,7 +1878,7 @@ export function activate(context: vscode.ExtensionContext) {
                     await persistScans();
 
                     if (!summary.completed) {
-                        statusBar.showIdle();
+                        refreshIdleStatus();
                         return {
                             status: summary.status,
                             summary: {
@@ -1761,7 +1928,7 @@ export function activate(context: vscode.ExtensionContext) {
                     await persistScans();
 
                     if (!summary.completed) {
-                        statusBar.showIdle();
+                        refreshIdleStatus();
                         return {
                             status: summary.status,
                             summary: {
@@ -1808,7 +1975,7 @@ export function activate(context: vscode.ExtensionContext) {
                 await persistScans();
 
                 if (!summary.completed) {
-                    statusBar.showIdle();
+                    refreshIdleStatus();
                     return {
                         status: summary.status,
                         summary: {
@@ -1842,12 +2009,22 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.openPromptEditor, async () => {
+            const licenceInfo = await resolveLicenceInfoForAccess(licenceMgr, getConfiguredApiUrl);
+            if (!hasPromptEditorAccess(licenceInfo)) {
+                vscode.window.showInformationMessage(buildPlanUpgradeMessage('prompt-editor'));
+                return;
+            }
             await chatView.show();
         })
     );
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.compareScans, async () => {
+            const licenceInfo = await resolveLicenceInfoForAccess(licenceMgr, getConfiguredApiUrl);
+            if (!hasComparisonAccess(licenceInfo)) {
+                vscode.window.showInformationMessage(buildPlanUpgradeMessage('comparison'));
+                return;
+            }
             const cfg = vscode.workspace.getConfiguration(PROFILE.configSection);
             const compareApiUrl = cfg.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
             const licenceKey = await licenceMgr.getKey();

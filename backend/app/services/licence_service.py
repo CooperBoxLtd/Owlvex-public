@@ -4,10 +4,10 @@ import string
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Licence, LicenceSeat
+from app.db.models import Licence, LicenceSeat, UsageEvent
 
 
 def hash_licence_key(raw_key: str) -> str:
@@ -42,6 +42,9 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
 
     features = licence.features or {}
     allowed_frameworks = features.get("frameworks", ["OWASP"])
+    scans_per_day = features.get("scans_per_day")
+    scans_today = await get_daily_usage_count(db, str(licence.id), "scan_run")
+    scans_remaining = None if scans_per_day is None else max(scans_per_day - scans_today, 0)
 
     return {
         "valid": True,
@@ -52,7 +55,7 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
         "seats_used": licence.seats_used,
         "features": {
             "frameworks": allowed_frameworks,
-            "scans_per_day": features.get("scans_per_day"),
+            "scans_per_day": scans_per_day,
             "prompt_editor": features.get("prompt_editor", False),
             "comparison": features.get("comparison", False),
             "team_prompts": features.get("team_prompts", False),
@@ -62,8 +65,27 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
             "sso": features.get("sso", False),
             "industry_packs": licence.industry_packs or [],
         },
+        "usage": {
+            "scans_today": scans_today,
+            "scans_remaining": scans_remaining,
+            "daily_limit_reached": scans_per_day is not None and scans_today >= scans_per_day,
+        },
         "expires_at": licence.expires_at.isoformat() if licence.expires_at else None,
     }
+
+
+async def get_daily_usage_count(db: AsyncSession, licence_id: str, event_name: str) -> int:
+    start_of_day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    result = await db.execute(
+        select(func.count())
+        .select_from(UsageEvent)
+        .where(
+            UsageEvent.licence_id == licence_id,
+            UsageEvent.event_name == event_name,
+            UsageEvent.created_at >= start_of_day,
+        )
+    )
+    return int(result.scalar_one() or 0)
 
 
 async def record_seat_seen(db: AsyncSession, licence_id: str, user_email: str) -> None:

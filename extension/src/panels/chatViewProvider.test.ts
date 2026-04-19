@@ -1112,6 +1112,55 @@ describe('parseChatIntent', () => {
         ]));
     });
 
+    it('blocks free-plan assistant chat before calling the provider', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: 'This should never be returned.',
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => 'owlvex_lic_FREE_DEV_SEED',
+            getCachedInfo: () => ({
+                valid: true,
+                licenceId: 'lic-free',
+                teamName: 'Free Dev',
+                plan: 'free',
+                seats: 1,
+                seatsUsed: 0,
+                features: {
+                    frameworks: ['OWASP'],
+                    scansPerDay: 50,
+                    promptEditor: false,
+                    comparison: false,
+                    teamPrompts: false,
+                    ciCd: false,
+                    pdfReports: false,
+                    customRules: false,
+                    sso: false,
+                    industryPacks: [],
+                },
+                expiresAt: null,
+            }),
+            validate: async () => { throw new Error('should not validate when cached info exists'); },
+        } as any);
+
+        await (provider as any).handleUserMessage('help me fix this vulnerability');
+
+        expect(complete).not.toHaveBeenCalled();
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Trial or Developer plans');
+    });
+
     it('keeps Keep fix and Discard fix visible during diff-focused follow-ups', async () => {
         const complete = jest.fn().mockResolvedValue({
             content: 'The preview is replacing the unsafe redirect with an allow-listed destination.',

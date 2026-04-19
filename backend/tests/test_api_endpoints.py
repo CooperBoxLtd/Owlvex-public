@@ -250,6 +250,11 @@ async def test_validate_licence_valid_key(client):
             "sso": False,
             "industry_packs": [],
         },
+        "usage": {
+            "scans_today": 0,
+            "scans_remaining": 100,
+            "daily_limit_reached": False,
+        },
         "expires_at": None,
     }
     with patch("app.routers.licences.validate_licence", return_value=mock_result):
@@ -262,6 +267,7 @@ async def test_validate_licence_valid_key(client):
     assert data["plan"] == "team"
     assert data["team_name"] == "Test Corp"
     assert "OWASP" in data["features"]["frameworks"]
+    assert data["usage"]["daily_limit_reached"] is False
 
 
 @pytest.mark.asyncio
@@ -286,6 +292,7 @@ async def test_validate_licence_rate_limits_repeated_requests(client):
         "seats": 5,
         "seats_used": 1,
         "features": {"frameworks": ["OWASP"], "scans_per_day": 100},
+        "usage": {"scans_today": 0, "scans_remaining": 100, "daily_limit_reached": False},
         "expires_at": None,
     }
     with patch("app.routers.licences.settings.licence_validate_rate_limit", 2), \
@@ -318,6 +325,7 @@ async def test_validate_licence_does_not_trust_spoofed_forwarded_for_by_default(
         "seats": 5,
         "seats_used": 1,
         "features": {"frameworks": ["OWASP"], "scans_per_day": 100},
+        "usage": {"scans_today": 0, "scans_remaining": 100, "daily_limit_reached": False},
         "expires_at": None,
     }
     with patch("app.routers.licences.settings.licence_validate_rate_limit", 2), \
