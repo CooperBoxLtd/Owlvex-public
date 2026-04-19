@@ -3,11 +3,11 @@ from app.db.session import check_db_connection
 from app.config import get_settings
 
 router = APIRouter()
-settings = get_settings()
 
 
 @router.get("/health")
 async def health():
+    settings = get_settings()
     db_ok = await check_db_connection()
 
     return {

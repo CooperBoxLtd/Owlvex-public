@@ -6,11 +6,16 @@ a real PostgreSQL instance.  The ARRAY and JSONB column types that
 PostgreSQL provides are handled by overriding the dialect-specific types
 with generic equivalents in the engine URL.
 """
+import os
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from unittest.mock import AsyncMock, MagicMock
+
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("SECRET_KEY", "test-secret-key")
+os.environ.setdefault("ADMIN_KEY", "test-admin-key")
 
 from app.main import app
 from app.db.session import Base, get_db

@@ -1,15 +1,14 @@
 import logging
 import logging.config
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.db.session import engine, check_db_connection
+from app.db.session import get_engine, check_db_connection
 from app.routers import health, licences, prompts, scans, billing, policies, packs, usage
-
-settings = get_settings()
 
 # ----------------------------------------------------------------
 # Structured JSON logging
@@ -39,6 +38,7 @@ logger = logging.getLogger(__name__)
 # ----------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
     logger.info(f"Starting Owlvex API — environment={settings.environment}")
 
     db_ok = await check_db_connection()
@@ -49,26 +49,29 @@ async def lifespan(app: FastAPI):
     logger.info("Database connection: OK")
     yield
 
-    await engine.dispose()
+    await get_engine().dispose()
     logger.info("Owlvex API shutdown complete")
 
 
 # ----------------------------------------------------------------
 # FastAPI app
 # ----------------------------------------------------------------
+environment = os.getenv("ENVIRONMENT", "development")
+is_development = environment == "development"
+
 app = FastAPI(
     title="Owlvex API",
     description="AI-powered code security scanner backend",
     version="1.0.0",
-    docs_url="/docs" if settings.is_development else None,
-    redoc_url="/redoc" if settings.is_development else None,
+    docs_url="/docs" if is_development else None,
+    redoc_url="/redoc" if is_development else None,
     lifespan=lifespan,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if settings.is_development else [],
-    allow_origin_regex=r"^vscode-webview://.*$" if not settings.is_development else None,
+    allow_origins=["*"] if is_development else [],
+    allow_origin_regex=r"^vscode-webview://.*$" if not is_development else None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

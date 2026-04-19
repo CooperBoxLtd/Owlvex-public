@@ -16,7 +16,6 @@ from app.routers.licences import PLAN_FEATURES
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/billing", tags=["billing"])
-settings = get_settings()
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +31,7 @@ async def stripe_webhook(
     db: AsyncSession = Depends(get_db),
     stripe_signature: str = Header(..., alias="Stripe-Signature"),
 ):
+    settings = get_settings()
     if not settings.billing_enabled:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Billing is disabled")
 
@@ -112,6 +112,7 @@ async def _handle_checkout_completed(db: AsyncSession, session: dict) -> None:
 
 
 async def _send_licence_email(email: str, team_name: str, plan: str, raw_key: str) -> None:
+    settings = get_settings()
     if not settings.sendgrid_api_key:
         logger.warning("SendGrid API key not configured — licence key not emailed")
         return
@@ -180,6 +181,7 @@ async def _handle_subscription_deleted(db: AsyncSession, subscription: dict) -> 
 
 
 def _plan_from_stripe_items(subscription: dict) -> str:
+    settings = get_settings()
     price_to_plan = {
         settings.stripe_price_developer_monthly: "developer",
         settings.stripe_price_developer_annual: "developer",

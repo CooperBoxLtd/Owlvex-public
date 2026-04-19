@@ -18,7 +18,6 @@ from app.services.rate_limit import allow_control_plane_request
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/licences", tags=["licences"])
-settings = get_settings()
 
 
 # ----------------------------------------------------------------
@@ -37,6 +36,7 @@ async def validate(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
+    settings = get_settings()
     if not allow_control_plane_request(
         "licence_validate",
         request,
@@ -138,6 +138,7 @@ async def generate(
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
     db: AsyncSession = Depends(get_db),
 ):
+    settings = get_settings()
     if x_admin_key != settings.admin_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key")
 

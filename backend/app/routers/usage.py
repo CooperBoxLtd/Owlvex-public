@@ -9,7 +9,6 @@ from app.services.rate_limit import allow_control_plane_request
 from app.services.usage_service import record_usage_event
 
 router = APIRouter(prefix="/v1/usage", tags=["usage"])
-settings = get_settings()
 
 
 class UsageEventRequest(BaseModel):
@@ -27,6 +26,7 @@ async def create_usage_event(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
+    settings = get_settings()
     if not allow_control_plane_request(
         "usage_events",
         request,
