@@ -1977,6 +1977,10 @@ describe('parseChatIntent', () => {
         expect(finalMessage.content).toContain('Owlvex plans:');
         expect(finalMessage.content).toContain('Free: deterministic scanning and reports');
         expect(finalMessage.content).toContain('Developer: full individual workflow');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Start Trial', kind: 'quickAction', quickAction: 'startTrial' }),
+            expect.objectContaining({ label: 'Enter Licence', kind: 'quickAction', quickAction: 'enterLicence' }),
+        ]));
     });
 
     it('shows trial onboarding guidance when no active trial is cached', async () => {
@@ -2005,4 +2009,64 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Trial onboarding:');
         expect(finalMessage.content).toContain('Configure your LLM connection');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Enter Licence', kind: 'quickAction', quickAction: 'enterLicence' }),
+            expect.objectContaining({ label: 'Configure LLM', kind: 'quickAction', quickAction: 'setupAI' }),
+        ]));
+    });
+
+    it('shows guided next steps when a trial licence is active', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => 'owlvex_lic_TRIAL_DEV_SEED',
+            getCachedInfo: () => ({
+                valid: true,
+                licenceId: 'lic-trial',
+                teamName: 'Trial Team',
+                plan: 'trial',
+                seats: 1,
+                seatsUsed: 0,
+                features: {
+                    frameworks: ['OWASP'],
+                    scansPerDay: null,
+                    promptEditor: true,
+                    comparison: true,
+                    teamPrompts: false,
+                    ciCd: false,
+                    pdfReports: false,
+                    customRules: false,
+                    sso: false,
+                    industryPacks: [],
+                },
+                usage: {
+                    scansToday: 2,
+                    scansRemaining: null,
+                    dailyLimitReached: false,
+                },
+                expiresAt: '2026-04-26T00:00:00Z',
+            }),
+            validate: async () => { throw new Error('no validation expected'); },
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+
+        await (provider as any).handleQuickAction('startTrial');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Trial is active for Trial Team.');
+        expect(finalMessage.content).toContain('Recommended next steps:');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Test Trial Setup', kind: 'quickAction', quickAction: 'testTrialSetup' }),
+            expect.objectContaining({ label: 'Configure LLM', kind: 'quickAction', quickAction: 'setupAI' }),
+        ]));
     });

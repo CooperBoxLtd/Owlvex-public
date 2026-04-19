@@ -24,12 +24,22 @@ interface ChatMessage {
     actions?: ChatMessageAction[];
 }
 
-type ChatMessageActionKind = 'openSource' | 'applyFixPreview' | 'discardFixPreview' | 'generateFixPreview' | 'generateBatchFixPreview' | 'restorePreviousChat' | 'dismissMessage' | 'explainScore';
+type ChatMessageActionKind =
+    | 'openSource'
+    | 'applyFixPreview'
+    | 'discardFixPreview'
+    | 'generateFixPreview'
+    | 'generateBatchFixPreview'
+    | 'restorePreviousChat'
+    | 'dismissMessage'
+    | 'explainScore'
+    | 'quickAction';
 
 interface ChatMessageAction {
     id: string;
     label: string;
     kind: ChatMessageActionKind;
+    quickAction?: string;
     path?: string;
     line?: number;
     finding?: Finding;
@@ -2098,6 +2108,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             void this.persistState();
             this.refresh();
         }
+
+        if (action.kind === 'quickAction' && action.quickAction) {
+            await this.handleQuickAction(action.quickAction);
+        }
     }
 
     private buildActiveSnippetForFinding(finding: Finding): string | undefined {
@@ -2262,9 +2276,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.messages.push({
                 role: 'system',
                 content: licenceInfo
-                    ? `Licence is ready: ${licenceInfo.plan} plan for ${licenceInfo.teamName}.`
+                    ? `Licence is ready: ${buildLicenceStatusSummary(licenceInfo)}.`
                     : 'Licence setup finished. If validation failed, check the backend URL and try again.',
                 kind: 'advisory',
+                actions: licenceInfo
+                    ? [
+                        {
+                            id: 'quick-test-trial-setup',
+                            label: 'Test Setup',
+                            kind: 'quickAction',
+                            quickAction: 'testTrialSetup',
+                        },
+                        {
+                            id: 'quick-view-plans',
+                            label: 'View Plans',
+                            kind: 'quickAction',
+                            quickAction: 'viewPlans',
+                        },
+                    ]
+                    : [
+                        {
+                            id: 'quick-configure-backend',
+                            label: 'Configure Backend',
+                            kind: 'quickAction',
+                            quickAction: 'configureBackend',
+                        },
+                        {
+                            id: 'quick-test-ai',
+                            label: 'Configure LLM',
+                            kind: 'quickAction',
+                            quickAction: 'setupAI',
+                        },
+                    ],
             });
             void this.persistState();
             this.refresh();
@@ -2293,6 +2336,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         '- Run a real scan to experience the full workflow',
                     ].join('\n'),
                 kind: 'advisory',
+                actions: licenceInfo?.plan === 'trial'
+                    ? [
+                        {
+                            id: 'trial-test-setup',
+                            label: 'Test Trial Setup',
+                            kind: 'quickAction',
+                            quickAction: 'testTrialSetup',
+                        },
+                        {
+                            id: 'trial-configure-llm',
+                            label: 'Configure LLM',
+                            kind: 'quickAction',
+                            quickAction: 'setupAI',
+                        },
+                    ]
+                    : [
+                        {
+                            id: 'trial-enter-licence',
+                            label: 'Enter Licence',
+                            kind: 'quickAction',
+                            quickAction: 'enterLicence',
+                        },
+                        {
+                            id: 'trial-configure-backend',
+                            label: 'Configure Backend',
+                            kind: 'quickAction',
+                            quickAction: 'configureBackend',
+                        },
+                        {
+                            id: 'trial-configure-llm',
+                            label: 'Configure LLM',
+                            kind: 'quickAction',
+                            quickAction: 'setupAI',
+                        },
+                    ],
             });
             void this.persistState();
             this.refresh();
@@ -2314,6 +2392,20 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     '- Move to Developer for daily use without free-tier limits',
                 ].join('\n'),
                 kind: 'advisory',
+                actions: [
+                    {
+                        id: 'plans-start-trial',
+                        label: 'Start Trial',
+                        kind: 'quickAction',
+                        quickAction: 'startTrial',
+                    },
+                    {
+                        id: 'plans-enter-licence',
+                        label: 'Enter Licence',
+                        kind: 'quickAction',
+                        quickAction: 'enterLicence',
+                    },
+                ],
             });
             void this.persistState();
             this.refresh();
