@@ -57,6 +57,13 @@ Starter remediation benchmark signals should be recorded explicitly, even before
 - target finding removed
 - new high-risk findings introduced or not
 
+Current product direction:
+
+- Owlvex can auto-record a latest remediation benchmark result after `Keep fix` when:
+  - the file matches a fix benchmark case
+  - the verification rescan completes
+- this latest-result artifact is a product-evidence aid, not yet a full historical benchmark ledger
+
 ## Method Rules
 
 ### Safe / unsafe pairing

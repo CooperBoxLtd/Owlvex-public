@@ -20,6 +20,7 @@ Each entry should answer:
 | AI benchmark evaluator | AI/tooling | `tools/evaluate-ai-benchmark.mjs` | live | AI benchmark results are repeatable and reviewable |
 | Fix benchmark starter manifest | remediation/product | `tools/fix-benchmark/fix-benchmark.expectations.json` | live | Fix attempts can be measured against explicit safety properties instead of ad hoc review |
 | Fix benchmark evaluator | remediation/tooling | `tools/evaluate-fix-benchmark.mjs` | live | Fix-quality results are repeatable and reviewable |
+| Latest remediation benchmark result | remediation/artifact | `tools/fix-benchmark/fix-benchmark.latest.json` | live | Verified kept fixes can be captured as real benchmark evidence from product usage |
 | Baseline layout | governance | `docs/benchmarking/references/BASELINE_LAYOUT.md` | live | Every benchmark claim can point to its source and artifact location |
 
 ## External Benchmark Anchors

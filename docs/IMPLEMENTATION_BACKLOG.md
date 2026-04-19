@@ -288,7 +288,8 @@ This workstream exists because detection quality and fix quality are different c
 ### Current Direction
 
 - a starter fix benchmark manifest and evaluator now exist under `tools/fix-benchmark/`
-- the next step is wiring real fix runs and post-fix rescans into that property-based contract
+- Owlvex can now auto-record a latest fix benchmark result after `Keep fix` and verification for matching benchmark cases
+- the next step is expanding that flow from latest-result capture into broader historical baseline collection and family-level readiness scoring
 
 ### Likely Files
 

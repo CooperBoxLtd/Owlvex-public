@@ -17,6 +17,12 @@ Use this directory as the benchmark governance layer above the runnable assets i
 - [tools/demo-app](D:/Dev/repos/CodeScanner/tools/demo-app/EXPECTATIONS.md)
 - [tools/fix-benchmark](D:/Dev/repos/CodeScanner/tools/fix-benchmark/README.md)
 
+Current live benchmark lanes:
+
+- deterministic proof benchmarking
+- AI product benchmarking
+- starter remediation benchmarking with latest-result capture from verified kept fixes
+
 Core documents:
 
 - [CHARTER.md](D:/Dev/repos/CodeScanner/docs/benchmarking/CHARTER.md)

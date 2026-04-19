@@ -127,6 +127,7 @@ Current product direction:
   - validation guidance
   - unsafe alternatives
   - concise curated cheat-sheet grounding
+- those richer canonical remediation fields now also surface in reports and sidebar finding detail where available
 - OWASP-style cheat-sheet content should continue to flow into the product through the canonical remediation layer rather than through raw prompt stuffing by default
 
 ### Deterministic Benchmark Tool
@@ -141,6 +142,7 @@ Lives under `tools/owlvex-benchmark/`. Provides:
 - separate AI eval tooling for uncovered issue classes that are not part of the deterministic release gate
 - a separate benchmarking department under `docs/benchmarking/` to govern deterministic, AI, external, and future remediation benchmarks
 - a starter remediation benchmark lane under `tools/fix-benchmark/` for measuring preview quality, scope discipline, finding removal, and post-fix safety
+- benchmark-mapped fixes can now auto-record a latest remediation benchmark result after `Keep fix` and a completed verification rescan
 
 This is the mechanism that defines what Owlvex can claim with certainty. No deterministic rule ships without benchmark coverage.
 
