@@ -65,12 +65,12 @@ async def record(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])
 
     quota_ok = await check_scan_quota(
-        db, lic["licence_id"], lic["features"]["scans_per_day"]
+        db, lic["licence_id"], lic["features"]["scans_per_month"]
     )
     if not quota_ok:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Daily scan quota exceeded for this licence",
+            detail="Monthly scan quota exceeded for this licence",
         )
 
     scan = await record_scan(

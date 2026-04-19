@@ -92,9 +92,9 @@ class VerifyRegistrationRequest(BaseModel):
 PLAN_FEATURES = {
     "free": {
         "frameworks": ["OWASP"],
-        "scans_per_day": 50,
-        "prompt_editor": False,
-        "comparison": False,
+        "scans_per_month": 50,
+        "prompt_editor": True,
+        "comparison": True,
         "team_prompts": False,
         "ci_cd": False,
         "pdf_reports": False,
@@ -103,7 +103,7 @@ PLAN_FEATURES = {
     },
     "trial": {
         "frameworks": ["OWASP", "STRIDE", "MITRE", "CWE", "CLEANCODE", "NIST", "PCIDSS"],
-        "scans_per_day": None,
+        "scans_per_month": None,
         "prompt_editor": True,
         "comparison": True,
         "team_prompts": True,
@@ -114,7 +114,7 @@ PLAN_FEATURES = {
     },
     "developer": {
         "frameworks": ["OWASP", "STRIDE", "MITRE", "CWE", "CLEANCODE"],
-        "scans_per_day": None,
+        "scans_per_month": None,
         "prompt_editor": True,
         "comparison": True,
         "team_prompts": False,
@@ -125,7 +125,7 @@ PLAN_FEATURES = {
     },
     "team": {
         "frameworks": ["OWASP", "STRIDE", "MITRE", "CWE", "CLEANCODE", "NIST", "PCIDSS"],
-        "scans_per_day": None,
+        "scans_per_month": None,
         "prompt_editor": True,
         "comparison": True,
         "team_prompts": True,
@@ -136,7 +136,7 @@ PLAN_FEATURES = {
     },
     "enterprise": {
         "frameworks": ["OWASP", "STRIDE", "MITRE", "CWE", "CLEANCODE", "NIST", "PCIDSS", "HIPAA"],
-        "scans_per_day": None,
+        "scans_per_month": None,
         "prompt_editor": True,
         "comparison": True,
         "team_prompts": True,

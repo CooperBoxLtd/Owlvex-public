@@ -1112,9 +1112,9 @@ describe('parseChatIntent', () => {
         ]));
     });
 
-    it('blocks free-plan assistant chat before calling the provider', async () => {
+    it('allows free-plan assistant chat when the licence is valid', async () => {
         const complete = jest.fn().mockResolvedValue({
-            content: 'This should never be returned.',
+            content: 'Free can still use the assistant.',
         });
 
         const provider = new ChatViewProvider({
@@ -1139,9 +1139,9 @@ describe('parseChatIntent', () => {
                 seatsUsed: 0,
                 features: {
                     frameworks: ['OWASP'],
-                    scansPerDay: 50,
-                    promptEditor: false,
-                    comparison: false,
+                    scansPerMonth: 50,
+                    promptEditor: true,
+                    comparison: true,
                     teamPrompts: false,
                     ciCd: false,
                     pdfReports: false,
@@ -1156,9 +1156,9 @@ describe('parseChatIntent', () => {
 
         await (provider as any).handleUserMessage('help me fix this vulnerability');
 
-        expect(complete).not.toHaveBeenCalled();
+        expect(complete).toHaveBeenCalled();
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
-        expect(finalMessage.content).toContain('Trial or Developer plans');
+        expect(finalMessage.content).toContain('Free can still use the assistant.');
     });
 
     it('keeps Keep fix and Discard fix visible during diff-focused follow-ups', async () => {
@@ -2112,7 +2112,7 @@ describe('parseChatIntent', () => {
                 seatsUsed: 0,
                 features: {
                     frameworks: ['OWASP'],
-                    scansPerDay: null,
+                    scansPerMonth: null,
                     promptEditor: true,
                     comparison: true,
                     teamPrompts: false,
@@ -2123,9 +2123,9 @@ describe('parseChatIntent', () => {
                     industryPacks: [],
                 },
                 usage: {
-                    scansToday: 2,
+                    scansThisMonth: 2,
                     scansRemaining: null,
-                    dailyLimitReached: false,
+                    monthlyLimitReached: false,
                 },
                 expiresAt: '2026-04-26T00:00:00Z',
             }),

@@ -650,14 +650,14 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const handleLimitHit = async (info: LicenceInfo): Promise<void> => {
-        const limitKey = `${info.licenceId}:${info.usage.scansToday}:${info.features.scansPerDay ?? 'unlimited'}`;
+        const limitKey = `${info.licenceId}:${info.usage.scansThisMonth}:${info.features.scansPerMonth ?? 'unlimited'}`;
         if (!limitHitEventKeys.has(limitKey)) {
             limitHitEventKeys.add(limitKey);
             void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'limit_hit', {
                 plan: info.plan,
-                scans_today: info.usage.scansToday,
+                scans_this_month: info.usage.scansThisMonth,
                 scans_remaining: info.usage.scansRemaining,
-                scans_per_day: info.features.scansPerDay,
+                scans_per_month: info.features.scansPerMonth,
             });
         }
 

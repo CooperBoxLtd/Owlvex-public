@@ -1679,7 +1679,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl)
                     || PROFILE.defaultApiUrl,
                 ).catch(() => null);
-            if (!hasAiAssistantAccess(activeLicence)) {
+            if (activeLicence && !hasAiAssistantAccess(activeLicence)) {
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',
                     content: buildPlanUpgradeMessage(this.currentMode === 'fix' ? 'fix' : 'assistant'),
@@ -2437,14 +2437,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'system',
                 content: [
                     'Owlvex plans:',
-                    '- Free: register and verify your email, then use deterministic scanning and reports with capped daily usage',
-                    '- Trial: register and verify your email for 7-day full product access, including AI assistant and fix previews',
+                    '- Free: register and verify your email, then use the full workflow with up to 50 scans per month',
+                    '- Trial: register and verify your email for 7-day full product access with higher-volume evaluation',
                     '- Developer: full individual workflow with ongoing AI-assisted use',
                     '',
                     'Upgrade path:',
-                    '- Start with Free to validate deterministic value',
-                    '- Use Trial to experience the full workflow quickly',
-                    '- Move to Developer for daily use without free-tier limits',
+                    '- Start with Free to validate value with the complete product surface',
+                    '- Use Trial to evaluate at higher volume before committing',
+                    '- Move to Developer for ongoing use without free-tier limits',
                 ].join('\n'),
                 kind: 'advisory',
                 actions: [

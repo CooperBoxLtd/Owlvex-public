@@ -127,6 +127,15 @@ bash infra/deploy-dev.sh
 
 This provisions or updates the shared Azure dev control plane.
 
+For day-to-day backend iteration on the current Windows ARM machine, prefer:
+
+1. local `linux/amd64` image build
+2. push to `owlvexdevregistry`
+3. update the dev Web App to a unique image tag
+4. run schema verification / migration
+
+Use remote source-upload ACR builds only as fallback when local Docker is unavailable.
+
 ### Prod Path
 
 Deploy the hosted production environment with:
@@ -176,9 +185,18 @@ Current package outputs:
 Use this workflow:
 
 1. develop and validate against Azure `dev`
+2. build locally as `linux/amd64` and push to ACR with a unique tag
 2. keep deterministic benchmark and extension tests green
 3. promote intentional releases into Azure `prod`
 4. keep external trials and demos pointed at `prod`
+
+On this machine, "local build" still means a container build for Azure:
+
+- Docker Desktop must be running
+- `docker buildx` must support `linux/amd64`
+- the image should be pushed to ACR before the App Service update
+
+If Docker Desktop is stopped, local builds will fail in a way that can look like an ARM issue. Treat Docker availability as the first prerequisite check.
 
 This preserves a stable market-facing environment while still keeping Azure as the shared hosted model.
 

@@ -77,3 +77,20 @@ node tools/admin-db-view.mjs rotate someone@example.com developer
 - Treat the admin key like production infrastructure access.
 - Prefer read-only lookup first, then resend, then rotate/deactivate only when needed.
 - Use prod endpoints only for real customer support; do normal testing on dev.
+
+## Deployment note
+
+For current engineering operations on the Windows ARM development machine:
+
+- build backend images locally with `docker buildx --platform linux/amd64`
+- push those images to ACR
+- deploy App Service from the pushed ACR tag
+
+Do not assume a failed local build is automatically an ARM limitation.
+
+Check Docker Desktop first:
+
+```bash
+docker version
+docker buildx ls
+```

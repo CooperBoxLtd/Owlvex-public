@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Optional
 
 from app.db.models import ScanHistory, Comparison, Licence, TeamPrompt
@@ -9,12 +9,13 @@ from app.db.models import ScanHistory, Comparison, Licence, TeamPrompt
 async def check_scan_quota(
     db: AsyncSession,
     licence_id: str,
-    scans_per_day: Optional[int],
+    scans_per_month: Optional[int],
 ) -> bool:
-    if scans_per_day is None:
+    if scans_per_month is None:
         return True  # unlimited
 
-    since = datetime.now(timezone.utc) - timedelta(days=1)
+    now = datetime.now(timezone.utc)
+    since = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     result = await db.execute(
         select(func.count(ScanHistory.id)).where(
             ScanHistory.licence_id == licence_id,
@@ -22,7 +23,7 @@ async def check_scan_quota(
         )
     )
     count = result.scalar_one()
-    return count < scans_per_day
+    return count < scans_per_month
 
 
 async def record_scan(

@@ -42,9 +42,9 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
 
     features = licence.features or {}
     allowed_frameworks = features.get("frameworks", ["OWASP"])
-    scans_per_day = features.get("scans_per_day")
-    scans_today = await get_daily_usage_count(db, str(licence.id), "scan_run")
-    scans_remaining = None if scans_per_day is None else max(scans_per_day - scans_today, 0)
+    scans_per_month = features.get("scans_per_month", features.get("scans_per_day"))
+    scans_this_month = await get_monthly_usage_count(db, str(licence.id), "scan_run")
+    scans_remaining = None if scans_per_month is None else max(scans_per_month - scans_this_month, 0)
 
     return {
         "valid": True,
@@ -55,7 +55,7 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
         "seats_used": licence.seats_used,
         "features": {
             "frameworks": allowed_frameworks,
-            "scans_per_day": scans_per_day,
+            "scans_per_month": scans_per_month,
             "prompt_editor": features.get("prompt_editor", False),
             "comparison": features.get("comparison", False),
             "team_prompts": features.get("team_prompts", False),
@@ -66,23 +66,24 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
             "industry_packs": licence.industry_packs or [],
         },
         "usage": {
-            "scans_today": scans_today,
+            "scans_this_month": scans_this_month,
             "scans_remaining": scans_remaining,
-            "daily_limit_reached": scans_per_day is not None and scans_today >= scans_per_day,
+            "monthly_limit_reached": scans_per_month is not None and scans_this_month >= scans_per_month,
         },
         "expires_at": licence.expires_at.isoformat() if licence.expires_at else None,
     }
 
 
-async def get_daily_usage_count(db: AsyncSession, licence_id: str, event_name: str) -> int:
-    start_of_day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+async def get_monthly_usage_count(db: AsyncSession, licence_id: str, event_name: str) -> int:
+    now = datetime.now(timezone.utc)
+    start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     result = await db.execute(
         select(func.count())
         .select_from(UsageEvent)
         .where(
             UsageEvent.licence_id == licence_id,
             UsageEvent.event_name == event_name,
-            UsageEvent.created_at >= start_of_day,
+            UsageEvent.created_at >= start_of_month,
         )
     )
     return int(result.scalar_one() or 0)

@@ -66,6 +66,50 @@ This:
 - applies the database schema
 - health-checks the result
 
+## Step 4A: Preferred Local Build Path On Windows ARM
+
+For this machine, the preferred dev build path is now:
+
+1. start Docker Desktop
+2. build a `linux/amd64` image locally
+3. push it to Azure Container Registry
+4. update the dev Web App to the new unique tag
+5. run schema/migration checks
+
+This avoids waiting on remote source-upload builds for normal iteration.
+
+### Quick checks
+
+Before using the local build path, verify Docker is actually running:
+
+```bash
+docker version
+docker buildx ls
+docker run --rm --platform linux/amd64 hello-world
+```
+
+If these fail, the problem is usually that Docker Desktop is not running, not that the machine is ARM.
+
+### Recommended local image build
+
+Use a unique image tag every time:
+
+```bash
+docker buildx build \
+  --platform linux/amd64 \
+  -t owlvexdevregistry.azurecr.io/owlvex-api:<unique-tag> \
+  --push \
+  .
+```
+
+Then update the dev Web App to that tag.
+
+### Important note
+
+Do not reuse old image tags for dev promotion if the backend code changed.
+
+Unique tags are required so App Service clearly pulls the intended image and does not appear to "redeploy" stale code.
+
 ## Step 5: Capture The Dev API URL
 
 The deploy script prints the URL at the end.

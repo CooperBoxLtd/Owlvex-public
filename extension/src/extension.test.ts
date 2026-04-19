@@ -95,32 +95,34 @@ describe('provider setup helpers', () => {
 });
 
 describe('plan access helpers', () => {
-    it('blocks AI assistant access for free plans only', () => {
-        expect(hasAiAssistantAccess({ plan: 'free' } as any)).toBe(false);
+    it('allows AI assistant access for any validated plan', () => {
+        expect(hasAiAssistantAccess({ plan: 'free' } as any)).toBe(true);
         expect(hasAiAssistantAccess({ plan: 'trial' } as any)).toBe(true);
         expect(hasAiAssistantAccess({ plan: 'developer' } as any)).toBe(true);
+        expect(hasAiAssistantAccess(null)).toBe(false);
     });
 
     it('uses feature flags for comparison and prompt editor access', () => {
         expect(hasComparisonAccess({ features: { comparison: false } } as any)).toBe(false);
         expect(hasComparisonAccess({ features: { comparison: true } } as any)).toBe(true);
         expect(hasPromptEditorAccess({ plan: 'free', features: { promptEditor: false } } as any)).toBe(false);
+        expect(hasPromptEditorAccess({ plan: 'free', features: { promptEditor: true } } as any)).toBe(true);
         expect(hasPromptEditorAccess({ plan: 'trial', features: { promptEditor: true } } as any)).toBe(true);
     });
 
     it('returns clear upgrade messages for gated capabilities', () => {
-        expect(buildPlanUpgradeMessage('assistant')).toContain('Trial or Developer plans');
+        expect(buildPlanUpgradeMessage('assistant')).toContain('not available');
         expect(buildPlanUpgradeMessage('fix')).toContain('fix previews');
         expect(buildPlanUpgradeMessage('comparison')).toContain('Scan comparison');
     });
 
-    it('blocks scans only when the backend says the daily limit is reached', () => {
-        expect(canRunScan({ usage: { dailyLimitReached: false } } as any)).toBe(true);
-        expect(canRunScan({ usage: { dailyLimitReached: true } } as any)).toBe(false);
+    it('blocks scans only when the backend says the monthly limit is reached', () => {
+        expect(canRunScan({ usage: { monthlyLimitReached: false } } as any)).toBe(true);
+        expect(canRunScan({ usage: { monthlyLimitReached: true } } as any)).toBe(false);
         expect(buildScanLimitMessage({
             plan: 'free',
-            features: { scansPerDay: 50 },
-            usage: { scansToday: 50, dailyLimitReached: true },
+            features: { scansPerMonth: 50 },
+            usage: { scansThisMonth: 50, monthlyLimitReached: true },
         } as any)).toContain('50/50');
     });
 
@@ -141,16 +143,16 @@ describe('plan access helpers', () => {
         expect(buildRegistrationSuccessMessage('free', 'free-user@example.com', {
             plan: 'free',
             teamName: 'free-user',
-            features: { scansPerDay: 50 },
-            usage: { scansToday: 0 },
+            features: { scansPerMonth: 50 },
+            usage: { scansThisMonth: 0 },
             expiresAt: null,
         } as any)).toContain('Free access registered for free-user@example.com');
 
         expect(buildRegistrationSuccessMessage('trial', 'trial-user@example.com', {
             plan: 'trial',
             teamName: 'Trial Team',
-            features: { scansPerDay: null },
-            usage: { scansToday: 0 },
+            features: { scansPerMonth: null },
+            usage: { scansThisMonth: 0 },
             expiresAt: '2026-04-26T00:00:00Z',
         } as any)).toContain('Trial started for trial-user@example.com');
     });
@@ -179,8 +181,8 @@ describe('plan access helpers', () => {
             plan: 'trial',
             teamName: 'Dev Team',
             expiresAt: '2026-04-26T00:00:00Z',
-            features: { scansPerDay: null },
-            usage: { scansToday: 3 },
+            features: { scansPerMonth: null },
+            usage: { scansThisMonth: 3 },
         } as any, new Date('2026-04-19T10:00:00Z'));
         expect(trialSummary).toContain('Licence: Trial');
         expect(trialSummary).toContain('Dev Team');
@@ -189,17 +191,17 @@ describe('plan access helpers', () => {
         const freeSummary = buildLicenceStatusSummary({
             plan: 'free',
             teamName: 'Starter',
-            features: { scansPerDay: 50 },
-            usage: { scansToday: 4 },
+            features: { scansPerMonth: 50 },
+            usage: { scansThisMonth: 4 },
             expiresAt: null,
         } as any);
-        expect(freeSummary).toContain('4/50 scans today');
+        expect(freeSummary).toContain('4/50 scans this month');
         expect(buildLicenceBadgeLabel({ plan: 'trial', expiresAt: '2026-04-20T00:00:00Z' } as any, new Date('2026-04-19T10:00:00Z'))).toBe('Trial · 1d left');
         expect(buildLicenceBadgeLabel({ plan: 'developer' } as any)).toBe('Developer');
     });
 
     it('builds plan-aware next-step guidance including near-expiry trial messaging', () => {
-        expect(buildPlanNextStepGuidance({ plan: 'free' } as any)[1]).toContain('start a trial');
+        expect(buildPlanNextStepGuidance({ plan: 'free' } as any)[0]).toContain('full workflow');
         expect(buildPlanNextStepGuidance({
             plan: 'trial',
             expiresAt: '2026-04-20T00:00:00Z',

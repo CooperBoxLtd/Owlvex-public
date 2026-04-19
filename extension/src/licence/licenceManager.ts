@@ -12,7 +12,7 @@ export interface LicenceInfo {
     seatsUsed: number;
     features: {
         frameworks: string[];
-        scansPerDay: number | null;
+        scansPerMonth: number | null;
         promptEditor: boolean;
         comparison: boolean;
         teamPrompts: boolean;
@@ -23,9 +23,9 @@ export interface LicenceInfo {
         industryPacks: string[];
     };
     usage: {
-        scansToday: number;
+        scansThisMonth: number;
         scansRemaining: number | null;
-        dailyLimitReached: boolean;
+        monthlyLimitReached: boolean;
     };
     expiresAt: string | null;
 }
@@ -71,9 +71,9 @@ export function buildLicenceStatusSummary(info: LicenceInfo | null | undefined, 
         parts.push(`expires ${info.expiresAt.slice(0, 10)}`);
     }
 
-    if (typeof info.features?.scansPerDay === 'number') {
-        const scansToday = info.usage?.scansToday ?? 0;
-        parts.push(`${scansToday}/${info.features.scansPerDay} scans today`);
+    if (typeof info.features?.scansPerMonth === 'number') {
+        const scansThisMonth = info.usage?.scansThisMonth ?? 0;
+        parts.push(`${scansThisMonth}/${info.features.scansPerMonth} scans this month`);
     }
 
     return parts.join(' · ');
@@ -124,8 +124,8 @@ export function buildPlanNextStepGuidance(
 
     if (info.plan === 'free') {
         return [
-            'Free plan active: deterministic scans and reports are available.',
-            'Next step: start a trial to unlock AI assistant chat, fix previews, and comparison.',
+            'Free plan active: the full workflow is available with capped monthly usage.',
+            'Next step: start a trial if you want higher-volume evaluation before moving to Developer.',
         ];
     }
 
@@ -161,7 +161,7 @@ export function isFreePlan(info: LicenceInfo | null | undefined): boolean {
 }
 
 export function hasAiAssistantAccess(info: LicenceInfo | null | undefined): boolean {
-    return !isFreePlan(info);
+    return Boolean(info);
 }
 
 export function hasComparisonAccess(info: LicenceInfo | null | undefined): boolean {
@@ -169,38 +169,38 @@ export function hasComparisonAccess(info: LicenceInfo | null | undefined): boole
 }
 
 export function hasPromptEditorAccess(info: LicenceInfo | null | undefined): boolean {
-    return Boolean(info?.features.promptEditor) || hasAiAssistantAccess(info);
+    return Boolean(info?.features.promptEditor);
 }
 
 export function canRunScan(info: LicenceInfo | null | undefined): boolean {
     if (!info) {
         return true;
     }
-    return !info.usage.dailyLimitReached;
+    return !info.usage.monthlyLimitReached;
 }
 
 export function buildScanLimitMessage(info: LicenceInfo | null | undefined): string {
-    if (!info || !info.usage.dailyLimitReached) {
+    if (!info || !info.usage.monthlyLimitReached) {
         return 'Scanning is available.';
     }
 
-    const limit = info.features.scansPerDay;
-    const used = info.usage.scansToday;
+    const limit = info.features.scansPerMonth;
+    const used = info.usage.scansThisMonth;
     const capText = typeof limit === 'number' ? `${used}/${limit}` : `${used}`;
-    return `You have reached today's scan limit for the ${info.plan} plan (${capText}). Start a trial or upgrade to Developer for higher or unlimited usage.`;
+    return `You have reached this month's scan limit for the ${info.plan} plan (${capText}). Start a trial or upgrade to Developer for higher or unlimited usage.`;
 }
 
 export function buildPlanUpgradeMessage(capability: 'assistant' | 'fix' | 'comparison' | 'prompt-editor'): string {
     switch (capability) {
         case 'comparison':
-            return 'Scan comparison is part of the Trial, Developer, or Team plans. Free still includes deterministic scanning and reports.';
+            return 'Scan comparison is not available for this licence. Free normally includes it, so this account may need a trial or Developer upgrade.';
         case 'prompt-editor':
-            return 'The guided AI assistant is part of the Trial or Developer plans. Free still includes deterministic scanning and report generation.';
+            return 'The guided AI assistant is not available for this licence. Free normally includes it, so this account may need a trial or Developer upgrade.';
         case 'fix':
-            return 'AI-assisted fix previews are part of the Trial or Developer plans. Free still includes deterministic scanning and report generation.';
+            return 'AI-assisted fix previews are not available for this licence. Free normally includes them, so this account may need a trial or Developer upgrade.';
         case 'assistant':
         default:
-            return 'The AI assistant is part of the Trial or Developer plans. Free still includes deterministic scanning and report generation.';
+            return 'The AI assistant is not available for this licence. Free normally includes it, so this account may need a trial or Developer upgrade.';
     }
 }
 
@@ -252,7 +252,7 @@ export class LicenceManager {
             seatsUsed: data.seats_used,
             features: {
                 frameworks: data.features.frameworks,
-                scansPerDay: data.features.scans_per_day,
+                scansPerMonth: data.features.scans_per_month ?? data.features.scans_per_day,
                 promptEditor: data.features.prompt_editor,
                 comparison: data.features.comparison,
                 teamPrompts: data.features.team_prompts,
@@ -263,9 +263,9 @@ export class LicenceManager {
                 industryPacks: data.features.industry_packs,
             },
             usage: {
-                scansToday: data.usage?.scans_today ?? 0,
+                scansThisMonth: data.usage?.scans_this_month ?? data.usage?.scans_today ?? 0,
                 scansRemaining: data.usage?.scans_remaining ?? null,
-                dailyLimitReached: Boolean(data.usage?.daily_limit_reached),
+                monthlyLimitReached: Boolean(data.usage?.monthly_limit_reached ?? data.usage?.daily_limit_reached),
             },
             expiresAt: data.expires_at,
         };
