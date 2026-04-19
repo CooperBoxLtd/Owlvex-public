@@ -104,6 +104,28 @@ docker buildx build \
 
 Then update the dev Web App to that tag.
 
+### Recommended split deploy commands
+
+Use the same unique tag through the full dev validation path:
+
+```bash
+IMAGE_TAG=dev-20260419-1234 bash infra/build-image.sh
+IMAGE_TAG=dev-20260419-1234 bash infra/deploy-app.sh
+bash infra/migrate-schema.sh
+```
+
+This is the preferred loop for normal backend iteration.
+
+### Promotion discipline
+
+Once a dev image tag is validated, promote that exact tag to prod:
+
+```bash
+IMAGE_TAG=dev-20260419-1234 bash infra/promote-to-prod.sh
+```
+
+Do not rebuild the image separately for production promotion.
+
 ### Important note
 
 Do not reuse old image tags for dev promotion if the backend code changed.
@@ -157,3 +179,9 @@ Owlvex should now have two explicit hosted targets:
 - Azure `prod` for external use
 
 That split is required if production is going to stay stable enough for market trials.
+
+The preferred operational rule is now:
+
+- build once
+- validate on `dev`
+- promote the same image tag to `prod`

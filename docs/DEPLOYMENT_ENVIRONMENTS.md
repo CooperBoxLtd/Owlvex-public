@@ -117,7 +117,7 @@ These real env files must never be committed.
 
 ### Dev Path
 
-Deploy the hosted dev environment with:
+For full dev environment deploys:
 
 ```bash
 cp infra/.env.dev.example infra/.env.dev
@@ -127,18 +127,26 @@ bash infra/deploy-dev.sh
 
 This provisions or updates the shared Azure dev control plane.
 
-For day-to-day backend iteration on the current Windows ARM machine, prefer:
+For day-to-day backend iteration on the current Windows ARM machine, prefer the split flow:
 
 1. local `linux/amd64` image build
 2. push to `owlvexdevregistry`
 3. update the dev Web App to a unique image tag
 4. run schema verification / migration
 
+Recommended commands:
+
+```bash
+IMAGE_TAG=dev-20260419-1234 bash infra/build-image.sh
+IMAGE_TAG=dev-20260419-1234 bash infra/deploy-app.sh
+bash infra/migrate-schema.sh
+```
+
 Use remote source-upload ACR builds only as fallback when local Docker is unavailable.
 
 ### Prod Path
 
-Deploy the hosted production environment with:
+For full production environment deploys:
 
 ```bash
 cp infra/.env.prod.example infra/.env.prod
@@ -148,6 +156,19 @@ bash infra/deploy-prod.sh
 
 This provisions or updates the market-facing Azure control plane.
 
+For normal promotion after dev validation, do not rebuild the image. Promote the validated tag:
+
+```bash
+IMAGE_TAG=dev-20260419-1234 bash infra/promote-to-prod.sh
+```
+
+That path:
+
+1. switches prod App Service to the exact validated image tag
+2. applies schema files
+3. verifies required tables/columns
+4. fails loudly if schema or health checks are not correct
+
 ### Shared Deploy Engine
 
 The common deploy engine remains:
@@ -156,6 +177,10 @@ The common deploy engine remains:
 - [deploy.sh](D:/Dev/repos/CodeScanner/infra/deploy.sh) - shared Azure deployment engine
 - [deploy-dev.sh](D:/Dev/repos/CodeScanner/infra/deploy-dev.sh) - dev wrapper
 - [deploy-prod.sh](D:/Dev/repos/CodeScanner/infra/deploy-prod.sh) - prod wrapper
+- [build-image.sh](D:/Dev/repos/CodeScanner/infra/build-image.sh) - image build and push
+- [deploy-app.sh](D:/Dev/repos/CodeScanner/infra/deploy-app.sh) - App Service image switch and health check
+- [migrate-schema.sh](D:/Dev/repos/CodeScanner/infra/migrate-schema.sh) - schema apply and required-schema verification
+- [promote-to-prod.sh](D:/Dev/repos/CodeScanner/infra/promote-to-prod.sh) - promote the exact validated image tag from dev to prod
 
 ## Extension Configuration
 
@@ -186,9 +211,11 @@ Use this workflow:
 
 1. develop and validate against Azure `dev`
 2. build locally as `linux/amd64` and push to ACR with a unique tag
-2. keep deterministic benchmark and extension tests green
-3. promote intentional releases into Azure `prod`
-4. keep external trials and demos pointed at `prod`
+3. switch Azure `dev` to that exact tag
+4. apply schema and verify health/schema in `dev`
+5. keep deterministic benchmark and extension tests green
+6. promote the exact validated tag into Azure `prod`
+7. keep external trials and demos pointed at `prod`
 
 On this machine, "local build" still means a container build for Azure:
 
@@ -217,6 +244,7 @@ The next environment-hardening priorities are:
 - move from raw secret injection toward Key Vault references in App Settings
 - ensure pack-signing secrets are explicitly environment-scoped
 - replace ACR admin credentials with managed identity where practical
+- keep image promotion tag-based rather than rebuilding separately in prod
 - add a dedicated dev deployment workflow when the hosted dev environment is stable
 
 ## Bottom Line
