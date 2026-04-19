@@ -1956,3 +1956,53 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Deterministic scanning runs locally');
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Fixes stay in preview until you choose Keep fix');
     });
+
+    it('shows a plan overview from settings quick actions', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleQuickAction('viewPlans');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Owlvex plans:');
+        expect(finalMessage.content).toContain('Free: deterministic scanning and reports');
+        expect(finalMessage.content).toContain('Developer: full individual workflow');
+    });
+
+    it('shows trial onboarding guidance when no active trial is cached', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+            validate: async () => { throw new Error('no validation expected'); },
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+
+        await (provider as any).handleQuickAction('startTrial');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.enterLicence);
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Trial onboarding:');
+        expect(finalMessage.content).toContain('Configure your LLM connection');
+    });

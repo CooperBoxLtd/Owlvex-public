@@ -2271,6 +2271,55 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'startTrial') {
+            await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
+            const licenceInfo = this.licenceMgr.getCachedInfo();
+            this.messages.push({
+                role: 'system',
+                content: licenceInfo?.plan === 'trial'
+                    ? [
+                        `Trial is active for ${licenceInfo.teamName}.`,
+                        `Status: ${buildLicenceStatusSummary(licenceInfo)}`,
+                        'Recommended next steps:',
+                        '- Run a scan on a real file or workspace',
+                        '- Ask the AI assistant to explain or fix a finding',
+                        '- Use Test Trial Setup if you want to re-check backend, licence, and LLM connectivity',
+                    ].join('\n')
+                    : [
+                        'Trial onboarding:',
+                        '- Enter a trial or developer licence key',
+                        '- Confirm the backend is reachable',
+                        '- Configure your LLM connection',
+                        '- Run a real scan to experience the full workflow',
+                    ].join('\n'),
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'viewPlans') {
+            this.messages.push({
+                role: 'system',
+                content: [
+                    'Owlvex plans:',
+                    '- Free: deterministic scanning and reports, with capped daily usage and no AI assistant/fix flows',
+                    '- Trial: full product access for evaluation, including AI assistant and fix previews',
+                    '- Developer: full individual workflow with ongoing AI-assisted use',
+                    '',
+                    'Upgrade path:',
+                    '- Start with Free to validate deterministic value',
+                    '- Use Trial to experience the full workflow quickly',
+                    '- Move to Developer for daily use without free-tier limits',
+                ].join('\n'),
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'testTrialSetup') {
             const result = await vscode.commands.executeCommand<any>(PROFILE.commands.testTrialSetup);
             this.messages.push({
@@ -3686,6 +3735,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <div class="meta" id="editor">Inspecting editor...</div>
           <div class="meta" id="projectContext">Project context: loading...</div>
           <div class="quick-actions">
+            <button class="chip" data-action="viewPlans">View Plans</button>
+            <button class="chip" data-action="startTrial">Start Trial</button>
             <button class="chip" data-action="configureBackend">Configure Backend</button>
             <button class="chip" data-action="enterLicence">Enter Licence</button>
             <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
