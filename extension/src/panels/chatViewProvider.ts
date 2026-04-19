@@ -2471,6 +2471,71 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'showOnboarding') {
+            const result = await vscode.commands.executeCommand<any>(PROFILE.commands.testTrialSetup);
+            const summary = Array.isArray(result?.summary) ? result.summary : [];
+            const lines = [
+                'Owlvex onboarding checklist:',
+                `- Backend connection: ${result?.backend ? 'ready' : 'needs setup'}`,
+                `- Licence or registration: ${result?.licence ? 'ready' : 'needs setup'}`,
+                `- LLM connection: ${result?.provider ? 'ready' : 'needs setup'}`,
+                `- First meaningful scan: ${result?.backend && result?.licence ? 'available now' : 'blocked until setup is complete'}`,
+                '',
+                'Current status:',
+                ...(summary.length ? summary.map((line: string) => `- ${line}`) : ['- Run Test Trial Setup to refresh the live status.']),
+            ];
+
+            const actions: ChatMessageAction[] = [];
+            if (!result?.backend) {
+                actions.push({
+                    id: 'onboarding-configure-backend',
+                    label: 'Configure Backend',
+                    kind: 'quickAction',
+                    quickAction: 'configureBackend',
+                });
+            }
+            if (!result?.licence) {
+                actions.push({
+                    id: 'onboarding-use-free',
+                    label: 'Use Free',
+                    kind: 'quickAction',
+                    quickAction: 'useFree',
+                });
+                actions.push({
+                    id: 'onboarding-start-trial',
+                    label: 'Start Trial',
+                    kind: 'quickAction',
+                    quickAction: 'startTrial',
+                });
+            }
+            if (!result?.provider) {
+                actions.push({
+                    id: 'onboarding-configure-llm',
+                    label: 'Configure LLM',
+                    kind: 'quickAction',
+                    quickAction: 'setupAI',
+                });
+            }
+            if (result?.backend && result?.licence) {
+                actions.push({
+                    id: 'onboarding-scan-workspace',
+                    label: 'Scan Workspace',
+                    kind: 'quickAction',
+                    quickAction: 'scanFolder',
+                });
+            }
+
+            this.messages.push({
+                role: 'system',
+                content: lines.join('\n'),
+                kind: 'advisory',
+                actions,
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'testTrialSetup') {
             const result = await vscode.commands.executeCommand<any>(PROFILE.commands.testTrialSetup);
             this.messages.push({
@@ -3886,6 +3951,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <div class="meta" id="editor">Inspecting editor...</div>
           <div class="meta" id="projectContext">Project context: loading...</div>
           <div class="quick-actions">
+            <button class="chip" data-action="showOnboarding">Onboarding</button>
             <button class="chip" data-action="useFree">Use Free</button>
             <button class="chip" data-action="viewPlans">View Plans</button>
             <button class="chip" data-action="startTrial">Start Trial</button>

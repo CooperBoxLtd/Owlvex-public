@@ -1984,6 +1984,46 @@ describe('parseChatIntent', () => {
         ]));
     });
 
+    it('shows an onboarding checklist with next actions based on live setup state', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue({
+            status: 'needs_attention',
+            backend: true,
+            licence: false,
+            provider: false,
+            summary: [
+                'Backend: reachable (42ms)',
+                'Licence: No licence key entered yet.',
+                'LLM: Test Provider is not configured yet.',
+            ],
+        });
+
+        await (provider as any).handleQuickAction('showOnboarding');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.testTrialSetup);
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Owlvex onboarding checklist:');
+        expect(finalMessage.content).toContain('Backend connection: ready');
+        expect(finalMessage.content).toContain('Licence or registration: needs setup');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Use Free', kind: 'quickAction', quickAction: 'useFree' }),
+            expect.objectContaining({ label: 'Start Trial', kind: 'quickAction', quickAction: 'startTrial' }),
+            expect.objectContaining({ label: 'Configure LLM', kind: 'quickAction', quickAction: 'setupAI' }),
+        ]));
+    });
+
     it('shows trial onboarding guidance when no active trial is cached', async () => {
         const provider = new ChatViewProvider({
             getActive: () => ({
