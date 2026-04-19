@@ -25,7 +25,8 @@ Each entry should answer:
 | Benchmark | Type | Source | Status | Supports Claim |
 | --- | --- | --- | --- | --- |
 | OWASP Benchmark Java slice | proof/external | OWASP Benchmark | starter | Owlvex deterministic proof can be compared to a known AppSec benchmark on mapped families |
-| Juliet / SARD slices | proof/external | NIST SARD | planned | Owlvex deterministic rules can be cross-checked against CWE-oriented corpora |
+| OWASP Benchmark Java scorecard starter | proof/external | OWASP Benchmark | starter | Owlvex external Java claim has an explicit scorecard boundary before real result numbers exist |
+| Juliet / SARD slices | proof/external | NIST SARD | starter | Owlvex deterministic rules can be cross-checked against CWE-oriented corpora |
 | SecurityEval references | AI/external | SecurityEval | planned | Owlvex AI behavior can be calibrated against external LLM security-eval references |
 | CyberSecEval references | AI/external | Purple Llama / CyberSecEval | planned | Owlvex AI and agent-lane positioning can be compared to broader cybersecurity AI evaluation work |
 

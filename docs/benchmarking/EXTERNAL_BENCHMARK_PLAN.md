@@ -20,6 +20,12 @@ Role:
 
 - secondary CWE-oriented corpus
 
+Initial use:
+
+- selective CWE slices only
+- start with command injection, SQL injection, and path traversal
+- treat insecure deserialization as a later extension
+
 ### SecurityEval
 
 Role:
@@ -44,3 +50,10 @@ Do not use them as:
 
 - a replacement for Owlvex-native evaluation
 - a shortcut to claims the product has not earned
+
+## Recommended Order
+
+1. use Owlvex-native proof and AI benchmarks as the primary quality gates
+2. use OWASP Benchmark Java as the first external proof anchor
+3. use selective Juliet / SARD slices as a second external proof reference
+4. use SecurityEval and CyberSecEval as AI calibration references, not primary product scorecards

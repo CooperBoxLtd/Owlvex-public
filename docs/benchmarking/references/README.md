@@ -17,6 +17,10 @@ Reference documents in this directory should answer:
 
 Current references:
 
+- [OWASP_BENCHMARK_JAVA_CASE_INVENTORY.md](D:/Dev/repos/CodeScanner/docs/benchmarking/references/OWASP_BENCHMARK_JAVA_CASE_INVENTORY.md)
 - [OWASP_BENCHMARK_JAVA_SLICE.md](D:/Dev/repos/CodeScanner/docs/benchmarking/references/OWASP_BENCHMARK_JAVA_SLICE.md)
 - [OWASP_BENCHMARK_JAVA_SCORECARD_TEMPLATE.md](D:/Dev/repos/CodeScanner/docs/benchmarking/references/OWASP_BENCHMARK_JAVA_SCORECARD_TEMPLATE.md)
+- [OWASP_BENCHMARK_JAVA_SCORECARD_STARTER.md](D:/Dev/repos/CodeScanner/docs/benchmarking/references/OWASP_BENCHMARK_JAVA_SCORECARD_STARTER.md)
+- [JULIET_SARD_SLICE.md](D:/Dev/repos/CodeScanner/docs/benchmarking/references/JULIET_SARD_SLICE.md)
+- [JULIET_SARD_SCORECARD_TEMPLATE.md](D:/Dev/repos/CodeScanner/docs/benchmarking/references/JULIET_SARD_SCORECARD_TEMPLATE.md)
 - [BASELINE_LAYOUT.md](D:/Dev/repos/CodeScanner/docs/benchmarking/references/BASELINE_LAYOUT.md)

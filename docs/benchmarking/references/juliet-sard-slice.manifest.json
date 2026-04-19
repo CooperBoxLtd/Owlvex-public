@@ -1,0 +1,35 @@
+{
+  "benchmark": "Juliet / SARD",
+  "sliceLabel": "owlvex-juliet-first-slice",
+  "type": "proof-external",
+  "candidateFamilies": [
+    {
+      "cwe": "CWE-78",
+      "label": "OS Command Injection",
+      "canonicalIssue": "owlvex.issue.command_injection.001",
+      "ruleCode": "GR-001",
+      "status": "candidate"
+    },
+    {
+      "cwe": "CWE-89",
+      "label": "SQL Injection",
+      "canonicalIssue": "owlvex.issue.sql_injection.001",
+      "ruleCode": "SQ-001",
+      "status": "candidate"
+    },
+    {
+      "cwe": "CWE-22",
+      "label": "Path Traversal",
+      "canonicalIssue": "owlvex.issue.path_traversal.001",
+      "ruleCode": "PT-001",
+      "status": "candidate"
+    },
+    {
+      "cwe": "CWE-502",
+      "label": "Insecure Deserialization",
+      "canonicalIssue": "owlvex.issue.insecure_deserialization.001",
+      "ruleCode": "DS-001",
+      "status": "later"
+    }
+  ]
+}
