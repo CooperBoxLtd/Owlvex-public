@@ -1,10 +1,10 @@
 # Owlvex First Production Deploy
 
-This runbook defines the bootstrap path for the Owlvex production control plane on Azure App Service for Containers. The infrastructure is implemented and has been deployed.
+This runbook defines the bootstrap path for the Owlvex production control plane on Azure App Service for Containers.
 
 It assumes:
 
-- development continues on `ml30`
+- Azure `dev` exists separately from production
 - production runs in Azure App Service for Containers
 - Stripe is not being activated yet
 - the extension and CLI continue scanning locally
@@ -28,7 +28,15 @@ This first deploy does **not** require:
 - managed identity hardening
 - full Key Vault-native secret retrieval
 
-This first deploy also does **not** depend on Azure Container Apps.
+## Production Role
+
+Production is now the market-facing environment for:
+
+- external trials
+- released product behavior
+- controlled demos
+
+It should not be used for day-to-day development deploys.
 
 ## Target Production Stack
 
@@ -63,12 +71,6 @@ az login
 az account set --subscription c0b31fc1-52d0-4339-96ee-9915e4dfe3c4
 ```
 
-Optional verification:
-
-```bash
-az account show --query "{name:name, id:id}" -o table
-```
-
 ## Step 2: Create The Production Resource Group
 
 ```bash
@@ -99,11 +101,9 @@ Leave these empty for the first deploy:
 
 - `noreply@owlvex.io`
 
-You can still store these in `infra/.env.prod` if that is operationally convenient, but that file is now just a staging convenience, not the definition of the deployment path.
-
 ## Step 4: Provision The Azure Infrastructure
 
-Run the deploy script. It will provision:
+Run the production wrapper script. It will provision:
 
 - Azure Container Registry
 - Azure Database for PostgreSQL Flexible Server
@@ -114,52 +114,21 @@ Run the deploy script. It will provision:
 
 ```bash
 cp infra/.env.prod.example infra/.env.prod
-# edit infra/.env.prod — set POSTGRES_ADMIN_PASSWORD, SECRET_KEY, ADMIN_KEY
-source infra/.env.prod
-bash infra/deploy.sh
+# edit infra/.env.prod
+bash infra/deploy-prod.sh
 ```
 
-The script handles all steps (Bicep deploy, image build/push, schema init, health check) in sequence.
+The wrapper delegates to the shared Azure deploy engine and stamps the environment as production.
 
 To redeploy a new image without re-provisioning infrastructure:
 
 ```bash
-IMAGE_ONLY=1 bash infra/deploy.sh
+IMAGE_ONLY=1 bash infra/deploy-prod.sh
 ```
 
-## Step 5: Build And Push The Backend Image
+## Step 5: Capture The Live API URL
 
-Handled automatically by `deploy.sh`. The script builds from [backend/Dockerfile](D:/Dev/repos/CodeScanner/backend/Dockerfile) and pushes to the ACR created in Step 4.
-
-## Step 6: Configure The Web App For Containers
-
-Handled automatically by `deploy.sh` via `az webapp config container set`. The Bicep template also injects all required app settings:
-
-- `DATABASE_URL`
-- `SECRET_KEY`
-- `ADMIN_KEY`
-- optional Stripe values
-- optional SendGrid value
-- `ENVIRONMENT=production`
-
-## Step 7: Initialize The Database Schema
-
-Handled automatically by `deploy.sh`. It applies in order:
-
-1. `01_schema.sql`
-2. `02_seed.sql`
-3. `03_rules_extended.sql`
-
-Uses `psql` if available, falls back to `docker run postgres:16`.
-
-## Step 8: Capture The Live API URL
-
-`deploy.sh` prints the live URL at the end:
-
-```
-API URL   : https://<app-service-hostname>
-Health    : https://<app-service-hostname>/health
-```
+`deploy-prod.sh` prints the live URL at the end.
 
 To retrieve it later:
 
@@ -167,21 +136,19 @@ To retrieve it later:
 az webapp show --name owlvex-api --resource-group owlvex-prd --query defaultHostName -o tsv
 ```
 
-## Step 9: Point The Extension At Production
+The current live production endpoint is:
+
+- `https://owlvex-api.azurewebsites.net`
+
+## Step 6: Point The Extension At Production
 
 Set:
 
 - `owlvex.apiUrl = https://<app-service-hostname>`
 
-The current live production endpoint is:
+Dev builds or dev profiles should stay pointed at Azure `dev`, not production.
 
-- `https://owlvex-api.azurewebsites.net`
-
-Development can continue using:
-
-- `http://192.168.50.35:8000`
-
-## Step 10: Verify Production Health
+## Step 7: Verify Production Health
 
 ```bash
 curl https://<app-service-hostname>/health
@@ -215,24 +182,10 @@ Those are valid hardening steps, but they are not required for the production co
 
 ## After First Deploy
 
-Normal application-only production updates:
+Normal production updates:
 
 ```bash
-IMAGE_ONLY=1 bash infra/deploy.sh
-```
-
-Or via CI: any push to `main` that touches `backend/`, `infra/`, or the workflow file triggers the deploy pipeline in `.github/workflows/deploy-prod.yml`, which builds the image, updates the Web App, and health-checks the result.
-
-## Future Billing Activation
-
-When you are ready to turn on Stripe later:
-
-1. fill in the Stripe variables in `infra/.env.prod`
-2. redeploy
-3. set the Stripe webhook to:
-
-```text
-https://<app-service-hostname>/v1/billing/webhook/stripe
+IMAGE_ONLY=1 bash infra/deploy-prod.sh
 ```
 
 ## Bottom Line
@@ -241,6 +194,6 @@ For the first production deploy, you only need:
 
 - Azure login with access to subscription `c0b31fc1-52d0-4339-96ee-9915e4dfe3c4`
 - `infra/.env.prod` with three real secret values
-- `bash infra/deploy.sh`
+- `bash infra/deploy-prod.sh`
 
-All infrastructure, image build, and schema init is automated.
+All infrastructure, image build, and schema init is automated through the shared Azure deploy engine.

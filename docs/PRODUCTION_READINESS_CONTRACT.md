@@ -12,7 +12,7 @@ It is a shipping contract:
 
 If this document conflicts with [IMPLEMENTATION_DESIGN.md](D:/Dev/repos/CodeScanner/docs/IMPLEMENTATION_DESIGN.md), the design document wins.
 
-For environment setup and deployment mechanics, see [DEPLOYMENT_ENVIRONMENTS.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_ENVIRONMENTS.md) and [FIRST_PRODUCTION_DEPLOY.md](D:/Dev/repos/CodeScanner/docs/FIRST_PRODUCTION_DEPLOY.md).
+For environment setup and deployment mechanics, see [DEPLOYMENT_ENVIRONMENTS.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_ENVIRONMENTS.md), [DEV_AZURE_ENVIRONMENT.md](D:/Dev/repos/CodeScanner/docs/DEV_AZURE_ENVIRONMENT.md), and [FIRST_PRODUCTION_DEPLOY.md](D:/Dev/repos/CodeScanner/docs/FIRST_PRODUCTION_DEPLOY.md).
 
 For current customer-facing boundary wording and the current Azure secret-posture note, see [CUSTOMER_SECURITY_AND_DATA_BOUNDARY.md](D:/Dev/repos/CodeScanner/docs/CUSTOMER_SECURITY_AND_DATA_BOUNDARY.md) and [AZURE_SECRET_POSTURE_2026-04-18.md](D:/Dev/repos/CodeScanner/docs/AZURE_SECRET_POSTURE_2026-04-18.md).
 
@@ -33,6 +33,7 @@ It means:
 - the critical extension/backend contracts are stable
 - release signals are strong enough to trust changes
 - operational failure modes are understood and bounded
+- production is not being used as the default development environment
 
 For the current AI lane, production readiness also requires that corroboration posture is honest:
 
@@ -167,6 +168,7 @@ Exit criteria:
 Required:
 
 - production backend is deployed to Azure App Service for Containers
+- production and development are separated at the environment level, not just by convention
 - production database schema is versioned and repeatable
 - secrets are injected securely and are not committed to the repo
 - health checks exist and are meaningful
@@ -176,6 +178,7 @@ Exit criteria:
 - `/health` returns success after deploy
 - database initialization path is documented and repeatable
 - required production secrets are enumerated
+- production and development do not share the same Azure resource group or default deploy path
 - the deployment path supports redeploy without reprovisioning everything
 
 Billing-specific note:

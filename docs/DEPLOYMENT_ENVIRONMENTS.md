@@ -1,27 +1,27 @@
 # Owlvex Deployment Environments
 
-This document defines the supported deployment model for Owlvex control-plane services.
+This document defines the supported hosted environment model for Owlvex.
 
-It exists to keep one simple operating model in place:
+It exists to keep one simple operating rule in place:
 
-- `ml30` stays the development environment
-- Azure is the production environment
-- the extension and CLI keep scanning locally in both environments
-- changing environment changes the backend endpoint, not the data boundary
+- Azure `dev` is the day-to-day hosted development environment
+- Azure `prod` is the market-facing trial and release environment
+- local Docker or ad hoc hosts are optional developer tools, not the named shared development environment
+- the extension and CLI keep scanning locally in every environment
 
 If this document conflicts with [IMPLEMENTATION_DESIGN.md](D:/Dev/repos/CodeScanner/docs/IMPLEMENTATION_DESIGN.md), the design document wins.
 
 ## Deployment Model
 
-Owlvex has two environments:
+Owlvex has two supported hosted environments:
 
 1. `dev`
-   - backend runs on `ml30`
-   - used for iteration, debugging, local QA, and development testing
+   - backend runs in Azure
+   - used for day-to-day backend work, integration testing, and pre-release validation
 
 2. `prod`
-   - backend runs in Azure App Service for Containers
-   - used for production licences, billing, prompt delivery, and metadata storage
+   - backend runs in Azure
+   - used for external trials, demos, and released product behavior
 
 The extension and CLI remain the execution plane in both environments.
 
@@ -36,64 +36,60 @@ These rules do not change by environment:
 
 Changing `dev` to `prod` must never turn Owlvex into a backend scan relay.
 
+## Resource Group Strategy
+
+Owlvex should use separate Azure resource groups:
+
+- `owlvex-dev`
+- `owlvex-prd`
+
+Both environments should currently live in:
+
+- `uksouth`
+
+`owlvex-prd` must no longer be used for day-to-day development deploys.
+
 ## Environment Responsibilities
 
-### Development (`ml30`)
+### Development (`owlvex-dev`)
 
-Development remains the fastest place to iterate.
+Development Azure is the shared hosted environment for:
 
-Use it for:
-
-- backend development
-- prompt and metadata flow validation
-- Docker-based local or LAN deployments
-- extension integration testing
-- benchmark and test debugging
+- backend iteration
+- extension-to-backend integration testing
+- dev licence and prompt-flow validation
+- safe pre-release deploy validation
 
 Expected backend URL shape:
 
-- `http://192.168.50.35:8000`
+- `https://owlvexdev-api.azurewebsites.net`
 
-### Production (Azure)
+### Production (`owlvex-prd`)
 
-Production hosts only the Owlvex control plane:
+Production Azure is the market-facing environment for:
 
-- licence validation
+- trial and external tester access
+- production-style licence validation
 - prompt/template delivery
 - policy evaluation
-- billing and Stripe webhook handling
 - scan metadata storage
-- signed pack delivery and pack access audit logging
+- controlled release validation
 
 Expected backend URL shape:
 
-- `https://<app-service-hostname>`
+- `https://owlvex-api.azurewebsites.net`
 
 ## Azure Subscription
 
-Production Azure resources must be deployed into subscription:
+Hosted Azure resources must be deployed into subscription:
 
 - `c0b31fc1-52d0-4339-96ee-9915e4dfe3c4`
 
-Before any production deploy, set the active subscription explicitly:
+Before any deploy, set the active subscription explicitly:
 
 ```bash
 az login
 az account set --subscription c0b31fc1-52d0-4339-96ee-9915e4dfe3c4
-```
-
-## Resource Group Strategy
-
-Production should use a dedicated resource group.
-
-Recommended initial value:
-
-- `owlvex-prd`
-
-Create it once:
-
-```bash
-az group create --name owlvex-prd --location uksouth
 ```
 
 ## Environment Files
@@ -112,7 +108,7 @@ Tracked templates:
 
 Legacy compatibility:
 
-- [infra/.env.azure.example](D:/Dev/repos/CodeScanner/infra/.env.azure.example) remains as a production-oriented alias for the current deploy script
+- [infra/.env.azure.example](D:/Dev/repos/CodeScanner/infra/.env.azure.example) remains a production-oriented alias
 
 These real env files must never be committed.
 
@@ -120,50 +116,36 @@ These real env files must never be committed.
 
 ### Dev Path
 
-Development can continue to use the existing local or `ml30` flow.
-
-Typical path:
+Deploy the hosted dev environment with:
 
 ```bash
-cp backend/.env.example backend/.env
-docker compose up -d
+cp infra/.env.dev.example infra/.env.dev
+# edit infra/.env.dev
+bash infra/deploy-dev.sh
 ```
 
-This keeps the dev backend on `ml30` or local Docker without touching Azure.
+This provisions or updates the shared Azure dev control plane.
 
-### Prod Bootstrap Path
+### Prod Path
 
-The target production bootstrap path is now:
+Deploy the hosted production environment with:
 
-1. provision Azure infrastructure for:
-   - Azure Container Registry
-   - Azure Database for PostgreSQL
-   - Azure Key Vault
-   - Azure App Service Plan
-   - Azure Web App for Containers
-2. build and push the backend image to ACR
-3. configure the Web App to run that image
-4. initialize the PostgreSQL schema
-5. verify `/health`
+```bash
+cp infra/.env.prod.example infra/.env.prod
+# edit infra/.env.prod
+bash infra/deploy-prod.sh
+```
 
-The exact App Service deployment scripts are not yet implemented in the repo.
+This provisions or updates the market-facing Azure control plane.
 
-### Current Repo Status
+### Shared Deploy Engine
 
-The production infrastructure is implemented and deployed. The files under `infra/` target Azure App Service for Containers:
+The common deploy engine remains:
 
-- [main.bicep](D:/Dev/repos/CodeScanner/infra/main.bicep) — provisions ACR, PostgreSQL Flexible Server, Key Vault, Log Analytics, App Service Plan, and the Web App for Containers
-- [deploy.sh](D:/Dev/repos/CodeScanner/infra/deploy.sh) — full bootstrap: provisions infra via Bicep, builds and pushes image, updates Web App, applies schema, health checks
-- [deploy-prod.yml](D:/Dev/repos/CodeScanner/.github/workflows/deploy-prod.yml) — CI gate: runs tests and benchmark, then builds/pushes image and updates Web App on push to `main`
-
-### CI Production Path
-
-The CI production path:
-
-- tests and benchmark gate run first
-- backend image is built and pushed to ACR
-- `az webapp config container set` updates the production Web App to the new image tag
-- health check confirms the deployment succeeded
+- [main.bicep](D:/Dev/repos/CodeScanner/infra/main.bicep) - provisions ACR, PostgreSQL Flexible Server, Key Vault, Log Analytics, App Service Plan, and Web App for Containers
+- [deploy.sh](D:/Dev/repos/CodeScanner/infra/deploy.sh) - shared Azure deployment engine
+- [deploy-dev.sh](D:/Dev/repos/CodeScanner/infra/deploy-dev.sh) - dev wrapper
+- [deploy-prod.sh](D:/Dev/repos/CodeScanner/infra/deploy-prod.sh) - prod wrapper
 
 ## Extension Configuration
 
@@ -175,33 +157,28 @@ Current key:
 
 Expected usage:
 
-- dev -> `http://192.168.50.35:8000`
-- prod default -> `https://owlvex-api.azurewebsites.net`
-- prod -> Azure App Service URL
+- dev -> Azure dev App Service URL
+- prod -> Azure prod App Service URL
 
-This keeps the environment switch operationally simple.
+The packaging/profile rule should stay simple:
 
-The extension now supports two packaging profiles from the same source tree:
-
-- `npm run package:dev` -> `Owlvex Dev`
-- `npm run package:prod` -> `Owlvex`
-
-These builds are intended as environment-specific package outputs, not long-term side-by-side installs.
+- dev builds or dev profiles point to dev
+- prod builds or release profiles point to prod
 
 ## Recommended Operating Pattern
 
 Use this workflow:
 
-1. develop and test against `ml30`
+1. develop and validate against Azure `dev`
 2. keep deterministic benchmark and extension tests green
-3. deploy the backend control plane to Azure prod
-4. point production users to the Azure backend URL
+3. promote intentional releases into Azure `prod`
+4. keep external trials and demos pointed at `prod`
 
-This preserves the same product model in both environments.
+This preserves a stable market-facing environment while still keeping Azure as the shared hosted model.
 
 ## What Must Not Change
 
-These must remain true after Azure production is added:
+These must remain true after the environment split:
 
 - source code is not sent to Owlvex backend for scanning
 - the deterministic engine does not move into Azure
@@ -210,24 +187,21 @@ These must remain true after Azure production is added:
 
 ## Near-Term Improvements
 
-The production infrastructure is live. Hardening priorities:
+The next environment-hardening priorities are:
 
+- keep dev and prod secrets fully separate
 - move from raw secret injection toward Key Vault references in App Settings
-- ensure `OWLVEX_PACK_SIGNING_PRIVATE_KEY_PEM` and `OWLVEX_PACK_SIGNING_KEY_ID` are set from managed production secrets; production must not fall back to development signing keys
+- ensure pack-signing secrets are explicitly environment-scoped
 - replace ACR admin credentials with managed identity where practical
-- formalize environment selection in extension settings if needed
-- document backend request shapes that are allowed to carry metadata only
-- add real telemetry instrumentation before reintroducing Application Insights settings
+- add a dedicated dev deployment workflow when the hosted dev environment is stable
 
 ## Bottom Line
 
-The supported operating model is:
+The supported hosted operating model is:
 
-- `ml30` for development
-- Azure for production
+- Azure `dev` for day-to-day development
+- Azure `prod` for market-facing trials and releases
 - local scanning in both
 - backend control plane only
 
-That lets us ship production without changing the core privacy and execution boundary of Owlvex.
-
-For the shortest Stripe-free bootstrap sequence, see [FIRST_PRODUCTION_DEPLOY.md](D:/Dev/repos/CodeScanner/docs/FIRST_PRODUCTION_DEPLOY.md).
+That gives Owlvex a stable production target without continuing to develop directly in production.

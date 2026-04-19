@@ -124,6 +124,8 @@ Current operating decision for this phase:
 - keep trials free
 - keep billing disabled by default
 - document billing-path security work now, but defer billing enablement work until the product is intentionally moved into a billable phase
+- stop using Azure production as the day-to-day development environment
+- establish Azure `dev` and Azure `prod` as separate hosted environments with separate resource groups and secrets
 
 This ordering exists because Owlvex's deterministic floor is now materially stronger, but the overall product experience still has visible trust and UX gaps. The next phase should improve:
 

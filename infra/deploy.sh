@@ -14,9 +14,14 @@
 #   - az CLI installed and logged in
 #   - Docker running
 #   - psql installed locally, or Docker available for the fallback schema step
-#   - All required env vars set (see .env.prod.example or .env.azure.example)
+#   - All required env vars set (see .env.dev.example, .env.prod.example, or .env.azure.example)
 #
 # Usage:
+#   cp infra/.env.dev.example infra/.env.dev
+#   source infra/.env.dev
+#   bash infra/deploy.sh
+#
+# Or:
 #   cp infra/.env.prod.example infra/.env.prod
 #   source infra/.env.prod
 #   bash infra/deploy.sh
@@ -27,9 +32,10 @@
 
 set -euo pipefail
 
-RESOURCE_GROUP="${RESOURCE_GROUP:-owlvex-prod}"
-LOCATION="${LOCATION:-westeurope}"
+RESOURCE_GROUP="${RESOURCE_GROUP:-owlvex-prd}"
+LOCATION="${LOCATION:-uksouth}"
 PREFIX="${PREFIX:-owlvex}"
+DEPLOY_ENV="${DEPLOY_ENV:-production}"
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD 2>/dev/null || echo 'latest')}"
 IMAGE_ONLY="${IMAGE_ONLY:-0}"
 
@@ -84,6 +90,7 @@ run_schema_file() {
 echo ""
 echo "=================================================="
 echo "  Owlvex — Azure deployment"
+echo "  Environment    : ${DEPLOY_ENV}"
 echo "  Resource group : ${RESOURCE_GROUP}"
 echo "  Location       : ${LOCATION}"
 echo "  Image tag      : ${IMAGE_TAG}"
@@ -108,6 +115,7 @@ if [[ "${IMAGE_ONLY}" != "1" ]]; then
     --template-file "${SCRIPT_DIR}/main.bicep" \
     --parameters \
       prefix="${PREFIX}" \
+      environment="${DEPLOY_ENV}" \
       postgresAdminPassword="${POSTGRES_ADMIN_PASSWORD}" \
       secretKey="${SECRET_KEY}" \
       adminKey="${ADMIN_KEY}" \
