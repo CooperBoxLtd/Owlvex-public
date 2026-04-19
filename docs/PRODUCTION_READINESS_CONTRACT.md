@@ -34,6 +34,7 @@ It means:
 - release signals are strong enough to trust changes
 - operational failure modes are understood and bounded
 - production is not being used as the default development environment
+- customer entry, registration, and licence issuance are supportable enough that early users do not depend on ad hoc engineer intervention
 
 For the current AI lane, production readiness also requires that corroboration posture is honest:
 
@@ -83,6 +84,7 @@ Current operating note:
 - during the free-trial phase, billing may remain intentionally disabled
 - disabled billing does not remove the need to document billing-path risks
 - it does mean billing-specific production blockers can stay deferred until the product is intentionally moved into a billable phase
+- before marketplace and payment automation exist, customer registration and licence issuance should still be explicit and traceable rather than anonymous
 
 ## 4. Required Readiness Areas
 
@@ -140,6 +142,21 @@ Exit criteria:
 - live deterministic rule set and benchmark-covered rule set match
 - any intentionally heuristic rule is either removed from deterministic claims or clearly downgraded in wording
 - user-facing confidence tiers for AI-backed findings do not overstate certainty relative to the implemented corroboration flow
+
+## 4.3A Customer Entry Readiness
+
+Required:
+
+- Free and Trial entry paths are understandable to a new customer without custom engineering help
+- customer registration and licence issuance are traceable to a known identity, at minimum an email address
+- extension onboarding can guide a user from registration through licence, backend, and provider setup
+- manual operator steps are documented when automation is not yet complete
+
+Exit criteria:
+
+- early-access users can register and receive a tracked licence without ad hoc database editing
+- licence recovery, resend, or plan correction has a documented runbook
+- marketplace and payment may remain unfinished, but customer entry is still supportable and repeatable
 
 ## 4.4 Test And Release Readiness
 

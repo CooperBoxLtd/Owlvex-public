@@ -1975,9 +1975,10 @@ describe('parseChatIntent', () => {
 
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Owlvex plans:');
-        expect(finalMessage.content).toContain('Free: deterministic scanning and reports');
+        expect(finalMessage.content).toContain('Free: register with email');
         expect(finalMessage.content).toContain('Developer: full individual workflow');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Use Free', kind: 'quickAction', quickAction: 'useFree' }),
             expect.objectContaining({ label: 'Start Trial', kind: 'quickAction', quickAction: 'startTrial' }),
             expect.objectContaining({ label: 'Enter Licence', kind: 'quickAction', quickAction: 'enterLicence' }),
         ]));
@@ -2005,13 +2006,44 @@ describe('parseChatIntent', () => {
 
         await (provider as any).handleQuickAction('startTrial');
 
-        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.enterLicence);
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.registerAccess, 'trial');
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Trial onboarding:');
         expect(finalMessage.content).toContain('Configure your LLM connection');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Enter Licence', kind: 'quickAction', quickAction: 'enterLicence' }),
+            expect.objectContaining({ label: 'Register Trial', kind: 'quickAction', quickAction: 'startTrial' }),
             expect.objectContaining({ label: 'Configure LLM', kind: 'quickAction', quickAction: 'setupAI' }),
+        ]));
+    });
+
+    it('shows free onboarding guidance when no free licence is cached', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+            validate: async () => { throw new Error('no validation expected'); },
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+
+        await (provider as any).handleQuickAction('useFree');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.registerAccess, 'free');
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Free onboarding:');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Use Free', kind: 'quickAction', quickAction: 'useFree' }),
+            expect.objectContaining({ label: 'Configure Backend', kind: 'quickAction', quickAction: 'configureBackend' }),
         ]));
     });
 

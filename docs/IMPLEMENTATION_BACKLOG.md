@@ -46,6 +46,7 @@ Current product shape:
 - backend provides licence, prompt, catalog, and metadata services
 - backend must not receive raw source code for scanning
 - extension now supports a trial-oriented onboarding path for backend, licence, and provider configuration
+- the next customer-entry direction is lightweight email-based registration for Free and Trial so licences are issued to a known customer identity
 - AI-backed findings now expose multi-pass corroboration detail through finder, verifier, and skeptic roles
 
 ## Build Principles
@@ -148,6 +149,7 @@ The current phase should also make demos and trials work without engineer hand-h
 - provider setup is part of the normal workflow
 - one setup check can confirm whether the trial path is ready
 - day-to-day product work should now happen against Azure `dev`, including pricing, trial, and telemetry changes
+- early customer entry should move away from anonymous licence distribution and toward email-based registration plus tracked licence issuance
 
 ## Workstream 0.88: Pricing, Trial, And Usage Metering
 
@@ -181,6 +183,35 @@ Turn the current free-trial / developer packaging into a real product contract b
 - usage events are recorded without requiring raw source upload
 - extension scan/fix flows emit observable telemetry to the Owlvex control plane
 - Azure `dev` is the default place to validate pricing and trial work before any production exposure
+
+## Workstream 0.89: Customer Registration And Licence Issuance
+
+### Goal
+
+Move Free and Trial entry from manual or anonymous key handoff toward a lightweight email-registration model that lets Owlvex track issued licences and support early customers before marketplace or payment automation exists.
+
+### Tasks
+
+- define a lightweight customer registration contract using email as the primary identifier
+- add backend customer/licence issuance flow for:
+  - free
+  - trial
+  - later developer upgrades
+- make the extension onboarding path ask for email registration before Free or Trial licence issuance
+- keep the first implementation intentionally light:
+  - email registration
+  - tracked licence issuance
+  - extension-side licence storage
+- add an internal ops/runbook path for manual support, resend, or recovery before payment automation exists
+- keep marketplace discovery and billing out of scope for this workstream
+
+### Acceptance Criteria
+
+- Free and Trial entry can be tied to a known email identity
+- issued licences are traceable to a customer record
+- a new user can register, receive a licence, and continue setup from inside the extension
+- early customer support can recover or reissue a licence without ad hoc database edits
+- the flow remains compatible with later marketplace and payment automation
 
 ## Workstream 0.85: Benchmarking Department
 

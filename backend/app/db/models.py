@@ -72,10 +72,25 @@ class PromptTemplate(Base):
     framework = relationship("Framework", back_populates="prompt_templates")
 
 
+class Customer(Base):
+    __tablename__ = "customers"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email       = Column(String(200), nullable=False, unique=True)
+    name        = Column(String(200))
+    company     = Column(String(200))
+    source      = Column(String(50), default="extension")
+    created_at  = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at  = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    licences    = relationship("Licence", back_populates="customer")
+
+
 class Licence(Base):
     __tablename__ = "licences"
 
     id                     = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    customer_id            = Column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="SET NULL"))
     licence_key_hash       = Column(String(64), nullable=False, unique=True)
     team_name              = Column(String(200), nullable=False)
     email                  = Column(String(200), nullable=False)
@@ -91,6 +106,7 @@ class Licence(Base):
     created_at             = Column(TIMESTAMP(timezone=True), server_default=func.now())
     updated_at             = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    customer    = relationship("Customer", back_populates="licences")
     seats_rel   = relationship("LicenceSeat", back_populates="licence", cascade="all, delete")
     scans       = relationship("ScanHistory", back_populates="licence")
     comparisons = relationship("Comparison", back_populates="licence")

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
-import { buildLicenceBadgeLabel, buildLicenceStatusSummary, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess } from './licence/licenceManager';
+import { buildLicenceBadgeLabel, buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, isTrialEndingSoon } from './licence/licenceManager';
 import {
+    buildRegistrationSuccessMessage,
     buildUsefulnessPromptMessage,
     clearProviderConnection,
     getProviderConnectionSettingKeys,
@@ -135,6 +136,24 @@ describe('plan access helpers', () => {
         expect(buildUsefulnessPromptMessage({ plan: 'free' } as any)).toBe('Was this useful?');
     });
 
+    it('builds registration success messaging for free and trial flows', () => {
+        expect(buildRegistrationSuccessMessage('free', 'free-user@example.com', {
+            plan: 'free',
+            teamName: 'free-user',
+            features: { scansPerDay: 50 },
+            usage: { scansToday: 0 },
+            expiresAt: null,
+        } as any)).toContain('Free access registered for free-user@example.com');
+
+        expect(buildRegistrationSuccessMessage('trial', 'trial-user@example.com', {
+            plan: 'trial',
+            teamName: 'Trial Team',
+            features: { scansPerDay: null },
+            usage: { scansToday: 0 },
+            expiresAt: '2026-04-26T00:00:00Z',
+        } as any)).toContain('Trial started for trial-user@example.com');
+    });
+
     it('builds richer licence status summaries for trial and free plans', () => {
         const trialSummary = buildLicenceStatusSummary({
             plan: 'trial',
@@ -157,5 +176,18 @@ describe('plan access helpers', () => {
         expect(freeSummary).toContain('4/50 scans today');
         expect(buildLicenceBadgeLabel({ plan: 'trial', expiresAt: '2026-04-20T00:00:00Z' } as any, new Date('2026-04-19T10:00:00Z'))).toBe('Trial · 1d left');
         expect(buildLicenceBadgeLabel({ plan: 'developer' } as any)).toBe('Developer');
+    });
+
+    it('builds plan-aware next-step guidance including near-expiry trial messaging', () => {
+        expect(buildPlanNextStepGuidance({ plan: 'free' } as any)[1]).toContain('start a trial');
+        expect(buildPlanNextStepGuidance({
+            plan: 'trial',
+            expiresAt: '2026-04-20T00:00:00Z',
+        } as any, new Date('2026-04-19T10:00:00Z'))[0]).toContain('Trial ending soon');
+        expect(isTrialEndingSoon({
+            plan: 'trial',
+            expiresAt: '2026-04-20T00:00:00Z',
+        } as any, 2, new Date('2026-04-19T10:00:00Z'))).toBe(true);
+        expect(buildPlanNextStepGuidance({ plan: 'developer' } as any)[0]).toContain('Developer plan active');
     });
 });

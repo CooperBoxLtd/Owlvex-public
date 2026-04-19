@@ -82,6 +82,10 @@
         "title": "Owlvex: Enter Licence Key"
       },
       {
+        "command": "owlvex.registerAccess",
+        "title": "Owlvex: Register Free Or Trial Access"
+      },
+      {
         "command": "owlvex.compareScans",
         "title": "Owlvex: Compare Scans"
       },

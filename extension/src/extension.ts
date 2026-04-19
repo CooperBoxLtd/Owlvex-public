@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { buildLicenceStatusSummary, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, LicenceInfo, LicenceManager } from './licence/licenceManager';
+import { buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, LicenceInfo, LicenceManager } from './licence/licenceManager';
 import { getProviderApiKeySecretName, ProviderRegistry, persistProviderSetting } from './providers/registry';
 import { ScanEngine, ScanResult } from './scanner/scanEngine';
 import { DiagnosticsProvider } from './diagnostics/diagnosticsProvider';
@@ -115,6 +115,16 @@ type UsageEventName =
     | 'feedback_negative';
 
 const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
+
+interface RegisterAccessResponse {
+    customer_id: string;
+    licence_id: string;
+    licence_key: string;
+    plan: string;
+    team_name: string;
+    email: string;
+    expires_at: string | null;
+}
 
 function normalizeStoredScanRecord(item: { scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }): StoredScanRecord {
     return {
@@ -394,6 +404,21 @@ export function buildUsefulnessPromptMessage(info: LicenceInfo | null | undefine
     return 'Was this useful?';
 }
 
+export function buildRegistrationSuccessMessage(
+    plan: 'free' | 'trial',
+    email: string,
+    info: LicenceInfo | null | undefined,
+): string {
+    const heading = plan === 'trial'
+        ? `Trial started for ${email}.`
+        : `Free access registered for ${email}.`;
+    const summary = info
+        ? buildLicenceStatusSummary(info)
+        : `Licence: ${plan.charAt(0).toUpperCase()}${plan.slice(1)}`;
+
+    return `${heading}\n${summary}\n${buildPlanNextStepGuidance(info).join('\n')}`;
+}
+
 export function getProviderConnectionSettingKeys(providerId: string): string[] {
     switch (providerId) {
         case 'azure-foundry':
@@ -489,6 +514,25 @@ async function readJsonResponse(res: Response, prefix: string): Promise<any> {
     }
 }
 
+async function registerTrackedAccessRequest(
+    apiUrl: string,
+    payload: { email: string; plan: 'free' | 'trial' },
+): Promise<RegisterAccessResponse> {
+    const response = await fetch(`${apiUrl}/v1/licences/register`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+        throw new Error(await readErrorResponse(response, 'Registration failed'));
+    }
+
+    return await readJsonResponse(response, 'Registration response returned invalid JSON') as RegisterAccessResponse;
+}
+
 export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.workspace.registerTextDocumentContentProvider(OWLVEX_PREVIEW_SCHEME, new PreviewDocumentProvider()),
@@ -572,11 +616,11 @@ export function activate(context: vscode.ExtensionContext) {
 
         const choice = await vscode.window.showInformationMessage(
             buildScanLimitMessage(info),
-            'Enter Trial Key',
+            'Start Trial',
             'Later',
         );
-        if (choice === 'Enter Trial Key') {
-            await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
+        if (choice === 'Start Trial') {
+            await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'trial');
         }
     };
 
@@ -1017,7 +1061,7 @@ export function activate(context: vscode.ExtensionContext) {
                 refreshIdleStatus();
                 void refreshRulePackRuntime();
                 vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms) and ${buildLicenceStatusSummary(info)}.`,
+                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms) and ${buildLicenceStatusSummary(info)}.\n${buildPlanNextStepGuidance(info).join('\n')}`,
                 );
             } catch (error: any) {
                 if (isRevocationLikeError(error)) {
@@ -1028,6 +1072,71 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.window.showWarningMessage(
                     `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms), but licence validation failed. ${error.message}`,
                 );
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.registerAccess, async (requestedPlan?: 'free' | 'trial') => {
+            const selectedPlan = requestedPlan ?? await (async (): Promise<'free' | 'trial' | undefined> => {
+                const picked = await vscode.window.showQuickPick(
+                    [
+                        {
+                            label: 'Free',
+                            description: 'Deterministic scans and reports with capped usage',
+                            plan: 'free' as const,
+                        },
+                        {
+                            label: 'Trial',
+                            description: '7-day full workflow with AI assistant and fix previews',
+                            plan: 'trial' as const,
+                        },
+                    ],
+                    {
+                        title: 'Register Owlvex access',
+                        placeHolder: 'Choose how you want to start',
+                        ignoreFocusOut: true,
+                    },
+                );
+                return picked?.plan;
+            })();
+
+            if (!selectedPlan) {
+                return;
+            }
+
+            const email = await vscode.window.showInputBox({
+                prompt: selectedPlan === 'trial'
+                    ? 'Enter your email to start a tracked 7-day Owlvex trial'
+                    : 'Enter your email to register Owlvex Free access',
+                placeHolder: 'you@company.com',
+                ignoreFocusOut: true,
+                validateInput: (value) => /\S+@\S+\.\S+/.test(value.trim()) ? undefined : 'Enter a valid email address.',
+            });
+            if (!email) {
+                return;
+            }
+
+            try {
+                const registration = await registerTrackedAccessRequest(getConfiguredApiUrl(), {
+                    email: email.trim(),
+                    plan: selectedPlan,
+                });
+
+                await licenceMgr.storeKey(registration.licence_key);
+                const info = await licenceMgr.validate(getConfiguredApiUrl());
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: ${buildRegistrationSuccessMessage(selectedPlan, registration.email, info)}`,
+                );
+                refreshIdleStatus();
+                void refreshRulePackRuntime();
+            } catch (error: any) {
+                if (isRevocationLikeError(error)) {
+                    licenceMgr.clearCachedInfo();
+                    await purgeRulePackState();
+                }
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: ${error.message}`);
+                statusBar.showUnlicensed();
             }
         })
     );
@@ -1046,7 +1155,7 @@ export function activate(context: vscode.ExtensionContext) {
             try {
                 const info = await licenceMgr.validate(getConfiguredApiUrl());
                 vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel} activated - ${buildLicenceStatusSummary(info)}`
+                    `${PROFILE.displayLabel} activated - ${buildLicenceStatusSummary(info)}\n${buildPlanNextStepGuidance(info).join('\n')}`
                 );
                 refreshIdleStatus();
                 void refreshRulePackRuntime();
@@ -1703,6 +1812,13 @@ export function activate(context: vscode.ExtensionContext) {
                 `Licence: ${licenceSummary}`,
                 `LLM: ${providerSummary}`,
             ];
+
+            if (licenceValid) {
+                const info = licenceMgr.getCachedInfo();
+                if (info) {
+                    lines.push(...buildPlanNextStepGuidance(info));
+                }
+            }
 
             if (backend.success && licenceValid && providerReady) {
                 vscode.window.showInformationMessage(

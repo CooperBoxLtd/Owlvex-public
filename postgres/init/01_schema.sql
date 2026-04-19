@@ -62,8 +62,19 @@ CREATE TABLE prompt_templates (
 -- ============================================================
 -- LICENCES — one per paying customer / team
 -- ============================================================
+CREATE TABLE customers (
+    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email       VARCHAR(200) NOT NULL UNIQUE,
+    name        VARCHAR(200),
+    company     VARCHAR(200),
+    source      VARCHAR(50)  DEFAULT 'extension',
+    created_at  TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  DEFAULT NOW()
+);
+
 CREATE TABLE licences (
     id                      UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_id             UUID         REFERENCES customers(id) ON DELETE SET NULL,
     licence_key_hash        VARCHAR(64)  NOT NULL UNIQUE,  -- SHA256 of key, never raw
     team_name               VARCHAR(200) NOT NULL,
     email                   VARCHAR(200) NOT NULL,
@@ -171,6 +182,7 @@ CREATE INDEX idx_rules_language      ON rules USING GIN(languages);
 CREATE INDEX idx_scan_licence        ON scan_history(licence_id);
 CREATE INDEX idx_scan_created        ON scan_history(created_at DESC);
 CREATE INDEX idx_licence_key_hash    ON licences(licence_key_hash);
+CREATE INDEX idx_customers_email     ON customers(email);
 CREATE INDEX idx_team_prompts_lic    ON team_prompts(licence_id);
 CREATE INDEX idx_licence_seats_lic   ON licence_seats(licence_id);
 CREATE INDEX idx_comparisons_licence ON comparisons(licence_id);

@@ -87,6 +87,7 @@ The execution plane. Provides:
 - scan comparison
 - provider and model switching
 - trial and demo onboarding for:
+  - lightweight email-based registration for Free or Trial entry
   - backend URL configuration
   - licence entry
   - provider setup
@@ -182,10 +183,21 @@ This is the mechanism that defines what Owlvex can claim with certainty. No dete
 
 The current onboarding path for AI-backed use is:
 
-1. configure backend URL
-2. enter or validate licence
-3. configure provider/model
-4. run a trial/setup readiness check
+1. choose Free, Start Trial, or Enter Existing Licence
+2. for Free or Trial, register with email so Owlvex can issue and track the licence
+3. configure backend URL
+4. enter or validate licence
+5. configure provider/model
+6. run a trial/setup readiness check
+
+Current product direction for customer entry:
+
+- Free and Trial should move to a lightweight email-registration flow rather than anonymous licence-key distribution
+- the first release of that flow should stay deliberately small:
+  - email registration
+  - backend-issued tracked licence
+  - extension-side storage of the issued key
+- marketplace discovery and automated payment can follow later
 
 ### Privacy Model
 
@@ -266,7 +278,9 @@ Current remediation posture:
 
 **Working-scope-controlled AI access** - the assistant's bottom scope dropdown should define both what Owlvex scans and what AI is allowed to inspect as context. `Active file`, `Selected files`, `Open editors`, and `Workspace` should act as explicit AI context boundaries rather than letting repo access become an invisible always-on mode.
 
-**Trial onboarding** - configure backend, enter a licence, configure an LLM, and verify whether the AI-backed path is ready without editing settings files by hand.
+**Trial onboarding** - choose Free, Start Trial, or Enter Existing Licence; register with email for Free or Trial; configure backend, enter or validate the issued licence, configure an LLM, and verify whether the AI-backed path is ready without editing settings files by hand.
+
+**Customer entry direction** - Owlvex should support a lightweight registration path where a user installs the extension, chooses Free or Trial, registers with email, receives or is issued a tracked licence, and continues setup in-product. Marketplace distribution and automated payment are later workstreams, not prerequisites for this early customer-entry model.
 
 ---
 

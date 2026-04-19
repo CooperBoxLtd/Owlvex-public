@@ -396,6 +396,56 @@ async def test_generate_licence_rejects_unexpected_fields(client):
     assert response.status_code == 422
 
 
+@pytest.mark.asyncio
+async def test_register_free_licence_creates_tracked_access(client):
+    response = await client.post(
+        "/v1/licences/register",
+        json={"email": "free-user@example.com", "plan": "free"},
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["licence_key"].startswith("owlvex_lic_")
+    assert data["plan"] == "free"
+    assert data["email"] == "free-user@example.com"
+    assert data["expires_at"] is None
+
+
+@pytest.mark.asyncio
+async def test_register_trial_licence_sets_expiry(client):
+    response = await client.post(
+        "/v1/licences/register",
+        json={"email": "trial-user@example.com", "plan": "trial", "name": "Trial User"},
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["plan"] == "trial"
+    assert data["email"] == "trial-user@example.com"
+    assert data["team_name"] == "Trial User's Workspace"
+    assert data["expires_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_register_licence_rejects_invalid_plan(client):
+    response = await client.post(
+        "/v1/licences/register",
+        json={"email": "bad-plan@example.com", "plan": "developer"},
+    )
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_register_licence_rejects_unexpected_fields(client):
+    response = await client.post(
+        "/v1/licences/register",
+        json={"email": "free-user@example.com", "plan": "free", "source_code": "nope"},
+    )
+
+    assert response.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # /v1/usage/events
 # ---------------------------------------------------------------------------

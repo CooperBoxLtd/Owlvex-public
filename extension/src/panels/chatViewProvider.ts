@@ -11,7 +11,7 @@ import type { Finding, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 import { getProjectContextSummaryFromConfig, loadProjectContextInfo } from '../projectContext';
 import { createPreviewDocumentUri } from './previewDocumentProvider';
-import { buildLicenceStatusSummary, buildPlanUpgradeMessage, hasAiAssistantAccess, LicenceManager } from '../licence/licenceManager';
+import { buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, hasAiAssistantAccess, LicenceManager } from '../licence/licenceManager';
 
 type ChatRole = 'user' | 'assistant' | 'system';
 type MessageKind = 'advisory' | 'scan';
@@ -2315,7 +2315,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action === 'startTrial') {
-            await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
+            await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'trial');
             const licenceInfo = this.licenceMgr.getCachedInfo();
             this.messages.push({
                 role: 'system',
@@ -2324,13 +2324,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         `Trial is active for ${licenceInfo.teamName}.`,
                         `Status: ${buildLicenceStatusSummary(licenceInfo)}`,
                         'Recommended next steps:',
-                        '- Run a scan on a real file or workspace',
-                        '- Ask the AI assistant to explain or fix a finding',
+                        ...buildPlanNextStepGuidance(licenceInfo).map(line => `- ${line}`),
                         '- Use Test Trial Setup if you want to re-check backend, licence, and LLM connectivity',
                     ].join('\n')
                     : [
                         'Trial onboarding:',
-                        '- Enter a trial or developer licence key',
+                        '- Register a tracked trial with your email',
                         '- Confirm the backend is reachable',
                         '- Configure your LLM connection',
                         '- Run a real scan to experience the full workflow',
@@ -2353,10 +2352,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     ]
                     : [
                         {
-                            id: 'trial-enter-licence',
-                            label: 'Enter Licence',
+                            id: 'trial-register',
+                            label: 'Register Trial',
                             kind: 'quickAction',
-                            quickAction: 'enterLicence',
+                            quickAction: 'startTrial',
                         },
                         {
                             id: 'trial-configure-backend',
@@ -2377,13 +2376,67 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'useFree') {
+            await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'free');
+            const licenceInfo = this.licenceMgr.getCachedInfo();
+            this.messages.push({
+                role: 'system',
+                content: licenceInfo?.plan === 'free'
+                    ? [
+                        `Free access is active for ${licenceInfo.teamName}.`,
+                        `Status: ${buildLicenceStatusSummary(licenceInfo)}`,
+                        'Recommended next steps:',
+                        ...buildPlanNextStepGuidance(licenceInfo).map(line => `- ${line}`),
+                    ].join('\n')
+                    : [
+                        'Free onboarding:',
+                        '- Register Free access with your email',
+                        '- Confirm the backend is reachable',
+                        '- Run a deterministic scan to validate value quickly',
+                    ].join('\n'),
+                kind: 'advisory',
+                actions: licenceInfo?.plan === 'free'
+                    ? [
+                        {
+                            id: 'free-test-setup',
+                            label: 'Test Trial Setup',
+                            kind: 'quickAction',
+                            quickAction: 'testTrialSetup',
+                        },
+                        {
+                            id: 'free-start-trial',
+                            label: 'Start Trial',
+                            kind: 'quickAction',
+                            quickAction: 'startTrial',
+                        },
+                    ]
+                    : [
+                        {
+                            id: 'free-register',
+                            label: 'Use Free',
+                            kind: 'quickAction',
+                            quickAction: 'useFree',
+                        },
+                        {
+                            id: 'free-configure-backend',
+                            label: 'Configure Backend',
+                            kind: 'quickAction',
+                            quickAction: 'configureBackend',
+                        },
+                    ],
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'viewPlans') {
             this.messages.push({
                 role: 'system',
                 content: [
                     'Owlvex plans:',
-                    '- Free: deterministic scanning and reports, with capped daily usage and no AI assistant/fix flows',
-                    '- Trial: full product access for evaluation, including AI assistant and fix previews',
+                    '- Free: register with email, then use deterministic scanning and reports with capped daily usage',
+                    '- Trial: register with email for 7-day full product access, including AI assistant and fix previews',
                     '- Developer: full individual workflow with ongoing AI-assisted use',
                     '',
                     'Upgrade path:',
@@ -2393,6 +2446,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 ].join('\n'),
                 kind: 'advisory',
                 actions: [
+                    {
+                        id: 'plans-use-free',
+                        label: 'Use Free',
+                        kind: 'quickAction',
+                        quickAction: 'useFree',
+                    },
                     {
                         id: 'plans-start-trial',
                         label: 'Start Trial',
@@ -3827,6 +3886,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <div class="meta" id="editor">Inspecting editor...</div>
           <div class="meta" id="projectContext">Project context: loading...</div>
           <div class="quick-actions">
+            <button class="chip" data-action="useFree">Use Free</button>
             <button class="chip" data-action="viewPlans">View Plans</button>
             <button class="chip" data-action="startTrial">Start Trial</button>
             <button class="chip" data-action="configureBackend">Configure Backend</button>

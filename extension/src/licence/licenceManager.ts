@@ -95,6 +95,67 @@ export function buildLicenceBadgeLabel(info: LicenceInfo | null | undefined, now
     return titleCasePlan(info.plan);
 }
 
+export function isTrialPlan(info: LicenceInfo | null | undefined): boolean {
+    return info?.plan === 'trial';
+}
+
+export function isTrialEndingSoon(
+    info: LicenceInfo | null | undefined,
+    thresholdDays = 2,
+    now = new Date(),
+): boolean {
+    if (!isTrialPlan(info)) {
+        return false;
+    }
+
+    const daysLeft = getDaysUntilExpiry(info?.expiresAt, now);
+    return daysLeft !== null && daysLeft <= thresholdDays;
+}
+
+export function buildPlanNextStepGuidance(
+    info: LicenceInfo | null | undefined,
+    now = new Date(),
+): string[] {
+    if (!info) {
+        return [
+            'Next step: enter a licence key and configure your LLM connection.',
+        ];
+    }
+
+    if (info.plan === 'free') {
+        return [
+            'Free plan active: deterministic scans and reports are available.',
+            'Next step: start a trial to unlock AI assistant chat, fix previews, and comparison.',
+        ];
+    }
+
+    if (info.plan === 'trial') {
+        const daysLeft = getDaysUntilExpiry(info.expiresAt, now);
+        if (daysLeft !== null && daysLeft <= 2) {
+            return [
+                `Trial ending soon: ${daysLeft} day${daysLeft === 1 ? '' : 's'} left.`,
+                'Next step: upgrade to Developer to keep AI assistant, fix previews, and higher usage after the trial ends.',
+            ];
+        }
+
+        return [
+            'Trial active: the full product workflow is available during evaluation.',
+            'Next step: run a real scan, review a finding, and try a fix preview before the trial ends.',
+        ];
+    }
+
+    if (info.plan === 'developer') {
+        return [
+            'Developer plan active: the full individual workflow is available.',
+            'Next step: keep using Owlvex in your daily scan, explain, and fix loop.',
+        ];
+    }
+
+    return [
+        `Plan active: ${titleCasePlan(info.plan)}.`,
+    ];
+}
+
 export function isFreePlan(info: LicenceInfo | null | undefined): boolean {
     return info?.plan === 'free';
 }

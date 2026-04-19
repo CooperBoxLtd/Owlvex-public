@@ -1,13 +1,12 @@
-import hashlib
-import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
 from app.db.session import get_db
-from app.db.models import Licence
+from app.db.models import Customer, Licence
 from app.services.licence_service import (
     validate_licence,
     generate_licence_key,
@@ -50,7 +49,7 @@ async def validate(
     result = await validate_licence(db, x_licence_key)
 
     if not result["valid"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=result["reason"])
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=result["reason"])
 
     if body.user_email:
         await record_seat_seen(db, result["licence_id"], body.user_email)
@@ -71,6 +70,14 @@ class GenerateRequest(BaseModel):
     expires_at: Optional[str] = None
     stripe_customer_id: Optional[str] = None
     stripe_subscription_id: Optional[str] = None
+
+
+class RegisterRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr
+    plan: str = Field(pattern="^(free|trial)$")
+    name: Optional[str] = None
+    company: Optional[str] = None
 
 
 PLAN_FEATURES = {
@@ -132,6 +139,54 @@ PLAN_FEATURES = {
 }
 
 
+def _default_team_name_for_registration(email: str, company: Optional[str], name: Optional[str]) -> str:
+    if company and company.strip():
+        return company.strip()
+    if name and name.strip():
+        return f"{name.strip()}'s Workspace"
+    return email.split("@", 1)[0]
+
+
+async def _get_or_create_customer(
+    db: AsyncSession,
+    *,
+    email: str,
+    name: Optional[str],
+    company: Optional[str],
+    source: str = "extension",
+) -> Customer:
+    result = await db.execute(select(Customer).where(Customer.email == email))
+    customer = result.scalar_one_or_none()
+    if customer:
+        if name and not customer.name:
+            customer.name = name
+        if company and not customer.company:
+            customer.company = company
+        return customer
+
+    customer = Customer(
+        email=email,
+        name=name,
+        company=company,
+        source=source,
+    )
+    db.add(customer)
+    await db.flush()
+    return customer
+
+
+async def _deactivate_existing_plan_licences(db: AsyncSession, *, email: str, plan: str) -> None:
+    result = await db.execute(
+        select(Licence).where(
+            Licence.email == email,
+            Licence.plan == plan,
+            Licence.is_active.is_(True),
+        )
+    )
+    for licence in result.scalars().all():
+        licence.is_active = False
+
+
 @router.post("/generate", status_code=status.HTTP_201_CREATED)
 async def generate(
     body: GenerateRequest,
@@ -180,4 +235,64 @@ async def generate(
         "plan": licence.plan,
         "team_name": licence.team_name,
         "email": licence.email,
+    }
+
+
+@router.post("/register", status_code=status.HTTP_201_CREATED)
+async def register(
+    body: RegisterRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    settings = get_settings()
+    if not allow_control_plane_request(
+        "licence_register",
+        request,
+        limit=settings.licence_validate_rate_limit,
+        window_seconds=settings.rate_limit_window_seconds,
+        trust_forwarded_for=settings.trust_forwarded_for,
+    ):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many registration requests")
+
+    plan = body.plan.lower()
+    if plan not in {"free", "trial"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only free and trial registration are supported here")
+
+    customer = await _get_or_create_customer(
+        db,
+        email=str(body.email),
+        name=body.name,
+        company=body.company,
+    )
+    await _deactivate_existing_plan_licences(db, email=str(body.email), plan=plan)
+
+    raw_key = generate_licence_key()
+    key_hash = hash_licence_key(raw_key)
+    team_name = _default_team_name_for_registration(str(body.email), body.company, body.name)
+    expires_dt = None
+    if plan == "trial":
+        expires_dt = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=7)
+
+    licence = Licence(
+        customer_id=customer.id,
+        licence_key_hash=key_hash,
+        team_name=team_name,
+        email=str(body.email),
+        plan=plan,
+        seats=1,
+        features=PLAN_FEATURES[plan],
+        expires_at=expires_dt,
+    )
+    db.add(licence)
+    await db.commit()
+    await db.refresh(licence)
+
+    return {
+        "customer_id": str(customer.id),
+        "licence_id": str(licence.id),
+        "licence_key": raw_key,
+        "plan": licence.plan,
+        "team_name": licence.team_name,
+        "email": licence.email,
+        "expires_at": licence.expires_at.isoformat() if licence.expires_at else None,
     }
