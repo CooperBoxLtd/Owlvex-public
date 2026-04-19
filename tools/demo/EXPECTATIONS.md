@@ -111,5 +111,13 @@ The files below are intentionally outside the current deterministic stabilizatio
 | `79-mass-assignment-safe.js` | should stay quiet | explicit profile field allow-list |
 | `80-unprotected-admin-route-unsafe.js` | finding likely | admin route without visible guard |
 | `81-unprotected-admin-route-safe.js` | should stay quiet | explicit admin middleware present |
+| `82-privilege-escalation-unsafe.js` | finding likely | authenticated user can assign account roles |
+| `83-privilege-escalation-safe.js` | should stay quiet | admin gate plus role allow-list |
+| `84-audit-gap-unsafe.js` | finding likely | privileged suspension action has no audit trail |
+| `85-audit-gap-safe.js` | should stay quiet | privileged action records audit event |
+| `86-pii-overexposure-unsafe.js` | finding likely | full account object returned to client |
+| `87-pii-overexposure-safe.js` | should stay quiet | response projects only safe profile fields |
+| `88-approval-workflow-bypass-unsafe.js` | finding likely | auth-only refund approval despite stronger business rule |
+| `89-approval-workflow-bypass-safe.js` | should stay quiet | finance-approver gate enforced before approval |
 
 These fixtures are review aids, not release-gated proof claims. If we later promote any of these families into deterministic coverage, they should move into the main expectation table with unsafe/safe benchmark requirements.

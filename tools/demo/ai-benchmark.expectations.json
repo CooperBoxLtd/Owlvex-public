@@ -1,0 +1,111 @@
+{
+  "name": "owlvex-ai-demo-benchmark",
+  "description": "AI-only exploratory fixture benchmark for detection quality, false-positive discipline, and scan-mode fit.",
+  "expectations": [
+    {
+      "file": "76-nosql-injection-unsafe.js",
+      "track": "unsafe",
+      "expectedState": "finding",
+      "expectedFindingAnyOfIncludes": ["nosql injection", "untrusted query object"],
+      "recommendedAgent": "TARGETED_AI",
+      "scenario": "Local semantic misuse of a Mongo-style filter object"
+    },
+    {
+      "file": "77-nosql-injection-safe.js",
+      "track": "safe",
+      "expectedState": "clean",
+      "recommendedAgent": "TARGETED_AI",
+      "scenario": "Safe NoSQL filter construction with explicit allow-list"
+    },
+    {
+      "file": "78-mass-assignment-unsafe.js",
+      "track": "unsafe",
+      "expectedState": "finding",
+      "expectedFindingAnyOfIncludes": ["mass assignment", "client-supplied fields"],
+      "recommendedAgent": "TARGETED_AI",
+      "scenario": "Request-body spread into persisted update payload"
+    },
+    {
+      "file": "79-mass-assignment-safe.js",
+      "track": "safe",
+      "expectedState": "clean",
+      "recommendedAgent": "TARGETED_AI",
+      "scenario": "Safe field allow-list before persistence"
+    },
+    {
+      "file": "80-unprotected-admin-route-unsafe.js",
+      "track": "unsafe",
+      "expectedState": "finding",
+      "expectedFindingAnyOfIncludes": ["administrative", "admin route", "access controls"],
+      "recommendedAgent": "TARGETED_AI",
+      "scenario": "Privileged route without visible guard"
+    },
+    {
+      "file": "81-unprotected-admin-route-safe.js",
+      "track": "safe",
+      "expectedState": "clean",
+      "recommendedAgent": "TARGETED_AI",
+      "scenario": "Admin route protected by explicit middleware"
+    },
+    {
+      "file": "82-privilege-escalation-unsafe.js",
+      "track": "unsafe",
+      "expectedState": "finding",
+      "expectedFindingAnyOfIncludes": ["privilege escalation", "role assignment", "unvalidated role"],
+      "recommendedAgent": "REPO_AI",
+      "scenario": "Role-changing action gated only by authentication"
+    },
+    {
+      "file": "83-privilege-escalation-safe.js",
+      "track": "safe",
+      "expectedState": "clean",
+      "recommendedAgent": "REPO_AI",
+      "scenario": "Role-changing action protected by admin gate and role allow-list"
+    },
+    {
+      "file": "84-audit-gap-unsafe.js",
+      "track": "unsafe",
+      "expectedState": "finding",
+      "expectedFindingAnyOfIncludes": ["audit", "missing audit trail", "privileged action"],
+      "recommendedAgent": "REPO_AI",
+      "scenario": "Privileged action with no visible audit event"
+    },
+    {
+      "file": "85-audit-gap-safe.js",
+      "track": "safe",
+      "expectedState": "clean",
+      "recommendedAgent": "REPO_AI",
+      "scenario": "Privileged action with explicit audit record"
+    },
+    {
+      "file": "86-pii-overexposure-unsafe.js",
+      "track": "unsafe",
+      "expectedState": "finding",
+      "expectedFindingAnyOfIncludes": ["pii", "overexposure", "api response"],
+      "recommendedAgent": "TARGETED_AI",
+      "scenario": "Whole account object returned to the client"
+    },
+    {
+      "file": "87-pii-overexposure-safe.js",
+      "track": "safe",
+      "expectedState": "clean",
+      "recommendedAgent": "TARGETED_AI",
+      "scenario": "Safe response projection with explicit fields"
+    },
+    {
+      "file": "88-approval-workflow-bypass-unsafe.js",
+      "track": "unsafe",
+      "expectedState": "finding",
+      "expectedFindingAnyOfIncludes": ["privilege escalation", "broken function", "approval", "authorization"],
+      "recommendedAgent": "REPO_AI",
+      "scenario": "Business-rule approval flow enforced only by comment, not code"
+    },
+    {
+      "file": "89-approval-workflow-bypass-safe.js",
+      "track": "safe",
+      "expectedState": "clean",
+      "recommendedAgent": "REPO_AI",
+      "scenario": "Approval flow protected by explicit finance-approver role"
+    }
+  ]
+}

@@ -141,6 +141,45 @@ The current phase should also make demos and trials work without engineer hand-h
 - provider setup is part of the normal workflow
 - one setup check can confirm whether the trial path is ready
 
+## Workstream 0.85: Benchmarking Department
+
+### Goal
+
+Turn benchmarking into a first-class department inside the repo rather than a scattered collection of scripts, corpora, and notes.
+
+This workstream exists to make Owlvex's quality claims explicit across:
+
+- deterministic proof
+- AI quality
+- recommended scan-tier fit
+- release confidence
+- external benchmark alignment
+
+### Tasks
+
+- define benchmark governance and methodology
+- separate deterministic benchmark ownership from AI benchmark ownership
+- define the client-facing benchmark story for `STATIC`, `TARGETED_AI`, and `REPO_AI`
+- formalize how external benchmarks support Owlvex claims without replacing Owlvex-native evaluation
+- keep benchmark docs, scripts, and manifests aligned with product truth
+
+### Likely Files
+
+- [docs/benchmarking/README.md](D:/Dev/repos/CodeScanner/docs/benchmarking/README.md)
+- [docs/benchmarking/CHARTER.md](D:/Dev/repos/CodeScanner/docs/benchmarking/CHARTER.md)
+- [docs/benchmarking/METHODOLOGY.md](D:/Dev/repos/CodeScanner/docs/benchmarking/METHODOLOGY.md)
+- [docs/benchmarking/EXTERNAL_BENCHMARK_PLAN.md](D:/Dev/repos/CodeScanner/docs/benchmarking/EXTERNAL_BENCHMARK_PLAN.md)
+- [docs/benchmarking/CLIENT_GUIDE.md](D:/Dev/repos/CodeScanner/docs/benchmarking/CLIENT_GUIDE.md)
+- [docs/benchmarking/ROADMAP.md](D:/Dev/repos/CodeScanner/docs/benchmarking/ROADMAP.md)
+- [tools/owlvex-benchmark/README.md](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark/README.md)
+
+### Acceptance Criteria
+
+- benchmark governance is documented separately from implementation backlog detail
+- Owlvex-native proof and AI benchmarks are clearly separated
+- the repo has a client-readable benchmark explanation
+- external benchmark adoption has a declared plan instead of ad hoc references
+
 ## Workstream 0: Project Context And Scan Tiers
 
 ### Goal

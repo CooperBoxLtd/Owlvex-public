@@ -2,6 +2,10 @@
 
 Dedicated home for deterministic engine evaluation inside the CodeScanner repo.
 
+For benchmark governance, methodology, client explanation, and external benchmark planning, see the Benchmarking Department:
+
+- [docs/benchmarking/README.md](D:/Dev/repos/CodeScanner/docs/benchmarking/README.md)
+
 For the broader build contract this benchmark supports, see:
 
 - [IMPLEMENTATION_DESIGN.md](D:/Dev/repos/CodeScanner/docs/IMPLEMENTATION_DESIGN.md)
@@ -11,7 +15,7 @@ The benchmark tool answers one question:
 
 > **Is this axis's structural reasoning correct across all covered cases?**
 
-It is not a model benchmark. It is a deterministic correctness gate.
+It is not the whole benchmarking department. It is the deterministic correctness gate inside that larger benchmark system.
 
 For model-assisted issue classes that are **not** part of the deterministic release gate yet, see:
 
