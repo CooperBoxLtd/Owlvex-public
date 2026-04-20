@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, LicenceInfo, LicenceManager } from './licence/licenceManager';
-import { getProviderApiKeySecretName, ProviderRegistry, persistProviderSetting } from './providers/registry';
+import { getProviderApiKeySecretName, ProviderRegistry, persistProviderConnectionSetting, persistProviderSetting } from './providers/registry';
 import { ScanEngine, ScanResult } from './scanner/scanEngine';
 import { DiagnosticsProvider } from './diagnostics/diagnosticsProvider';
 import { StatusBar } from './ui/statusBar';
@@ -358,8 +358,31 @@ async function promptForSetting(
     const normalized = settingKey.endsWith('endpoint') || settingKey.endsWith('baseUrl')
         ? normalizeServiceUrl(value)
         : value.trim();
-    await persistProviderSetting(settingKey, normalized);
+    await persistProviderConnectionSetting(settingKey, normalized);
     return normalized;
+}
+
+async function migrateWorkspaceProviderSettingsToGlobalDefaults(): Promise<void> {
+    if (!vscode.workspace.workspaceFolders?.length) {
+        return;
+    }
+
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    const connectionKeys = new Set<string>(['provider']);
+    for (const providerId of ['azure-foundry', 'anthropic', 'openai', 'mistral', 'gemini', 'groq', 'ollama', 'custom']) {
+        for (const key of getProviderConnectionSettingKeys(providerId)) {
+            connectionKeys.add(key);
+        }
+    }
+
+    for (const key of connectionKeys) {
+        const inspected = config.inspect<unknown>(key);
+        if (inspected?.workspaceValue === undefined || inspected.globalValue !== undefined) {
+            continue;
+        }
+
+        await config.update(key, inspected.workspaceValue, vscode.ConfigurationTarget.Global);
+    }
 }
 
 async function resolveLicenceInfoForAccess(
@@ -486,9 +509,8 @@ export function resolveConnectedModelSelection(selectedModel: string, discovered
 async function resetProviderSettings(providerId: string): Promise<void> {
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     for (const key of getProviderConnectionSettingKeys(providerId)) {
-        await config.update(key, undefined, vscode.workspace.workspaceFolders?.length
-            ? vscode.ConfigurationTarget.Workspace
-            : vscode.ConfigurationTarget.Global);
+        await config.update(key, undefined, vscode.ConfigurationTarget.Workspace);
+        await config.update(key, undefined, vscode.ConfigurationTarget.Global);
     }
 }
 
@@ -607,6 +629,7 @@ export function activate(context: vscode.ExtensionContext) {
     const diagnostics = new DiagnosticsProvider();
     const statusBar = new StatusBar();
     const sidebar = new SidebarProvider();
+    void migrateWorkspaceProviderSettingsToGlobalDefaults();
     const restoredScans = context.workspaceState.get<Array<{ scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }>>(SCAN_STORE_KEY, []);
     for (const item of restoredScans) {
         scanStore.set(item.scanId, normalizeStoredScanRecord(item));
@@ -1710,12 +1733,12 @@ export function activate(context: vscode.ExtensionContext) {
                 }
 
                 const trimmedDeployment = deployment.trim();
-                await persistProviderSetting('foundry.model', trimmedDeployment);
+                await persistProviderConnectionSetting('foundry.model', trimmedDeployment);
                 const existingDeployments = vscode.workspace
                     .getConfiguration(PROFILE.configSection)
                     .get<string[]>('foundry.deployments', []);
                 const nextDeployments = [...new Set([trimmedDeployment, ...existingDeployments.map(item => item.trim()).filter(Boolean)])];
-                await persistProviderSetting('foundry.deployments', nextDeployments as any);
+                await persistProviderConnectionSetting('foundry.deployments', nextDeployments as any);
             }
 
             if (provider.id === 'anthropic') {
@@ -1773,7 +1796,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                await persistProviderSetting('custom.model', model.trim());
+                await persistProviderConnectionSetting('custom.model', model.trim());
             }
 
             let key: string | undefined;

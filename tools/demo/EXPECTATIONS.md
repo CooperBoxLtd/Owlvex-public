@@ -11,7 +11,7 @@ Purpose:
 These expectations should be read together with:
 
 - [STABILIZATION_CONTRACT.md](../../docs/STABILIZATION_CONTRACT.md)
-- [DEMO-SCRIPT.md](./DEMO-SCRIPT.md)
+- [DEMO_RUNBOOK.md](../../docs/DEMO_RUNBOOK.md)
 
 ## Expected Outcomes
 

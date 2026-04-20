@@ -5,6 +5,7 @@ Covers the production extension/backend contract surfaces.
 import pytest
 import uuid
 from unittest.mock import patch, MagicMock
+from app.config import Settings
 
 
 # ---------------------------------------------------------------------------
@@ -547,6 +548,53 @@ async def test_register_trial_licence_sets_expiry(client):
     assert data["plan"] == "trial"
     assert data["email"] == "trial-user@example.com"
     assert data["expires_in_minutes"] > 0
+
+
+@pytest.mark.asyncio
+async def test_register_licence_uses_email_delivery_when_sendgrid_is_configured(client):
+    configured_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        sendgrid_api_key="SG.test",
+        from_email="verified-sender@example.com",
+        environment="production",
+    )
+
+    with patch("app.routers.licences.get_settings", return_value=configured_settings), \
+         patch("app.routers.licences.send_verification_email") as mock_send_verification_email:
+        response = await client.post(
+            "/v1/licences/register",
+            json={"email": "mail-user@example.com", "plan": "free"},
+        )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["delivery"] == "email"
+    assert "verification_code" not in data
+    mock_send_verification_email.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_register_licence_surfaces_email_delivery_failure(client):
+    configured_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        sendgrid_api_key="SG.test",
+        from_email="verified-sender@example.com",
+        environment="production",
+    )
+
+    with patch("app.routers.licences.get_settings", return_value=configured_settings), \
+         patch("app.routers.licences.send_verification_email", side_effect=RuntimeError("Email delivery failed with HTTP 403: from.email: The from address does not match a verified Sender Identity.")):
+        response = await client.post(
+            "/v1/licences/register",
+            json={"email": "mail-user@example.com", "plan": "free"},
+        )
+
+    assert response.status_code == 503
+    assert "verified Sender Identity" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

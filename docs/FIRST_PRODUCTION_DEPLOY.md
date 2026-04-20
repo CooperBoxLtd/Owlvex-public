@@ -101,6 +101,8 @@ Leave these empty for the first deploy:
 
 - `noreply@owlvex.io`
 
+If registration emails should work in production, `FROM_EMAIL` must be a sender address or domain that is actually verified in SendGrid. An unverified sender will cause registration to fail at delivery time.
+
 ## Step 4: Provision The Azure Infrastructure
 
 Run the production wrapper script. It will provision:

@@ -7,6 +7,7 @@ export interface CompletionRequest {
     userMessage: string;
     model: string;
     temperature: number;
+    maxCompletionTokens?: number;
 }
 
 export interface CompletionResponse {
@@ -62,6 +63,10 @@ function getPreferredConfigurationTarget(): vscode.ConfigurationTarget {
         : vscode.ConfigurationTarget.Global;
 }
 
+function getGlobalConfigurationTarget(): vscode.ConfigurationTarget {
+    return vscode.ConfigurationTarget.Global;
+}
+
 function normalizeConfiguredModels(value: unknown): string[] {
     if (!Array.isArray(value)) {
         return [];
@@ -74,10 +79,18 @@ function normalizeConfiguredModels(value: unknown): string[] {
     )];
 }
 
-export async function persistProviderSetting(settingKey: string, value: unknown): Promise<void> {
+export async function persistProviderSetting(
+    settingKey: string,
+    value: unknown,
+    target: vscode.ConfigurationTarget = getPreferredConfigurationTarget(),
+): Promise<void> {
     await vscode.workspace
         .getConfiguration(PROFILE.configSection)
-        .update(settingKey, value, getPreferredConfigurationTarget());
+        .update(settingKey, value, target);
+}
+
+export async function persistProviderConnectionSetting(settingKey: string, value: unknown): Promise<void> {
+    await persistProviderSetting(settingKey, value, getGlobalConfigurationTarget());
 }
 
 // Chat-capable model prefixes used to filter OpenAI/Groq model lists.
@@ -89,6 +102,24 @@ const MISTRAL_FALLBACK     = ['mistral-large-latest', 'mistral-medium-latest', '
 const GEMINI_FALLBACK      = ['gemini-2.0-flash', 'gemini-1.5-pro', 'gemini-1.5-flash'];
 const GROQ_FALLBACK        = ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'mixtral-8x7b-32768', 'gemma2-9b-it'];
 const AZURE_CHAT_API_VERSION = '2024-10-21';
+const DEFAULT_COMPLETION_TOKENS = 4096;
+
+async function buildProviderErrorMessage(providerName: string, res: Response): Promise<string> {
+    let detail = '';
+
+    try {
+        const raw = (await res.text()).trim();
+        if (raw) {
+            detail = raw.replace(/\s+/g, ' ').slice(0, 400);
+        }
+    } catch {
+        // Ignore response-body parsing failures and fall back to the status code.
+    }
+
+    return detail
+        ? `${providerName} error: ${res.status} ${detail}`
+        : `${providerName} error: ${res.status}`;
+}
 
 export function isLikelyOpenAIChatModel(modelId: string): boolean {
     const normalized = modelId.trim().toLowerCase();
@@ -105,7 +136,7 @@ class OpenAIProvider implements AIProvider {
         return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('openai.model', 'gpt-4o');
     }
     set selectedModel(value: string) {
-        void persistProviderSetting('openai.model', value);
+        void persistProviderConnectionSetting('openai.model', value);
     }
 
     private async getApiKey(): Promise<string | undefined> {
@@ -144,7 +175,7 @@ class OpenAIProvider implements AIProvider {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
             body: JSON.stringify({
                 model: this.selectedModel,
-                max_tokens: 4096,
+                max_tokens: req.maxCompletionTokens ?? DEFAULT_COMPLETION_TOKENS,
                 temperature: req.temperature,
                 messages: [
                     { role: 'system', content: req.systemPrompt },
@@ -152,7 +183,7 @@ class OpenAIProvider implements AIProvider {
                 ],
             }),
         });
-        if (!res.ok) throw new Error(`OpenAI error: ${res.status}`);
+        if (!res.ok) throw new Error(await buildProviderErrorMessage('OpenAI', res));
         const data = await res.json() as any;
         if (!data.choices?.length) throw new Error('OpenAI returned an empty response');
         return {
@@ -185,7 +216,7 @@ class AnthropicProvider implements AIProvider {
         return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('anthropic.model', 'claude-opus-4-6');
     }
     set selectedModel(value: string) {
-        void persistProviderSetting('anthropic.model', value);
+        void persistProviderConnectionSetting('anthropic.model', value);
     }
 
     private async getApiKey(): Promise<string | undefined> {
@@ -212,13 +243,13 @@ class AnthropicProvider implements AIProvider {
             },
             body: JSON.stringify({
                 model: this.selectedModel,
-                max_tokens: 8192,
+                max_tokens: req.maxCompletionTokens ?? 8192,
                 temperature: req.temperature,
                 system: req.systemPrompt,
                 messages: [{ role: 'user', content: req.userMessage }],
             }),
         });
-        if (!res.ok) throw new Error(`Anthropic error: ${res.status}`);
+        if (!res.ok) throw new Error(await buildProviderErrorMessage('Anthropic', res));
         const data = await res.json() as any;
         if (!data.content?.length) throw new Error('Anthropic returned an empty response');
         return {
@@ -254,7 +285,7 @@ class AzureFoundryProvider implements AIProvider {
         return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('foundry.model', 'gpt-4o');
     }
     set selectedModel(value: string) {
-        void persistProviderSetting('foundry.model', value);
+        void persistProviderConnectionSetting('foundry.model', value);
     }
 
     private async getCredentials(): Promise<{ endpoint: string; apiKey: string } | null> {
@@ -287,7 +318,7 @@ class AzureFoundryProvider implements AIProvider {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'api-key': creds.apiKey },
             body: JSON.stringify({
-                max_completion_tokens: 4096,
+                max_completion_tokens: req.maxCompletionTokens ?? DEFAULT_COMPLETION_TOKENS,
                 temperature: req.temperature,
                 messages: [
                     { role: 'system', content: req.systemPrompt },
@@ -295,7 +326,7 @@ class AzureFoundryProvider implements AIProvider {
                 ],
             }),
         });
-        if (!res.ok) throw new Error(`Azure Foundry error: ${res.status}`);
+        if (!res.ok) throw new Error(await buildProviderErrorMessage('Azure Foundry', res));
         const data = await res.json() as any;
         if (!data.choices?.length) throw new Error('Azure Foundry returned an empty response');
         return {
@@ -335,7 +366,7 @@ class OllamaProvider implements AIProvider {
         return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('ollama.model', 'qwen2.5:7b');
     }
     set selectedModel(value: string) {
-        void vscode.workspace.getConfiguration(PROFILE.configSection).update('ollama.model', value, getPreferredConfigurationTarget());
+        void vscode.workspace.getConfiguration(PROFILE.configSection).update('ollama.model', value, getGlobalConfigurationTarget());
     }
 
     private get host(): string {
@@ -399,7 +430,7 @@ class MistralProvider implements AIProvider {
         return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('mistral.model', 'mistral-large-latest');
     }
     set selectedModel(value: string) {
-        void persistProviderSetting('mistral.model', value);
+        void persistProviderConnectionSetting('mistral.model', value);
     }
 
     private async getApiKey(): Promise<string | undefined> {
@@ -434,7 +465,7 @@ class MistralProvider implements AIProvider {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
             body: JSON.stringify({
                 model: this.selectedModel,
-                max_tokens: 4096,
+                max_tokens: req.maxCompletionTokens ?? DEFAULT_COMPLETION_TOKENS,
                 temperature: req.temperature,
                 messages: [
                     { role: 'system', content: req.systemPrompt },
@@ -442,7 +473,7 @@ class MistralProvider implements AIProvider {
                 ],
             }),
         });
-        if (!res.ok) throw new Error(`Mistral error: ${res.status}`);
+        if (!res.ok) throw new Error(await buildProviderErrorMessage('Mistral', res));
         const data = await res.json() as any;
         if (!data.choices?.length) throw new Error('Mistral returned an empty response');
         return {
@@ -475,7 +506,7 @@ class GeminiProvider implements AIProvider {
         return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('gemini.model', 'gemini-1.5-pro');
     }
     set selectedModel(value: string) {
-        void persistProviderSetting('gemini.model', value);
+        void persistProviderConnectionSetting('gemini.model', value);
     }
 
     private async getApiKey(): Promise<string | undefined> {
@@ -548,7 +579,7 @@ class GroqProvider implements AIProvider {
         return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('groq.model', 'llama-3.3-70b-versatile');
     }
     set selectedModel(value: string) {
-        void persistProviderSetting('groq.model', value);
+        void persistProviderConnectionSetting('groq.model', value);
     }
 
     private async getApiKey(): Promise<string | undefined> {
@@ -583,7 +614,7 @@ class GroqProvider implements AIProvider {
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
             body: JSON.stringify({
                 model: this.selectedModel,
-                max_tokens: 4096,
+                max_tokens: req.maxCompletionTokens ?? DEFAULT_COMPLETION_TOKENS,
                 temperature: req.temperature,
                 messages: [
                     { role: 'system', content: req.systemPrompt },
@@ -591,7 +622,7 @@ class GroqProvider implements AIProvider {
                 ],
             }),
         });
-        if (!res.ok) throw new Error(`Groq error: ${res.status}`);
+        if (!res.ok) throw new Error(await buildProviderErrorMessage('Groq', res));
         const data = await res.json() as any;
         if (!data.choices?.length) throw new Error('Groq returned an empty response');
         return {
@@ -625,7 +656,7 @@ class CustomProvider implements AIProvider {
         return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('custom.model', 'custom-model');
     }
     set selectedModel(value: string) {
-        void vscode.workspace.getConfiguration(PROFILE.configSection).update('custom.model', value, getPreferredConfigurationTarget());
+        void vscode.workspace.getConfiguration(PROFILE.configSection).update('custom.model', value, getGlobalConfigurationTarget());
     }
 
     private get baseUrl(): string {
@@ -724,7 +755,7 @@ export class ProviderRegistry {
     }
 
     async setActiveProvider(id: string): Promise<void> {
-        await vscode.workspace.getConfiguration(PROFILE.configSection).update('provider', id, getPreferredConfigurationTarget());
+        await vscode.workspace.getConfiguration(PROFILE.configSection).update('provider', id, getGlobalConfigurationTarget());
     }
 
     allProviders(): AIProvider[] {

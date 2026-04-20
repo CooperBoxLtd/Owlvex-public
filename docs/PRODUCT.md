@@ -316,7 +316,7 @@ Additional AI-only demo fixtures:
 - `26-deserialization-unsafe.py` -> AI-only insecure deserialization coverage example
 - `27-deserialization-safe.py` -> safe companion for deserialization handling
 
-Demo script: [tools/demo/DEMO-SCRIPT.md](../tools/demo/DEMO-SCRIPT.md)
+Demo runbook: [docs/DEMO_RUNBOOK.md](./DEMO_RUNBOOK.md)
 
 The next validation layer is `tools/demo-app/`: a small intentionally vulnerable web app with shared middleware, auth helpers, tenant scoping, outbound request helpers, and both vulnerable and safe route variants. This repo-style app exists to validate that Owlvex can use surrounding project context, not just isolated fixture files. Expected outcome: some issue candidates that look risky in single-file mode should disappear once the scanner can see the full route, helper, and authorization flow together.
 

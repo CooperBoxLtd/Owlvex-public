@@ -145,6 +145,8 @@ The model comparison rubric for stronger-agent experiments lives in [docs/MODEL_
 
 The project-grounding and hybrid scan-tier contract lives in [docs/PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md](docs/PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md).
 
+The current repo-level reality check across code, tests, release signals, and docs lives in [docs/GAP_ANALYSIS_2026-04-19.md](docs/GAP_ANALYSIS_2026-04-19.md).
+
 Current note: Azure production is now planned around App Service for Containers. Existing Container Apps deployment files in `infra/` are deprecated and need to be rewritten before first prod bootstrap.
 
 That document is the source of truth for:

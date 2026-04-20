@@ -104,7 +104,7 @@ Run `npm run benchmark:status` from `extension/` to verify current gate state.
 
 ## Demo
 
-`tools/demo/` contains five verified fixture files and a full 3-minute demo script (`DEMO-SCRIPT.md`). Each fixture produces exactly the right scanner output:
+`tools/demo/` contains five verified fixture files and a live demo runbook in [`docs/DEMO_RUNBOOK.md`](../../docs/DEMO_RUNBOOK.md). Each fixture produces exactly the right scanner output:
 
 ```
 01-idor-unsafe.js           → ⚡ AC-001  HIGH     Insecure Direct Object Reference
