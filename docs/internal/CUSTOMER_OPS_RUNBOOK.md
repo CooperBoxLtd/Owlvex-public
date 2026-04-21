@@ -10,7 +10,7 @@ Provide a fast way to inspect:
 - issued licences
 - verification state
 
-and perform basic support actions without manual database browsing.
+and perform support actions without manual database browsing.
 
 ## Required environment
 
@@ -22,6 +22,28 @@ Set:
 Default API URL for the helper script is the dev backend:
 
 - `https://owlvexdev-api.azurewebsites.net`
+
+## Browser app
+
+Primary ops surface:
+
+- `https://owlvexdev-api.azurewebsites.net/v1/admin/app`
+- `https://owlvex-api.azurewebsites.net/v1/admin/app`
+
+The app supports:
+
+- environment switch between `dev` and `prod`
+- customer search and overview
+- full JSON export
+- resend verification
+- revoke licences
+- rotate licences
+- ban / unban customer
+- delete licence
+- delete customer and related licence/scan/usage/comparison data
+
+All actions still require `X-Admin-Key`; the page only provides the UI.
+The environment selector changes which backend database the app reads and writes.
 
 ## Read-only lookup
 
@@ -59,6 +81,8 @@ node tools/admin-db-view.mjs rotate someone@example.com
 node tools/admin-db-view.mjs rotate someone@example.com developer
 ```
 
+The CLI remains useful for scripted or terminal-only operations, but the browser app should be the default day-to-day admin surface.
+
 ## Operational notes
 
 - Free and Trial should only become active after email verification.
@@ -71,6 +95,11 @@ node tools/admin-db-view.mjs rotate someone@example.com developer
   - rotate the licence if a fresh key is needed
 - If a licence must be stopped quickly:
   - deactivate by email
+- If a customer must be fully blocked:
+  - ban the customer
+  - this clears pending verification and deactivates active licences
+- If data must be removed:
+  - delete the specific licence, or delete the full customer tree
 
 ## Safety
 

@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Owlvex Admin Console</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0f1418;
+      --panel: #151c21;
+      --border: #2c3943;
+      --text: #e7eef4;
+      --muted: #9db0be;
+      --accent: #43b581;
+      --warn: #ffb020;
+      --danger: #ff6b6b;
+    }
+    body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    header, section { padding: 16px 20px; }
+    .grid { display: grid; gap: 16px; grid-template-columns: 360px 1fr; }
+    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
+    h1, h2, h3 { margin: 0 0 12px; font-size: 18px; }
+    h2 { font-size: 16px; }
+    h3 { font-size: 14px; }
+    label { display: block; margin: 10px 0 4px; color: var(--muted); }
+    input, select, textarea, button {
+      width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--border);
+      background: #0d1216; color: var(--text); padding: 10px 12px; font: inherit;
+    }
+    textarea { min-height: 88px; resize: vertical; }
+    button { cursor: pointer; background: #182229; }
+    button.primary { background: #163224; border-color: #24563d; }
+    button.warn { background: #3a2910; border-color: #6f5217; }
+    button.danger { background: #3b1d20; border-color: #6d2f35; }
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+    .status { white-space: pre-wrap; color: var(--muted); }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-weight: 600; }
+    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); margin-right: 6px; }
+    .pill.ok { color: var(--accent); }
+    .pill.warn { color: var(--warn); }
+    .pill.danger { color: var(--danger); }
+    .stack { display: grid; gap: 12px; }
+    .customer-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+    .licence-card { border: 1px dashed var(--border); border-radius: 8px; padding: 10px; margin-top: 10px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+    .small { color: var(--muted); font-size: 12px; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Owlvex Admin Console</h1>
+  </header>
+  <section class="grid">
+    <div class="stack">
+      <div class="panel">
+        <h2>Connection</h2>
+        <label for="environment">Environment</label>
+        <select id="environment">
+          <option value="custom">Custom</option>
+          <option value="dev">Dev</option>
+          <option value="prod">Prod</option>
+        </select>
+        <label for="apiUrl">API URL</label>
+        <input id="apiUrl" />
+        <label for="adminKey">Admin key</label>
+        <input id="adminKey" type="password" />
+        <div class="row" style="margin-top:12px;">
+          <button class="primary" id="loadOverview">Load customers</button>
+          <button id="exportJson">Export JSON</button>
+        </div>
+        <p class="status" id="status">Ready.</p>
+      </div>
+
+      <div class="panel">
+        <h2>Search</h2>
+        <label for="search">Email, name, company</label>
+        <input id="search" placeholder="someone@example.com" />
+        <div class="row" style="margin-top:12px;">
+          <button id="runSearch">Search</button>
+          <button id="clearSearch">Clear</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Direct Actions</h2>
+        <label for="targetEmail">Customer email</label>
+        <input id="targetEmail" placeholder="user@example.com" />
+        <label for="targetPlan">Plan filter</label>
+        <select id="targetPlan">
+          <option value="">All plans</option>
+          <option value="free">free</option>
+          <option value="trial">trial</option>
+          <option value="developer">developer</option>
+          <option value="team">team</option>
+          <option value="enterprise">enterprise</option>
+        </select>
+        <label for="banReason">Ban reason</label>
+        <textarea id="banReason" placeholder="Internal fraud / abuse note"></textarea>
+        <div class="stack" style="margin-top:12px;">
+          <button id="lookupCustomer">Lookup customer</button>
+          <button class="warn" id="resendVerification">Resend verification</button>
+          <button class="warn" id="revokeLicences">Revoke licence(s)</button>
+          <button class="warn" id="rotateLicence">Rotate licence</button>
+          <button class="danger" id="banCustomer">Ban customer</button>
+          <button id="unbanCustomer">Unban customer</button>
+          <button class="danger" id="deleteCustomer">Delete customer</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="stack">
+      <div class="panel">
+        <h2>Customers</h2>
+        <div id="customers"></div>
+      </div>
+      <div class="panel">
+        <h2>Latest API Response</h2>
+        <pre id="response" class="mono small"></pre>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    const apiUrlEl = document.getElementById('apiUrl');
+    const environmentEl = document.getElementById('environment');
+    const adminKeyEl = document.getElementById('adminKey');
+    const searchEl = document.getElementById('search');
+    const targetEmailEl = document.getElementById('targetEmail');
+    const targetPlanEl = document.getElementById('targetPlan');
+    const banReasonEl = document.getElementById('banReason');
+    const statusEl = document.getElementById('status');
+    const customersEl = document.getElementById('customers');
+    const responseEl = document.getElementById('response');
+
+    const ENVIRONMENTS = {
+      dev: 'https://owlvexdev-api.azurewebsites.net',
+      prod: 'https://owlvex-api.azurewebsites.net',
+    };
+
+    function normalizeUrl(value) {
+      return String(value || '').trim().replace(/\/+$/, '');
+    }
+
+    function resolveEnvironmentName(url) {
+      const normalized = normalizeUrl(url);
+      if (normalized === ENVIRONMENTS.dev) return 'dev';
+      if (normalized === ENVIRONMENTS.prod) return 'prod';
+      return 'custom';
+    }
+
+    const initialApiUrl = normalizeUrl(localStorage.getItem('owlvexAdminApiUrl') || window.location.origin);
+    apiUrlEl.value = initialApiUrl;
+    environmentEl.value = resolveEnvironmentName(initialApiUrl);
+    adminKeyEl.value = localStorage.getItem('owlvexAdminKey') || '';
+
+    function saveSettings() {
+      localStorage.setItem('owlvexAdminApiUrl', normalizeUrl(apiUrlEl.value));
+      localStorage.setItem('owlvexAdminKey', adminKeyEl.value);
+    }
+
+    function syncEnvironmentSelectionFromApiUrl() {
+      environmentEl.value = resolveEnvironmentName(apiUrlEl.value);
+    }
+
+    function applyEnvironmentSelection() {
+      const selected = environmentEl.value;
+      if (selected === 'custom') {
+        syncEnvironmentSelectionFromApiUrl();
+        return;
+      }
+      apiUrlEl.value = ENVIRONMENTS[selected];
+      saveSettings();
+      setStatus(`Selected ${selected} database.`);
+    }
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function setResponse(data) {
+      responseEl.textContent = JSON.stringify(data, null, 2);
+    }
+
+    async function request(path, options = {}) {
+      saveSettings();
+      const targetApiUrl = normalizeUrl(apiUrlEl.value);
+      const res = await fetch(`${targetApiUrl}${path}`, {
+        ...options,
+        headers: {
+          'X-Admin-Key': adminKeyEl.value,
+          'Content-Type': 'application/json',
+          ...(options.headers || {}),
+        },
+      });
+      const text = await res.text();
+      let data = {};
+      try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      setResponse(data);
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      return data;
+    }
+
+    function customerHtml(customer) {
+      const banned = customer.is_banned ? `<span class="pill danger">banned</span>` : '';
+      const verified = customer.email_verified_at ? `<span class="pill ok">verified</span>` : `<span class="pill warn">unverified</span>`;
+      const licences = (customer.licences || []).map(licence => `
+        <div class="licence-card">
+          <div><strong>${licence.plan}</strong> <span class="small mono">${licence.licence_id}</span></div>
+          <div class="small">active=${licence.is_active} seats=${licence.seats_used}/${licence.seats}</div>
+          <div class="small">expires=${licence.expires_at || 'never'}</div>
+          <div class="row" style="margin-top:8px;">
+            <button onclick="deleteLicence('${licence.licence_id}')">Delete licence</button>
+            <button onclick="revokeLicenceFor('${customer.email}', '${licence.plan}')">Revoke</button>
+            <button onclick="rotateLicenceFor('${customer.email}', '${licence.plan}')">Rotate</button>
+          </div>
+        </div>
+      `).join('');
+      return `
+        <div class="customer-card">
+          <div><strong>${customer.email}</strong></div>
+          <div>${verified}${banned}<span class="pill">${customer.pending_plan || 'no pending plan'}</span></div>
+          <div class="small">name=${customer.name || '-'} company=${customer.company || '-'} source=${customer.source || '-'}</div>
+          <div class="small">ban reason=${customer.ban_reason || '-'}</div>
+          <div class="row" style="margin-top:8px;">
+            <button onclick="lookupCustomerFor('${customer.email}')">Open</button>
+            <button onclick="banCustomerFor('${customer.email}')">Ban</button>
+            <button onclick="unbanCustomerFor('${customer.email}')">Unban</button>
+            <button onclick="deleteCustomerFor('${customer.email}')">Delete</button>
+          </div>
+          ${licences}
+        </div>
+      `;
+    }
+
+    function renderCustomers(customers) {
+      customersEl.innerHTML = customers.length ? customers.map(customerHtml).join('') : '<p class="small">No customers returned.</p>';
+    }
+
+    async function loadOverview() {
+      setStatus('Loading customers...');
+      const q = searchEl.value.trim();
+      const params = new URLSearchParams({ limit: '250' });
+      if (q) params.set('q', q);
+      const data = await request(`/v1/admin/overview?${params.toString()}`, { method: 'GET' });
+      renderCustomers(data.customers || []);
+      setStatus(`Loaded ${data.count} customer(s).`);
+    }
+
+    async function exportJson() {
+      setStatus('Exporting full snapshot...');
+      const data = await request('/v1/admin/export?scope=full', { method: 'GET' });
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `owlvex-admin-export-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setStatus('Export ready.');
+    }
+
+    async function lookupCustomer() {
+      const email = targetEmailEl.value.trim();
+      if (!email) throw new Error('Customer email is required.');
+      setStatus(`Looking up ${email}...`);
+      const data = await request(`/v1/admin/customer?email=${encodeURIComponent(email)}`, { method: 'GET' });
+      renderCustomers([data]);
+      setStatus(`Loaded ${email}.`);
+    }
+
+    async function resendVerification() {
+      const email = targetEmailEl.value.trim();
+      if (!email) throw new Error('Customer email is required.');
+      setStatus(`Resending verification to ${email}...`);
+      await request('/v1/admin/resend-verification', { method: 'POST', body: JSON.stringify({ email }) });
+      setStatus('Verification resent.');
+    }
+
+    async function revokeLicences() {
+      const email = targetEmailEl.value.trim();
+      if (!email) throw new Error('Customer email is required.');
+      const plan = targetPlanEl.value || null;
+      setStatus(`Revoking licence(s) for ${email}...`);
+      await request('/v1/admin/licence/deactivate', { method: 'POST', body: JSON.stringify({ email, plan }) });
+      setStatus('Licence(s) revoked.');
+      await lookupCustomer();
+    }
+
+    async function rotateLicence() {
+      const email = targetEmailEl.value.trim();
+      if (!email) throw new Error('Customer email is required.');
+      const plan = targetPlanEl.value || null;
+      setStatus(`Rotating licence for ${email}...`);
+      await request('/v1/admin/licence/rotate', { method: 'POST', body: JSON.stringify({ email, plan }) });
+      setStatus('Licence rotated.');
+      await lookupCustomer();
+    }
+
+    async function banCustomer() {
+      const email = targetEmailEl.value.trim();
+      if (!email) throw new Error('Customer email is required.');
+      setStatus(`Banning ${email}...`);
+      await request('/v1/admin/customer/ban', {
+        method: 'POST',
+        body: JSON.stringify({ email, reason: banReasonEl.value.trim() || null }),
+      });
+      setStatus('Customer banned.');
+      await lookupCustomer();
+    }
+
+    async function unbanCustomer() {
+      const email = targetEmailEl.value.trim();
+      if (!email) throw new Error('Customer email is required.');
+      setStatus(`Unbanning ${email}...`);
+      await request('/v1/admin/customer/unban', { method: 'POST', body: JSON.stringify({ email }) });
+      setStatus('Customer unbanned.');
+      await lookupCustomer();
+    }
+
+    async function deleteCustomer() {
+      const email = targetEmailEl.value.trim();
+      if (!email) throw new Error('Customer email is required.');
+      if (!confirm(`Delete customer ${email} and all related licences, scans, usage events, and comparisons?`)) return;
+      setStatus(`Deleting ${email}...`);
+      await request('/v1/admin/customer/delete', { method: 'POST', body: JSON.stringify({ email }) });
+      setStatus('Customer deleted.');
+      customersEl.innerHTML = '';
+    }
+
+    async function deleteLicence(licenceId) {
+      if (!confirm(`Delete licence ${licenceId} and related scan/usage history?`)) return;
+      setStatus(`Deleting licence ${licenceId}...`);
+      await request('/v1/admin/licence/delete', { method: 'POST', body: JSON.stringify({ licence_id: licenceId }) });
+      setStatus('Licence deleted.');
+      if (targetEmailEl.value.trim()) await lookupCustomer();
+    }
+
+    window.lookupCustomerFor = (email) => { targetEmailEl.value = email; lookupCustomer().catch(handleError); };
+    window.banCustomerFor = (email) => { targetEmailEl.value = email; banCustomer().catch(handleError); };
+    window.unbanCustomerFor = (email) => { targetEmailEl.value = email; unbanCustomer().catch(handleError); };
+    window.deleteCustomerFor = (email) => { targetEmailEl.value = email; deleteCustomer().catch(handleError); };
+    window.revokeLicenceFor = (email, plan) => { targetEmailEl.value = email; targetPlanEl.value = plan || ''; revokeLicences().catch(handleError); };
+    window.rotateLicenceFor = (email, plan) => { targetEmailEl.value = email; targetPlanEl.value = plan || ''; rotateLicence().catch(handleError); };
+    window.deleteLicence = (licenceId) => deleteLicence(licenceId).catch(handleError);
+
+    function handleError(error) {
+      setStatus(`Error: ${error.message}`);
+    }
+
+    document.getElementById('loadOverview').addEventListener('click', () => loadOverview().catch(handleError));
+    document.getElementById('exportJson').addEventListener('click', () => exportJson().catch(handleError));
+    document.getElementById('runSearch').addEventListener('click', () => loadOverview().catch(handleError));
+    document.getElementById('clearSearch').addEventListener('click', () => { searchEl.value = ''; loadOverview().catch(handleError); });
+    document.getElementById('lookupCustomer').addEventListener('click', () => lookupCustomer().catch(handleError));
+    document.getElementById('resendVerification').addEventListener('click', () => resendVerification().catch(handleError));
+    document.getElementById('revokeLicences').addEventListener('click', () => revokeLicences().catch(handleError));
+    document.getElementById('rotateLicence').addEventListener('click', () => rotateLicence().catch(handleError));
+    document.getElementById('banCustomer').addEventListener('click', () => banCustomer().catch(handleError));
+    document.getElementById('unbanCustomer').addEventListener('click', () => unbanCustomer().catch(handleError));
+    document.getElementById('deleteCustomer').addEventListener('click', () => deleteCustomer().catch(handleError));
+    environmentEl.addEventListener('change', applyEnvironmentSelection);
+    apiUrlEl.addEventListener('change', () => { syncEnvironmentSelectionFromApiUrl(); saveSettings(); });
+  </script>
+</body>
+</html>

@@ -520,6 +520,130 @@ async def test_admin_rotate_licence_issues_new_key(client):
 
 
 @pytest.mark.asyncio
+async def test_admin_app_route_serves_console(client):
+    response = await client.get("/v1/admin/app")
+    assert response.status_code == 200
+    assert "Owlvex Admin Console" in response.text
+
+
+@pytest.mark.asyncio
+async def test_admin_export_returns_full_snapshot(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "export-user@example.com", "plan": "free"},
+    )
+    verification_code = registration.json()["verification_code"]
+    await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "export-user@example.com", "code": verification_code},
+    )
+
+    response = await client.get(
+        "/v1/admin/export?scope=full",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["scope"] == "full"
+    assert any(customer["email"] == "export-user@example.com" for customer in data["customers"])
+    assert "licences" in data
+    assert "usage_events" in data
+
+
+@pytest.mark.asyncio
+async def test_admin_ban_customer_deactivates_licences_and_blocks_validation(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "ban-user@example.com", "plan": "free"},
+    )
+    verification_code = registration.json()["verification_code"]
+    verified = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "ban-user@example.com", "code": verification_code},
+    )
+    licence_key = verified.json()["licence_key"]
+
+    response = await client.post(
+        "/v1/admin/customer/ban",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"email": "ban-user@example.com", "reason": "abuse"},
+    )
+    assert response.status_code == 200
+    assert response.json()["is_banned"] is True
+
+    validate_response = await client.post(
+        "/v1/licences/validate",
+        headers={"X-Licence-Key": licence_key},
+        json={},
+    )
+    assert validate_response.status_code == 401
+
+    second_registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "ban-user@example.com", "plan": "free"},
+    )
+    assert second_registration.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_licence_removes_it(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "delete-licence@example.com", "plan": "trial"},
+    )
+    verification_code = registration.json()["verification_code"]
+    verified = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "delete-licence@example.com", "code": verification_code},
+    )
+    licence_id = verified.json()["licence_id"]
+    licence_key = verified.json()["licence_key"]
+
+    response = await client.post(
+        "/v1/admin/licence/delete",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"licence_id": licence_id},
+    )
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+
+    validate_response = await client.post(
+        "/v1/licences/validate",
+        headers={"X-Licence-Key": licence_key},
+        json={},
+    )
+    assert validate_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_delete_customer_purges_customer_tree(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "delete-customer@example.com", "plan": "free"},
+    )
+    verification_code = registration.json()["verification_code"]
+    await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "delete-customer@example.com", "code": verification_code},
+    )
+
+    response = await client.post(
+        "/v1/admin/customer/delete",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"email": "delete-customer@example.com"},
+    )
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+
+    lookup_response = await client.get(
+        "/v1/admin/customer",
+        params={"email": "delete-customer@example.com"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert lookup_response.status_code == 404
+
+
+@pytest.mark.asyncio
 async def test_register_free_licence_creates_tracked_access(client):
     response = await client.post(
         "/v1/licences/register",

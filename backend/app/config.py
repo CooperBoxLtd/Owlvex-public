@@ -35,10 +35,15 @@ class Settings(BaseSettings):
     usage_event_rate_limit: int = 120
     rate_limit_window_seconds: int = 60
     email_verification_code_minutes: int = 15
+    admin_app_allowed_origins: str = "https://owlvexdev-api.azurewebsites.net,https://owlvex-api.azurewebsites.net"
 
     @property
     def is_development(self) -> bool:
         return self.environment in {"development", "test"}
+
+    @property
+    def parsed_admin_app_allowed_origins(self) -> list[str]:
+        return [origin.strip() for origin in self.admin_app_allowed_origins.split(",") if origin.strip()]
 
     class Config:
         env_file = ".env"

@@ -69,12 +69,19 @@ CREATE TABLE customers (
     company     VARCHAR(200),
     source      VARCHAR(50)  DEFAULT 'extension',
     pending_plan VARCHAR(20),
+    is_banned   BOOLEAN      DEFAULT false,
+    banned_at   TIMESTAMPTZ,
+    ban_reason  TEXT,
     email_verified_at TIMESTAMPTZ,
     verification_code_hash VARCHAR(64),
     verification_code_expires_at TIMESTAMPTZ,
     created_at  TIMESTAMPTZ  DEFAULT NOW(),
     updated_at  TIMESTAMPTZ  DEFAULT NOW()
 );
+
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ;
+ALTER TABLE customers ADD COLUMN IF NOT EXISTS ban_reason TEXT;
 
 CREATE TABLE licences (
     id                      UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),

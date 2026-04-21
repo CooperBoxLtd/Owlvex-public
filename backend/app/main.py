@@ -58,6 +58,8 @@ async def lifespan(app: FastAPI):
 # ----------------------------------------------------------------
 environment = os.getenv("ENVIRONMENT", "development")
 is_development = environment == "development"
+settings = get_settings()
+allowed_origins = ["*"] if is_development else settings.parsed_admin_app_allowed_origins
 
 app = FastAPI(
     title="Owlvex API",
@@ -70,7 +72,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"] if is_development else [],
+    allow_origins=allowed_origins,
     allow_origin_regex=r"^vscode-webview://.*$" if not is_development else None,
     allow_credentials=True,
     allow_methods=["*"],

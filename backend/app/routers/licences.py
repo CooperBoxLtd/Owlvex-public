@@ -188,6 +188,8 @@ async def _get_or_create_customer(
     result = await db.execute(select(Customer).where(Customer.email == email))
     customer = result.scalar_one_or_none()
     if customer:
+        if customer.is_banned:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This customer is banned.")
         if name:
             customer.name = name
         if company:
@@ -369,6 +371,8 @@ async def verify_email_registration(
     customer = result.scalar_one_or_none()
     if not customer or not customer.verification_code_hash or not customer.pending_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending registration found for this email")
+    if customer.is_banned:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This customer is banned.")
 
     now = datetime.now(timezone.utc)
     expires_at = _coerce_utc(customer.verification_code_expires_at)

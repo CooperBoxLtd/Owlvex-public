@@ -8,7 +8,7 @@ from typing import Optional
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import Licence, LicenceSeat, UsageEvent
+from app.db.models import Customer, Licence, LicenceSeat, UsageEvent
 
 
 def is_telemetry_required(features: dict | None) -> bool:
@@ -51,6 +51,12 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
 
     if licence.expires_at and licence.expires_at < datetime.now(timezone.utc):
         return {"valid": False, "reason": "Licence has expired"}
+
+    if licence.customer_id:
+        customer_result = await db.execute(select(Customer).where(Customer.id == licence.customer_id))
+        customer = customer_result.scalar_one_or_none()
+        if customer and customer.is_banned:
+            return {"valid": False, "reason": "Customer is banned"}
 
     features = licence.features or {}
     allowed_frameworks = features.get("frameworks", ["OWASP"])
