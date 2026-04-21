@@ -10,6 +10,7 @@ from app.services.rate_limit import allow_control_plane_request
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/prompts", tags=["prompts"])
+settings = get_settings()
 
 
 class BuildRequest(BaseModel):
@@ -29,7 +30,6 @@ async def build(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
-    settings = get_settings()
     if not allow_control_plane_request(
         "prompt_build",
         request,
@@ -43,7 +43,7 @@ async def build(
     # Validate licence and extract allowed frameworks
     lic = await validate_licence(db, x_licence_key)
     if not lic["valid"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=lic["reason"])
 
     allowed = lic["features"]["frameworks"]
 

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy import (
-    Boolean, Column, Float, ForeignKey, Integer, String, Text,
+    Boolean, Column, Float, ForeignKey, Integer, JSON, String, Text,
     TIMESTAMP, ARRAY, func,
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -104,7 +104,7 @@ class Licence(Base):
     stripe_customer_id     = Column(String(100))
     stripe_subscription_id = Column(String(100))
     features               = Column(JSONB, default=dict)
-    industry_packs         = Column(ARRAY(Text), default=list)
+    industry_packs         = Column(JSON().with_variant(JSONB, "postgresql"), default=list)
     is_active              = Column(Boolean, default=True)
     expires_at             = Column(TIMESTAMP(timezone=True))
     created_at             = Column(TIMESTAMP(timezone=True), server_default=func.now())

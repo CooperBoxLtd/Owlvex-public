@@ -53,7 +53,7 @@ INSERT INTO licences (
         "custom_rules": false,
         "sso": false
     }'::jsonb,
-    '{"fintech"}',
+    '["fintech"]'::jsonb,
     true,
     '2030-01-01T00:00:00Z'
 ) ON CONFLICT (licence_key_hash) DO NOTHING;
@@ -95,7 +95,7 @@ INSERT INTO licences (
         "custom_rules": false,
         "sso": false
     }'::jsonb,
-    '{}',
+    '[]'::jsonb,
     true,
     '2030-01-01T00:00:00Z'
 ),
@@ -117,7 +117,7 @@ INSERT INTO licences (
         "custom_rules": false,
         "sso": false
     }'::jsonb,
-    '{}',
+    '[]'::jsonb,
     true,
     '2030-01-01T00:00:00Z'
 ),
@@ -139,7 +139,7 @@ INSERT INTO licences (
         "custom_rules": false,
         "sso": false
     }'::jsonb,
-    '{}',
+    '[]'::jsonb,
     true,
     '2030-01-01T00:00:00Z'
 )

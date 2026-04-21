@@ -98,7 +98,7 @@ The report generator (`extension/src/scanner/reportGenerator.ts`) produces enter
 | access-control | ac002, ac004, ac003, ac005, ac001, ac-integration | ✅ |
 | conditional-rules | sm002 | ✅ |
 
-Run `npm run benchmark:status` from `extension/` to verify current gate state.
+Run `npm run benchmark:status` from `extension/` to inspect the latest recorded deterministic benchmark artifact state.
 
 ---
 
@@ -132,7 +132,7 @@ SQL deterministic axis reaches the same maturity level as execution risk. Aggreg
 
 ### ✅ Milestone 3: Product Confidence
 
-CI gate runs `benchmark:deterministic` + unit tests. `benchmark:status` reports per-axis confidence. Axis contract documents define invariants and ownership boundaries.
+CI gate runs `benchmark:deterministic` + unit tests. `benchmark:status` reports confidence for the latest recorded deterministic artifact, not full current-checkout readiness. Axis contract documents define invariants and ownership boundaries.
 
 ### ✅ Milestone 4: Broader Coverage
 

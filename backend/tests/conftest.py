@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("ADMIN_KEY", "test-admin-key")
+os.environ.setdefault("ENVIRONMENT", "test")
 
 from app.main import app
 from app.db.session import Base, get_db

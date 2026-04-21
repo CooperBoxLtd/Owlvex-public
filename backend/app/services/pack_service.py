@@ -146,8 +146,8 @@ def get_pack_artifact(pack_id: str, plan: str, allowed_frameworks: list[str]) ->
     definition = PACK_DEFINITIONS[pack_id]
     artifact = _load_pack_json(definition["relative_path"])
     return {
-        "schema_version": "owlvex.rulepack.artifact.v1",
         **manifest,
+        "schema_version": "owlvex.rulepack.artifact.v1",
         "artifact": artifact,
     }
 

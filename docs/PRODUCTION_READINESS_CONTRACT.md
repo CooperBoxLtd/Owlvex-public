@@ -174,6 +174,16 @@ Minimum release gate:
 3. deterministic benchmark green
 4. no known contract mismatch between backend payloads and extension rendering
 
+Operational release-check command:
+
+- `cd extension && npm run release:check`
+
+Interpretation rule:
+
+- `benchmark:status` is artifact-backed deterministic evidence only
+- `release:check` is the current-checkout go / no-go signal
+- production-readiness decisions should use the fresh combined check, not the cached benchmark artifact on its own
+
 Exit criteria:
 
 - CI blocks production deploy on failed tests or failed benchmark

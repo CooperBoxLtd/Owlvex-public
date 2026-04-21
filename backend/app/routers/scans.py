@@ -62,10 +62,12 @@ async def record(
 
     lic = await validate_licence(db, x_licence_key)
     if not lic["valid"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=lic["reason"])
 
     quota_ok = await check_scan_quota(
-        db, lic["licence_id"], lic["features"]["scans_per_month"]
+        db,
+        lic["licence_id"],
+        lic["features"].get("scans_per_month", lic["features"].get("scans_per_day")),
     )
     if not quota_ok:
         raise HTTPException(
@@ -116,7 +118,7 @@ async def compare(
 ):
     lic = await validate_licence(db, x_licence_key)
     if not lic["valid"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=lic["reason"])
 
     if not lic["features"]["comparison"]:
         raise HTTPException(

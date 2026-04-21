@@ -1,3 +1,5 @@
+import uuid
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import UsageEvent
@@ -12,7 +14,7 @@ async def record_usage_event(
     metadata: dict | None = None,
 ) -> UsageEvent:
     event = UsageEvent(
-        licence_id=licence_id,
+        licence_id=uuid.UUID(str(licence_id)),
         user_email=user_email,
         event_name=event_name,
         event_data=metadata or {},

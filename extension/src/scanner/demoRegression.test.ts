@@ -310,13 +310,13 @@ describe('Demo fixture regression coverage', () => {
         const result = await engine.scanDocument(doc);
 
         expect(result.findings).toHaveLength(2);
-        expect(result.findings.map(f => f.canonicalId)).toEqual([
+        expect(result.findings.map(f => f.canonicalId).sort()).toEqual([
             'owlvex.issue.idor.001',
             'owlvex.issue.sql_injection.001',
-        ]);
+        ].sort());
     });
 
-    it('keeps only the real weak JWT validation issue in the demo-app token helper', async () => {
+    it('keeps the real JWT and hardcoded-secret issues in the demo-app token helper', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
             validate: jest.fn().mockResolvedValue({
@@ -388,9 +388,13 @@ describe('Demo fixture regression coverage', () => {
 
         const result = await engine.scanDocument(doc);
 
-        expect(result.findings).toHaveLength(1);
-        expect(result.findings[0].canonicalId).toBe('owlvex.issue.weak_jwt_validation.001');
-        expect(result.findings[0].line).toBe(9);
+        expect(result.findings).toHaveLength(2);
+        expect(result.findings.map(f => f.canonicalId).sort()).toEqual([
+            'owlvex.issue.hardcoded_secret.001',
+            'owlvex.issue.weak_jwt_validation.001',
+        ].sort());
+        expect(result.findings.find(f => f.canonicalId === 'owlvex.issue.weak_jwt_validation.001')?.line).toBe(9);
+        expect(result.findings.find(f => f.canonicalId === 'owlvex.issue.hardcoded_secret.001')?.line).toBe(3);
     });
 
     it('keeps the allowlisted fetch-safe route clean under SSRF overclassification attempts', async () => {

@@ -298,6 +298,7 @@
     "benchmark:integration": "node ../tools/owlvex-benchmark/engine/execution-risk-integration/run-execution-risk-integration.mjs",
     "benchmark:deterministic": "node ../tools/owlvex-benchmark/run-deterministic.mjs",
     "benchmark:status": "node ../tools/owlvex-benchmark/benchmark-status.mjs",
+    "release:check": "node ../tools/release-check.mjs",
     "benchmark:stabilization": "node ../tools/run-stabilization-benchmark.mjs",
     "benchmark:generate-reports": "npm run compile && node ./scripts/generate-stabilization-reports.mjs",
     "benchmark:refresh-and-evaluate": "npm run benchmark:generate-reports && npm run benchmark:stabilization:demo && npm run benchmark:stabilization:demo-app",

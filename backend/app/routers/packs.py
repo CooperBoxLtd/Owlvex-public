@@ -11,13 +11,15 @@ from app.config import get_settings
 
 router = APIRouter(prefix="/v1/packs", tags=["packs"])
 logger = logging.getLogger(__name__)
+settings = get_settings()
+
+
 def _audit_pack_event(
     event: str,
     request: Request,
     licence: dict,
     **extra: object,
 ) -> None:
-    settings = get_settings()
     payload = {
         "event": event,
         "client_ip": get_client_ip(request, trust_forwarded_for=settings.trust_forwarded_for),
@@ -36,7 +38,6 @@ async def manifest(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
-    settings = get_settings()
     if not allow_control_plane_request(
         "pack_fetch",
         request,
@@ -49,7 +50,7 @@ async def manifest(
 
     lic = await validate_licence(db, x_licence_key)
     if not lic["valid"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=lic["reason"])
 
     manifests = list_available_packs(lic["plan"], lic["features"]["frameworks"])
     signing_posture = get_pack_signing_posture()
@@ -75,7 +76,6 @@ async def get_pack(
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
 ):
-    settings = get_settings()
     if not allow_control_plane_request(
         "pack_fetch",
         request,
@@ -88,7 +88,7 @@ async def get_pack(
 
     lic = await validate_licence(db, x_licence_key)
     if not lic["valid"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=lic["reason"])
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=lic["reason"])
 
     artifact = get_pack_artifact(pack_id, lic["plan"], lic["features"]["frameworks"])
     if artifact is None:

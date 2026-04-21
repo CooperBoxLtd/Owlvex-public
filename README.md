@@ -166,6 +166,20 @@ That document is the source of truth for:
 cd extension && npm install && npm test
 ```
 
+### Run the full fresh checkout gate
+
+```bash
+cd extension && npm run release:check
+```
+
+This is the current repo-level release signal. It runs fresh backend tests, extension tests, and the deterministic benchmark, then reports one combined checkout status.
+
+Notes:
+
+- `npm run benchmark:status` is only the latest recorded deterministic benchmark artifact view
+- `npm run release:check` is the command to use when you need current checkout health
+- on machines without a normal Python interpreter on `PATH`, the backend leg will fall back to `uv` with Python `3.12` when available
+
 ### Run the benchmark gate
 
 ```bash

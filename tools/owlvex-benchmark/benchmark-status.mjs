@@ -14,6 +14,42 @@ const AXIS_SUITES = {
   'conditional-rules': ['sm002'],
 };
 
+function buildArtifactFreshness(generatedAt) {
+  const generatedAtMs = Date.parse(generatedAt);
+  if (Number.isNaN(generatedAtMs)) {
+    return {
+      ageMs: null,
+      freshness: 'unknown',
+      freshnessNote: 'Artifact timestamp could not be parsed.',
+    };
+  }
+
+  const ageMs = Math.max(0, Date.now() - generatedAtMs);
+  const ageHours = ageMs / (1000 * 60 * 60);
+
+  if (ageHours < 24) {
+    return {
+      ageMs,
+      freshness: 'fresh',
+      freshnessNote: 'Artifact is less than 24 hours old.',
+    };
+  }
+
+  if (ageHours < 24 * 7) {
+    return {
+      ageMs,
+      freshness: 'stale',
+      freshnessNote: 'Artifact is older than 24 hours. Re-run the deterministic gate before using it as a current signal.',
+    };
+  }
+
+  return {
+    ageMs,
+    freshness: 'very-stale',
+    freshnessNote: 'Artifact is older than 7 days. Treat it as historical benchmark evidence, not current checkout status.',
+  };
+}
+
 function buildAxisStatus(axisName, suiteNames, results) {
   const axisResults = results.filter((entry) => suiteNames.includes(entry.name));
   const allPassing = axisResults.every((entry) => entry.passed);
@@ -24,15 +60,19 @@ function buildAxisStatus(axisName, suiteNames, results) {
 
   return {
     axis: axisName,
-    acceptableForAxis: allPassing,
+    artifactPassing: allPassing,
     confidence: allPassing ? 'high-for-covered-axis' : 'not-acceptable',
-    releaseStatement: allPassing
-      ? `The deterministic ${axisName} benchmark is passing for all covered suites and cases.`
-      : `The deterministic ${axisName} benchmark is not yet acceptable for release on the covered axis.`,
+    statusStatement: allPassing
+      ? `The latest recorded deterministic ${axisName} benchmark artifact is passing for all covered suites and cases.`
+      : `The latest recorded deterministic ${axisName} benchmark artifact is not passing for the covered axis.`,
     reasons: [
       `suites passing: ${passedSuites}/${suiteNames.length}`,
       `cases passing: ${passedCases}/${totalCases}`,
       `failed suite: ${failedSuite ?? 'none'}`,
+    ],
+    limitations: [
+      'This is artifact-backed benchmark status only.',
+      'This does not confirm current checkout health outside the covered deterministic suites.',
     ],
   };
 }
@@ -40,7 +80,7 @@ function buildAxisStatus(axisName, suiteNames, results) {
 function buildStatus(summary) {
   const allSuitesPassing = summary.passedSuites === summary.totalSuites;
   const allCasesPassing = summary.passedCases === summary.totalCases;
-  const acceptableForAxis = summary.passed && allSuitesPassing && allCasesPassing;
+  const artifactPassing = summary.passed && allSuitesPassing && allCasesPassing;
   const results = summary.results ?? [];
 
   const axes = Object.entries(AXIS_SUITES).map(([axisName, suiteNames]) =>
@@ -49,16 +89,23 @@ function buildStatus(summary) {
 
   return {
     overall: {
-      acceptableForRelease: acceptableForAxis,
-      confidence: acceptableForAxis ? 'high-for-all-axes' : 'not-acceptable',
-      releaseStatement: acceptableForAxis
-        ? 'All deterministic axes are passing. Product is acceptable for the covered behaviors.'
-        : 'One or more deterministic axes are failing. Review individual axis status.',
+      artifactPassing,
+      releaseReadiness: 'unknown',
+      checkoutHealth: 'unknown',
+      confidence: artifactPassing ? 'high-for-covered-deterministic-artifact' : 'not-acceptable',
+      statusStatement: artifactPassing
+        ? 'All deterministic axes are passing in the latest recorded benchmark artifact.'
+        : 'One or more deterministic axes are failing in the latest recorded benchmark artifact.',
       reasons: [
         `gate passed: ${summary.passed}`,
         `suites passing: ${summary.passedSuites}/${summary.totalSuites}`,
         `cases passing: ${summary.passedCases}/${summary.totalCases}`,
         `failed suite: ${summary.failedSuite ?? 'none'}`,
+      ],
+      limitations: [
+        'This command reads the latest recorded deterministic benchmark artifact.',
+        'It does not run benchmarks, unit tests, or backend tests for the current checkout.',
+        'Do not treat this output alone as a release decision.',
       ],
     },
     axes,
@@ -69,9 +116,15 @@ async function main() {
   const raw = await fs.readFile(latestPath, 'utf8');
   const summary = JSON.parse(raw);
   const status = buildStatus(summary);
+  const artifact = {
+    source: 'latest-recorded-deterministic-run',
+    path: latestPath,
+    generatedAt: summary.generatedAt,
+    ...buildArtifactFreshness(summary.generatedAt),
+  };
 
   console.log(JSON.stringify({
-    generatedAt: summary.generatedAt,
+    artifact,
     summary,
     status,
   }, null, 2));

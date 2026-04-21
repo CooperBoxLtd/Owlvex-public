@@ -1,4 +1,5 @@
 import hashlib
+import inspect
 import secrets
 import string
 from datetime import datetime, timezone
@@ -56,6 +57,7 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
         "features": {
             "frameworks": allowed_frameworks,
             "scans_per_month": scans_per_month,
+            "scans_per_day": scans_per_month,
             "prompt_editor": features.get("prompt_editor", False),
             "comparison": features.get("comparison", False),
             "team_prompts": features.get("team_prompts", False),
@@ -67,8 +69,10 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
         },
         "usage": {
             "scans_this_month": scans_this_month,
+            "scans_today": scans_this_month,
             "scans_remaining": scans_remaining,
             "monthly_limit_reached": scans_per_month is not None and scans_this_month >= scans_per_month,
+            "daily_limit_reached": scans_per_month is not None and scans_this_month >= scans_per_month,
         },
         "expires_at": licence.expires_at.isoformat() if licence.expires_at else None,
     }
@@ -86,7 +90,10 @@ async def get_monthly_usage_count(db: AsyncSession, licence_id: str, event_name:
             UsageEvent.created_at >= start_of_month,
         )
     )
-    return int(result.scalar_one() or 0)
+    count = result.scalar_one()
+    if inspect.isawaitable(count):
+        count = await count
+    return int(count or 0)
 
 
 async def record_seat_seen(db: AsyncSession, licence_id: str, user_email: str) -> None:

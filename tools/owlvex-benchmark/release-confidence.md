@@ -138,6 +138,6 @@ npm run benchmark:status
 
 ## Bottom Line
 
-The benchmark is now strong enough to support disciplined release decisions for the covered deterministic behaviors in Owlvex.
+The benchmark is now strong enough to support disciplined release decisions for the covered deterministic behaviors in Owlvex when paired with fresh test and CI signals.
 
-It is not the final confidence story for every product behavior, but it is already a real release signal, not just a test harness.
+It is not the final confidence story for every product behavior, and `benchmark:status` alone should not be treated as a complete release verdict for the current checkout.

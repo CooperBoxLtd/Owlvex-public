@@ -20,6 +20,7 @@ from app.services.email_service import send_verification_email
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/licences", tags=["licences"])
+settings = get_settings()
 
 
 # ----------------------------------------------------------------
@@ -33,12 +34,11 @@ class ValidateRequest(BaseModel):
 
 @router.post("/validate")
 async def validate(
-    body: ValidateRequest,
     request: Request,
     x_licence_key: str = Header(..., alias="X-Licence-Key"),
     db: AsyncSession = Depends(get_db),
+    body: ValidateRequest = ValidateRequest(),
 ):
-    settings = get_settings()
     if not allow_control_plane_request(
         "licence_validate",
         request,
@@ -204,6 +204,14 @@ def _hash_verification_code(code: str) -> str:
     return hashlib.sha256(code.encode("utf-8")).hexdigest()
 
 
+def _coerce_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def _build_registration_response(
     *,
     email: str,
@@ -229,8 +237,8 @@ async def generate(
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
     db: AsyncSession = Depends(get_db),
 ):
-    settings = get_settings()
-    if x_admin_key != settings.admin_key:
+    current_settings = get_settings()
+    if x_admin_key != current_settings.admin_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key")
 
     if body.plan not in PLAN_FEATURES:
@@ -280,13 +288,13 @@ async def register(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    settings = get_settings()
+    current_settings = get_settings()
     if not allow_control_plane_request(
         "licence_register",
         request,
-        limit=settings.licence_register_rate_limit,
-        window_seconds=settings.rate_limit_window_seconds,
-        trust_forwarded_for=settings.trust_forwarded_for,
+        limit=current_settings.licence_register_rate_limit,
+        window_seconds=current_settings.rate_limit_window_seconds,
+        trust_forwarded_for=current_settings.trust_forwarded_for,
     ):
         raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Too many registration requests")
 
@@ -304,10 +312,10 @@ async def register(
     customer.pending_plan = plan
     customer.verification_code_hash = _hash_verification_code(verification_code)
     customer.verification_code_expires_at = (
-        datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=settings.email_verification_code_minutes)
+        datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=current_settings.email_verification_code_minutes)
     )
 
-    if settings.sendgrid_api_key:
+    if current_settings.sendgrid_api_key:
         try:
             send_verification_email(
                 to_email=str(body.email),
@@ -316,7 +324,7 @@ async def register(
             )
         except RuntimeError as exc:
             raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    elif not settings.is_development:
+    elif not current_settings.is_development:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Email verification delivery is not configured.",
@@ -327,7 +335,7 @@ async def register(
         email=str(body.email),
         plan=plan,
         verification_code=verification_code,
-        settings=settings,
+        settings=current_settings,
     )
 
 
@@ -342,7 +350,8 @@ async def verify_email_registration(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending registration found for this email")
 
     now = datetime.now(timezone.utc)
-    if not customer.verification_code_expires_at or customer.verification_code_expires_at < now:
+    expires_at = _coerce_utc(customer.verification_code_expires_at)
+    if not expires_at or expires_at < now:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code has expired")
 
     if _hash_verification_code(body.code.strip()) != customer.verification_code_hash:

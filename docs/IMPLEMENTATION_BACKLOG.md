@@ -945,7 +945,7 @@ Make deterministic correctness part of the default shipping path rather than a m
 
 - run `benchmark:deterministic` in CI
 - run key extension tests alongside the benchmark gate
-- add a short release checklist referencing `benchmark:status`
+- add a short release checklist referencing `release:check`
 - ensure failures are easy to diagnose from generated run artifacts
 
 ### Likely Files
@@ -958,7 +958,7 @@ Make deterministic correctness part of the default shipping path rather than a m
 ### Acceptance Criteria
 
 - deterministic regressions block release by default
-- release reviewers have one clear benchmark signal to inspect
+- release reviewers have one clear fresh-checkout signal to inspect
 - run artifacts are retained in a predictable format
 - trusted-source provenance validation blocks release for grounded packs
 

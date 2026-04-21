@@ -63,7 +63,7 @@ describe('stability guardrails', () => {
         expect(result.findings[0].corroboration).toBe('PROVEN');
     });
 
-    it('does not allow project context to upgrade AI findings into PROVEN', async () => {
+    it('does not allow project context to upgrade AI findings into PROVEN when the issue remains AI-only', async () => {
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
             get: (key: string, defaultValue?: any) => {
                 switch (key) {
@@ -76,7 +76,7 @@ describe('stability guardrails', () => {
                     case 'teamContext':
                         return '';
                     case 'projectContext':
-                        return 'All redirect destinations must be allow-listed.';
+                        return 'Only finance-admin users may issue refunds.';
                     case 'projectContextFile':
                         return '';
                     default:
@@ -96,20 +96,20 @@ describe('stability guardrails', () => {
             .mockResolvedValueOnce({
                 content: JSON.stringify({
                     score: 6.4,
-                    summary: 'Potential open redirect detected.',
+                    summary: 'Potential missing finance-admin authorization detected.',
                     findings: [{
-                        id: 'ai-open-redirect',
+                        id: 'ai-finance-admin',
                         line: 2,
                         line_end: 2,
                         severity: 'MEDIUM',
                         framework: 'OWASP',
-                        rule_code: 'A01-REDIRECT',
-                        title: 'Open Redirect',
-                        explanation: 'User-controlled destination is passed directly into a redirect call.',
-                        threat: 'Attackers can steer users to attacker-controlled pages.',
-                        fix: 'Allow-list redirect destinations.',
+                        rule_code: 'A01-AUTHZ',
+                        title: 'Missing finance-admin authorization on refund action',
+                        explanation: 'The refund action is reachable without a visible finance-admin authorization gate.',
+                        threat: 'Unauthorized users may trigger refund operations.',
+                        fix: 'Require a finance-admin role check before calling the refund path.',
                         confidence: 0.88,
-                        issue_id: 'owlvex.issue.open_redirect.001',
+                        issue_id: 'owlvex.issue.missing_authorization.001',
                     }],
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 1, low: 0 },
@@ -118,13 +118,13 @@ describe('stability guardrails', () => {
             })
             .mockResolvedValueOnce({
                 content: JSON.stringify({
-                    reviews: [{ id: 'ai-open-redirect', verdict: 'support', reason: 'supported' }],
+                    reviews: [{ id: 'ai-finance-admin', verdict: 'support', reason: 'supported' }],
                 }),
                 tokenCount: 10,
             })
             .mockResolvedValueOnce({
                 content: JSON.stringify({
-                    reviews: [{ id: 'ai-open-redirect', verdict: 'clear', reason: 'no contradiction' }],
+                    reviews: [{ id: 'ai-finance-admin', verdict: 'clear', reason: 'no contradiction' }],
                 }),
                 tokenCount: 10,
             });
@@ -147,8 +147,8 @@ describe('stability guardrails', () => {
         const engine = new ScanEngine(licenceMgr, registry);
         const doc = {
             languageId: 'javascript',
-            fileName: 'd:\\repo\\redirect.js',
-            getText: () => 'function go(req, res) { return res.redirect(req.query.next); }',
+            fileName: 'd:\\repo\\refund.js',
+            getText: () => 'function refund(req, res) { return billing.refund(req.body.invoiceId); }',
         } as any;
 
         const result = await engine.scanDocument(doc);

@@ -96,6 +96,11 @@ npm run benchmark:deterministic    # from extension/
 npm run benchmark:status
 ```
 
+**Fresh checkout release check:**
+```bash
+npm run release:check
+```
+
 **AI eval lane against a generated markdown report:**
 ```bash
 npm run benchmark:ai-evals -- ../tools/demo/owlvex-scan-report-YYYYMMDD-HHMMSS.md model-tag
@@ -116,6 +121,7 @@ npm run benchmark:sm002            # debug mode conditional rule
 ```
 
 All `benchmark:*` scripts are defined in `extension/package.json`.
+The combined `release:check` script is also defined there and runs fresh backend tests, extension tests, and the deterministic benchmark before reporting current checkout health.
 
 ---
 
@@ -138,7 +144,7 @@ The expected JSON declares what the evaluator should return (`finding`, `resourc
 
 ## Gate status
 
-Verified via `npm run benchmark:status`:
+Verified from the latest recorded deterministic benchmark artifact via `npm run benchmark:status`:
 
 - `19` suites passing
 - `82` cases passing
@@ -156,6 +162,6 @@ Breakdown:
 
 ## Release confidence
 
-`benchmark:status` writes JSON artifacts to `runs/deterministic/`. When all suites in an axis pass, the axis is `high-for-covered-axis`. This is the gate for releasing deterministic findings in that category.
+`benchmark:status` reads the latest recorded JSON artifact from `runs/deterministic/`; it does not run the benchmark fresh. When all suites in an axis pass, the axis is reported as `high-for-covered-axis` for the covered deterministic artifact only. This is useful release evidence for deterministic findings in that category, but it is not a complete current-checkout or product-release verdict.
 
 For authoritative product state and milestone tracking, see `product-map.md`.

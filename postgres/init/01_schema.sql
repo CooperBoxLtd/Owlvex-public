@@ -88,7 +88,7 @@ CREATE TABLE licences (
     stripe_customer_id      VARCHAR(100),
     stripe_subscription_id  VARCHAR(100),
     features                JSONB        DEFAULT '{}',
-    industry_packs          TEXT[]       DEFAULT '{}',
+    industry_packs          JSONB        DEFAULT '[]',
     is_active               BOOLEAN      DEFAULT true,
     expires_at              TIMESTAMPTZ,
     created_at              TIMESTAMPTZ  DEFAULT NOW(),
