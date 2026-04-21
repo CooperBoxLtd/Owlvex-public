@@ -138,7 +138,6 @@ CREATE TABLE scan_history (
     file_name        VARCHAR(500),                   -- filename only, no path
     language         VARCHAR(50),
     prompt_id        UUID         REFERENCES team_prompts(id),
-    prompt_snapshot  TEXT,                           -- snapshot of exact prompt used
     model            VARCHAR(100),
     provider         VARCHAR(50),                    -- 'azure-foundry','openai','anthropic','ollama'
     frameworks       TEXT[]       DEFAULT '{}',
@@ -150,6 +149,8 @@ CREATE TABLE scan_history (
     status           VARCHAR(20)  DEFAULT 'completed',
     created_at       TIMESTAMPTZ  DEFAULT NOW()
 );
+
+ALTER TABLE scan_history DROP COLUMN IF EXISTS prompt_snapshot;
 
 -- ============================================================
 -- COMPARISONS — A vs B scan comparisons

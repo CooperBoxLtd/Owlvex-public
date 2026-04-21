@@ -158,7 +158,6 @@ class ScanHistory(Base):
     file_name        = Column(String(500))
     language         = Column(String(50))
     prompt_id        = Column(UUID(as_uuid=True), ForeignKey("team_prompts.id"), nullable=True)
-    prompt_snapshot  = Column(Text)
     model            = Column(String(100))
     provider         = Column(String(50))
     frameworks       = Column(ARRAY(Text), default=list)

@@ -696,7 +696,7 @@ async def test_usage_event_records_valid_event(client):
         "plan": "developer",
         "seats": 1,
         "seats_used": 1,
-        "features": {"frameworks": ["OWASP"], "scans_per_day": None},
+        "features": {"frameworks": ["OWASP"], "scans_per_day": None, "telemetry_enabled": True},
         "expires_at": None,
     }
     with patch("app.routers.usage.validate_licence", return_value=mock_result):
@@ -722,7 +722,7 @@ async def test_usage_event_rejects_unexpected_fields(client):
         "plan": "developer",
         "seats": 1,
         "seats_used": 1,
-        "features": {"frameworks": ["OWASP"], "scans_per_day": None},
+        "features": {"frameworks": ["OWASP"], "scans_per_day": None, "telemetry_enabled": True},
         "expires_at": None,
     }
     with patch("app.routers.usage.validate_licence", return_value=mock_result):
@@ -733,6 +733,34 @@ async def test_usage_event_rejects_unexpected_fields(client):
         )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_usage_event_returns_success_without_recording_when_telemetry_disabled(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {"frameworks": ["OWASP"], "scans_per_day": None, "telemetry_enabled": False, "telemetry_required": False},
+        "expires_at": None,
+    }
+    with patch("app.routers.usage.validate_licence", return_value=mock_result), \
+         patch("app.routers.usage.record_usage_event") as mock_record_usage_event:
+        response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={"event_name": "scan_run", "metadata": {"scope": "file"}},
+        )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["ok"] is True
+    assert data["event_id"] is None
+    assert data["telemetry_disabled"] is True
+    mock_record_usage_event.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

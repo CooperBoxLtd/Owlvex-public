@@ -21,6 +21,9 @@ export interface LicenceInfo {
         customRules: boolean;
         sso: boolean;
         industryPacks: string[];
+        telemetryRequired: boolean;
+        telemetryEnabled: boolean;
+        telemetryOptOut: boolean;
     };
     usage: {
         scansThisMonth: number;
@@ -261,6 +264,9 @@ export class LicenceManager {
                 customRules: data.features.custom_rules,
                 sso: data.features.sso,
                 industryPacks: data.features.industry_packs,
+                telemetryRequired: Boolean(data.features.telemetry_required),
+                telemetryEnabled: Boolean(data.features.telemetry_enabled ?? true),
+                telemetryOptOut: Boolean(data.features.telemetry_opt_out),
             },
             usage: {
                 scansThisMonth: data.usage?.scans_this_month ?? data.usage?.scans_today ?? 0,

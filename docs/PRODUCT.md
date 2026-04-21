@@ -113,6 +113,13 @@ The control plane. Handles:
 
 Must not require raw source code in order to perform its role. Lives in `backend/`.
 
+Telemetry policy for launch:
+
+- `free` and `trial` require Owlvex metadata telemetry for activation, quota enforcement, onboarding measurement, and abuse control
+- paid tiers may opt out of non-essential product telemetry
+- prompt snapshots are not stored
+- raw source code is not uploaded through the control plane telemetry path
+
 ### Grounded Data Packs
 
 Owlvex now maintains versioned local grounded-data assets that can later become signed rule-pack artifacts. Current pack families include:

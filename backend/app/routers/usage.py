@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.session import get_db
-from app.services.licence_service import validate_licence
+from app.services.licence_service import is_telemetry_enabled, validate_licence
 from app.services.rate_limit import allow_control_plane_request
 from app.services.usage_service import record_usage_event
 
@@ -41,6 +41,15 @@ async def create_usage_event(
     if not result["valid"]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=result["reason"])
 
+    if not is_telemetry_enabled(result.get("features")):
+        return {
+            "ok": True,
+            "event_id": None,
+            "event_name": body.event_name,
+            "licence_id": result["licence_id"],
+            "telemetry_disabled": True,
+        }
+
     event = await record_usage_event(
         db,
         licence_id=result["licence_id"],
@@ -53,4 +62,5 @@ async def create_usage_event(
         "event_id": str(event.id),
         "event_name": event.event_name,
         "licence_id": result["licence_id"],
+        "telemetry_disabled": False,
     }

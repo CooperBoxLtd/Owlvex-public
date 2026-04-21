@@ -305,6 +305,10 @@ async function trackUsageEvent(
         if (!licenceKey) {
             return;
         }
+        const cachedInfo = licenceMgr.getCachedInfo();
+        if (cachedInfo && !cachedInfo.features.telemetryEnabled) {
+            return;
+        }
 
         const response = await fetch(`${getApiUrl()}/v1/usage/events`, {
             method: 'POST',

@@ -100,6 +100,9 @@ PLAN_FEATURES = {
         "pdf_reports": False,
         "custom_rules": False,
         "sso": False,
+        "telemetry_required": True,
+        "telemetry_enabled": True,
+        "telemetry_opt_out": False,
     },
     "trial": {
         "frameworks": ["OWASP", "STRIDE", "MITRE", "CWE", "CLEANCODE", "NIST", "PCIDSS"],
@@ -111,6 +114,9 @@ PLAN_FEATURES = {
         "pdf_reports": True,
         "custom_rules": False,
         "sso": False,
+        "telemetry_required": True,
+        "telemetry_enabled": True,
+        "telemetry_opt_out": False,
     },
     "developer": {
         "frameworks": ["OWASP", "STRIDE", "MITRE", "CWE", "CLEANCODE"],
@@ -122,6 +128,9 @@ PLAN_FEATURES = {
         "pdf_reports": False,
         "custom_rules": False,
         "sso": False,
+        "telemetry_required": False,
+        "telemetry_enabled": True,
+        "telemetry_opt_out": True,
     },
     "team": {
         "frameworks": ["OWASP", "STRIDE", "MITRE", "CWE", "CLEANCODE", "NIST", "PCIDSS"],
@@ -133,6 +142,9 @@ PLAN_FEATURES = {
         "pdf_reports": True,
         "custom_rules": False,
         "sso": False,
+        "telemetry_required": False,
+        "telemetry_enabled": True,
+        "telemetry_opt_out": True,
     },
     "enterprise": {
         "frameworks": ["OWASP", "STRIDE", "MITRE", "CWE", "CLEANCODE", "NIST", "PCIDSS", "HIPAA"],
@@ -144,6 +156,9 @@ PLAN_FEATURES = {
         "pdf_reports": True,
         "custom_rules": True,
         "sso": True,
+        "telemetry_required": False,
+        "telemetry_enabled": True,
+        "telemetry_opt_out": True,
     },
 }
 

@@ -187,7 +187,6 @@ def _create_sqlite_tables(conn):
             file_name TEXT,
             language TEXT,
             prompt_id TEXT,
-            prompt_snapshot TEXT,
             model TEXT,
             provider TEXT,
             frameworks TEXT DEFAULT '[]',

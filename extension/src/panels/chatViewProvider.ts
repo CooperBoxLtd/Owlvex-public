@@ -1134,6 +1134,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     customRules: false,
                     sso: false,
                     industryPacks: [],
+                    telemetryRequired: true,
+                    telemetryEnabled: true,
+                    telemetryOptOut: false,
                 },
                 usage: {
                     scansThisMonth: 0,
@@ -1160,6 +1163,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     customRules: false,
                     sso: false,
                     industryPacks: [],
+                    telemetryRequired: true,
+                    telemetryEnabled: true,
+                    telemetryOptOut: false,
                 },
                 usage: {
                     scansThisMonth: 0,

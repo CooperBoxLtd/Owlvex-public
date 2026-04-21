@@ -28,6 +28,10 @@ class CustomerLicenceActionRequest(BaseModel):
     plan: str | None = Field(default=None, pattern="^(free|trial|developer|team|enterprise)$")
 
 
+class CustomerTelemetryRequest(CustomerLicenceActionRequest):
+    enabled: bool
+
+
 def _ensure_admin_key(x_admin_key: str) -> None:
     settings = get_settings()
     if x_admin_key != settings.admin_key:
@@ -254,4 +258,43 @@ async def rotate_licence(
         "licence_id": str(rotated.id),
         "licence_key": raw_key,
         "rotated_from_licence_id": str(source_licence.id),
+    }
+
+
+@router.post("/licence/telemetry")
+async def update_licence_telemetry(
+    body: CustomerTelemetryRequest,
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    customer = await _get_customer_with_licences(db, str(body.email))
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+
+    licences = _filter_customer_licences(customer, body.plan)
+    if not licences:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No licence found for this customer")
+
+    updated = 0
+    for licence in licences:
+        if licence.plan in {"free", "trial"} and not body.enabled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Free and trial licences require telemetry and cannot disable it.",
+            )
+        features = dict(licence.features or {})
+        features["telemetry_required"] = licence.plan in {"free", "trial"}
+        features["telemetry_opt_out"] = licence.plan not in {"free", "trial"}
+        features["telemetry_enabled"] = True if licence.plan in {"free", "trial"} else body.enabled
+        licence.features = features
+        updated += 1
+
+    await db.commit()
+    return {
+        "ok": True,
+        "email": customer.email,
+        "plan": body.plan,
+        "telemetry_enabled": body.enabled,
+        "updated": updated,
     }

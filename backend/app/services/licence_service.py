@@ -11,6 +11,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import Licence, LicenceSeat, UsageEvent
 
 
+def is_telemetry_required(features: dict | None) -> bool:
+    return bool((features or {}).get("telemetry_required", False))
+
+
+def is_telemetry_enabled(features: dict | None) -> bool:
+    feature_map = features or {}
+    if is_telemetry_required(feature_map):
+        return True
+    return bool(feature_map.get("telemetry_enabled", True))
+
+
 def hash_licence_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.encode()).hexdigest()
 
@@ -66,6 +77,9 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
             "custom_rules": features.get("custom_rules", False),
             "sso": features.get("sso", False),
             "industry_packs": licence.industry_packs or [],
+            "telemetry_required": is_telemetry_required(features),
+            "telemetry_enabled": is_telemetry_enabled(features),
+            "telemetry_opt_out": bool(features.get("telemetry_opt_out", False)),
         },
         "usage": {
             "scans_this_month": scans_this_month,

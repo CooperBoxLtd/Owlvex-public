@@ -51,7 +51,10 @@ INSERT INTO licences (
         "ci_cd": true,
         "pdf_reports": true,
         "custom_rules": false,
-        "sso": false
+        "sso": false,
+        "telemetry_required": false,
+        "telemetry_enabled": true,
+        "telemetry_opt_out": true
     }'::jsonb,
     '["fintech"]'::jsonb,
     true,
@@ -86,14 +89,17 @@ INSERT INTO licences (
     0,
     '{
         "frameworks": ["OWASP"],
-        "scans_per_day": 50,
+        "scans_per_month": 50,
         "prompt_editor": false,
         "comparison": false,
         "team_prompts": false,
         "ci_cd": false,
         "pdf_reports": false,
         "custom_rules": false,
-        "sso": false
+        "sso": false,
+        "telemetry_required": true,
+        "telemetry_enabled": true,
+        "telemetry_opt_out": false
     }'::jsonb,
     '[]'::jsonb,
     true,
@@ -108,14 +114,17 @@ INSERT INTO licences (
     0,
     '{
         "frameworks": ["OWASP","STRIDE","MITRE","CWE","CLEANCODE","NIST","PCIDSS"],
-        "scans_per_day": null,
+        "scans_per_month": null,
         "prompt_editor": true,
         "comparison": true,
         "team_prompts": true,
         "ci_cd": true,
         "pdf_reports": true,
         "custom_rules": false,
-        "sso": false
+        "sso": false,
+        "telemetry_required": true,
+        "telemetry_enabled": true,
+        "telemetry_opt_out": false
     }'::jsonb,
     '[]'::jsonb,
     true,
@@ -130,14 +139,17 @@ INSERT INTO licences (
     0,
     '{
         "frameworks": ["OWASP","STRIDE","MITRE","CWE","CLEANCODE"],
-        "scans_per_day": null,
+        "scans_per_month": null,
         "prompt_editor": true,
         "comparison": true,
         "team_prompts": false,
         "ci_cd": false,
         "pdf_reports": false,
         "custom_rules": false,
-        "sso": false
+        "sso": false,
+        "telemetry_required": false,
+        "telemetry_enabled": true,
+        "telemetry_opt_out": true
     }'::jsonb,
     '[]'::jsonb,
     true,
