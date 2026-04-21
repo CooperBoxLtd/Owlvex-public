@@ -2486,6 +2486,9 @@ describe('parseChatIntent', () => {
             expect.objectContaining({ label: 'Register Trial', kind: 'quickAction', quickAction: 'startTrial' }),
             expect.objectContaining({ label: 'Configure LLM', kind: 'quickAction', quickAction: 'setupAI' }),
         ]));
+        expect(finalMessage.actions).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Configure Backend', kind: 'quickAction', quickAction: 'configureBackend' }),
+        ]));
     });
 
     it('shows free onboarding guidance when no free licence is cached', async () => {
@@ -2516,6 +2519,8 @@ describe('parseChatIntent', () => {
         expect(finalMessage.content).toContain('Verify the email code');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Use Free', kind: 'quickAction', quickAction: 'useFree' }),
+        ]));
+        expect(finalMessage.actions).not.toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Configure Backend', kind: 'quickAction', quickAction: 'configureBackend' }),
         ]));
     });

@@ -2383,7 +2383,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const apiUrl = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl;
             this.messages.push({
                 role: 'system',
-                content: `Backend URL is set to ${apiUrl}.`,
+                content: `Backend override is set to ${apiUrl}. Owlvex uses the packaged backend by default unless you explicitly override it.`,
                 kind: 'advisory',
             });
             void this.persistState();
@@ -2398,7 +2398,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'system',
                 content: licenceInfo
                     ? `Licence is ready: ${buildLicenceStatusSummary(licenceInfo)}.`
-                    : 'Licence setup finished. If validation failed, check the backend URL and try again.',
+                    : 'Licence setup finished. If validation failed, confirm the packaged backend is reachable and only use a backend override when you intentionally need a different Owlvex environment.',
                 kind: 'advisory',
                 actions: licenceInfo
                     ? [
@@ -2416,12 +2416,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         },
                     ]
                     : [
-                        {
-                            id: 'quick-configure-backend',
-                            label: 'Configure Backend',
-                            kind: 'quickAction',
-                            quickAction: 'configureBackend',
-                        },
                         {
                             id: 'quick-test-ai',
                             label: 'Configure LLM',
@@ -2475,7 +2469,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         'Trial onboarding:',
                         '- Register a tracked trial with your email',
                         '- Verify the email code to activate the licence',
-                        '- Confirm the backend is reachable',
+                        '- The packaged backend should already be selected for this build',
                         '- Configure your LLM connection',
                         '- Run a real scan to experience the full workflow',
                     ].join('\n'),
@@ -2501,12 +2495,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             label: 'Register Trial',
                             kind: 'quickAction',
                             quickAction: 'startTrial',
-                        },
-                        {
-                            id: 'trial-configure-backend',
-                            label: 'Configure Backend',
-                            kind: 'quickAction',
-                            quickAction: 'configureBackend',
                         },
                         {
                             id: 'trial-configure-llm',
@@ -2537,7 +2525,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         'Free onboarding:',
                         '- Register Free access with your email',
                         '- Verify the email code to activate the licence',
-                        '- Confirm the backend is reachable',
+                        '- The packaged backend should already be selected for this build',
                         '- Run a deterministic scan to validate value quickly',
                     ].join('\n'),
                 kind: 'advisory',
@@ -2562,12 +2550,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             label: 'Use Free',
                             kind: 'quickAction',
                             quickAction: 'useFree',
-                        },
-                        {
-                            id: 'free-configure-backend',
-                            label: 'Configure Backend',
-                            kind: 'quickAction',
-                            quickAction: 'configureBackend',
                         },
                     ],
             });
@@ -2622,7 +2604,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const summary = Array.isArray(result?.summary) ? result.summary : [];
             const lines = [
                 'Owlvex onboarding checklist:',
-                `- Backend connection: ${result?.backend ? 'ready' : 'needs setup'}`,
+                `- Backend connection: ${result?.backend ? 'ready' : 'package default unreachable'}`,
                 `- Licence or registration: ${result?.licence ? 'ready' : 'needs setup'}`,
                 `- LLM connection: ${result?.provider ? 'ready' : 'needs setup'}`,
                 `- First meaningful scan: ${result?.backend && result?.licence ? 'available now' : 'blocked until setup is complete'}`,
@@ -2632,14 +2614,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             ];
 
             const actions: ChatMessageAction[] = [];
-            if (!result?.backend) {
-                actions.push({
-                    id: 'onboarding-configure-backend',
-                    label: 'Configure Backend',
-                    kind: 'quickAction',
-                    quickAction: 'configureBackend',
-                });
-            }
             if (!result?.licence) {
                 actions.push({
                     id: 'onboarding-use-free',
@@ -4122,7 +4096,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             <button class="chip" data-action="useFree">Use Free</button>
             <button class="chip" data-action="viewPlans">View Plans</button>
             <button class="chip" data-action="startTrial">Start Trial</button>
-            <button class="chip" data-action="configureBackend">Configure Backend</button>
+            <button class="chip" data-action="configureBackend">Backend Override</button>
             <button class="chip" data-action="enterLicence">Enter Licence</button>
             <button class="chip" data-action="toggleTelemetry">Telemetry</button>
             <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>

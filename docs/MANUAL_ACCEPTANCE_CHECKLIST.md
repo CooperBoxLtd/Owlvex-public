@@ -42,6 +42,8 @@ or production:
 curl https://owlvex-api.azurewebsites.net/health
 ```
 
+The extension should use the packaged backend URL by default for the selected build. `Configure Backend Override URL` is only for intentional non-default environments or debugging.
+
 3. Open `extension/` in VS Code and launch the extension host with `F5`.
 
 4. Prepare a small workspace with at least:
@@ -239,6 +241,7 @@ npm run package:prod
 Pass:
 - both packages build successfully
 - profile-specific defaults are correct
+- backend is preconfigured automatically for each package profile without requiring manual setup
 
 ## Exit Criteria
 

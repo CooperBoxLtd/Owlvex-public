@@ -135,6 +135,20 @@ interface VerifyRegistrationResponse {
     expires_at: string | null;
 }
 
+interface UpdateTelemetryResponse {
+    ok: boolean;
+    licence_id: string;
+    plan: string;
+    telemetry_enabled: boolean;
+    telemetry_required: boolean;
+}
+
+export interface OnboardingActionChoice {
+    label: string;
+    command: string;
+    args?: unknown[];
+}
+
 function normalizeStoredScanRecord(item: { scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }): StoredScanRecord {
     return {
         scanId: item.scanId,
@@ -389,6 +403,28 @@ async function migrateWorkspaceProviderSettingsToGlobalDefaults(): Promise<void>
     }
 }
 
+async function updateTelemetryPreferenceRequest(
+    apiUrl: string,
+    licenceKey: string,
+    enabled: boolean,
+): Promise<UpdateTelemetryResponse> {
+    const response = await fetch(`${apiUrl}/v1/licences/telemetry`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-Licence-Key': licenceKey,
+        },
+        body: JSON.stringify({ enabled }),
+    });
+
+    const body = await response.json().catch(() => ({})) as Record<string, any>;
+    if (!response.ok) {
+        throw new Error(String(body?.detail ?? `Telemetry update failed (HTTP ${response.status})`));
+    }
+
+    return body as UpdateTelemetryResponse;
+}
+
 async function resolveLicenceInfoForAccess(
     licenceMgr: LicenceManager,
     getApiUrl: () => string,
@@ -472,6 +508,85 @@ export function buildVerificationPromptMessage(
 
     lines.push('Enter the verification code to activate your licence.');
     return lines.join('\n');
+}
+
+function buildBackendDefaultSummary(apiUrl: string): string {
+    return `Owlvex uses the packaged backend by default for this build: ${apiUrl}`;
+}
+
+export function buildBackendConnectedNoLicenceChoices(): OnboardingActionChoice[] {
+    return [
+        {
+            label: 'Use Free',
+            command: PROFILE.commands.registerAccess,
+            args: ['free'],
+        },
+        {
+            label: 'Start Trial',
+            command: PROFILE.commands.registerAccess,
+            args: ['trial'],
+        },
+        {
+            label: 'Enter Licence',
+            command: PROFILE.commands.enterLicence,
+        },
+    ];
+}
+
+export function buildRegistrationCompletionChoices(): OnboardingActionChoice[] {
+    return [
+        {
+            label: 'Configure LLM',
+            command: PROFILE.commands.setupAI,
+        },
+        {
+            label: 'Test Trial Setup',
+            command: PROFILE.commands.testTrialSetup,
+        },
+    ];
+}
+
+export function buildBackendAndLicenceReadyChoices(): OnboardingActionChoice[] {
+    return [
+        {
+            label: 'Configure LLM',
+            command: PROFILE.commands.setupAI,
+        },
+        {
+            label: 'Test Trial Setup',
+            command: PROFILE.commands.testTrialSetup,
+        },
+    ];
+}
+
+export function buildProviderConnectedChoices(): OnboardingActionChoice[] {
+    return [
+        {
+            label: 'Test Trial Setup',
+            command: PROFILE.commands.testTrialSetup,
+        },
+    ];
+}
+
+async function promptOnboardingChoices(
+    message: string,
+    actions: OnboardingActionChoice[],
+): Promise<void> {
+    if (!actions.length) {
+        vscode.window.showInformationMessage(message);
+        return;
+    }
+
+    const choice = await vscode.window.showInformationMessage(
+        message,
+        ...actions.map(action => action.label),
+    );
+    const selected = actions.find(action => action.label === choice);
+    if (!selected) {
+        return;
+    }
+
+    await vscode.commands.executeCommand(selected.command, ...(selected.args ?? []));
 }
 
 export function getProviderConnectionSettingKeys(providerId: string): string[] {
@@ -1110,7 +1225,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(PROFILE.commands.configureBackend, async () => {
             const currentApiUrl = getConfiguredApiUrl();
             const entered = await vscode.window.showInputBox({
-                prompt: 'Enter the Owlvex backend URL for this environment',
+                prompt: 'Enter an Owlvex backend override URL for this VS Code profile',
                 placeHolder: PROFILE.defaultApiUrl,
                 value: currentApiUrl,
                 ignoreFocusOut: true,
@@ -1142,15 +1257,16 @@ export function activate(context: vscode.ExtensionContext) {
             const backend = await testBackendConnection(normalizedApiUrl);
             if (!backend.success) {
                 vscode.window.showWarningMessage(
-                    `${PROFILE.displayLabel}: Backend URL saved, but the health check failed. ${backend.message ?? 'Check the URL and try again.'}`,
+                    `${PROFILE.displayLabel}: Backend override saved, but the health check failed. ${backend.message ?? 'Check the URL and try again.'}`,
                 );
                 return;
             }
 
             const licenceKey = await licenceMgr.getKey();
             if (!licenceKey) {
-                vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms). Next step: enter a licence key.`,
+                await promptOnboardingChoices(
+                    `${PROFILE.displayLabel}: Backend override connected (${backend.latencyMs}ms).\n${buildBackendDefaultSummary(normalizedApiUrl)}\nNext step: register Free, start Trial, or enter a licence key.`,
+                    buildBackendConnectedNoLicenceChoices(),
                 );
                 return;
             }
@@ -1159,8 +1275,9 @@ export function activate(context: vscode.ExtensionContext) {
                 const info = await licenceMgr.validate(normalizedApiUrl);
                 refreshIdleStatus();
                 void refreshRulePackRuntime();
-                vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms) and ${buildLicenceStatusSummary(info)}.\n${buildPlanNextStepGuidance(info).join('\n')}`,
+                await promptOnboardingChoices(
+                    `${PROFILE.displayLabel}: Backend override connected (${backend.latencyMs}ms) and ${buildLicenceStatusSummary(info)}.\n${buildPlanNextStepGuidance(info).join('\n')}`,
+                    buildBackendAndLicenceReadyChoices(),
                 );
             } catch (error: any) {
                 if (isRevocationLikeError(error)) {
@@ -1171,7 +1288,7 @@ export function activate(context: vscode.ExtensionContext) {
                     await refreshStoredKeyStatus();
                 }
                 vscode.window.showWarningMessage(
-                    `${PROFILE.displayLabel}: Backend connected (${backend.latencyMs}ms), but licence validation failed. ${error.message}`,
+                    `${PROFILE.displayLabel}: Backend override connected (${backend.latencyMs}ms), but licence validation failed. ${error.message}`,
                 );
             }
         })
@@ -1244,8 +1361,9 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 await licenceMgr.storeKey(verified.licence_key);
                 const info = await licenceMgr.validate(getConfiguredApiUrl());
-                vscode.window.showInformationMessage(
+                await promptOnboardingChoices(
                     `${PROFILE.displayLabel}: ${buildRegistrationSuccessMessage(selectedPlan, verified.email, info)}`,
+                    buildRegistrationCompletionChoices(),
                 );
                 refreshIdleStatus();
                 void refreshRulePackRuntime();
@@ -1319,6 +1437,81 @@ export function activate(context: vscode.ExtensionContext) {
                     await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
                 }
             });
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.toggleTelemetry, async () => {
+            const licenceKey = await licenceMgr.getKey();
+            if (!licenceKey) {
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: Enter a paid licence before managing telemetry settings.`,
+                    'Enter Licence',
+                ).then(async action => {
+                    if (action === 'Enter Licence') {
+                        await vscode.commands.executeCommand(PROFILE.commands.enterLicence);
+                    }
+                });
+                return;
+            }
+
+            let info: LicenceInfo;
+            try {
+                info = await licenceMgr.validate(getConfiguredApiUrl());
+            } catch (error: any) {
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: ${error.message}`);
+                await refreshStoredKeyStatus();
+                return;
+            }
+
+            if (!info.features.telemetryOptOut) {
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: ${info.plan === 'trial' ? 'Trial' : 'Free'} access requires product telemetry for activation, quotas, and abuse prevention.`,
+                );
+                return;
+            }
+
+            const currentlyEnabled = info.features.telemetryEnabled;
+            const choice = await vscode.window.showQuickPick(
+                [
+                    {
+                        label: currentlyEnabled ? 'Disable Product Telemetry' : 'Enable Product Telemetry',
+                        description: currentlyEnabled
+                            ? 'Keep minimal licensing and quota checks, but stop optional product usage events.'
+                            : 'Resume optional product usage events for this paid licence.',
+                        enabled: !currentlyEnabled,
+                    },
+                    {
+                        label: currentlyEnabled ? 'Keep Product Telemetry Enabled' : 'Keep Product Telemetry Disabled',
+                        description: currentlyEnabled
+                            ? 'Leave the current telemetry setting unchanged.'
+                            : 'Leave optional product telemetry disabled.',
+                        enabled: currentlyEnabled,
+                    },
+                ],
+                {
+                    title: 'Owlvex Telemetry Preference',
+                    placeHolder: currentlyEnabled
+                        ? 'Disable optional product telemetry for this paid licence?'
+                        : 'Enable optional product telemetry for this paid licence?',
+                    ignoreFocusOut: true,
+                },
+            );
+
+            if (!choice || choice.enabled === currentlyEnabled) {
+                return;
+            }
+
+            try {
+                const updated = await updateTelemetryPreferenceRequest(getConfiguredApiUrl(), licenceKey, choice.enabled);
+                const refreshed = await licenceMgr.validate(getConfiguredApiUrl());
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: ${updated.telemetry_enabled ? 'Enabled' : 'Disabled'} optional product telemetry for ${refreshed.plan}.`,
+                );
+                refreshIdleStatus();
+            } catch (error: any) {
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: ${error.message}`);
+            }
         })
     );
 
@@ -1835,10 +2028,16 @@ export function activate(context: vscode.ExtensionContext) {
                         provider.selectedModel = activeModel;
                     }
                     await registry.setActiveProvider(provider.id);
-                    vscode.window.showInformationMessage(`${provider.name} connected (${latencyMs}ms) using ${activeModel}`);
+                    await promptOnboardingChoices(
+                        `${provider.name} connected (${latencyMs}ms) using ${activeModel}`,
+                        buildProviderConnectedChoices(),
+                    );
                 } catch {
                     await registry.setActiveProvider(provider.id);
-                    vscode.window.showInformationMessage(`${provider.name} connected (${latencyMs}ms)`);
+                    await promptOnboardingChoices(
+                        `${provider.name} connected (${latencyMs}ms)`,
+                        buildProviderConnectedChoices(),
+                    );
                 }
             } else {
                 const extraHint = provider.id === 'azure-foundry'

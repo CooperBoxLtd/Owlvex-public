@@ -1,6 +1,10 @@
 import * as vscode from 'vscode';
 import { buildLicenceBadgeLabel, buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, isTrialEndingSoon } from './licence/licenceManager';
 import {
+    buildBackendAndLicenceReadyChoices,
+    buildBackendConnectedNoLicenceChoices,
+    buildProviderConnectedChoices,
+    buildRegistrationCompletionChoices,
     buildRegistrationSuccessMessage,
     buildVerificationPromptMessage,
     buildUsefulnessPromptMessage,
@@ -175,6 +179,32 @@ describe('plan access helpers', () => {
             expires_in_minutes: 15,
             verification_code: '123456',
         } as any)).toContain('Verification code: 123456');
+    });
+
+    it('builds guided onboarding action choices for backend, registration, and provider setup steps', () => {
+        expect(buildBackendConnectedNoLicenceChoices().map(item => item.label)).toEqual([
+            'Use Free',
+            'Start Trial',
+            'Enter Licence',
+        ]);
+        expect(buildRegistrationCompletionChoices().map(item => item.label)).toEqual([
+            'Configure LLM',
+            'Test Trial Setup',
+        ]);
+        expect(buildBackendAndLicenceReadyChoices().map(item => item.label)).toEqual([
+            'Configure LLM',
+            'Test Trial Setup',
+        ]);
+        expect(buildProviderConnectedChoices().map(item => item.label)).toEqual([
+            'Test Trial Setup',
+        ]);
+    });
+
+    it('keeps backend setup out of the primary onboarding choices', () => {
+        expect(buildBackendConnectedNoLicenceChoices().map(item => item.label)).not.toContain('Configure Backend');
+        expect(buildRegistrationCompletionChoices().map(item => item.label)).not.toContain('Configure Backend');
+        expect(buildBackendAndLicenceReadyChoices().map(item => item.label)).not.toContain('Configure Backend');
+        expect(buildProviderConnectedChoices().map(item => item.label)).not.toContain('Configure Backend');
     });
 
     it('builds richer licence status summaries for trial and free plans', () => {

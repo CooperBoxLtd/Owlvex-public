@@ -59,7 +59,7 @@
       },
       {
         "command": "owlvex.configureBackend",
-        "title": "Owlvex: Configure Backend URL"
+        "title": "Owlvex: Configure Backend Override URL"
       },
       {
         "command": "owlvex.removeAIConnection",
@@ -84,6 +84,10 @@
       {
         "command": "owlvex.removeLicence",
         "title": "Owlvex: Remove Licence Key"
+      },
+      {
+        "command": "owlvex.toggleTelemetry",
+        "title": "Owlvex: Toggle Product Telemetry"
       },
       {
         "command": "owlvex.registerAccess",
