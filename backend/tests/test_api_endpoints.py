@@ -424,7 +424,10 @@ async def test_admin_overview_returns_recent_customers(client):
     assert response.status_code == 200
     data = response.json()
     assert data["count"] >= 1
-    assert any(customer["email"] == "overview-user@example.com" for customer in data["customers"])
+    customer = next(customer for customer in data["customers"] if customer["email"] == "overview-user@example.com")
+    assert customer["summary"]["active_licence_count"] == 1
+    assert customer["summary"]["active_plan"] == "free"
+    assert customer["summary"]["verification_pending"] is False
 
 
 @pytest.mark.asyncio
@@ -451,6 +454,10 @@ async def test_admin_customer_lookup_returns_licence_state(client):
     assert data["email"] == "lookup-user@example.com"
     assert data["email_verified_at"] is not None
     assert data["licences"][0]["plan"] == "trial"
+    assert data["summary"]["active_plan"] == "trial"
+    assert data["activity"]["recent_scans"] == []
+    assert data["activity"]["recent_usage_events"] == []
+    assert data["activity"]["recent_comparisons"] == []
 
 
 @pytest.mark.asyncio

@@ -1,13 +1,14 @@
 import hashlib
 import secrets
 import uuid
+from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse, HTMLResponse
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -102,7 +103,48 @@ def _serialize_licence(licence: Licence) -> dict:
     }
 
 
-def _serialize_customer(customer: Customer) -> dict:
+def _base_customer_summary(customer: Customer) -> dict:
+    active_licences = [licence for licence in customer.licences if licence.is_active]
+    latest_active = next(
+        iter(sorted(active_licences, key=lambda item: item.created_at or 0, reverse=True)),
+        None,
+    )
+    telemetry_enabled = [
+        bool((licence.features or {}).get("telemetry_enabled", True))
+        for licence in customer.licences
+        if licence.plan not in {"free", "trial"}
+    ]
+    return {
+        "licence_count": len(customer.licences),
+        "active_licence_count": len(active_licences),
+        "active_plan": latest_active.plan if latest_active else None,
+        "verification_pending": bool(customer.verification_code_hash),
+        "telemetry_enabled": all(telemetry_enabled) if telemetry_enabled else True,
+        "scan_count": 0,
+        "usage_event_count": 0,
+        "comparison_count": 0,
+        "last_scan_at": None,
+        "last_usage_at": None,
+        "last_comparison_at": None,
+        "last_activity_at": None,
+    }
+
+
+def _merge_customer_summary(summary: dict, updates: dict | None) -> dict:
+    merged = dict(summary)
+    if updates:
+        merged.update({key: value for key, value in updates.items() if value is not None})
+
+    timestamps = [
+        merged.get("last_scan_at"),
+        merged.get("last_usage_at"),
+        merged.get("last_comparison_at"),
+    ]
+    merged["last_activity_at"] = max((value for value in timestamps if value), default=None)
+    return merged
+
+
+def _serialize_customer(customer: Customer, summary: dict | None = None) -> dict:
     return {
         "customer_id": str(customer.id),
         "email": customer.email,
@@ -119,6 +161,7 @@ def _serialize_customer(customer: Customer) -> dict:
         if customer.verification_code_expires_at else None,
         "created_at": customer.created_at.isoformat() if customer.created_at else None,
         "updated_at": customer.updated_at.isoformat() if customer.updated_at else None,
+        "summary": _merge_customer_summary(_base_customer_summary(customer), summary),
         "licences": [_serialize_licence(licence) for licence in sorted(
             customer.licences,
             key=lambda item: item.created_at or 0,
@@ -172,6 +215,92 @@ def _serialize_comparison(item: Comparison) -> dict:
     }
 
 
+async def _collect_customer_activity_summaries(
+    db: AsyncSession,
+    customers: list[Customer],
+) -> dict[str, dict]:
+    if not customers:
+        return {}
+
+    customer_ids = [customer.id for customer in customers]
+    summaries: dict[str, dict] = defaultdict(dict)
+
+    scan_result = await db.execute(
+        select(
+            Licence.customer_id,
+            func.count(ScanHistory.id),
+            func.max(ScanHistory.created_at),
+        )
+        .join(ScanHistory, ScanHistory.licence_id == Licence.id)
+        .where(Licence.customer_id.in_(customer_ids))
+        .group_by(Licence.customer_id)
+    )
+    for customer_id, count, last_at in scan_result.all():
+        summaries[str(customer_id)]["scan_count"] = int(count or 0)
+        summaries[str(customer_id)]["last_scan_at"] = last_at.isoformat() if last_at else None
+
+    usage_result = await db.execute(
+        select(
+            Licence.customer_id,
+            func.count(UsageEvent.id),
+            func.max(UsageEvent.created_at),
+        )
+        .join(UsageEvent, UsageEvent.licence_id == Licence.id)
+        .where(Licence.customer_id.in_(customer_ids))
+        .group_by(Licence.customer_id)
+    )
+    for customer_id, count, last_at in usage_result.all():
+        summaries[str(customer_id)]["usage_event_count"] = int(count or 0)
+        summaries[str(customer_id)]["last_usage_at"] = last_at.isoformat() if last_at else None
+
+    comparison_result = await db.execute(
+        select(
+            Licence.customer_id,
+            func.count(Comparison.id),
+            func.max(Comparison.created_at),
+        )
+        .join(Comparison, Comparison.licence_id == Licence.id)
+        .where(Licence.customer_id.in_(customer_ids))
+        .group_by(Licence.customer_id)
+    )
+    for customer_id, count, last_at in comparison_result.all():
+        summaries[str(customer_id)]["comparison_count"] = int(count or 0)
+        summaries[str(customer_id)]["last_comparison_at"] = last_at.isoformat() if last_at else None
+
+    return summaries
+
+
+async def _collect_recent_customer_activity(db: AsyncSession, customer: Customer) -> dict:
+    licence_ids = [licence.id for licence in customer.licences]
+    if not licence_ids:
+        return {"recent_scans": [], "recent_usage_events": [], "recent_comparisons": []}
+
+    scans_result = await db.execute(
+        select(ScanHistory)
+        .where(ScanHistory.licence_id.in_(licence_ids))
+        .order_by(ScanHistory.created_at.desc())
+        .limit(8)
+    )
+    usage_result = await db.execute(
+        select(UsageEvent)
+        .where(UsageEvent.licence_id.in_(licence_ids))
+        .order_by(UsageEvent.created_at.desc())
+        .limit(8)
+    )
+    comparisons_result = await db.execute(
+        select(Comparison)
+        .where(Comparison.licence_id.in_(licence_ids))
+        .order_by(Comparison.created_at.desc())
+        .limit(8)
+    )
+
+    return {
+        "recent_scans": [_serialize_scan(item) for item in scans_result.scalars().all()],
+        "recent_usage_events": [_serialize_usage_event(item) for item in usage_result.scalars().all()],
+        "recent_comparisons": [_serialize_comparison(item) for item in comparisons_result.scalars().all()],
+    }
+
+
 async def _purge_licence_tree(db: AsyncSession, licence: Licence) -> None:
     await db.execute(delete(Comparison).where(Comparison.licence_id == licence.id))
     await db.execute(delete(ScanHistory).where(ScanHistory.licence_id == licence.id))
@@ -213,9 +342,10 @@ async def overview(
         )
     result = await db.execute(query.limit(limit))
     customers = result.scalars().all()
+    summaries = await _collect_customer_activity_summaries(db, customers)
     return {
         "count": len(customers),
-        "customers": [_serialize_customer(customer) for customer in customers],
+        "customers": [_serialize_customer(customer, summaries.get(str(customer.id))) for customer in customers],
     }
 
 
@@ -229,7 +359,10 @@ async def customer_lookup(
     customer = await _get_customer_with_licences(db, email)
     if not customer:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
-    return _serialize_customer(customer)
+    summaries = await _collect_customer_activity_summaries(db, [customer])
+    payload = _serialize_customer(customer, summaries.get(str(customer.id)))
+    payload["activity"] = await _collect_recent_customer_activity(db, customer)
+    return payload
 
 
 @router.get("/export")
@@ -244,11 +377,12 @@ async def export_snapshot(
         select(Customer).options(selectinload(Customer.licences)).order_by(Customer.created_at.desc())
     )
     customers = customers_result.scalars().all()
+    summaries = await _collect_customer_activity_summaries(db, customers)
 
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "scope": scope,
-        "customers": [_serialize_customer(customer) for customer in customers],
+        "customers": [_serialize_customer(customer, summaries.get(str(customer.id))) for customer in customers],
     }
 
     if scope == "full":

@@ -7,140 +7,431 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0f1418;
-      --panel: #151c21;
-      --border: #2c3943;
+      --bg: #0b1014;
+      --panel: #121a21;
+      --panel-2: #17212a;
+      --border: #26333f;
       --text: #e7eef4;
-      --muted: #9db0be;
-      --accent: #43b581;
-      --warn: #ffb020;
-      --danger: #ff6b6b;
+      --muted: #94a8b8;
+      --accent: #5bc98f;
+      --accent-2: #6cb7ff;
+      --warn: #ffbe5c;
+      --danger: #ff7b7b;
+      --shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+      --radius: 14px;
     }
-    body { margin: 0; font: 14px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--text); }
-    header, section { padding: 16px 20px; }
-    .grid { display: grid; gap: 16px; grid-template-columns: 360px 1fr; }
-    .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; }
-    h1, h2, h3 { margin: 0 0 12px; font-size: 18px; }
-    h2 { font-size: 16px; }
-    h3 { font-size: 14px; }
-    label { display: block; margin: 10px 0 4px; color: var(--muted); }
-    input, select, textarea, button {
-      width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--border);
-      background: #0d1216; color: var(--text); padding: 10px 12px; font: inherit;
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top right, rgba(108, 183, 255, 0.12), transparent 30%),
+        radial-gradient(circle at top left, rgba(91, 201, 143, 0.08), transparent 25%),
+        var(--bg);
+      color: var(--text);
+      font: 14px/1.45 "Segoe UI", Inter, system-ui, sans-serif;
     }
-    textarea { min-height: 88px; resize: vertical; }
-    button { cursor: pointer; background: #182229; }
-    button.primary { background: #163224; border-color: #24563d; }
-    button.warn { background: #3a2910; border-color: #6f5217; }
-    button.danger { background: #3b1d20; border-color: #6d2f35; }
-    .row { display: flex; gap: 8px; }
-    .row > * { flex: 1; }
-    .status { white-space: pre-wrap; color: var(--muted); }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: 10px 8px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-    th { color: var(--muted); font-weight: 600; }
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); margin-right: 6px; }
-    .pill.ok { color: var(--accent); }
-    .pill.warn { color: var(--warn); }
-    .pill.danger { color: var(--danger); }
+    button, input, select, textarea {
+      font: inherit;
+      color: inherit;
+    }
+    button {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: #18222b;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    button:hover { border-color: #3a4d5f; }
+    button.primary { background: #163126; border-color: #23533e; }
+    button.secondary { background: #162532; border-color: #25445b; }
+    button.warn { background: #372811; border-color: #75551f; }
+    button.danger { background: #3a1c20; border-color: #6e3037; }
+    button.ghost { background: transparent; }
+    button:disabled { opacity: 0.6; cursor: default; }
+    input, select, textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      background: #0d141a;
+      border-radius: 10px;
+      padding: 10px 12px;
+    }
+    textarea {
+      min-height: 84px;
+      resize: vertical;
+    }
+    a { color: var(--accent-2); }
+    .app {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 20px;
+      display: grid;
+      gap: 18px;
+    }
+    .panel {
+      background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent 40%), var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .panel-header {
+      padding: 16px 18px 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .panel-body { padding: 18px; }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+    }
+    .page-header h1 {
+      margin: 0 0 4px;
+      font-size: 28px;
+      line-height: 1.1;
+    }
+    .page-header p,
+    .muted { color: var(--muted); }
+    .connection-grid,
+    .filter-grid,
+    .detail-grid,
+    .stats-grid {
+      display: grid;
+      gap: 12px;
+    }
+    .connection-grid { grid-template-columns: 140px 1fr 320px auto auto; align-items: end; }
+    .filter-grid { grid-template-columns: 1.4fr repeat(4, minmax(120px, 1fr)); align-items: end; }
+    .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .stat-card {
+      padding: 14px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .stat-card strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1.1;
+      margin-top: 6px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.9fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .table-wrap {
+      overflow: auto;
+      border-top: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 980px;
+    }
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      text-align: left;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: rgba(18, 26, 33, 0.96);
+      backdrop-filter: blur(6px);
+      color: var(--muted);
+      font-weight: 600;
+      z-index: 1;
+    }
+    tbody tr {
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }
+    tbody tr:hover { background: rgba(108, 183, 255, 0.06); }
+    tbody tr.selected {
+      background: rgba(108, 183, 255, 0.12);
+      outline: 1px solid rgba(108, 183, 255, 0.35);
+    }
+    .badge-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border);
+      padding: 3px 9px;
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255,255,255,0.02);
+      white-space: nowrap;
+    }
+    .badge.ok { color: var(--accent); }
+    .badge.info { color: var(--accent-2); }
+    .badge.warn { color: var(--warn); }
+    .badge.danger { color: var(--danger); }
+    .subtle-list {
+      display: grid;
+      gap: 10px;
+    }
+    .detail-empty {
+      padding: 22px;
+      text-align: center;
+      color: var(--muted);
+    }
+    .detail-section {
+      padding: 18px;
+      border-top: 1px solid var(--border);
+    }
+    .detail-section:first-of-type { border-top: 0; }
+    .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kv {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+    }
+    .kv label {
+      display: block;
+      color: var(--muted);
+      margin-bottom: 6px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .licence-card,
+    .activity-card {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--panel-2);
+    }
     .stack { display: grid; gap: 12px; }
-    .customer-card { border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
-    .licence-card { border: 1px dashed var(--border); border-radius: 8px; padding: 10px; margin-top: 10px; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .row > * { flex: 1; min-width: 0; }
+    .row.actions > * { flex: 0 0 auto; }
     .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
-    .small { color: var(--muted); font-size: 12px; }
-    .hidden { display: none; }
+    .small { font-size: 12px; color: var(--muted); }
+    .status-banner {
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.02);
+      color: var(--muted);
+    }
+    .status-banner.error {
+      color: var(--danger);
+      border-color: rgba(255, 123, 123, 0.3);
+      background: rgba(255, 123, 123, 0.08);
+    }
+    details pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    @media (max-width: 1280px) {
+      .layout { grid-template-columns: 1fr; }
+      .connection-grid { grid-template-columns: 1fr 1fr; }
+      .filter-grid { grid-template-columns: 1fr 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 760px) {
+      .app { padding: 12px; }
+      .connection-grid,
+      .filter-grid,
+      .detail-grid,
+      .stats-grid { grid-template-columns: 1fr; }
+      .page-header { display: block; }
+      table { min-width: 720px; }
+    }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Owlvex Admin Console</h1>
-  </header>
-  <section class="grid">
-    <div class="stack">
-      <div class="panel">
-        <h2>Connection</h2>
-        <label for="environment">Environment</label>
-        <select id="environment">
-          <option value="custom">Custom</option>
-          <option value="dev">Dev</option>
-          <option value="prod">Prod</option>
-        </select>
-        <label for="apiUrl">API URL</label>
-        <input id="apiUrl" />
-        <label for="adminKey">Admin key</label>
-        <input id="adminKey" type="password" />
-        <div class="row" style="margin-top:12px;">
-          <button class="primary" id="loadOverview">Load customers</button>
-          <button id="exportJson">Export JSON</button>
-        </div>
-        <p class="status" id="status">Ready.</p>
+  <div class="app">
+    <section class="page-header">
+      <div>
+        <h1>Owlvex Admin Console</h1>
+        <p class="muted">Customer operations across dev and prod with searchable account state, licence controls, and activity signals.</p>
       </div>
+      <div class="badge-row">
+        <span class="badge info" id="activeEnvironmentBadge">Environment: custom</span>
+        <span class="badge" id="selectionBadge">No customer selected</span>
+      </div>
+    </section>
 
-      <div class="panel">
-        <h2>Search</h2>
-        <label for="search">Email, name, company</label>
-        <input id="search" placeholder="someone@example.com" />
-        <div class="row" style="margin-top:12px;">
-          <button id="runSearch">Search</button>
-          <button id="clearSearch">Clear</button>
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 style="margin:0;">Connection</h2>
+          <div class="small">Switch environments, load the customer directory, and export a snapshot when needed.</div>
         </div>
       </div>
-
-      <div class="panel">
-        <h2>Direct Actions</h2>
-        <label for="targetEmail">Customer email</label>
-        <input id="targetEmail" placeholder="user@example.com" />
-        <label for="targetPlan">Plan filter</label>
-        <select id="targetPlan">
-          <option value="">All plans</option>
-          <option value="free">free</option>
-          <option value="trial">trial</option>
-          <option value="developer">developer</option>
-          <option value="team">team</option>
-          <option value="enterprise">enterprise</option>
-        </select>
-        <label for="banReason">Ban reason</label>
-        <textarea id="banReason" placeholder="Internal fraud / abuse note"></textarea>
-        <div class="stack" style="margin-top:12px;">
-          <button id="lookupCustomer">Lookup customer</button>
-          <button class="warn" id="resendVerification">Resend verification</button>
-          <button class="warn" id="revokeLicences">Revoke licence(s)</button>
-          <button class="warn" id="rotateLicence">Rotate licence</button>
-          <button class="danger" id="banCustomer">Ban customer</button>
-          <button id="unbanCustomer">Unban customer</button>
-          <button class="danger" id="deleteCustomer">Delete customer</button>
+      <div class="panel-body">
+        <div class="connection-grid">
+          <div>
+            <label class="small" for="environment">Environment</label>
+            <select id="environment">
+              <option value="dev">Dev</option>
+              <option value="prod">Prod</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+          <div>
+            <label class="small" for="apiUrl">API URL</label>
+            <input id="apiUrl" />
+          </div>
+          <div>
+            <label class="small" for="adminKey">Admin key</label>
+            <input id="adminKey" type="password" />
+          </div>
+          <button class="primary" id="loadOverview">Load directory</button>
+          <button class="secondary" id="exportJson">Export JSON</button>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div class="stack">
-      <div class="panel">
-        <h2>Customers</h2>
-        <div id="customers"></div>
+    <div id="statusBanner" class="status-banner">Ready.</div>
+
+    <section class="stats-grid" id="statsGrid">
+      <div class="stat-card"><div class="small">Customers</div><strong>0</strong></div>
+      <div class="stat-card"><div class="small">Active licences</div><strong>0</strong></div>
+      <div class="stat-card"><div class="small">Pending verification</div><strong>0</strong></div>
+      <div class="stat-card"><div class="small">Banned</div><strong>0</strong></div>
+      <div class="stat-card"><div class="small">Recent activity</div><strong>0</strong></div>
+    </section>
+
+    <section class="layout">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2 style="margin:0;">Customer Directory</h2>
+            <div class="small">Filter by state, plan, and activity. Select a row to inspect account details and take actions.</div>
+          </div>
+          <div class="small" id="directoryCount">0 results</div>
+        </div>
+        <div class="panel-body">
+          <div class="filter-grid">
+            <div>
+              <label class="small" for="search">Search</label>
+              <input id="search" placeholder="email, name, company" />
+            </div>
+            <div>
+              <label class="small" for="statusFilter">Status</label>
+              <select id="statusFilter">
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="pending">Pending verification</option>
+                <option value="banned">Banned</option>
+                <option value="trial">Trial</option>
+                <option value="free">Free</option>
+                <option value="paid">Paid</option>
+                <option value="inactive">No active licence</option>
+              </select>
+            </div>
+            <div>
+              <label class="small" for="planFilter">Plan</label>
+              <select id="planFilter">
+                <option value="all">All</option>
+                <option value="free">free</option>
+                <option value="trial">trial</option>
+                <option value="developer">developer</option>
+                <option value="team">team</option>
+                <option value="enterprise">enterprise</option>
+              </select>
+            </div>
+            <div>
+              <label class="small" for="activityFilter">Activity</label>
+              <select id="activityFilter">
+                <option value="all">All</option>
+                <option value="active-7">Active in last 7 days</option>
+                <option value="active-30">Active in last 30 days</option>
+                <option value="inactive">No recorded activity</option>
+              </select>
+            </div>
+            <div>
+              <label class="small" for="sortBy">Sort</label>
+              <select id="sortBy">
+                <option value="updated_desc">Recently updated</option>
+                <option value="activity_desc">Recent activity</option>
+                <option value="email_asc">Email A-Z</option>
+                <option value="plan_asc">Plan</option>
+                <option value="scans_desc">Most scans</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Customer</th>
+                <th>Status</th>
+                <th>Plan</th>
+                <th>Usage</th>
+                <th>Last activity</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="customerTableBody">
+              <tr><td colspan="6" class="small">Load the directory to begin.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="detailPanel">
+        <div class="detail-empty">Select a customer from the directory to inspect account state and run actions.</div>
+      </section>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2 style="margin:0;">Raw API Response</h2>
+          <div class="small">Kept for debugging, not as the primary UI.</div>
+        </div>
       </div>
-      <div class="panel">
-        <h2>Latest API Response</h2>
-        <pre id="response" class="mono small"></pre>
+      <div class="panel-body">
+        <details>
+          <summary class="small">Show latest payload</summary>
+          <pre id="response" class="mono small"></pre>
+        </details>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 
   <script>
-    const apiUrlEl = document.getElementById('apiUrl');
-    const environmentEl = document.getElementById('environment');
-    const adminKeyEl = document.getElementById('adminKey');
-    const searchEl = document.getElementById('search');
-    const targetEmailEl = document.getElementById('targetEmail');
-    const targetPlanEl = document.getElementById('targetPlan');
-    const banReasonEl = document.getElementById('banReason');
-    const statusEl = document.getElementById('status');
-    const customersEl = document.getElementById('customers');
-    const responseEl = document.getElementById('response');
-
     const ENVIRONMENTS = {
       dev: 'https://owlvexdev-api.azurewebsites.net',
       prod: 'https://owlvex-api.azurewebsites.net',
     };
+
+    const state = {
+      customers: [],
+      filteredCustomers: [],
+      selectedCustomerId: null,
+      latestResponse: {},
+      isBusy: false,
+    };
+
+    const environmentEl = document.getElementById('environment');
+    const apiUrlEl = document.getElementById('apiUrl');
+    const adminKeyEl = document.getElementById('adminKey');
+    const searchEl = document.getElementById('search');
+    const statusFilterEl = document.getElementById('statusFilter');
+    const planFilterEl = document.getElementById('planFilter');
+    const activityFilterEl = document.getElementById('activityFilter');
+    const sortByEl = document.getElementById('sortBy');
+    const customerTableBodyEl = document.getElementById('customerTableBody');
+    const detailPanelEl = document.getElementById('detailPanel');
+    const responseEl = document.getElementById('response');
+    const statusBannerEl = document.getElementById('statusBanner');
+    const statsGridEl = document.getElementById('statsGrid');
+    const directoryCountEl = document.getElementById('directoryCount');
+    const activeEnvironmentBadgeEl = document.getElementById('activeEnvironmentBadge');
+    const selectionBadgeEl = document.getElementById('selectionBadge');
 
     function normalizeUrl(value) {
       return String(value || '').trim().replace(/\/+$/, '');
@@ -153,43 +444,353 @@
       return 'custom';
     }
 
-    const initialApiUrl = normalizeUrl(localStorage.getItem('owlvexAdminApiUrl') || window.location.origin);
-    apiUrlEl.value = initialApiUrl;
-    environmentEl.value = resolveEnvironmentName(initialApiUrl);
-    adminKeyEl.value = localStorage.getItem('owlvexAdminKey') || '';
-
     function saveSettings() {
       localStorage.setItem('owlvexAdminApiUrl', normalizeUrl(apiUrlEl.value));
       localStorage.setItem('owlvexAdminKey', adminKeyEl.value);
     }
 
-    function syncEnvironmentSelectionFromApiUrl() {
-      environmentEl.value = resolveEnvironmentName(apiUrlEl.value);
+    function initializeSettings() {
+      const initialApiUrl = normalizeUrl(localStorage.getItem('owlvexAdminApiUrl') || window.location.origin);
+      apiUrlEl.value = initialApiUrl;
+      environmentEl.value = resolveEnvironmentName(initialApiUrl);
+      adminKeyEl.value = localStorage.getItem('owlvexAdminKey') || '';
+      renderEnvironmentBadge();
     }
 
-    function applyEnvironmentSelection() {
-      const selected = environmentEl.value;
-      if (selected === 'custom') {
-        syncEnvironmentSelectionFromApiUrl();
-        return;
-      }
-      apiUrlEl.value = ENVIRONMENTS[selected];
-      saveSettings();
-      setStatus(`Selected ${selected} database.`);
-    }
-
-    function setStatus(message) {
-      statusEl.textContent = message;
+    function setStatus(message, isError = false) {
+      statusBannerEl.textContent = message;
+      statusBannerEl.classList.toggle('error', Boolean(isError));
     }
 
     function setResponse(data) {
-      responseEl.textContent = JSON.stringify(data, null, 2);
+      state.latestResponse = data || {};
+      responseEl.textContent = JSON.stringify(state.latestResponse, null, 2);
+    }
+
+    function formatDate(value) {
+      if (!value) return '—';
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      return date.toLocaleString();
+    }
+
+    function formatRelative(value) {
+      if (!value) return 'No activity';
+      const date = new Date(value);
+      const diff = Date.now() - date.getTime();
+      const minutes = Math.floor(diff / 60000);
+      if (minutes < 1) return 'Just now';
+      if (minutes < 60) return `${minutes}m ago`;
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return `${hours}h ago`;
+      const days = Math.floor(hours / 24);
+      if (days < 30) return `${days}d ago`;
+      return formatDate(value);
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function badgesForCustomer(customer) {
+      const badges = [];
+      const summary = customer.summary || {};
+      if (customer.is_banned) badges.push(['Banned', 'danger']);
+      if (summary.verification_pending) badges.push(['Pending verification', 'warn']);
+      if (customer.email_verified_at) badges.push(['Verified', 'ok']);
+      if ((summary.active_licence_count || 0) > 0) badges.push(['Active', 'ok']);
+      if ((summary.active_plan || '').length) badges.push([summary.active_plan, 'info']);
+      if (!customer.email_verified_at && !summary.verification_pending && (summary.licence_count || 0) === 0) badges.push(['Unverified', 'warn']);
+      return badges;
+    }
+
+    function badgeHtml(label, tone = '') {
+      return `<span class="badge ${tone}">${escapeHtml(label)}</span>`;
+    }
+
+    function planForCustomer(customer) {
+      const summary = customer.summary || {};
+      return summary.active_plan || customer.pending_plan || (customer.licences?.[0]?.plan ?? '—');
+    }
+
+    function matchesStatusFilter(customer) {
+      const status = statusFilterEl.value;
+      const summary = customer.summary || {};
+      const currentPlan = planForCustomer(customer);
+      if (status === 'all') return true;
+      if (status === 'active') return (summary.active_licence_count || 0) > 0 && !customer.is_banned;
+      if (status === 'pending') return Boolean(summary.verification_pending);
+      if (status === 'banned') return Boolean(customer.is_banned);
+      if (status === 'trial') return currentPlan === 'trial';
+      if (status === 'free') return currentPlan === 'free';
+      if (status === 'paid') return ['developer', 'team', 'enterprise'].includes(currentPlan);
+      if (status === 'inactive') return (summary.active_licence_count || 0) === 0;
+      return true;
+    }
+
+    function matchesPlanFilter(customer) {
+      const plan = planFilterEl.value;
+      return plan === 'all' || planForCustomer(customer) === plan;
+    }
+
+    function matchesActivityFilter(customer) {
+      const mode = activityFilterEl.value;
+      const lastActivityAt = customer.summary?.last_activity_at;
+      if (mode === 'all') return true;
+      if (mode === 'inactive') return !lastActivityAt;
+      if (!lastActivityAt) return false;
+      const ageDays = (Date.now() - new Date(lastActivityAt).getTime()) / (24 * 60 * 60 * 1000);
+      if (mode === 'active-7') return ageDays <= 7;
+      if (mode === 'active-30') return ageDays <= 30;
+      return true;
+    }
+
+    function applyFilters() {
+      const search = searchEl.value.trim().toLowerCase();
+      const filtered = state.customers.filter((customer) => {
+        const haystack = [customer.email, customer.name, customer.company, customer.pending_plan, planForCustomer(customer)]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        if (search && !haystack.includes(search)) return false;
+        if (!matchesStatusFilter(customer)) return false;
+        if (!matchesPlanFilter(customer)) return false;
+        if (!matchesActivityFilter(customer)) return false;
+        return true;
+      });
+
+      filtered.sort((a, b) => {
+        const sortBy = sortByEl.value;
+        if (sortBy === 'email_asc') return a.email.localeCompare(b.email);
+        if (sortBy === 'plan_asc') return String(planForCustomer(a)).localeCompare(String(planForCustomer(b)));
+        if (sortBy === 'scans_desc') return (b.summary?.scan_count || 0) - (a.summary?.scan_count || 0);
+        if (sortBy === 'activity_desc') {
+          return String(b.summary?.last_activity_at || '').localeCompare(String(a.summary?.last_activity_at || ''));
+        }
+        return String(b.updated_at || '').localeCompare(String(a.updated_at || ''));
+      });
+
+      state.filteredCustomers = filtered;
+      if (!filtered.find((customer) => customer.customer_id === state.selectedCustomerId)) {
+        state.selectedCustomerId = filtered[0]?.customer_id || null;
+      }
+    }
+
+    function renderStats() {
+      const customers = state.filteredCustomers;
+      const activeLicences = customers.reduce((sum, customer) => sum + (customer.summary?.active_licence_count || 0), 0);
+      const pending = customers.filter((customer) => customer.summary?.verification_pending).length;
+      const banned = customers.filter((customer) => customer.is_banned).length;
+      const recentActivity = customers.filter((customer) => {
+        const last = customer.summary?.last_activity_at;
+        if (!last) return false;
+        const ageDays = (Date.now() - new Date(last).getTime()) / (24 * 60 * 60 * 1000);
+        return ageDays <= 7;
+      }).length;
+
+      statsGridEl.innerHTML = [
+        ['Customers', customers.length],
+        ['Active licences', activeLicences],
+        ['Pending verification', pending],
+        ['Banned', banned],
+        ['Recent activity', recentActivity],
+      ].map(([label, value]) => `
+        <div class="stat-card">
+          <div class="small">${escapeHtml(label)}</div>
+          <strong>${escapeHtml(String(value))}</strong>
+        </div>
+      `).join('');
+    }
+
+    function renderDirectory() {
+      directoryCountEl.textContent = `${state.filteredCustomers.length} result${state.filteredCustomers.length === 1 ? '' : 's'}`;
+      if (!state.filteredCustomers.length) {
+        customerTableBodyEl.innerHTML = '<tr><td colspan="6" class="small">No customers match the current filters.</td></tr>';
+        return;
+      }
+
+      customerTableBodyEl.innerHTML = state.filteredCustomers.map((customer) => {
+        const summary = customer.summary || {};
+        const rowClass = customer.customer_id === state.selectedCustomerId ? 'selected' : '';
+        return `
+          <tr class="${rowClass}" data-customer-id="${escapeHtml(customer.customer_id)}">
+            <td>
+              <div><strong>${escapeHtml(customer.email)}</strong></div>
+              <div class="small">${escapeHtml(customer.name || 'No name')} · ${escapeHtml(customer.company || 'No company')}</div>
+            </td>
+            <td><div class="badge-row">${badgesForCustomer(customer).map(([label, tone]) => badgeHtml(label, tone)).join('')}</div></td>
+            <td>${escapeHtml(planForCustomer(customer))}</td>
+            <td class="small">
+              scans=${escapeHtml(String(summary.scan_count || 0))}<br />
+              usage=${escapeHtml(String(summary.usage_event_count || 0))}<br />
+              comparisons=${escapeHtml(String(summary.comparison_count || 0))}
+            </td>
+            <td>
+              <div>${escapeHtml(formatRelative(summary.last_activity_at))}</div>
+              <div class="small">${escapeHtml(formatDate(summary.last_activity_at))}</div>
+            </td>
+            <td>
+              <div>${escapeHtml(formatRelative(customer.updated_at))}</div>
+              <div class="small">${escapeHtml(formatDate(customer.updated_at))}</div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function selectedCustomer() {
+      return state.customers.find((customer) => customer.customer_id === state.selectedCustomerId) || null;
+    }
+
+    function renderSelectionBadge(customer) {
+      selectionBadgeEl.textContent = customer ? `Selected: ${customer.email}` : 'No customer selected';
+    }
+
+    function renderEnvironmentBadge() {
+      activeEnvironmentBadgeEl.textContent = `Environment: ${resolveEnvironmentName(apiUrlEl.value)}`;
+    }
+
+    function activityList(title, items, renderer, emptyLabel) {
+      return `
+        <div class="stack">
+          <h3 style="margin:0;">${escapeHtml(title)}</h3>
+          ${items && items.length ? items.map(renderer).join('') : `<div class="small">${escapeHtml(emptyLabel)}</div>`}
+        </div>
+      `;
+    }
+
+    function renderCustomerDetail() {
+      const customer = selectedCustomer();
+      renderSelectionBadge(customer);
+      if (!customer) {
+        detailPanelEl.innerHTML = '<div class="detail-empty">Select a customer from the directory to inspect account state and run actions.</div>';
+        return;
+      }
+
+      const summary = customer.summary || {};
+      const activity = customer.activity || {};
+      const licences = customer.licences || [];
+
+      detailPanelEl.innerHTML = `
+        <div class="panel-header">
+          <div>
+            <h2 style="margin:0;">${escapeHtml(customer.email)}</h2>
+            <div class="small">${escapeHtml(customer.name || 'No name')} · ${escapeHtml(customer.company || 'No company')} · source=${escapeHtml(customer.source || '—')}</div>
+          </div>
+          <div class="badge-row">
+            ${badgesForCustomer(customer).map(([label, tone]) => badgeHtml(label, tone)).join('')}
+          </div>
+        </div>
+
+        <div class="detail-section stack">
+          <div class="row actions">
+            <button class="secondary" data-action="refresh-detail">Refresh detail</button>
+            <button class="warn" data-action="resend-verification">Resend verification</button>
+            <button class="warn" data-action="revoke-licences">Revoke active licence(s)</button>
+            <button class="warn" data-action="rotate-licence">Rotate latest licence</button>
+          </div>
+          <div class="row actions">
+            <button class="danger" data-action="ban-customer">Ban customer</button>
+            <button data-action="unban-customer">Unban customer</button>
+            <button class="danger" data-action="delete-customer">Delete customer</button>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-grid">
+            <div class="kv"><label>Plan</label><div>${escapeHtml(planForCustomer(customer))}</div></div>
+            <div class="kv"><label>Pending plan</label><div>${escapeHtml(customer.pending_plan || '—')}</div></div>
+            <div class="kv"><label>Created</label><div>${escapeHtml(formatDate(customer.created_at))}</div></div>
+            <div class="kv"><label>Updated</label><div>${escapeHtml(formatDate(customer.updated_at))}</div></div>
+            <div class="kv"><label>Email verified</label><div>${escapeHtml(formatDate(customer.email_verified_at))}</div></div>
+            <div class="kv"><label>Ban reason</label><div>${escapeHtml(customer.ban_reason || '—')}</div></div>
+            <div class="kv"><label>Last activity</label><div>${escapeHtml(formatDate(summary.last_activity_at))}</div></div>
+            <div class="kv"><label>Telemetry</label><div>${summary.telemetry_enabled ? 'Enabled' : 'Disabled on paid licence(s)'}</div></div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-grid">
+            <div class="kv"><label>Licence count</label><div>${escapeHtml(String(summary.licence_count || 0))}</div></div>
+            <div class="kv"><label>Active licences</label><div>${escapeHtml(String(summary.active_licence_count || 0))}</div></div>
+            <div class="kv"><label>Scans</label><div>${escapeHtml(String(summary.scan_count || 0))}</div></div>
+            <div class="kv"><label>Usage events</label><div>${escapeHtml(String(summary.usage_event_count || 0))}</div></div>
+            <div class="kv"><label>Comparisons</label><div>${escapeHtml(String(summary.comparison_count || 0))}</div></div>
+            <div class="kv"><label>Verification pending</label><div>${summary.verification_pending ? 'Yes' : 'No'}</div></div>
+          </div>
+        </div>
+
+        <div class="detail-section stack">
+          <h3 style="margin:0;">Licences</h3>
+          ${licences.length ? licences.map((licence) => `
+            <div class="licence-card">
+              <div class="row">
+                <div>
+                  <strong>${escapeHtml(licence.plan)}</strong>
+                  <div class="small mono">${escapeHtml(licence.licence_id)}</div>
+                </div>
+                <div class="badge-row" style="justify-content:flex-end;">
+                  ${badgeHtml(licence.is_active ? 'Active' : 'Inactive', licence.is_active ? 'ok' : 'warn')}
+                  ${licence.expires_at ? badgeHtml(`Expires ${formatRelative(licence.expires_at)}`, 'warn') : ''}
+                </div>
+              </div>
+              <div class="small" style="margin-top:8px;">
+                seats=${escapeHtml(String(licence.seats_used))}/${escapeHtml(String(licence.seats))} · created=${escapeHtml(formatDate(licence.created_at))} · updated=${escapeHtml(formatDate(licence.updated_at))}
+              </div>
+              <div class="small">telemetry=${(licence.features || {}).telemetry_enabled === false ? 'disabled' : 'enabled'} · packs=${escapeHtml(String((licence.industry_packs || []).length))}</div>
+              <div class="row actions" style="margin-top:10px;">
+                <button class="warn" data-action="revoke-licence" data-plan="${escapeHtml(licence.plan)}">Revoke</button>
+                <button class="warn" data-action="rotate-licence" data-plan="${escapeHtml(licence.plan)}">Rotate</button>
+                <button class="danger" data-action="delete-licence" data-licence-id="${escapeHtml(licence.licence_id)}">Delete</button>
+              </div>
+            </div>
+          `).join('') : '<div class="small">No licences for this customer.</div>'}
+        </div>
+
+        <div class="detail-section stack">
+          ${activityList('Recent scans', activity.recent_scans || [], (scan) => `
+            <div class="activity-card">
+              <div><strong>${escapeHtml(scan.file_name || 'Unnamed file')}</strong></div>
+              <div class="small">${escapeHtml(scan.language || 'unknown')} · score=${escapeHtml(String(scan.score ?? '—'))} · findings=${escapeHtml(String(scan.finding_count ?? 0))}</div>
+              <div class="small">${escapeHtml(formatDate(scan.created_at))}</div>
+            </div>
+          `, 'No scans recorded.')}
+
+          ${activityList('Recent usage events', activity.recent_usage_events || [], (event) => `
+            <div class="activity-card">
+              <div><strong>${escapeHtml(event.event_name)}</strong></div>
+              <div class="small">${escapeHtml(event.user_email || customer.email)} · ${escapeHtml(formatDate(event.created_at))}</div>
+            </div>
+          `, 'No usage events recorded.')}
+
+          ${activityList('Recent comparisons', activity.recent_comparisons || [], (item) => `
+            <div class="activity-card">
+              <div><strong>Score change ${escapeHtml(String(item.score_change ?? '—'))}</strong></div>
+              <div class="small">new=${escapeHtml(String(item.new_findings ?? 0))} · resolved=${escapeHtml(String(item.resolved_findings ?? 0))}</div>
+              <div class="small">${escapeHtml(formatDate(item.created_at))}</div>
+            </div>
+          `, 'No comparisons recorded.')}
+        </div>
+      `;
+    }
+
+    function renderAll() {
+      applyFilters();
+      renderStats();
+      renderDirectory();
+      renderCustomerDetail();
+      renderEnvironmentBadge();
     }
 
     async function request(path, options = {}) {
       saveSettings();
       const targetApiUrl = normalizeUrl(apiUrlEl.value);
-      const res = await fetch(`${targetApiUrl}${path}`, {
+      const response = await fetch(`${targetApiUrl}${path}`, {
         ...options,
         headers: {
           'X-Admin-Key': adminKeyEl.value,
@@ -197,58 +798,28 @@
           ...(options.headers || {}),
         },
       });
-      const text = await res.text();
+      const text = await response.text();
       let data = {};
-      try { data = text ? JSON.parse(text) : {}; } catch { data = { raw: text }; }
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch {
+        data = { raw: text };
+      }
       setResponse(data);
-      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
       return data;
     }
 
-    function customerHtml(customer) {
-      const banned = customer.is_banned ? `<span class="pill danger">banned</span>` : '';
-      const verified = customer.email_verified_at ? `<span class="pill ok">verified</span>` : `<span class="pill warn">unverified</span>`;
-      const licences = (customer.licences || []).map(licence => `
-        <div class="licence-card">
-          <div><strong>${licence.plan}</strong> <span class="small mono">${licence.licence_id}</span></div>
-          <div class="small">active=${licence.is_active} seats=${licence.seats_used}/${licence.seats}</div>
-          <div class="small">expires=${licence.expires_at || 'never'}</div>
-          <div class="row" style="margin-top:8px;">
-            <button onclick="deleteLicence('${licence.licence_id}')">Delete licence</button>
-            <button onclick="revokeLicenceFor('${customer.email}', '${licence.plan}')">Revoke</button>
-            <button onclick="rotateLicenceFor('${customer.email}', '${licence.plan}')">Rotate</button>
-          </div>
-        </div>
-      `).join('');
-      return `
-        <div class="customer-card">
-          <div><strong>${customer.email}</strong></div>
-          <div>${verified}${banned}<span class="pill">${customer.pending_plan || 'no pending plan'}</span></div>
-          <div class="small">name=${customer.name || '-'} company=${customer.company || '-'} source=${customer.source || '-'}</div>
-          <div class="small">ban reason=${customer.ban_reason || '-'}</div>
-          <div class="row" style="margin-top:8px;">
-            <button onclick="lookupCustomerFor('${customer.email}')">Open</button>
-            <button onclick="banCustomerFor('${customer.email}')">Ban</button>
-            <button onclick="unbanCustomerFor('${customer.email}')">Unban</button>
-            <button onclick="deleteCustomerFor('${customer.email}')">Delete</button>
-          </div>
-          ${licences}
-        </div>
-      `;
-    }
-
-    function renderCustomers(customers) {
-      customersEl.innerHTML = customers.length ? customers.map(customerHtml).join('') : '<p class="small">No customers returned.</p>';
-    }
-
     async function loadOverview() {
-      setStatus('Loading customers...');
-      const q = searchEl.value.trim();
+      setStatus('Loading customer directory...');
       const params = new URLSearchParams({ limit: '250' });
-      if (q) params.set('q', q);
       const data = await request(`/v1/admin/overview?${params.toString()}`, { method: 'GET' });
-      renderCustomers(data.customers || []);
-      setStatus(`Loaded ${data.count} customer(s).`);
+      state.customers = data.customers || [];
+      if (!state.selectedCustomerId && state.customers.length) {
+        state.selectedCustomerId = state.customers[0].customer_id;
+      }
+      renderAll();
+      setStatus(`Loaded ${data.count} customer records.`);
     }
 
     async function exportJson() {
@@ -264,107 +835,190 @@
       setStatus('Export ready.');
     }
 
-    async function lookupCustomer() {
-      const email = targetEmailEl.value.trim();
-      if (!email) throw new Error('Customer email is required.');
-      setStatus(`Looking up ${email}...`);
-      const data = await request(`/v1/admin/customer?email=${encodeURIComponent(email)}`, { method: 'GET' });
-      renderCustomers([data]);
-      setStatus(`Loaded ${email}.`);
+    async function refreshSelectedCustomer() {
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      setStatus(`Refreshing ${customer.email}...`);
+      const data = await request(`/v1/admin/customer?email=${encodeURIComponent(customer.email)}`, { method: 'GET' });
+      const index = state.customers.findIndex((item) => item.customer_id === customer.customer_id);
+      if (index >= 0) state.customers[index] = data;
+      else state.customers.unshift(data);
+      state.selectedCustomerId = data.customer_id;
+      renderAll();
+      setStatus(`Loaded ${customer.email}.`);
+    }
+
+    function selectedCustomerPlan(planOverride) {
+      if (planOverride) return planOverride;
+      const customer = selectedCustomer();
+      return customer ? planForCustomer(customer) : null;
+    }
+
+    function typedConfirmation(target, label) {
+      const confirmation = window.prompt(`Type ${target} to confirm ${label}.`, '');
+      return confirmation === target;
     }
 
     async function resendVerification() {
-      const email = targetEmailEl.value.trim();
-      if (!email) throw new Error('Customer email is required.');
-      setStatus(`Resending verification to ${email}...`);
-      await request('/v1/admin/resend-verification', { method: 'POST', body: JSON.stringify({ email }) });
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      setStatus(`Resending verification for ${customer.email}...`);
+      await request('/v1/admin/resend-verification', {
+        method: 'POST',
+        body: JSON.stringify({ email: customer.email }),
+      });
+      await refreshSelectedCustomer();
       setStatus('Verification resent.');
     }
 
-    async function revokeLicences() {
-      const email = targetEmailEl.value.trim();
-      if (!email) throw new Error('Customer email is required.');
-      const plan = targetPlanEl.value || null;
-      setStatus(`Revoking licence(s) for ${email}...`);
-      await request('/v1/admin/licence/deactivate', { method: 'POST', body: JSON.stringify({ email, plan }) });
-      setStatus('Licence(s) revoked.');
-      await lookupCustomer();
+    async function revokeLicences(plan = null) {
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      setStatus(`Revoking active licence(s) for ${customer.email}...`);
+      await request('/v1/admin/licence/deactivate', {
+        method: 'POST',
+        body: JSON.stringify({ email: customer.email, plan }),
+      });
+      await refreshSelectedCustomer();
+      setStatus('Licence state updated.');
     }
 
-    async function rotateLicence() {
-      const email = targetEmailEl.value.trim();
-      if (!email) throw new Error('Customer email is required.');
-      const plan = targetPlanEl.value || null;
-      setStatus(`Rotating licence for ${email}...`);
-      await request('/v1/admin/licence/rotate', { method: 'POST', body: JSON.stringify({ email, plan }) });
-      setStatus('Licence rotated.');
-      await lookupCustomer();
+    async function rotateLicence(plan = null) {
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      setStatus(`Rotating licence for ${customer.email}...`);
+      const data = await request('/v1/admin/licence/rotate', {
+        method: 'POST',
+        body: JSON.stringify({ email: customer.email, plan }),
+      });
+      await refreshSelectedCustomer();
+      setStatus(`Licence rotated. New key issued for ${data.plan}.`);
     }
 
     async function banCustomer() {
-      const email = targetEmailEl.value.trim();
-      if (!email) throw new Error('Customer email is required.');
-      setStatus(`Banning ${email}...`);
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      const reason = window.prompt(`Ban ${customer.email}. Enter a reason for the audit trail.`, customer.ban_reason || '');
+      if (reason === null) return;
+      if (!typedConfirmation(customer.email, 'customer ban')) return;
+      setStatus(`Banning ${customer.email}...`);
       await request('/v1/admin/customer/ban', {
         method: 'POST',
-        body: JSON.stringify({ email, reason: banReasonEl.value.trim() || null }),
+        body: JSON.stringify({ email: customer.email, reason: reason.trim() || null }),
       });
+      await refreshSelectedCustomer();
       setStatus('Customer banned.');
-      await lookupCustomer();
     }
 
     async function unbanCustomer() {
-      const email = targetEmailEl.value.trim();
-      if (!email) throw new Error('Customer email is required.');
-      setStatus(`Unbanning ${email}...`);
-      await request('/v1/admin/customer/unban', { method: 'POST', body: JSON.stringify({ email }) });
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      setStatus(`Unbanning ${customer.email}...`);
+      await request('/v1/admin/customer/unban', {
+        method: 'POST',
+        body: JSON.stringify({ email: customer.email }),
+      });
+      await refreshSelectedCustomer();
       setStatus('Customer unbanned.');
-      await lookupCustomer();
     }
 
     async function deleteCustomer() {
-      const email = targetEmailEl.value.trim();
-      if (!email) throw new Error('Customer email is required.');
-      if (!confirm(`Delete customer ${email} and all related licences, scans, usage events, and comparisons?`)) return;
-      setStatus(`Deleting ${email}...`);
-      await request('/v1/admin/customer/delete', { method: 'POST', body: JSON.stringify({ email }) });
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      if (!typedConfirmation(customer.email, 'customer deletion')) return;
+      setStatus(`Deleting ${customer.email}...`);
+      await request('/v1/admin/customer/delete', {
+        method: 'POST',
+        body: JSON.stringify({ email: customer.email }),
+      });
+      state.customers = state.customers.filter((item) => item.customer_id !== customer.customer_id);
+      state.selectedCustomerId = state.customers[0]?.customer_id || null;
+      renderAll();
       setStatus('Customer deleted.');
-      customersEl.innerHTML = '';
     }
 
     async function deleteLicence(licenceId) {
-      if (!confirm(`Delete licence ${licenceId} and related scan/usage history?`)) return;
+      if (!typedConfirmation(licenceId, 'licence deletion')) return;
       setStatus(`Deleting licence ${licenceId}...`);
-      await request('/v1/admin/licence/delete', { method: 'POST', body: JSON.stringify({ licence_id: licenceId }) });
+      await request('/v1/admin/licence/delete', {
+        method: 'POST',
+        body: JSON.stringify({ licence_id: licenceId }),
+      });
+      await refreshSelectedCustomer();
       setStatus('Licence deleted.');
-      if (targetEmailEl.value.trim()) await lookupCustomer();
     }
 
-    window.lookupCustomerFor = (email) => { targetEmailEl.value = email; lookupCustomer().catch(handleError); };
-    window.banCustomerFor = (email) => { targetEmailEl.value = email; banCustomer().catch(handleError); };
-    window.unbanCustomerFor = (email) => { targetEmailEl.value = email; unbanCustomer().catch(handleError); };
-    window.deleteCustomerFor = (email) => { targetEmailEl.value = email; deleteCustomer().catch(handleError); };
-    window.revokeLicenceFor = (email, plan) => { targetEmailEl.value = email; targetPlanEl.value = plan || ''; revokeLicences().catch(handleError); };
-    window.rotateLicenceFor = (email, plan) => { targetEmailEl.value = email; targetPlanEl.value = plan || ''; rotateLicence().catch(handleError); };
-    window.deleteLicence = (licenceId) => deleteLicence(licenceId).catch(handleError);
+    function selectCustomer(customerId) {
+      state.selectedCustomerId = customerId;
+      renderAll();
+    }
+
+    async function handleAction(action, dataset) {
+      if (state.isBusy) return;
+      state.isBusy = true;
+      try {
+        if (action === 'refresh-detail') await refreshSelectedCustomer();
+        else if (action === 'resend-verification') await resendVerification();
+        else if (action === 'revoke-licences') await revokeLicences(null);
+        else if (action === 'revoke-licence') await revokeLicences(dataset.plan || null);
+        else if (action === 'rotate-licence') await rotateLicence(dataset.plan || null);
+        else if (action === 'ban-customer') await banCustomer();
+        else if (action === 'unban-customer') await unbanCustomer();
+        else if (action === 'delete-customer') await deleteCustomer();
+        else if (action === 'delete-licence') await deleteLicence(dataset.licenceId);
+      } finally {
+        state.isBusy = false;
+      }
+    }
 
     function handleError(error) {
-      setStatus(`Error: ${error.message}`);
+      setStatus(`Error: ${error.message}`, true);
     }
+
+    environmentEl.addEventListener('change', () => {
+      if (environmentEl.value !== 'custom') {
+        apiUrlEl.value = ENVIRONMENTS[environmentEl.value];
+      }
+      saveSettings();
+      renderEnvironmentBadge();
+      setStatus(`Selected ${environmentEl.value} environment.`);
+    });
+
+    apiUrlEl.addEventListener('change', () => {
+      environmentEl.value = resolveEnvironmentName(apiUrlEl.value);
+      saveSettings();
+      renderEnvironmentBadge();
+    });
+    adminKeyEl.addEventListener('change', saveSettings);
+
+    ['input', 'change'].forEach((eventName) => {
+      searchEl.addEventListener(eventName, renderAll);
+      statusFilterEl.addEventListener(eventName, renderAll);
+      planFilterEl.addEventListener(eventName, renderAll);
+      activityFilterEl.addEventListener(eventName, renderAll);
+      sortByEl.addEventListener(eventName, renderAll);
+    });
 
     document.getElementById('loadOverview').addEventListener('click', () => loadOverview().catch(handleError));
     document.getElementById('exportJson').addEventListener('click', () => exportJson().catch(handleError));
-    document.getElementById('runSearch').addEventListener('click', () => loadOverview().catch(handleError));
-    document.getElementById('clearSearch').addEventListener('click', () => { searchEl.value = ''; loadOverview().catch(handleError); });
-    document.getElementById('lookupCustomer').addEventListener('click', () => lookupCustomer().catch(handleError));
-    document.getElementById('resendVerification').addEventListener('click', () => resendVerification().catch(handleError));
-    document.getElementById('revokeLicences').addEventListener('click', () => revokeLicences().catch(handleError));
-    document.getElementById('rotateLicence').addEventListener('click', () => rotateLicence().catch(handleError));
-    document.getElementById('banCustomer').addEventListener('click', () => banCustomer().catch(handleError));
-    document.getElementById('unbanCustomer').addEventListener('click', () => unbanCustomer().catch(handleError));
-    document.getElementById('deleteCustomer').addEventListener('click', () => deleteCustomer().catch(handleError));
-    environmentEl.addEventListener('change', applyEnvironmentSelection);
-    apiUrlEl.addEventListener('change', () => { syncEnvironmentSelectionFromApiUrl(); saveSettings(); });
+
+    customerTableBodyEl.addEventListener('click', (event) => {
+      const row = event.target.closest('tr[data-customer-id]');
+      if (!row) return;
+      selectCustomer(row.dataset.customerId);
+    });
+
+    detailPanelEl.addEventListener('click', (event) => {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      handleAction(button.dataset.action, button.dataset).catch(handleError);
+    });
+
+    initializeSettings();
+    loadOverview().catch((error) => {
+      handleError(error);
+      renderAll();
+    });
   </script>
 </body>
 </html>
