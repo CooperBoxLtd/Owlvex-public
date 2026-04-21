@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     stripe_price_team_annual: str = ""
 
     # Email
-    sendgrid_api_key: str = ""
+    resend_api_key: str = ""
     from_email: str = "noreply@owlvex.io"
 
     # Runtime

@@ -41,7 +41,7 @@ STRIPE_PRICE_DEVELOPER_MONTHLY="${STRIPE_PRICE_DEVELOPER_MONTHLY:-}"
 STRIPE_PRICE_DEVELOPER_ANNUAL="${STRIPE_PRICE_DEVELOPER_ANNUAL:-}"
 STRIPE_PRICE_TEAM_MONTHLY="${STRIPE_PRICE_TEAM_MONTHLY:-}"
 STRIPE_PRICE_TEAM_ANNUAL="${STRIPE_PRICE_TEAM_ANNUAL:-}"
-SENDGRID_API_KEY="${SENDGRID_API_KEY:-}"
+RESEND_API_KEY="${RESEND_API_KEY:-}"
 FROM_EMAIL="${FROM_EMAIL:-noreply@owlvex.io}"
 
 extract_deploy_output() {
@@ -93,7 +93,7 @@ if [[ "${IMAGE_ONLY}" != "1" ]]; then
       stripePriceDeveloperAnnual="${STRIPE_PRICE_DEVELOPER_ANNUAL}" \
       stripePriceTeamMonthly="${STRIPE_PRICE_TEAM_MONTHLY}" \
       stripePriceTeamAnnual="${STRIPE_PRICE_TEAM_ANNUAL}" \
-      sendgridApiKey="${SENDGRID_API_KEY}" \
+      resendApiKey="${RESEND_API_KEY}" \
       fromEmail="${FROM_EMAIL}" \
       imageTag="${IMAGE_TAG}" \
     --output json)"

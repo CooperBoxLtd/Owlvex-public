@@ -75,7 +75,7 @@ This contract covers:
 This contract does not require:
 
 - Stripe activation on day one
-- SendGrid activation on day one
+- Resend activation on day one
 - every roadmap feature to be complete
 - enterprise hardening beyond the minimum controls listed here
 

@@ -45,7 +45,7 @@ Examples of secret-bearing settings observed by name:
 - `ADMIN_KEY`
 - `STRIPE_SECRET_KEY`
 - `STRIPE_WEBHOOK_SECRET`
-- `SENDGRID_API_KEY`
+- `RESEND_API_KEY`
 
 ## Drift summary
 

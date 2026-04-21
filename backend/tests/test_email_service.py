@@ -6,12 +6,12 @@ from app.config import Settings
 from app.services import email_service
 
 
-def test_send_verification_email_posts_to_sendgrid(monkeypatch):
+def test_send_verification_email_posts_to_resend(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         secret_key="test-secret-key",
         admin_key="test-admin-key",
-        sendgrid_api_key="SG.test",
+        resend_api_key="re_test",
         from_email="verified-sender@example.com",
         environment="test",
     )
@@ -43,19 +43,20 @@ def test_send_verification_email_posts_to_sendgrid(monkeypatch):
         plan="trial",
     )
 
-    assert captured["url"] == "https://api.sendgrid.com/v3/mail/send"
+    assert captured["url"] == "https://api.resend.com/emails"
     assert captured["timeout"] == 10
-    assert captured["body"]["from"]["email"] == "verified-sender@example.com"
-    assert captured["body"]["personalizations"][0]["to"][0]["email"] == "user@example.com"
-    assert "123456" in captured["body"]["content"][0]["value"]
+    assert captured["headers"]["Authorization"] == "Bearer re_test"
+    assert captured["body"]["from"] == "verified-sender@example.com"
+    assert captured["body"]["to"] == ["user@example.com"]
+    assert "123456" in captured["body"]["text"]
 
 
-def test_send_verification_email_surfaces_sendgrid_error_detail(monkeypatch):
+def test_send_verification_email_surfaces_resend_error_detail(monkeypatch):
     settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         secret_key="test-secret-key",
         admin_key="test-admin-key",
-        sendgrid_api_key="SG.test",
+        resend_api_key="re_test",
         from_email="noreply@example.com",
         environment="test",
     )
@@ -68,9 +69,8 @@ def test_send_verification_email_surfaces_sendgrid_error_detail(monkeypatch):
             "Forbidden",
             hdrs=None,
             fp=io.BytesIO(json.dumps({
-                "errors": [
-                    {"message": "The from address does not match a verified Sender Identity.", "field": "from.email"}
-                ]
+                "name": "validation_error",
+                "message": "The from address does not match a verified domain."
             }).encode("utf-8")),
         )
 
@@ -86,5 +86,5 @@ def test_send_verification_email_surfaces_sendgrid_error_detail(monkeypatch):
     except RuntimeError as exc:
         message = str(exc)
         assert "HTTP 403" in message
-        assert "from.email" in message
-        assert "verified Sender Identity" in message
+        assert "validation_error" in message
+        assert "verified domain" in message

@@ -1,19 +1,17 @@
-import stripe
-import hashlib
 import logging
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 
-import sendgrid
-from sendgrid.helpers.mail import Mail
+import stripe
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
-from app.db.models import Licence
-from app.services.licence_service import generate_licence_key, hash_licence_key
-from app.routers.licences import PLAN_FEATURES
 from app.config import get_settings
+from app.db.models import Licence
+from app.db.session import get_db
+from app.routers.licences import PLAN_FEATURES
+from app.services.email_service import send_licence_issued_email
+from app.services.licence_service import generate_licence_key, hash_licence_key
 
 router = APIRouter(prefix="/v1/billing", tags=["billing"])
 logger = logging.getLogger(__name__)
@@ -38,13 +36,11 @@ async def stripe_webhook(
     payload = await request.body()
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, stripe_signature, settings.stripe_webhook_secret
-        )
+        event = stripe.Webhook.construct_event(payload, stripe_signature, settings.stripe_webhook_secret)
     except stripe.error.SignatureVerificationError:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Stripe signature")
-    except Exception as e:
-        logger.error(f"Stripe webhook error: {e}")
+    except Exception as exc:
+        logger.error("Stripe webhook error: %s", exc)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Webhook processing failed")
 
     event_type = event["type"]
@@ -53,23 +49,18 @@ async def stripe_webhook(
     try:
         if event_type == "checkout.session.completed":
             await _handle_checkout_completed(db, data)
-
         elif event_type == "customer.subscription.updated":
             await _handle_subscription_updated(db, data)
-
         elif event_type == "customer.subscription.deleted":
             await _handle_subscription_deleted(db, data)
-
         elif event_type == "invoice.payment_failed":
-            logger.warning(f"Payment failed for customer {data.get('customer')} - Stripe handling retries")
-
+            logger.warning("Payment failed for customer %s - Stripe handling retries", data.get("customer"))
         else:
-            logger.debug(f"Unhandled Stripe event: {event_type}")
-
+            logger.debug("Unhandled Stripe event: %s", event_type)
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Error processing Stripe event {event_type}: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error("Error processing Stripe event %s: %s", event_type, exc, exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Webhook processing failed")
 
     return {"received": True}
@@ -113,38 +104,21 @@ async def _handle_checkout_completed(db: AsyncSession, session: dict) -> None:
 
 async def _send_licence_email(email: str, team_name: str, plan: str, raw_key: str) -> None:
     settings = get_settings()
-    if not settings.sendgrid_api_key:
-        logger.warning("SendGrid API key not configured — licence key not emailed")
+    if not settings.resend_api_key:
+        logger.warning("Resend API key not configured; licence key not emailed")
         return
 
-    body = f"""<h2>Your Owlvex licence key</h2>
-<p>Hi {team_name},</p>
-<p>Thank you for subscribing to Owlvex ({plan} plan). Your licence key is below.</p>
-<p style="font-family:monospace;font-size:16px;background:#f4f4f4;padding:12px;border-radius:4px;">{raw_key}</p>
-<p>To activate:</p>
-<ol>
-  <li>Open VS Code</li>
-  <li>Open the Command Palette (Ctrl+Shift+P / Cmd+Shift+P)</li>
-  <li>Run <strong>Owlvex: Enter Licence Key</strong></li>
-  <li>Paste your key</li>
-</ol>
-<p>Keep this email — the key cannot be retrieved again. If you lose it, contact support.</p>
-<p>— The Owlvex team</p>"""
-
-    message = Mail(
-        from_email=settings.from_email,
-        to_emails=email,
-        subject="Your Owlvex licence key",
-        html_content=body,
-    )
-
     try:
-        sg = sendgrid.SendGridAPIClient(api_key=settings.sendgrid_api_key)
-        response = sg.send(message)
-        logger.info(f"Licence email sent to {email} (status {response.status_code})")
-    except Exception as e:
-        logger.error(f"Failed to send licence email to {email}: {e}")
-        # Do not raise — licence is already created; email failure is non-fatal
+        send_licence_issued_email(
+            to_email=email,
+            team_name=team_name,
+            plan=plan,
+            raw_key=raw_key,
+        )
+        logger.info("Licence email sent to %s", email)
+    except Exception as exc:
+        logger.error("Failed to send licence email to %s: %s", email, exc)
+        # Do not raise; licence is already created and email failure is non-fatal.
 
 
 async def _handle_subscription_updated(db: AsyncSession, subscription: dict) -> None:
@@ -166,7 +140,7 @@ async def _handle_subscription_updated(db: AsyncSession, subscription: dict) -> 
         )
     )
     await db.commit()
-    logger.info(f"Licence updated for customer {customer_id}: plan={new_plan}, seats={seats}")
+    logger.info("Licence updated for customer %s: plan=%s, seats=%s", customer_id, new_plan, seats)
 
 
 async def _handle_subscription_deleted(db: AsyncSession, subscription: dict) -> None:
@@ -177,7 +151,7 @@ async def _handle_subscription_deleted(db: AsyncSession, subscription: dict) -> 
         .values(is_active=False, updated_at=datetime.now(timezone.utc))
     )
     await db.commit()
-    logger.info(f"Licence deactivated for customer {customer_id}")
+    logger.info("Licence deactivated for customer %s", customer_id)
 
 
 def _plan_from_stripe_items(subscription: dict) -> str:

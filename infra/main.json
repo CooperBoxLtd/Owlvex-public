@@ -71,7 +71,7 @@
       "type": "securestring",
       "defaultValue": ""
     },
-    "sendgridApiKey": {
+    "resendApiKey": {
       "type": "securestring",
       "defaultValue": ""
     },
@@ -198,9 +198,9 @@
     {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2023-07-01",
-      "name": "[format('{0}/{1}', format('{0}-kv', parameters('prefix')), 'sendgrid-api-key')]",
+      "name": "[format('{0}/{1}', format('{0}-kv', parameters('prefix')), 'resend-api-key')]",
       "properties": {
-        "value": "[parameters('sendgridApiKey')]"
+        "value": "[parameters('resendApiKey')]"
       },
       "dependsOn": [
         "[resourceId('Microsoft.KeyVault/vaults', format('{0}-kv', parameters('prefix')))]"
@@ -334,8 +334,8 @@
               "value": "[parameters('stripeWebhookSecret')]"
             },
             {
-              "name": "SENDGRID_API_KEY",
-              "value": "[parameters('sendgridApiKey')]"
+              "name": "RESEND_API_KEY",
+              "value": "[parameters('resendApiKey')]"
             },
             {
               "name": "STRIPE_PRICE_DEVELOPER_MONTHLY",

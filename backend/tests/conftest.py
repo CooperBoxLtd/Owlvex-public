@@ -32,7 +32,7 @@ TEST_SETTINGS = Settings(
     admin_key="test-admin-key",
     stripe_secret_key="sk_test_fake",
     stripe_webhook_secret="whsec_test_fake",
-    sendgrid_api_key="",
+    resend_api_key="",
     environment="test",
 )
 

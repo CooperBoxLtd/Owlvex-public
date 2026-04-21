@@ -551,12 +551,12 @@ async def test_register_trial_licence_sets_expiry(client):
 
 
 @pytest.mark.asyncio
-async def test_register_licence_uses_email_delivery_when_sendgrid_is_configured(client):
+async def test_register_licence_uses_email_delivery_when_resend_is_configured(client):
     configured_settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
         secret_key="test-secret-key",
         admin_key="test-admin-key",
-        sendgrid_api_key="SG.test",
+        resend_api_key="re_test",
         from_email="verified-sender@example.com",
         environment="production",
     )
@@ -581,20 +581,20 @@ async def test_register_licence_surfaces_email_delivery_failure(client):
         database_url="sqlite+aiosqlite:///:memory:",
         secret_key="test-secret-key",
         admin_key="test-admin-key",
-        sendgrid_api_key="SG.test",
+        resend_api_key="re_test",
         from_email="verified-sender@example.com",
         environment="production",
     )
 
     with patch("app.routers.licences.get_settings", return_value=configured_settings), \
-         patch("app.routers.licences.send_verification_email", side_effect=RuntimeError("Email delivery failed with HTTP 403: from.email: The from address does not match a verified Sender Identity.")):
+         patch("app.routers.licences.send_verification_email", side_effect=RuntimeError("Email delivery failed with HTTP 403: validation_error: The from address does not match a verified domain.")):
         response = await client.post(
             "/v1/licences/register",
             json={"email": "mail-user@example.com", "plan": "free"},
         )
 
     assert response.status_code == 503
-    assert "verified Sender Identity" in response.json()["detail"]
+    assert "verified domain" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -637,6 +637,35 @@ async def test_verify_email_registration_issues_licence(client):
     assert data["plan"] == "trial"
     assert data["team_name"] == "Verify User's Workspace"
     assert data["expires_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_verify_email_registration_emails_licence_when_resend_is_configured(client):
+    configured_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        resend_api_key="re_test",
+        from_email="verified-sender@example.com",
+        environment="production",
+    )
+
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "verify-mail@example.com", "plan": "free", "name": "Verify Mail"},
+    )
+    assert registration.status_code == 201
+    verification_code = registration.json()["verification_code"]
+
+    with patch("app.routers.licences.get_settings", return_value=configured_settings), \
+         patch("app.routers.licences.send_licence_issued_email") as mock_send_licence_issued_email:
+        verify_response = await client.post(
+            "/v1/licences/verify-email",
+            json={"email": "verify-mail@example.com", "code": verification_code},
+        )
+
+    assert verify_response.status_code == 201
+    mock_send_licence_issued_email.assert_called_once()
 
 
 @pytest.mark.asyncio

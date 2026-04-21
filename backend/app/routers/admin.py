@@ -153,7 +153,7 @@ async def resend_verification(
         datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=settings.email_verification_code_minutes)
     )
 
-    if settings.sendgrid_api_key:
+    if settings.resend_api_key:
         try:
             send_verification_email(
                 to_email=customer.email,
@@ -170,10 +170,10 @@ async def resend_verification(
         "ok": True,
         "email": customer.email,
         "pending_plan": customer.pending_plan,
-        "delivery": "email" if settings.sendgrid_api_key else "development_inline",
+        "delivery": "email" if settings.resend_api_key else "development_inline",
         "expires_in_minutes": settings.email_verification_code_minutes,
     }
-    if not settings.sendgrid_api_key and settings.is_development:
+    if not settings.resend_api_key and settings.is_development:
         response["verification_code"] = verification_code
     return response
 

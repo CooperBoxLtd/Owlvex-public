@@ -24,7 +24,7 @@ Bring up a working production backend that supports:
 This first deploy does **not** require:
 
 - Stripe billing
-- SendGrid email
+- Resend email
 - managed identity hardening
 - full Key Vault-native secret retrieval
 
@@ -95,13 +95,13 @@ Leave these empty for the first deploy:
 - `STRIPE_PRICE_DEVELOPER_ANNUAL`
 - `STRIPE_PRICE_TEAM_MONTHLY`
 - `STRIPE_PRICE_TEAM_ANNUAL`
-- `SENDGRID_API_KEY`
+- `RESEND_API_KEY`
 
 `FROM_EMAIL` can remain:
 
 - `noreply@owlvex.io`
 
-If registration emails should work in production, `FROM_EMAIL` must be a sender address or domain that is actually verified in SendGrid. An unverified sender will cause registration to fail at delivery time.
+If registration emails should work in production, `FROM_EMAIL` must be a sender address or domain that is actually verified in Resend. An unverified sender will cause registration to fail at delivery time.
 
 ## Step 4: Provision The Azure Infrastructure
 
@@ -176,7 +176,7 @@ The first deploy is successful when:
 Do not block production updates on:
 
 - Stripe webhook setup
-- SendGrid integration
+- Resend integration
 - ACR managed identity conversion
 - Key Vault reference-based secret consumption
 

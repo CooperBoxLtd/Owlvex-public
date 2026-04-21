@@ -16,7 +16,7 @@ from app.services.licence_service import (
     record_seat_seen,
 )
 from app.services.rate_limit import allow_control_plane_request
-from app.services.email_service import send_verification_email
+from app.services.email_service import send_licence_issued_email, send_verification_email
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/licences", tags=["licences"])
@@ -223,10 +223,10 @@ def _build_registration_response(
         "status": "verification_required",
         "email": email,
         "plan": plan,
-        "delivery": "email" if settings.sendgrid_api_key else "development_inline",
+        "delivery": "email" if settings.resend_api_key else "development_inline",
         "expires_in_minutes": settings.email_verification_code_minutes,
     }
-    if not settings.sendgrid_api_key and settings.is_development and verification_code:
+    if not settings.resend_api_key and settings.is_development and verification_code:
         response["verification_code"] = verification_code
     return response
 
@@ -315,7 +315,7 @@ async def register(
         datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=current_settings.email_verification_code_minutes)
     )
 
-    if current_settings.sendgrid_api_key:
+    if current_settings.resend_api_key:
         try:
             send_verification_email(
                 to_email=str(body.email),
@@ -385,6 +385,19 @@ async def verify_email_registration(
     db.add(licence)
     await db.commit()
     await db.refresh(licence)
+
+    current_settings = get_settings()
+    if current_settings.resend_api_key:
+        try:
+            send_licence_issued_email(
+                to_email=licence.email,
+                team_name=licence.team_name,
+                plan=licence.plan,
+                raw_key=raw_key,
+                expires_at=licence.expires_at.isoformat() if licence.expires_at else None,
+            )
+        except RuntimeError:
+            pass
 
     return {
         "customer_id": str(customer.id),

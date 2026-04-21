@@ -51,7 +51,7 @@ param stripeSecretKey string = ''
 param stripeWebhookSecret string = ''
 
 @secure()
-param sendgridApiKey string = ''
+param resendApiKey string = ''
 
 param stripePriceDeveloperMonthly string = ''
 param stripePriceDeveloperAnnual string = ''
@@ -123,10 +123,10 @@ resource kvStripeWebhookSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = 
   properties: { value: stripeWebhookSecret }
 }
 
-resource kvSendgridApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
+resource kvResendApiKey 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: keyVault
-  name: 'sendgrid-api-key'
-  properties: { value: sendgridApiKey }
+  name: 'resend-api-key'
+  properties: { value: resendApiKey }
 }
 
 resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2023-06-01-preview' = {
@@ -239,8 +239,8 @@ resource webApp 'Microsoft.Web/sites@2023-12-01' = {
           value: stripeWebhookSecret
         }
         {
-          name: 'SENDGRID_API_KEY'
-          value: sendgridApiKey
+          name: 'RESEND_API_KEY'
+          value: resendApiKey
         }
         {
           name: 'STRIPE_PRICE_DEVELOPER_MONTHLY'
