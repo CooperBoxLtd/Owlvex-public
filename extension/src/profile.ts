@@ -30,6 +30,7 @@ export const PROFILE = {
         "testTrialSetup": "owlvex.testTrialSetup",
         "enterLicence": "owlvex.enterLicence",
         "removeLicence": "owlvex.removeLicence",
+        "toggleTelemetry": "owlvex.toggleTelemetry",
         "registerAccess": "owlvex.registerAccess",
         "compareScans": "owlvex.compareScans",
         "reviewRiskCalibration": "owlvex.reviewRiskCalibration",

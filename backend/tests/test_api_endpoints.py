@@ -684,6 +684,55 @@ async def test_verify_email_registration_rejects_invalid_code(client):
     assert response.status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_paid_licence_can_disable_telemetry(client):
+    generate_response = await client.post(
+        "/v1/licences/generate",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"team_name": "Telemetry Paid", "email": "telemetry-paid@example.com", "plan": "developer", "seats": 1},
+    )
+    assert generate_response.status_code == 201
+    licence_key = generate_response.json()["licence_key"]
+
+    response = await client.post(
+        "/v1/licences/telemetry",
+        headers={"X-Licence-Key": licence_key},
+        json={"enabled": False},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["ok"] is True
+    assert data["plan"] == "developer"
+    assert data["telemetry_enabled"] is False
+    assert data["telemetry_required"] is False
+
+
+@pytest.mark.asyncio
+async def test_free_or_trial_cannot_disable_telemetry(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "telemetry-free@example.com", "plan": "free"},
+    )
+    assert registration.status_code == 201
+    verification_code = registration.json()["verification_code"]
+    verify_response = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "telemetry-free@example.com", "code": verification_code},
+    )
+    assert verify_response.status_code == 201
+    licence_key = verify_response.json()["licence_key"]
+
+    response = await client.post(
+        "/v1/licences/telemetry",
+        headers={"X-Licence-Key": licence_key},
+        json={"enabled": False},
+    )
+
+    assert response.status_code == 400
+    assert "require telemetry" in response.json()["detail"]
+
+
 # ---------------------------------------------------------------------------
 # /v1/usage/events
 # ---------------------------------------------------------------------------

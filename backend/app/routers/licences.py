@@ -12,6 +12,7 @@ from app.db.models import Customer, Licence
 from app.services.licence_service import (
     validate_licence,
     generate_licence_key,
+    get_licence_by_key,
     hash_licence_key,
     record_seat_seen,
 )
@@ -87,6 +88,11 @@ class VerifyRegistrationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: EmailStr
     code: str = Field(min_length=4, max_length=32)
+
+
+class UpdateTelemetryRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    enabled: bool
 
 
 PLAN_FEATURES = {
@@ -422,4 +428,40 @@ async def verify_email_registration(
         "team_name": licence.team_name,
         "email": licence.email,
         "expires_at": licence.expires_at.isoformat() if licence.expires_at else None,
+    }
+
+
+@router.post("/telemetry")
+async def update_telemetry_settings(
+    body: UpdateTelemetryRequest,
+    x_licence_key: str = Header(..., alias="X-Licence-Key"),
+    db: AsyncSession = Depends(get_db),
+):
+    licence = await get_licence_by_key(db, x_licence_key)
+    if not licence:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Licence key not found")
+    if not licence.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Licence is inactive")
+    if licence.expires_at and licence.expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Licence has expired")
+
+    if licence.plan in {"free", "trial"} and not body.enabled:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Free and trial licences require telemetry and cannot disable it.",
+        )
+
+    features = dict(licence.features or {})
+    features["telemetry_required"] = licence.plan in {"free", "trial"}
+    features["telemetry_opt_out"] = licence.plan not in {"free", "trial"}
+    features["telemetry_enabled"] = True if licence.plan in {"free", "trial"} else body.enabled
+    licence.features = features
+    await db.commit()
+
+    return {
+        "ok": True,
+        "licence_id": str(licence.id),
+        "plan": licence.plan,
+        "telemetry_enabled": bool(features["telemetry_enabled"]),
+        "telemetry_required": bool(features["telemetry_required"]),
     }
