@@ -27,22 +27,12 @@ if [[ "${ACR_USE_MANAGED_IDENTITY}" == "1" ]]; then
   echo "-> Enabling managed identity pull from ACR..."
   configure_managed_identity_acr_pull
 
-  az webapp config container set \
-    --name "${APP_NAME}" \
-    --resource-group "${RESOURCE_GROUP}" \
-    --docker-custom-image-name "${CONTAINER_IMAGE}" \
-    --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
-    --output none
+  set_webapp_container_image "${CONTAINER_IMAGE}"
 else
   echo "-> Updating Web App using registry credentials..."
-  az webapp config container set \
-    --name "${APP_NAME}" \
-    --resource-group "${RESOURCE_GROUP}" \
-    --docker-custom-image-name "${CONTAINER_IMAGE}" \
-    --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
+  set_webapp_container_image "${CONTAINER_IMAGE}" \
     --docker-registry-server-user "$(az acr credential show --name "${ACR_NAME}" --query username -o tsv)" \
     --docker-registry-server-password "$(az acr credential show --name "${ACR_NAME}" --query passwords[0].value -o tsv)" \
-    --output none
 fi
 
 az webapp restart --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --output none
@@ -51,4 +41,3 @@ wait_for_health "${API_URL}"
 echo ""
 echo "App updated:"
 echo "  ${API_URL}"
-

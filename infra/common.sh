@@ -5,9 +5,67 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+trim_cr() {
+  printf '%s' "${1//$'\r'/}"
+}
+
+command_supports_flag() {
+  local command_name="$1"
+  local flag_name="$2"
+  "$command_name" --help 2>/dev/null | grep -Fq -- "${flag_name}"
+}
+
+az_template_path() {
+  local path="$1"
+  if command -v wslpath >/dev/null 2>&1 && command -v az >/dev/null 2>&1 && az version >/dev/null 2>&1; then
+    if [[ "$(command -v az)" == *.exe ]]; then
+      wslpath -w "${path}"
+      return
+    fi
+  fi
+
+  printf '%s\n' "${path}"
+}
+
+docker_host_path() {
+  local path="$1"
+  if command -v wslpath >/dev/null 2>&1; then
+    wslpath -m "${path}"
+    return
+  fi
+
+  printf '%s\n' "${path}"
+}
+
 load_env_file() {
   local env_file="${1:-}"
   if [[ -n "${env_file}" && -f "${env_file}" ]]; then
+    if command -v python >/dev/null 2>&1; then
+      while IFS= read -r -d '' key && IFS= read -r -d '' value; do
+        printf -v "${key}" '%s' "${value}"
+        export "${key}"
+      done < <(python - "${env_file}" <<'PY'
+import sys
+
+env_file = sys.argv[1]
+with open(env_file, "r", encoding="utf-8", newline="") as fh:
+    for raw in fh:
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        sys.stdout.write(key)
+        sys.stdout.write("\0")
+        sys.stdout.write(value)
+        sys.stdout.write("\0")
+PY
+)
+      return
+    fi
     set -a
     # shellcheck disable=SC1090
     source "${env_file}"
@@ -38,7 +96,7 @@ resolve_acr_login_server() {
 
 resolve_api_url() {
   local host
-  host="$(az webapp show --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query defaultHostName -o tsv)"
+  host="$(trim_cr "$(az webapp show --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query defaultHostName -o tsv)")"
   printf 'https://%s\n' "${host}"
 }
 
@@ -52,7 +110,7 @@ resolve_pg_host() {
     --resource-group "${RESOURCE_GROUP}" \
     --name "${PG_SERVER_NAME}" \
     --query fullyQualifiedDomainName \
-    -o tsv
+    -o tsv | tr -d '\r'
 }
 
 run_schema_file() {
@@ -69,15 +127,14 @@ run_schema_file() {
       --no-password \
       --output /dev/null
   elif docker_available; then
+    local sql_dir
+    sql_dir="$(docker_host_path "${REPO_ROOT}/postgres/init")"
     docker run --rm \
       -e PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" \
-      -v "${REPO_ROOT}/postgres/init:/sql:ro" \
+      -v "${sql_dir}:/sql:ro" \
       postgres:16 \
       psql \
-        --host="${pg_host}" \
-        --port=5432 \
-        --username="owlvex" \
-        --dbname="owlvex" \
+        "sslmode=require host=${pg_host} port=5432 user=owlvex dbname=owlvex" \
         --file="/sql/$(basename "${sql_file}")" \
         --no-password \
         --output /dev/null
@@ -106,10 +163,7 @@ run_sql_scalar() {
       -e PGPASSWORD="${POSTGRES_ADMIN_PASSWORD}" \
       postgres:16 \
       psql \
-        --host="${pg_host}" \
-        --port=5432 \
-        --username="owlvex" \
-        --dbname="owlvex" \
+        "sslmode=require host=${pg_host} port=5432 user=owlvex dbname=owlvex" \
         --command="${sql}" \
         --tuples-only \
         --no-align \
@@ -209,7 +263,28 @@ configure_managed_identity_acr_pull() {
   az webapp config set \
     --name "${APP_NAME}" \
     --resource-group "${RESOURCE_GROUP}" \
-    --generic-configurations '{"acrUseManagedIdentityCreds": true}' \
+    --generic-configurations "{\"acrUseManagedIdentityCreds\":true}" \
+    --output none
+}
+
+set_webapp_container_image() {
+  if command_supports_flag az "--container-image-name"; then
+    az webapp config container set \
+      --name "${APP_NAME}" \
+      --resource-group "${RESOURCE_GROUP}" \
+      --container-image-name "$1" \
+      --container-registry-url "https://${ACR_LOGIN_SERVER}" \
+      "${@:2}" \
+      --output none
+    return
+  fi
+
+  az webapp config container set \
+    --name "${APP_NAME}" \
+    --resource-group "${RESOURCE_GROUP}" \
+    --docker-custom-image-name "$1" \
+    --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
+    "${@:2}" \
     --output none
 }
 
@@ -236,4 +311,3 @@ wait_for_health() {
   echo "    az webapp log download --name ${APP_NAME} --resource-group ${RESOURCE_GROUP} --log-file ./app-logs.zip" >&2
   exit 1
 }
-

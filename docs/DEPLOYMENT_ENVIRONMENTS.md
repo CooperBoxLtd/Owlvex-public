@@ -127,6 +127,12 @@ bash infra/deploy-dev.sh
 
 This provisions or updates the shared Azure dev control plane.
 
+On the current Windows ARM workstation, run that command from PowerShell/Windows Terminal so the deploy can use:
+
+- Windows Azure CLI
+- Docker Desktop
+- normalized Windows paths for Bicep and schema mounts
+
 For day-to-day backend iteration on the current Windows ARM machine, prefer the split flow:
 
 1. local `linux/amd64` image build
@@ -143,6 +149,8 @@ bash infra/migrate-schema.sh
 ```
 
 Use remote source-upload ACR builds only as fallback when local Docker is unavailable.
+
+If PostgreSQL schema application is blocked by the server firewall, add a temporary machine-IP rule, apply/verify schema, and then remove that rule. The Web App can still be healthy even when direct local schema access is blocked.
 
 ### Prod Path
 

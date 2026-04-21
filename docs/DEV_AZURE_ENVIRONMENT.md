@@ -66,6 +66,23 @@ This:
 - applies the database schema
 - health-checks the result
 
+### Windows note
+
+On this workstation, run the deploy scripts from PowerShell or Windows Terminal rather than WSL/Git Bash.
+
+The scripts now normalize Azure template paths and Docker volume paths for Windows-hosted `az`, Docker Desktop, and local schema checks. That means the documented commands are still:
+
+```bash
+bash infra/deploy-dev.sh
+```
+
+but the shell should be launched from Windows so the same process can reach:
+
+- Windows `az`
+- Docker Desktop
+- local repo paths for `main.bicep`
+- Docker-mounted `postgres/init`
+
 ## Step 4A: Preferred Local Build Path On Windows ARM
 
 For this machine, the preferred dev build path is now:
@@ -131,6 +148,8 @@ Do not rebuild the image separately for production promotion.
 Do not reuse old image tags for dev promotion if the backend code changed.
 
 Unique tags are required so App Service clearly pulls the intended image and does not appear to "redeploy" stale code.
+
+If the schema step needs temporary direct access from your machine to Azure PostgreSQL, add a short-lived firewall rule for your current IP, complete the schema step, then remove that rule immediately afterward.
 
 ## Step 5: Capture The Dev API URL
 

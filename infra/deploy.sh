@@ -77,9 +77,10 @@ if [[ "${IMAGE_ONLY}" != "1" ]]; then
 
   echo ""
   echo "-> Deploying Azure resources via Bicep..."
+  TEMPLATE_FILE="$(az_template_path "${SCRIPT_DIR}/main.bicep")"
   DEPLOY_OUTPUT="$(az deployment group create \
     --resource-group "${RESOURCE_GROUP}" \
-    --template-file "${SCRIPT_DIR}/main.bicep" \
+    --template-file "${TEMPLATE_FILE}" \
     --parameters \
       prefix="${PREFIX}" \
       environment="${DEPLOY_ENV}" \
@@ -105,4 +106,3 @@ fi
 bash "${SCRIPT_DIR}/build-image.sh"
 bash "${SCRIPT_DIR}/deploy-app.sh"
 bash "${SCRIPT_DIR}/migrate-schema.sh"
-
