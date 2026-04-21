@@ -387,7 +387,6 @@ describe('parseChatIntent', () => {
             }),
             update: jest.fn(),
         };
-        const previewUri = { fsPath: 'untitled:fix-preview.js', scheme: 'untitled', toString: () => 'untitled:fix-preview.js' };
         (vscode.workspace.workspaceFolders as any) = [{
             uri: vscode.Uri.file('d:\\repo'),
             name: 'repo',
@@ -414,8 +413,6 @@ describe('parseChatIntent', () => {
                 isEmpty: true,
             },
         };
-        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({ uri: previewUri });
-
         const provider = new ChatViewProvider(registry as any, storage as any);
         await provider.generateFixPreview({
             id: 'finding-1',
@@ -439,23 +436,17 @@ describe('parseChatIntent', () => {
             systemPrompt: expect.stringContaining('Return only the full updated file contents.'),
             userMessage: expect.stringContaining('Latest report findings: 1'),
         }));
-        expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith({
-            language: 'javascript',
-            content: [
-                'const query = "SELECT id FROM users WHERE name = ?";',
-                'db.query(query, [name]);',
-            ].join('\n'),
-        });
         expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(1, PROFILE.commands.chatFocus);
         expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(
             2,
             'vscode.diff',
             expect.anything(),
-            previewUri,
+            expect.objectContaining({ fsPath: expect.stringContaining('owlvex-preview:/') }),
             `${PROFILE.displayLabel}: Fix Preview - SQL Injection`,
         );
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Fix preview ready for');
         expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Regenerate diff', kind: 'generateFixPreview' }),
             expect.objectContaining({ id: 'apply-fix-preview', label: 'Keep fix', kind: 'applyFixPreview' }),
             expect.objectContaining({ id: 'discard-fix-preview', label: 'Discard fix', kind: 'discardFixPreview' }),
         ]));
@@ -886,12 +877,8 @@ describe('parseChatIntent', () => {
             content: '```javascript\nconst safeRedirect = allowList(req.query.next);\nreturn res.redirect(safeRedirect);\n```',
         });
         const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
-        const previewUri = { fsPath: 'untitled:redirect-fix.js', scheme: 'untitled', toString: () => 'untitled:redirect-fix.js' };
         (vscode.window.activeTextEditor as any) = undefined;
         (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
-            if (input?.language === 'javascript') {
-                return { uri: previewUri };
-            }
             return {
                 uri: targetUri,
                 languageId: 'javascript',
@@ -939,7 +926,7 @@ describe('parseChatIntent', () => {
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
             'vscode.diff',
             targetUri,
-            previewUri,
+            expect.objectContaining({ fsPath: expect.stringContaining('owlvex-preview:/') }),
             expect.stringContaining('Fix Preview - Open Redirect'),
         );
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Choose Keep fix to write the reviewed code into the file');
@@ -950,12 +937,8 @@ describe('parseChatIntent', () => {
             content: '```python\nimport json\n\ndef load_profile(request):\n    return json.loads(request.body)\n```',
         });
         const targetUri = vscode.Uri.file('d:\\repo\\tools\\demo\\26-deserialization-unsafe.py');
-        const previewUri = { fsPath: 'untitled:deser-fix.py', scheme: 'untitled', toString: () => 'untitled:deser-fix.py' };
         (vscode.window.activeTextEditor as any) = undefined;
         (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
-            if (input?.language === 'python') {
-                return { uri: previewUri };
-            }
             return {
                 uri: targetUri,
                 languageId: 'python',
@@ -1004,7 +987,7 @@ describe('parseChatIntent', () => {
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
             'vscode.diff',
             targetUri,
-            previewUri,
+            expect.objectContaining({ fsPath: expect.stringContaining('owlvex-preview:/') }),
             expect.stringContaining('Fix Preview - Insecure deserialization of untrusted data'),
         );
         expect(vscode.workspace.applyEdit).not.toHaveBeenCalled();
@@ -1246,6 +1229,7 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('allow-listed destination');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Regenerate diff', kind: 'generateFixPreview' }),
             expect.objectContaining({ label: 'Keep fix', kind: 'applyFixPreview' }),
             expect.objectContaining({ label: 'Discard fix', kind: 'discardFixPreview' }),
         ]));
@@ -1256,12 +1240,8 @@ describe('parseChatIntent', () => {
             content: '```javascript\nconst safeRedirect = allowList(req.query.next);\nreturn res.redirect(safeRedirect);\n```',
         });
         const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
-        const previewUri = { fsPath: 'untitled:redirect-fix.js', scheme: 'untitled', toString: () => 'untitled:redirect-fix.js' };
         (vscode.window.activeTextEditor as any) = undefined;
         (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
-            if (input?.language === 'javascript') {
-                return { uri: previewUri };
-            }
             return {
                 uri: targetUri,
                 languageId: 'javascript',
@@ -1311,10 +1291,130 @@ describe('parseChatIntent', () => {
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
             'vscode.diff',
             targetUri,
-            previewUri,
+            expect.objectContaining({ fsPath: expect.stringContaining('owlvex-preview:/') }),
             expect.stringContaining('Fix Preview - Open Redirect'),
         );
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Choose Keep fix to write the reviewed code into the file');
+    });
+
+    it('keeps regenerate diff available during a pending fix preview', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: 'Preview explanation.',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        const finding = {
+            id: 'finding-open-redirect',
+            line: 2,
+            lineEnd: 2,
+            severity: 'MEDIUM',
+            framework: 'OWASP',
+            ruleCode: 'A01-REDIRECT',
+            title: 'Open Redirect',
+            explanation: 'Untrusted destination reaches redirect.',
+            threat: 'Phishing.',
+            fix: 'Allow-list destinations.',
+            confidence: 0.88,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 7,
+        };
+        (provider as any).latestActionableFinding = finding;
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+        (provider as any).latestActionableItems = [{ finding, targetPath: targetUri.fsPath }];
+        (provider as any).pendingFixPreview = {
+            targetPath: targetUri.fsPath,
+            originalText: 'return res.redirect(req.query.next);',
+            patchedText: 'return res.redirect(allowList(req.query.next));',
+            finding,
+        };
+
+        await (provider as any).handleUserMessage('fix code');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Regenerate diff', kind: 'generateFixPreview' }),
+            expect.objectContaining({ label: 'Keep fix', kind: 'applyFixPreview' }),
+            expect.objectContaining({ label: 'Discard fix', kind: 'discardFixPreview' }),
+        ]));
+    });
+
+    it('keeps the active fix target when fix preview generation fails so the user can retry', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```javascript\nfunction go(req, res) {\n  return res.redirect(req.query.next);\n}\n```',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
+        (vscode.window.activeTextEditor as any) = undefined;
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async () => ({
+            uri: targetUri,
+            languageId: 'javascript',
+            getText: () => [
+                'function go(req, res) {',
+                '  return res.redirect(req.query.next);',
+                '}',
+            ].join('\n'),
+        }));
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        const finding = {
+            id: 'finding-open-redirect',
+            line: 2,
+            lineEnd: 2,
+            severity: 'MEDIUM',
+            framework: 'OWASP',
+            ruleCode: 'A01-REDIRECT',
+            title: 'Open Redirect',
+            explanation: 'Untrusted destination reaches redirect.',
+            threat: 'Phishing.',
+            fix: 'Allow-list destinations.',
+            confidence: 0.88,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 7,
+        };
+
+        (provider as any).latestActionableFinding = finding;
+        (provider as any).latestActionableTargetPath = targetUri.fsPath;
+
+        await provider.generateFixPreview(finding as any, targetUri.fsPath);
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Fix preview failed');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+        ]));
+        expect((provider as any).latestActionableTargetPath).toBe(targetUri.fsPath);
+        expect((provider as any).pendingFixPreview).toBeUndefined();
+        expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+            'vscode.diff',
+            expect.anything(),
+            expect.anything(),
+            expect.stringContaining('Fix Preview - Open Redirect'),
+        );
     });
 
     it('injects project context contract into advisory prompts when configured', async () => {
@@ -1596,12 +1696,8 @@ describe('parseChatIntent', () => {
         } as any);
 
         const targetUri = vscode.Uri.file('d:\\repo\\src\\redirect.js');
-        const previewUri = { fsPath: 'untitled:redirect-fix.js', scheme: 'untitled', toString: () => 'untitled:redirect-fix.js' };
         (vscode.window.activeTextEditor as any) = undefined;
         (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
-            if (input?.language === 'javascript') {
-                return { uri: previewUri };
-            }
             return {
                 uri: targetUri,
                 languageId: 'javascript',
@@ -1646,7 +1742,7 @@ describe('parseChatIntent', () => {
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
             'vscode.diff',
             targetUri,
-            previewUri,
+            expect.objectContaining({ fsPath: expect.stringContaining('owlvex-preview:/') }),
             expect.stringContaining('Fix Preview - Open Redirect'),
         );
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Choose Keep fix to write the reviewed code into the file');
@@ -1658,7 +1754,6 @@ describe('parseChatIntent', () => {
         });
         const originalText = 'const safe = false;';
         const targetUri = vscode.Uri.file('d:\\repo\\src\\target.js');
-        const previewUri = { fsPath: 'untitled:fix-preview.js', scheme: 'untitled', toString: () => 'untitled:fix-preview.js' };
         const registry = {
             getActive: () => ({
                 id: 'test-provider',
@@ -1688,9 +1783,6 @@ describe('parseChatIntent', () => {
             },
         };
         (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
-            if (input?.language === 'javascript') {
-                return { uri: previewUri };
-            }
             return {
                 uri: targetUri,
                 getText: () => originalText,
@@ -1772,14 +1864,10 @@ describe('parseChatIntent', () => {
             'utf8',
         );
         const targetUri = vscode.Uri.file(path.join(tempRoot, 'tools', 'demo', '06-sqli-unsafe.js'));
-        const previewUri = { fsPath: 'untitled:sqli-fix.js', scheme: 'untitled', toString: () => 'untitled:sqli-fix.js' };
         const originalText = 'const query = "SELECT * FROM users WHERE id = " + req.query.id;';
         (vscode.workspace.workspaceFolders as any) = [{ name: 'CodeScanner', uri: vscode.Uri.file(tempRoot) }];
         (vscode.workspace.getWorkspaceFolder as jest.Mock).mockReturnValue({ name: 'CodeScanner', uri: vscode.Uri.file(tempRoot) });
         (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
-            if (input?.language === 'javascript') {
-                return { uri: previewUri };
-            }
             return {
                 uri: targetUri,
                 getText: () => originalText,
@@ -1865,6 +1953,313 @@ describe('parseChatIntent', () => {
             }),
         ]));
         await fs.rm(tempRoot, { recursive: true, force: true });
+    });
+
+    it('treats rescanned deserialization findings as the same family when titles differ only by casing', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```python\nimport pickle\n\ndef load_profile(request):\n    return pickle.loads(request.body)\n```',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\tools\\demo\\26-deserialization-unsafe.py');
+        const originalText = 'import pickle\n\ndef load_profile(request):\n    return pickle.loads(request.body)\n';
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        };
+        const storage = {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        };
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async () => ({
+            uri: targetUri,
+            getText: () => originalText,
+        }));
+        (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
+        (vscode.window.showTextDocument as jest.Mock).mockResolvedValue({ revealRange: jest.fn() });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 9,
+                        findings: [{
+                            id: 'rescanned-deser',
+                            line: 4,
+                            lineEnd: 4,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            ruleCode: 'DS-001',
+                            title: 'Insecure Deserialization',
+                            canonicalId: 'owlvex.issue.insecure_deserialization.001',
+                            canonicalTitle: 'Insecure Deserialization',
+                            explanation: 'The request body is passed into pickle.loads.',
+                            threat: 'Attackers can trigger unsafe object loading.',
+                            fix: 'Replace pickle with a data-only format.',
+                            confidence: 1,
+                            provenance: 'deterministic',
+                            likelihood: 'HIGH',
+                            riskScore: 9,
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: '1 finding detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
+
+        const provider = new ChatViewProvider(registry as any, storage as any);
+        (provider as any).pendingFixPreview = {
+            targetPath: targetUri.fsPath,
+            originalText,
+            patchedText: originalText,
+            title: 'Insecure deserialization',
+            reviewedPaths: [targetUri.fsPath],
+            finding: {
+                id: 'ai-deser',
+                line: 4,
+                lineEnd: 4,
+                severity: 'HIGH',
+                framework: 'OWASP',
+                ruleCode: 'A08-DESER',
+                title: 'Insecure deserialization',
+                explanation: 'A pickle payload from the request is deserialized directly.',
+                threat: 'Attackers can trigger malicious object materialization.',
+                fix: 'Replace unsafe deserialization with safe parsing.',
+                confidence: 0.81,
+                provenance: 'ai',
+                likelihood: 'HIGH',
+                riskScore: 9,
+            },
+        };
+
+        await provider.applyPendingFixPreview();
+
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
+            'Verification complete: the finding is still present after the kept fix.',
+        );
+    });
+
+    it('treats the same finding family on a different rescanned line as still present', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```javascript\nconst query = db.query(sql, [req.query.id]);\n```',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\target.js');
+        const originalText = 'const query = "SELECT * FROM users WHERE id = " + req.query.id;';
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        };
+        const storage = {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        };
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async () => ({
+            uri: targetUri,
+            getText: () => originalText,
+        }));
+        (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
+        (vscode.window.showTextDocument as jest.Mock).mockResolvedValue({ revealRange: jest.fn() });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 9,
+                        findings: [{
+                            id: 'rescanned-sqli',
+                            line: 5,
+                            lineEnd: 5,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            ruleCode: 'SQ-001',
+                            title: 'SQL Injection',
+                            canonicalId: 'owlvex.issue.sql_injection.001',
+                            canonicalTitle: 'SQL Injection',
+                            explanation: 'Untrusted input still reaches the SQL sink.',
+                            threat: 'Attackers can alter database queries.',
+                            fix: 'Use parameterized queries.',
+                            confidence: 1,
+                            provenance: 'deterministic',
+                            likelihood: 'HIGH',
+                            riskScore: 9,
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: '1 finding detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
+
+        const provider = new ChatViewProvider(registry as any, storage as any);
+        (provider as any).pendingFixPreview = {
+            targetPath: targetUri.fsPath,
+            originalText,
+            patchedText: originalText,
+            title: 'SQL Injection',
+            reviewedPaths: [targetUri.fsPath],
+            finding: {
+                id: 'ai-sqli',
+                line: 1,
+                lineEnd: 1,
+                severity: 'HIGH',
+                framework: 'OWASP',
+                ruleCode: 'A03-SQL',
+                title: 'SQL Injection',
+                explanation: 'Untrusted request data is concatenated into SQL.',
+                threat: 'Attackers can alter database queries.',
+                fix: 'Use parameterized queries.',
+                confidence: 0.95,
+                provenance: 'ai',
+                likelihood: 'HIGH',
+                riskScore: 9,
+                canonicalId: 'owlvex.issue.sql_injection.001',
+                canonicalTitle: 'SQL Injection',
+            },
+        };
+
+        await provider.applyPendingFixPreview();
+
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
+            'Verification complete: the finding is still present after the kept fix.',
+        );
+    });
+
+    it('reports risk reduction when the rescanned finding family remains but with lower risk', async () => {
+        const complete = jest.fn().mockResolvedValue({
+            content: '```javascript\nconst query = db.query(sql, [req.query.id]);\n```',
+        });
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\target.js');
+        const originalText = 'const query = "SELECT * FROM users WHERE id = " + req.query.id;';
+        const registry = {
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        };
+        const storage = {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        };
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async () => ({
+            uri: targetUri,
+            getText: () => originalText,
+        }));
+        (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
+        (vscode.window.showTextDocument as jest.Mock).mockResolvedValue({ revealRange: jest.fn() });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 7,
+                        findings: [{
+                            id: 'rescanned-sqli-lower-risk',
+                            line: 1,
+                            lineEnd: 1,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            ruleCode: 'SQ-001',
+                            title: 'SQL Injection',
+                            canonicalId: 'owlvex.issue.sql_injection.001',
+                            canonicalTitle: 'SQL Injection',
+                            explanation: 'The query construction remains risky but the sink is partially constrained.',
+                            threat: 'Attackers may still influence the query.',
+                            fix: 'Use parameterized queries.',
+                            confidence: 1,
+                            provenance: 'deterministic',
+                            likelihood: 'HIGH',
+                            riskScore: 7,
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: '1 finding detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
+
+        const provider = new ChatViewProvider(registry as any, storage as any);
+        (provider as any).pendingFixPreview = {
+            targetPath: targetUri.fsPath,
+            originalText,
+            patchedText: originalText,
+            title: 'SQL Injection',
+            reviewedPaths: [targetUri.fsPath],
+            finding: {
+                id: 'ai-sqli',
+                line: 1,
+                lineEnd: 1,
+                severity: 'HIGH',
+                framework: 'OWASP',
+                ruleCode: 'A03-SQL',
+                title: 'SQL Injection',
+                explanation: 'Untrusted request data is concatenated into SQL.',
+                threat: 'Attackers can alter database queries.',
+                fix: 'Use parameterized queries.',
+                confidence: 0.95,
+                provenance: 'ai',
+                likelihood: 'HIGH',
+                riskScore: 9,
+                canonicalId: 'owlvex.issue.sql_injection.001',
+                canonicalTitle: 'SQL Injection',
+            },
+        };
+
+        await provider.applyPendingFixPreview();
+
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
+            'Verification complete: the finding still exists, but its risk dropped from 9/10 to 7/10.',
+        );
     });
 
     it('opens a source action from a context summary message', async () => {

@@ -199,8 +199,8 @@ The current onboarding path for AI-backed use is:
 
 Current product direction for customer entry:
 
-- Free and Trial should move to a lightweight email-registration plus verification flow rather than anonymous licence-key distribution
-- the first release of that flow should stay deliberately small:
+- Free and Trial now use a lightweight email-registration plus verification flow rather than anonymous licence-key distribution
+- the first release of that flow stays deliberately small:
   - email registration
   - backend-issued tracked licence
   - extension-side storage of the issued key
@@ -287,9 +287,9 @@ Current remediation posture:
 
 **Trial onboarding** - choose Free, Start Trial, or Enter Existing Licence; register with email for Free or Trial; verify the email code; configure backend, enter or validate the issued licence, configure an LLM, and verify whether the AI-backed path is ready without editing settings files by hand.
 
-**Customer entry direction** - Owlvex should support a lightweight registration path where a user installs the extension, chooses Free or Trial, registers with email, verifies that email, receives or is issued a tracked licence, and continues setup in-product. Marketplace distribution and automated payment are later workstreams, not prerequisites for this early customer-entry model.
+**Customer entry direction** - Owlvex now supports a lightweight registration path where a user installs the extension, chooses Free or Trial, registers with email, verifies that email, receives an issued tracked licence, and continues setup in-product. Marketplace distribution and automated payment are later workstreams, not prerequisites for this early customer-entry model.
 
-**Early customer operations** - Owlvex also needs a fast internal support surface to inspect customers, pending registrations, and issued licences by email. A read-only admin view or tool is part of early-customer readiness because support and recovery should not require manual database browsing.
+**Early customer operations** - Owlvex now has an early internal support surface to inspect customers, pending registrations, and issued licences by email. That read-only admin surface and companion ops tools are part of early-customer readiness because support and recovery should not require manual database browsing.
 
 That support surface should also cover:
 - resend verification for pending registrations
@@ -320,7 +320,10 @@ Additional AI-only demo fixtures:
 - `23-ssrf-safe.js` -> safe companion for SSRF handling
 - `24-jwt-validation-unsafe.js` -> AI-only weak JWT validation coverage example
 - `25-jwt-validation-safe.js` -> safe companion for JWT validation
-- `26-deserialization-unsafe.py` -> AI-only insecure deserialization coverage example
+
+Additional deterministic fixture pair:
+
+- `26-deserialization-unsafe.py` -> deterministic insecure deserialization finding
 - `27-deserialization-safe.py` -> safe companion for deserialization handling
 
 Demo runbook: [docs/DEMO_RUNBOOK.md](./DEMO_RUNBOOK.md)

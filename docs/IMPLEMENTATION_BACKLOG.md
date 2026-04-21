@@ -46,7 +46,7 @@ Current product shape:
 - backend provides licence, prompt, catalog, and metadata services
 - backend must not receive raw source code for scanning
 - extension now supports a trial-oriented onboarding path for backend, licence, and provider configuration
-- the next customer-entry direction is lightweight email-based registration plus verification for Free and Trial so licences are issued only to a verified customer identity
+- extension now supports lightweight email-based registration plus verification for Free and Trial so licences are issued only to a verified customer identity
 - AI-backed findings now expose multi-pass corroboration detail through finder, verifier, and skeptic roles
 
 ## Build Principles

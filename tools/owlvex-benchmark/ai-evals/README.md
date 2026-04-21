@@ -23,8 +23,6 @@ Current starter cases:
 - `tools/demo/23-ssrf-safe.js`
 - `tools/demo/24-jwt-validation-unsafe.js`
 - `tools/demo/25-jwt-validation-safe.js`
-- `tools/demo/26-deserialization-unsafe.py`
-- `tools/demo/27-deserialization-safe.py`
 
 The contract for this lane is:
 
@@ -34,6 +32,8 @@ The contract for this lane is:
 - wording guardrails can be checked for sensitive classes like CORS
 - framework scope can be asserted when a report is generated under a known framework selection
 - these cases must never be counted as deterministic benchmark coverage
+
+`tools/demo/26-deserialization-unsafe.py` and `tools/demo/27-deserialization-safe.py` were removed from this lane after insecure deserialization was promoted into deterministic coverage.
 
 Manifest cases can also assert:
 

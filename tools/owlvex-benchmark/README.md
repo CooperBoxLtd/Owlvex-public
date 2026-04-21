@@ -23,7 +23,7 @@ For model-assisted issue classes that are **not** part of the deterministic rele
 
 The repo also now includes curated framework and cheat-sheet packs under `docs/data/` so the AI lane can evolve toward more explicit grounding rather than relying only on model familiarity with OWASP/CWE/NIST terminology.
 The AI eval runner can also verify framework-scope expectations and wording guardrails from generated reports, not just whether a finding showed up.
-Current AI-only examples include open redirect, CSRF, permissive CORS, SSRF, weak JWT validation, and insecure deserialization fixtures under `tools/demo/`.
+Current AI-only examples include open redirect, CSRF, permissive CORS, SSRF, and weak JWT validation fixtures under `tools/demo/`.
 
 ---
 

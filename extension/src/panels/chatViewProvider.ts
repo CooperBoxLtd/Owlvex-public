@@ -988,6 +988,30 @@ function buildPendingFixPreviewActions(): ChatMessageAction[] {
     ];
 }
 
+function buildActiveFixPreviewActions(options: {
+    finding?: Finding;
+    targetPath?: string;
+    items?: ActionableFindingTarget[];
+}): ChatMessageAction[] {
+    const actions: ChatMessageAction[] = [];
+    const batchAction = options.items?.length ? buildBatchReviewFixAction(options.items) : undefined;
+    const singleAction = options.finding ? buildReviewFixAction(options.finding, options.targetPath) : undefined;
+    const regenerateAction = singleAction ?? batchAction;
+    if (regenerateAction) {
+        actions.push({
+            ...regenerateAction,
+            id: `${regenerateAction.id}-retry`,
+            label: 'Regenerate diff',
+        });
+    }
+
+    return [...actions, ...buildPendingFixPreviewActions()];
+}
+
+function hasMeaningfulPreviewChange(originalText: string, patchedText: string): boolean {
+    return Boolean(patchedText.trim()) && patchedText !== originalText;
+}
+
 function buildPendingFixPreviewMessage(finding: Finding, targetPath: string): string {
     const fileLabel = vscode.workspace.asRelativePath(vscode.Uri.file(targetPath), false);
     const findingLabel = finding.canonicalTitle || finding.title;
@@ -1339,14 +1363,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
 
             const patched = extractPatchedFileContent(response.content || '', document.getText());
-            const previewDoc = await vscode.workspace.openTextDocument({
-                language: document.languageId,
-                content: patched,
-            });
+            if (!hasMeaningfulPreviewChange(document.getText(), patched)) {
+                throw new Error('Owlvex could not produce a meaningful code diff. Ask "fix code" to regenerate the preview.');
+            }
+
+            const previewDoc = createPreviewDocumentUri(
+                `${path.basename(document.uri.fsPath)}-patched`,
+                patched,
+            );
             await vscode.commands.executeCommand(
                 'vscode.diff',
                 document.uri,
-                previewDoc.uri,
+                previewDoc,
                 `${PROFILE.displayLabel}: Fix Preview - ${finding.canonicalTitle || finding.title}`,
             );
 
@@ -1354,7 +1382,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'assistant',
                 content: buildPendingFixPreviewMessage(finding, document.uri.fsPath),
                 kind: 'advisory',
-                actions: buildPendingFixPreviewActions(),
+                actions: buildActiveFixPreviewActions({
+                    finding,
+                    targetPath: document.uri.fsPath,
+                }),
             };
             this.pendingFixPreview = {
                 targetPath: document.uri.fsPath,
@@ -1369,9 +1400,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'assistant',
                 content: `Fix preview failed: ${error.message}`,
                 kind: 'advisory',
+                actions: [
+                    buildReviewFixAction(finding, document.uri.fsPath),
+                ],
             };
             this.pendingFixPreview = undefined;
-            this.latestActionableTargetPath = undefined;
         }
 
         void this.persistState();
@@ -1444,6 +1477,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 });
 
                 const patched = extractPatchedFileContent(response.content || '', document.getText());
+                if (!hasMeaningfulPreviewChange(document.getText(), patched)) {
+                    throw new Error(`Owlvex could not produce a meaningful diff for ${vscode.workspace.asRelativePath(targetUri, false)}. Ask "fix code" to regenerate the preview.`);
+                }
                 changes.push({
                     targetPath,
                     originalText: document.getText(),
@@ -1489,13 +1525,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'assistant',
                 content: buildBatchPendingFixPreviewMessage(changes),
                 kind: 'advisory',
-                actions: buildPendingFixPreviewActions(),
+                actions: buildActiveFixPreviewActions({
+                    items: validItems,
+                }),
             };
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
                 content: `Fix preview failed: ${error.message}`,
                 kind: 'advisory',
+                actions: buildBatchReviewFixAction(validItems)
+                    ? [buildBatchReviewFixAction(validItems)!]
+                    : undefined,
             };
             this.pendingFixPreview = undefined;
         }
@@ -2394,6 +2435,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'toggleTelemetry') {
+            await vscode.commands.executeCommand(PROFILE.commands.toggleTelemetry);
+            const licenceInfo = this.licenceMgr.getCachedInfo();
+            this.messages.push({
+                role: 'system',
+                content: licenceInfo?.features.telemetryOptOut
+                    ? [
+                        'Telemetry preference:',
+                        `- Optional product telemetry is currently ${licenceInfo.features.telemetryEnabled ? 'enabled' : 'disabled'}.`,
+                        '- Licensing, quota enforcement, and abuse controls still require minimum operational checks.',
+                    ].join('\n')
+                    : [
+                        'Telemetry preference:',
+                        `- ${licenceInfo?.plan === 'trial' ? 'Trial' : 'Free'} access requires product telemetry.`,
+                        '- Paid licences can opt out of optional product usage telemetry.',
+                    ].join('\n'),
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'startTrial') {
             await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'trial');
             const licenceInfo = this.licenceMgr.getCachedInfo();
@@ -3042,11 +3106,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private isSameFindingFamily(candidate: Finding, reference: Finding): boolean {
-        return (
-            (!!reference.canonicalId && candidate.canonicalId === reference.canonicalId)
-            || candidate.title === reference.title
-            || (!!reference.canonicalTitle && candidate.canonicalTitle === reference.canonicalTitle)
+        const normalize = (value?: string): string | undefined => {
+            const normalized = value?.trim().toLowerCase();
+            return normalized ? normalized : undefined;
+        };
+        const candidateCanonicalId = normalize(candidate.canonicalId);
+        const referenceCanonicalId = normalize(reference.canonicalId);
+        if (candidateCanonicalId && referenceCanonicalId && candidateCanonicalId === referenceCanonicalId) {
+            return true;
+        }
+
+        const candidateTitles = new Set(
+            [candidate.title, candidate.canonicalTitle]
+                .map(value => normalize(value))
+                .filter((value): value is string => Boolean(value)),
         );
+        const referenceTitles = [reference.title, reference.canonicalTitle]
+            .map(value => normalize(value))
+            .filter((value): value is string => Boolean(value));
+
+        return referenceTitles.some(title => candidateTitles.has(title));
     }
 
     private getRestorableMessages(): ChatMessage[] | undefined {
@@ -3108,7 +3187,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private buildFixFollowUpActions(prompt: string, suggestedFinding?: Finding): ChatMessageAction[] | undefined {
         if (this.pendingFixPreview && (looksLikeFixRequest(prompt) || looksLikeImplementRequest(prompt) || looksLikeFindingFollowUp(prompt))) {
-            return buildPendingFixPreviewActions();
+            const finding = this.pendingFixPreview.finding ?? suggestedFinding ?? this.latestActionableFinding;
+            const targetPath = this.getActiveFixTargetPath();
+            return buildActiveFixPreviewActions({
+                finding,
+                targetPath,
+                items: this.latestActionableItems,
+            });
         }
 
         if (!(looksLikeFixRequest(prompt) || looksLikeImplementRequest(prompt) || looksLikeFindingFollowUp(prompt))) {
@@ -4039,6 +4124,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             <button class="chip" data-action="startTrial">Start Trial</button>
             <button class="chip" data-action="configureBackend">Configure Backend</button>
             <button class="chip" data-action="enterLicence">Enter Licence</button>
+            <button class="chip" data-action="toggleTelemetry">Telemetry</button>
             <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
             <button class="chip" data-action="testAI">Test Connection</button>
             <button class="chip" data-action="securityBoundary">Security Boundary</button>

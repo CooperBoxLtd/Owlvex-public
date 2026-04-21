@@ -89,23 +89,6 @@
         "verdict": "clean-or-advisory",
         "must_not_include_issue_ids": ["owlvex.issue.weak_jwt_validation.001"]
       }
-    },
-    {
-      "id": "ai-deserialization-unsafe",
-      "file": "tools/demo/26-deserialization-unsafe.py",
-      "expected": {
-        "verdict": "ai-finding",
-        "preferred_issue_ids": ["owlvex.issue.insecure_deserialization.001"],
-        "preferred_provenance": "ai"
-      }
-    },
-    {
-      "id": "ai-deserialization-safe",
-      "file": "tools/demo/27-deserialization-safe.py",
-      "expected": {
-        "verdict": "clean-or-advisory",
-        "must_not_include_issue_ids": ["owlvex.issue.insecure_deserialization.001"]
-      }
     }
   ]
 }
