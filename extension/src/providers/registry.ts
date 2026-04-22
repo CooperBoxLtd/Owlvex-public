@@ -67,6 +67,15 @@ function getGlobalConfigurationTarget(): vscode.ConfigurationTarget {
     return vscode.ConfigurationTarget.Global;
 }
 
+function getEffectiveConfigurationTarget(settingKey: string): vscode.ConfigurationTarget {
+    const inspected = vscode.workspace.getConfiguration(PROFILE.configSection).inspect(settingKey);
+    if (inspected?.workspaceValue !== undefined) {
+        return vscode.ConfigurationTarget.Workspace;
+    }
+
+    return getGlobalConfigurationTarget();
+}
+
 function normalizeConfiguredModels(value: unknown): string[] {
     if (!Array.isArray(value)) {
         return [];
@@ -755,7 +764,7 @@ export class ProviderRegistry {
     }
 
     async setActiveProvider(id: string): Promise<void> {
-        await vscode.workspace.getConfiguration(PROFILE.configSection).update('provider', id, getGlobalConfigurationTarget());
+        await vscode.workspace.getConfiguration(PROFILE.configSection).update('provider', id, getEffectiveConfigurationTarget('provider'));
     }
 
     allProviders(): AIProvider[] {

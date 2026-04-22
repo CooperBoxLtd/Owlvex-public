@@ -123,6 +123,20 @@ describe('ProviderRegistry', () => {
             });
             expect(registry.getActive().id).toBe('openai');
         });
+
+        it('updates the workspace override target when provider is overridden at workspace scope', async () => {
+            (vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
+                get: (key: string, def: any) => key in configState ? configState[key] : def,
+                inspect: (key: string) => key === 'provider'
+                    ? { workspaceValue: 'azure-foundry', globalValue: 'anthropic' }
+                    : { workspaceValue: undefined, globalValue: undefined },
+                update: updateMock,
+            }));
+
+            await registry.setActiveProvider('anthropic');
+
+            expect(updateMock).toHaveBeenCalledWith('provider', 'anthropic', vscode.ConfigurationTarget.Workspace);
+        });
     });
 
     describe('provider model lists', () => {
