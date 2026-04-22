@@ -927,6 +927,61 @@ async def test_verify_email_registration_rejects_invalid_code(client):
 
 
 @pytest.mark.asyncio
+async def test_trial_cannot_be_activated_twice_for_same_email(client):
+    first_registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "one-trial@example.com", "plan": "trial"},
+    )
+    assert first_registration.status_code == 201
+    first_code = first_registration.json()["verification_code"]
+
+    first_verify = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "one-trial@example.com", "code": first_code},
+    )
+    assert first_verify.status_code == 201
+
+    second_registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "one-trial@example.com", "plan": "trial"},
+    )
+
+    assert second_registration.status_code == 403
+    assert "already been activated" in second_registration.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_trial_cannot_be_reissued_after_customer_delete(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "deleted-trial@example.com", "plan": "trial"},
+    )
+    assert registration.status_code == 201
+    verification_code = registration.json()["verification_code"]
+
+    verified = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "deleted-trial@example.com", "code": verification_code},
+    )
+    assert verified.status_code == 201
+
+    deleted = await client.post(
+        "/v1/admin/customer/delete",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"email": "deleted-trial@example.com"},
+    )
+    assert deleted.status_code == 200
+
+    second_registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "deleted-trial@example.com", "plan": "trial"},
+    )
+
+    assert second_registration.status_code == 403
+    assert "already been activated" in second_registration.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_paid_licence_can_disable_telemetry(client):
     generate_response = await client.post(
         "/v1/licences/generate",

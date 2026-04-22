@@ -95,6 +95,17 @@ class Customer(Base):
     audit_events = relationship("AdminAuditLog", back_populates="customer")
 
 
+class CustomerIdentity(Base):
+    __tablename__ = "customer_identities"
+
+    id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email             = Column(String(200), nullable=False, unique=True)
+    trial_activated_at = Column(TIMESTAMP(timezone=True))
+    free_activated_at  = Column(TIMESTAMP(timezone=True))
+    created_at        = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at        = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
 class Licence(Base):
     __tablename__ = "licences"
 

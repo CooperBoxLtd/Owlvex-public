@@ -83,6 +83,15 @@ ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_banned BOOLEAN DEFAULT false;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS banned_at TIMESTAMPTZ;
 ALTER TABLE customers ADD COLUMN IF NOT EXISTS ban_reason TEXT;
 
+CREATE TABLE IF NOT EXISTS customer_identities (
+    id                  UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email               VARCHAR(200) NOT NULL UNIQUE,
+    trial_activated_at  TIMESTAMPTZ,
+    free_activated_at   TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ  DEFAULT NOW()
+);
+
 CREATE TABLE licences (
     id                      UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_id             UUID         REFERENCES customers(id) ON DELETE SET NULL,

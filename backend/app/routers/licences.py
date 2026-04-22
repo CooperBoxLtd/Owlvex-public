@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
 from app.db.session import get_db
-from app.db.models import Customer, Licence
+from app.db.models import Customer, CustomerIdentity, Licence
 from app.services.licence_service import (
     validate_licence,
     generate_licence_key,
@@ -177,6 +177,10 @@ def _default_team_name_for_registration(email: str, company: Optional[str], name
     return email.split("@", 1)[0]
 
 
+def _normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
 async def _get_or_create_customer(
     db: AsyncSession,
     *,
@@ -185,6 +189,7 @@ async def _get_or_create_customer(
     company: Optional[str],
     source: str = "extension",
 ) -> Customer:
+    email = _normalize_email(email)
     result = await db.execute(select(Customer).where(Customer.email == email))
     customer = result.scalar_one_or_none()
     if customer:
@@ -207,7 +212,25 @@ async def _get_or_create_customer(
     return customer
 
 
+async def _get_or_create_customer_identity(
+    db: AsyncSession,
+    *,
+    email: str,
+) -> CustomerIdentity:
+    normalized_email = _normalize_email(email)
+    result = await db.execute(select(CustomerIdentity).where(CustomerIdentity.email == normalized_email))
+    identity = result.scalar_one_or_none()
+    if identity:
+        return identity
+
+    identity = CustomerIdentity(email=normalized_email)
+    db.add(identity)
+    await db.flush()
+    return identity
+
+
 async def _deactivate_existing_plan_licences(db: AsyncSession, *, email: str, plan: str) -> None:
+    email = _normalize_email(email)
     result = await db.execute(
         select(Licence).where(
             Licence.email == email,
@@ -312,6 +335,7 @@ async def register(
     db: AsyncSession = Depends(get_db),
 ):
     current_settings = get_settings()
+    normalized_email = _normalize_email(str(body.email))
     if not allow_control_plane_request(
         "licence_register",
         request,
@@ -325,9 +349,16 @@ async def register(
     if plan not in {"free", "trial"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only free and trial registration are supported here")
 
+    identity = await _get_or_create_customer_identity(db, email=normalized_email)
+    if plan == "trial" and identity.trial_activated_at:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A trial has already been activated for this email.",
+        )
+
     customer = await _get_or_create_customer(
         db,
-        email=str(body.email),
+        email=normalized_email,
         name=body.name,
         company=body.company,
     )
@@ -341,7 +372,7 @@ async def register(
     if current_settings.resend_api_key:
         try:
             send_verification_email(
-                to_email=str(body.email),
+                to_email=normalized_email,
                 verification_code=verification_code,
                 plan=plan,
             )
@@ -355,7 +386,7 @@ async def register(
 
     await db.commit()
     return _build_registration_response(
-        email=str(body.email),
+        email=normalized_email,
         plan=plan,
         verification_code=verification_code,
         settings=current_settings,
@@ -367,7 +398,8 @@ async def verify_email_registration(
     body: VerifyRegistrationRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(Customer).where(Customer.email == str(body.email)))
+    normalized_email = _normalize_email(str(body.email))
+    result = await db.execute(select(Customer).where(Customer.email == normalized_email))
     customer = result.scalar_one_or_none()
     if not customer or not customer.verification_code_hash or not customer.pending_plan:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending registration found for this email")
@@ -383,6 +415,12 @@ async def verify_email_registration(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Verification code is invalid")
 
     plan = customer.pending_plan
+    identity = await _get_or_create_customer_identity(db, email=customer.email)
+    if plan == "trial" and identity.trial_activated_at:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="A trial has already been activated for this email.",
+        )
     await _deactivate_existing_plan_licences(db, email=customer.email, plan=plan)
 
     raw_key = generate_licence_key()
@@ -396,6 +434,10 @@ async def verify_email_registration(
     customer.verification_code_hash = None
     customer.verification_code_expires_at = None
     customer.pending_plan = None
+    if plan == "trial" and not identity.trial_activated_at:
+        identity.trial_activated_at = now
+    if plan == "free" and not identity.free_activated_at:
+        identity.free_activated_at = now
 
     licence = Licence(
         customer_id=customer.id,

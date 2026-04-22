@@ -134,6 +134,16 @@ def _create_sqlite_tables(conn):
         )
     """))
     conn.execute(__import__('sqlalchemy').text("""
+        CREATE TABLE IF NOT EXISTS customer_identities (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL UNIQUE,
+            trial_activated_at TIMESTAMP,
+            free_activated_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.execute(__import__('sqlalchemy').text("""
         CREATE TABLE IF NOT EXISTS licences (
             id TEXT PRIMARY KEY,
             customer_id TEXT,
