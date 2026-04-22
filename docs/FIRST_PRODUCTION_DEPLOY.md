@@ -97,11 +97,11 @@ Leave these empty for the first deploy:
 - `STRIPE_PRICE_TEAM_ANNUAL`
 - `RESEND_API_KEY`
 
-`FROM_EMAIL` can remain:
+`FROM_EMAIL` must be a sender address on a domain that is actually verified in Resend, for example:
 
-- `noreply@owlvex.io`
+- `noreply@owlvex.cooperbox.co.uk`
 
-If registration emails should work in production, `FROM_EMAIL` must be a sender address or domain that is actually verified in Resend. An unverified sender will cause registration to fail at delivery time.
+Registration verification emails and activation-confirmation emails will fail at delivery time if the sender is not verified in Resend.
 
 ## Step 4: Provision The Azure Infrastructure
 

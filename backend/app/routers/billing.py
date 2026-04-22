@@ -99,13 +99,12 @@ async def _handle_checkout_completed(db: AsyncSession, session: dict) -> None:
         plan,
         _redact_licence_key(raw_key),
     )
-    await _send_licence_email(customer_email, team_name, plan, raw_key)
+    await _send_licence_email(customer_email, team_name, plan)
 
-
-async def _send_licence_email(email: str, team_name: str, plan: str, raw_key: str) -> None:
+async def _send_licence_email(email: str, team_name: str, plan: str) -> None:
     settings = get_settings()
     if not settings.resend_api_key:
-        logger.warning("Resend API key not configured; licence key not emailed")
+        logger.warning("Resend API key not configured; licence confirmation email not sent")
         return
 
     try:
@@ -113,11 +112,10 @@ async def _send_licence_email(email: str, team_name: str, plan: str, raw_key: st
             to_email=email,
             team_name=team_name,
             plan=plan,
-            raw_key=raw_key,
         )
-        logger.info("Licence email sent to %s", email)
+        logger.info("Licence confirmation email sent to %s", email)
     except Exception as exc:
-        logger.error("Failed to send licence email to %s: %s", email, exc)
+        logger.error("Failed to send licence confirmation email to %s: %s", email, exc)
         # Do not raise; licence is already created and email failure is non-fatal.
 
 

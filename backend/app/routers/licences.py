@@ -418,7 +418,6 @@ async def verify_email_registration(
                 to_email=licence.email,
                 team_name=licence.team_name,
                 plan=licence.plan,
-                raw_key=raw_key,
                 expires_at=licence.expires_at.isoformat() if licence.expires_at else None,
             )
         except RuntimeError:

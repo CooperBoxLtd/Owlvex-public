@@ -118,7 +118,7 @@ const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
 
 interface RegisterAccessResponse {
     status: 'verification_required';
-    plan: string;
+    plan: 'free' | 'trial';
     email: string;
     delivery: 'email' | 'development_inline';
     expires_in_minutes: number;
@@ -507,7 +507,80 @@ export function buildVerificationPromptMessage(
     }
 
     lines.push('Enter the verification code to activate your licence.');
+    lines.push('If the code expires or does not arrive, use Resend Code to issue a new one.');
     return lines.join('\n');
+}
+
+async function completeTrackedRegistrationVerification(
+    apiUrl: string,
+    initialRegistration: RegisterAccessResponse,
+): Promise<VerifyRegistrationResponse | undefined> {
+    let registration = initialRegistration;
+
+    while (true) {
+        const code = await vscode.window.showInputBox({
+            prompt: `Enter the verification code sent to ${registration.email}`,
+            placeHolder: '123456',
+            ignoreFocusOut: true,
+            value: registration.verification_code ?? '',
+        });
+
+        if (!code?.trim()) {
+            const choice = await vscode.window.showInformationMessage(
+                `${PROFILE.displayLabel}: Registration is pending until you verify the email code.`,
+                'Enter Code',
+                'Resend Code',
+            );
+
+            if (choice === 'Resend Code') {
+                registration = await registerTrackedAccessRequest(apiUrl, {
+                    email: registration.email,
+                    plan: registration.plan,
+                });
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: ${buildVerificationPromptMessage(registration)}`,
+                );
+                continue;
+            }
+
+            if (choice === 'Enter Code') {
+                continue;
+            }
+
+            return undefined;
+        }
+
+        try {
+            return await verifyTrackedAccessRequest(apiUrl, {
+                email: registration.email,
+                code: code.trim(),
+            });
+        } catch (error: any) {
+            const choice = await vscode.window.showWarningMessage(
+                `${PROFILE.displayLabel}: ${error.message}`,
+                'Try Again',
+                'Resend Code',
+                'Cancel',
+            );
+
+            if (choice === 'Resend Code') {
+                registration = await registerTrackedAccessRequest(apiUrl, {
+                    email: registration.email,
+                    plan: registration.plan,
+                });
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: ${buildVerificationPromptMessage(registration)}`,
+                );
+                continue;
+            }
+
+            if (choice === 'Try Again') {
+                continue;
+            }
+
+            return undefined;
+        }
+    }
 }
 
 function buildBackendDefaultSummary(apiUrl: string): string {
@@ -1344,21 +1417,10 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: ${buildVerificationPromptMessage(registration)}`,
                 );
-                const code = await vscode.window.showInputBox({
-                    prompt: `Enter the verification code sent to ${registration.email}`,
-                    placeHolder: '123456',
-                    ignoreFocusOut: true,
-                    value: registration.verification_code ?? '',
-                });
-                if (!code) {
-                    vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Registration is pending until you verify the email code.`);
+                const verified = await completeTrackedRegistrationVerification(getConfiguredApiUrl(), registration);
+                if (!verified) {
                     return;
                 }
-
-                const verified = await verifyTrackedAccessRequest(getConfiguredApiUrl(), {
-                    email: registration.email,
-                    code: code.trim(),
-                });
                 await licenceMgr.storeKey(verified.licence_key);
                 const info = await licenceMgr.validate(getConfiguredApiUrl());
                 await promptOnboardingChoices(

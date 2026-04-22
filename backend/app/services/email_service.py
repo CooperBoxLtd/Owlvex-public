@@ -83,31 +83,25 @@ def send_licence_issued_email(
     to_email: str,
     team_name: str,
     plan: str,
-    raw_key: str,
     expires_at: str | None = None,
 ) -> None:
-    subject = "Your Owlvex licence key"
+    subject = "Your Owlvex access is active"
     expiry_line = f"\nTrial expires at: {expires_at}\n" if expires_at else "\n"
     text = (
         f"Hi {team_name},\n\n"
         f"Thank you for registering for Owlvex ({plan} plan).\n"
-        f"Your licence key is:\n\n{raw_key}\n"
+        "Your access is now active in the Owlvex extension.\n"
         f"{expiry_line}\n"
-        "To activate it:\n"
-        "1. Open VS Code\n"
-        "2. Open the Command Palette\n"
-        "3. Run 'Owlvex: Enter Licence Key'\n"
-        "4. Paste your key\n\n"
-        "Keep this email because the key cannot be retrieved again."
+        "You do not need to enter a licence key manually if you completed verification in the extension.\n\n"
+        "If you need help restoring access later, contact support or use the Owlvex customer operations tools."
     )
     html = (
-        "<h2>Your Owlvex licence key</h2>"
+        "<h2>Your Owlvex access is active</h2>"
         f"<p>Hi {team_name},</p>"
         f"<p>Thank you for registering for Owlvex ({plan} plan).</p>"
-        "<p>Your licence key is:</p>"
-        f"<p style=\"font-family:monospace;font-size:16px;background:#f4f4f4;padding:12px;border-radius:4px;\">{raw_key}</p>"
+        "<p>Your access is now active in the Owlvex extension.</p>"
         + (f"<p>Trial expires at: {expires_at}</p>" if expires_at else "")
-        + "<p>To activate it, open VS Code, run <strong>Owlvex: Enter Licence Key</strong>, and paste your key.</p>"
-        "<p>Keep this email because the key cannot be retrieved again.</p>"
+        + "<p>You do not need to enter a licence key manually if you completed verification in the extension.</p>"
+        "<p>If you need help restoring access later, contact support or use the Owlvex customer operations tools.</p>"
     )
     _send_email(to_email=to_email, subject=subject, text=text, html=html)

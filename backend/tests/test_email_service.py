@@ -88,3 +88,44 @@ def test_send_verification_email_surfaces_resend_error_detail(monkeypatch):
         assert "HTTP 403" in message
         assert "validation_error" in message
         assert "verified domain" in message
+
+
+def test_send_licence_issued_email_sends_activation_confirmation_without_raw_key(monkeypatch):
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        resend_api_key="re_test",
+        from_email="verified-sender@example.com",
+        environment="test",
+    )
+    monkeypatch.setattr(email_service, "get_settings", lambda: settings)
+
+    captured = {}
+
+    class _Response:
+        status = 202
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    def fake_urlopen(req, timeout=0):
+        captured["body"] = json.loads(req.data.decode("utf-8"))
+        return _Response()
+
+    monkeypatch.setattr(email_service.request, "urlopen", fake_urlopen)
+
+    email_service.send_licence_issued_email(
+        to_email="user@example.com",
+        team_name="Owlvex Team",
+        plan="trial",
+        expires_at="2026-04-29T12:00:00+00:00",
+    )
+
+    assert captured["body"]["subject"] == "Your Owlvex access is active"
+    assert "Your access is now active in the Owlvex extension." in captured["body"]["text"]
+    assert "Enter Licence Key" not in captured["body"]["text"]
+    assert "owlvex_lic_" not in captured["body"]["text"]

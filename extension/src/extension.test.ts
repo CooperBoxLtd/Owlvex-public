@@ -163,22 +163,26 @@ describe('plan access helpers', () => {
     });
 
     it('builds verification prompt messaging for email and dev-inline delivery', () => {
-        expect(buildVerificationPromptMessage({
+        const emailPrompt = buildVerificationPromptMessage({
             status: 'verification_required',
             plan: 'trial',
             email: 'trial-user@example.com',
             delivery: 'email',
             expires_in_minutes: 15,
-        } as any)).toContain('A verification code was sent to trial-user@example.com');
+        } as any);
+        expect(emailPrompt).toContain('A verification code was sent to trial-user@example.com');
+        expect(emailPrompt).toContain('Resend Code');
 
-        expect(buildVerificationPromptMessage({
+        const inlinePrompt = buildVerificationPromptMessage({
             status: 'verification_required',
             plan: 'free',
             email: 'free-user@example.com',
             delivery: 'development_inline',
             expires_in_minutes: 15,
             verification_code: '123456',
-        } as any)).toContain('Verification code: 123456');
+        } as any);
+        expect(inlinePrompt).toContain('Verification code: 123456');
+        expect(inlinePrompt).toContain('Resend Code');
     });
 
     it('builds guided onboarding action choices for backend, registration, and provider setup steps', () => {
