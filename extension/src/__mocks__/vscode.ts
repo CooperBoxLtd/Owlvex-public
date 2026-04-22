@@ -38,6 +38,7 @@ export const workspace: any = {
     fs: {
         readFile: jest.fn(),
         readDirectory: jest.fn(),
+        stat: jest.fn(),
         writeFile: jest.fn(),
     },
 };

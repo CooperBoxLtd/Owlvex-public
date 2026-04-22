@@ -28,6 +28,8 @@ export const PROFILE = {
         "openProjectContext": "owlvex.openProjectContext",
         "testAI": "owlvex.testAIConnection",
         "testTrialSetup": "owlvex.testTrialSetup",
+        "showOnboarding": "owlvex.showOnboarding",
+        "selectProjectRoot": "owlvex.selectProjectRoot",
         "enterLicence": "owlvex.enterLicence",
         "removeLicence": "owlvex.removeLicence",
         "toggleTelemetry": "owlvex.toggleTelemetry",

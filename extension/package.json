@@ -78,6 +78,14 @@
         "title": "Owlvex: Test Trial Setup"
       },
       {
+        "command": "owlvex.showOnboarding",
+        "title": "Owlvex: Show Onboarding"
+      },
+      {
+        "command": "owlvex.selectProjectRoot",
+        "title": "Owlvex: Select Project Root"
+      },
+      {
         "command": "owlvex.enterLicence",
         "title": "Owlvex: Enter Licence Key"
       },
@@ -238,6 +246,11 @@
           "type": "string",
           "default": "",
           "description": "Optional local file path to a project context contract document used to ground AI scans and remediation prompts"
+        },
+        "owlvex.projectRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Repo root Owlvex should treat as the active project boundary for workspace scans and repo-wide AI context"
         }
       }
     },

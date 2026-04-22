@@ -76,8 +76,8 @@ export class StatusBar {
     showUnlicensed(): void {
         this.licenceInfo = null;
         this.item.text = `$(shield-x) ${PROFILE.statusBarLabel}: No Licence`;
-        this.item.command = PROFILE.commands.enterLicence;
-        this.item.tooltip = 'Click to enter your licence key';
+        this.item.command = PROFILE.commands.showOnboarding;
+        this.item.tooltip = 'Click to choose Free, Trial, or manual licence entry';
         this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
     }
 

@@ -9,7 +9,7 @@ import { getGroundedFrameworkLabels } from '../frameworks/frameworkGrounding';
 import type { StoredScanRecord } from '../scanner/calibrationReview';
 import type { Finding, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
-import { getProjectContextSummaryFromConfig, loadProjectContextInfo } from '../projectContext';
+import { getProjectContextSummaryFromConfig, getProjectRootSummaryFromConfig, loadProjectContextInfo, resolveProjectRootInfo } from '../projectContext';
 import { createPreviewDocumentUri } from './previewDocumentProvider';
 import { buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, hasAiAssistantAccess, LicenceManager } from '../licence/licenceManager';
 
@@ -739,6 +739,11 @@ interface WorkspaceFolderMatch {
     score: number;
 }
 
+interface RepoScopeRoot {
+    uri: vscode.Uri;
+    label: string;
+}
+
 function buildWorkspacePathTokenSet(prompt: string): Set<string> {
     const normalized = prompt
         .toLowerCase()
@@ -790,7 +795,7 @@ function scoreWorkspacePathLabel(prompt: string, promptTokens: Set<string>, labe
 }
 
 async function collectWorkspaceDirectoryCandidates(
-    folder: vscode.WorkspaceFolder,
+    folder: RepoScopeRoot,
     prompt: string,
     maxDepth = 3,
 ): Promise<WorkspaceFolderMatch[]> {
@@ -1825,10 +1830,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
             const provider = this.registry.getActive();
             this.currentMode = inferredMode;
-            const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
-            const workspaceSummary = workspaceFolders.length
-                ? workspaceFolders.map(folder => folder.name).join(', ')
-                : 'No workspace folder is currently open.';
+            const workspaceSummary = this.getWorkspaceSummary();
             const workingScope = this.getWorkingScope();
             const editorContext = this.currentMode === 'general'
                 ? { summary: 'Working context: not injected by default in General mode', promptContext: 'Working context: not injected by default in General mode.' }
@@ -2383,7 +2385,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const apiUrl = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl;
             this.messages.push({
                 role: 'system',
-                content: `Backend override is set to ${apiUrl}. Owlvex uses the packaged backend by default unless you explicitly override it.`,
+                content: apiUrl === PROFILE.defaultApiUrl
+                    ? `Owlvex is using this build's packaged backend: ${apiUrl}.`
+                    : `Owlvex is using an explicit backend override: ${apiUrl}.`,
                 kind: 'advisory',
             });
             void this.persistState();
@@ -2602,10 +2606,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (action === 'showOnboarding') {
             const result = await vscode.commands.executeCommand<any>(PROFILE.commands.testTrialSetup);
             const summary = Array.isArray(result?.summary) ? result.summary : [];
+            const projectRoot = getProjectRootSummaryFromConfig();
             const lines = [
                 'Owlvex onboarding checklist:',
                 `- Backend connection: ${result?.backend ? 'ready' : 'package default unreachable'}`,
                 `- Licence or registration: ${result?.licence ? 'ready' : 'needs setup'}`,
+                `- Project root: ${projectRoot !== 'not set' ? projectRoot : 'needs selection'}`,
                 `- LLM connection: ${result?.provider ? 'ready' : 'needs setup'}`,
                 `- First meaningful scan: ${result?.backend && result?.licence ? 'available now' : 'blocked until setup is complete'}`,
                 '',
@@ -2634,6 +2640,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     label: 'Configure LLM',
                     kind: 'quickAction',
                     quickAction: 'setupAI',
+                });
+            }
+            if (projectRoot === 'not set') {
+                actions.push({
+                    id: 'onboarding-select-project-root',
+                    label: 'Select Project Root',
+                    kind: 'quickAction',
+                    quickAction: 'selectProjectRoot',
                 });
             }
             if (result?.backend && result?.licence) {
@@ -2671,6 +2685,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action === 'securityBoundary') {
+            const projectRoot = getProjectRootSummaryFromConfig();
             this.messages.push({
                 role: 'system',
                 content: [
@@ -2678,6 +2693,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     '- Deterministic scanning runs locally in the extension.',
                     '- Source code for AI-backed review goes directly to your selected provider.',
                     '- Owlvex backend is intended to receive licence, prompt, pack, and scan/comparison metadata rather than raw source code.',
+                    `- Repo-wide AI context stays inside the selected project root (${projectRoot !== 'not set' ? projectRoot : 'not set yet'}).`,
                     '- Project context stays local by default and is only used in direct AI review when configured.',
                     '- Fixes stay in preview until you choose Keep fix.',
                 ].join('\n'),
@@ -2696,6 +2712,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 content: projectContextSummary !== 'none'
                     ? `Project context is ready: ${projectContextSummary}.`
                     : 'Opened project context. Save or configure it locally to reuse it in scans.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'selectProjectRoot') {
+            await vscode.commands.executeCommand(PROFILE.commands.selectProjectRoot);
+            const projectRoot = getProjectRootSummaryFromConfig();
+            this.messages.push({
+                role: 'system',
+                content: projectRoot !== 'not set'
+                    ? `Project root is now ${projectRoot}. Repo-wide AI context and workspace scans will stay inside this boundary.`
+                    : 'Project root selection was not changed.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -3504,16 +3535,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async buildWorkspaceRepoContext(promptForRepoTarget?: string): Promise<EditorContext> {
+        const projectRoot = await resolveProjectRootInfo();
         const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
-        if (!workspaceFolders.length) {
+        const scopeRoots: RepoScopeRoot[] = projectRoot.uri
+            ? [{ uri: projectRoot.uri, label: projectRoot.label }]
+            : workspaceFolders.map(folder => ({ uri: folder.uri, label: folder.name }));
+
+        if (!scopeRoots.length) {
             return {
-                summary: 'Working scope: Workspace (no workspace folder open)',
-                promptContext: 'Working scope: Workspace\nNo workspace folder is open.',
+                summary: 'Working scope: Workspace (no project root selected)',
+                promptContext: 'Working scope: Workspace\nNo project root is configured and no workspace folder is open.',
             };
         }
 
         if (promptForRepoTarget && looksLikeRepoQuestion(promptForRepoTarget)) {
-            const targetMatches = (await Promise.all(workspaceFolders.slice(0, 3).map(folder => collectWorkspaceDirectoryCandidates(folder, promptForRepoTarget))))
+            const targetMatches = (await Promise.all(scopeRoots.slice(0, 3).map(folder => collectWorkspaceDirectoryCandidates(folder, promptForRepoTarget))))
                 .flat()
                 .sort((left, right) =>
                     right.score - left.score
@@ -3561,8 +3597,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     summary: `Working scope: Workspace (targeted module ${bestMatch.label})`,
                     promptContext: [
                         'Working scope: Workspace',
+                        `Selected project root: ${projectRoot.label}`,
                         `Targeted repo focus: ${bestMatch.label}`,
-                        'Prefer this module/app as the primary interpretation target. Use broader repo identity only as secondary background.',
+                        'Owlvex may use the full selected project root as context, but should keep this targeted module as the primary interpretation target.',
                         `Module path: ${bestMatch.label}`,
                         visibleEntries.length ? `Module entries: ${visibleEntries.join(', ')}` : 'Module entries: unavailable',
                         readme ? `README.md:\n${readme.length > 3000 ? `${readme.slice(0, 3000)}\n\n[truncated after 3000 characters]` : readme}` : '',
@@ -3573,7 +3610,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
         }
 
-        const rootSections = await Promise.all(workspaceFolders.slice(0, 3).map(async folder => {
+        const rootSections = await Promise.all(scopeRoots.slice(0, 3).map(async folder => {
             let entries: Array<[string, vscode.FileType]> = [];
             try {
                 entries = await vscode.workspace.fs.readDirectory(folder.uri);
@@ -3598,17 +3635,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }));
 
             return [
-                `Workspace folder: ${folder.name}`,
+                `Project root: ${folder.label}`,
                 visibleEntries.length ? `Top-level entries: ${visibleEntries.join(', ')}` : 'Top-level entries: unavailable',
                 ...keyFileSections.filter((section): section is string => Boolean(section)),
             ].join('\n\n');
         }));
 
         return {
-            summary: `Working scope: Workspace (${workspaceFolders.map(folder => folder.name).join(', ')})`,
+            summary: `Working scope: Workspace (${scopeRoots.map(folder => folder.label).join(', ')})`,
             promptContext: [
                 'Working scope: Workspace',
-                'AI may use repo-level structure and key root files within the open workspace.',
+                `Selected project root: ${projectRoot.label}`,
+                'AI may use the full selected project root, including repo-level structure and key root files, but should stay inside this project boundary.',
                 ...rootSections,
             ].join('\n\n'),
         };
@@ -3641,9 +3679,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private getWorkspaceSummary(): string {
+        const projectRoot = getProjectRootSummaryFromConfig();
+        if (projectRoot !== 'not set') {
+            return `Project root: ${projectRoot}`;
+        }
+
         const workspaceFolders = vscode.workspace.workspaceFolders ?? [];
         if (!workspaceFolders.length) return 'No workspace folder open';
-        return workspaceFolders.map(folder => folder.name).join(', ');
+        return `Default workspace: ${workspaceFolders.map(folder => folder.name).join(', ')}`;
     }
 
     private buildHtml(): string {
@@ -4096,6 +4139,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             <button class="chip" data-action="useFree">Use Free</button>
             <button class="chip" data-action="viewPlans">View Plans</button>
             <button class="chip" data-action="startTrial">Start Trial</button>
+            <button class="chip" data-action="selectProjectRoot">Project Root</button>
             <button class="chip" data-action="configureBackend">Backend Override</button>
             <button class="chip" data-action="enterLicence">Enter Licence</button>
             <button class="chip" data-action="toggleTelemetry">Telemetry</button>

@@ -9,12 +9,12 @@ import { SidebarProvider } from './panels/sidebarProvider';
 import { ChatViewProvider } from './panels/chatViewProvider';
 import { OWLVEX_PREVIEW_SCHEME, PreviewDocumentProvider } from './panels/previewDocumentProvider';
 import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
-import { pickScanFile, pickScanFiles, pickScanRoot, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
+import { pickScanFile, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
 import { PROFILE } from './profile';
-import { loadProjectContextInfo } from './projectContext';
+import { loadProjectContextInfo, promptForProjectRootSelection, resolveProjectRootInfo } from './projectContext';
 import { applyRepoAiReviewSupport, buildRepoAiReviewPrompt, extractRepoAiSnippet, parseRepoAiReviewResponse, selectRepoAiCandidateRefs, summarizeRepoAiResults } from './repoAiReview';
 import { initializeSecretStorage } from './secrets';
 import { PackArtifactResponse, PackEntitlement, PackManifestEntry, RulePackClient } from './packs/packClient';
@@ -125,6 +125,13 @@ interface RegisterAccessResponse {
     verification_code?: string;
 }
 
+interface RegisterTrackedAccessPayload {
+    email: string;
+    plan: 'free' | 'trial';
+    name?: string;
+    company?: string;
+}
+
 interface VerifyRegistrationResponse {
     customer_id: string;
     licence_id: string;
@@ -207,9 +214,9 @@ function buildDefaultProjectContextContent(): string {
 async function openOrCreateProjectContext(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     const configuredFile = config.get<string>('projectContextFile', '').trim();
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    const projectRoot = await resolveProjectRootInfo();
 
-    if (!workspaceFolder) {
+    if (!projectRoot.uri) {
         const document = await vscode.workspace.openTextDocument({
             language: 'markdown',
             content: buildDefaultProjectContextContent(),
@@ -221,7 +228,7 @@ async function openOrCreateProjectContext(): Promise<{ uri: vscode.Uri; created:
     const relativePath = configuredFile || DEFAULT_PROJECT_CONTEXT_RELATIVE_PATH;
     const targetFsPath = path.isAbsolute(relativePath)
         ? relativePath
-        : path.join(workspaceFolder.uri.fsPath, relativePath);
+        : path.join(projectRoot.uri.fsPath, relativePath);
     const targetUri = vscode.Uri.file(targetFsPath);
 
     let created = false;
@@ -491,6 +498,12 @@ export function buildRegistrationSuccessMessage(
     return `${heading}\n${summary}\n${buildPlanNextStepGuidance(info).join('\n')}`;
 }
 
+function buildBackendConnectionSummary(apiUrl: string): string {
+    return normalizeServiceUrl(apiUrl) === normalizeServiceUrl(PROFILE.defaultApiUrl)
+        ? `Owlvex is using this build's packaged backend: ${apiUrl}`
+        : `Owlvex is using an explicit backend override: ${apiUrl}`;
+}
+
 export function buildVerificationPromptMessage(
     registration: RegisterAccessResponse,
 ): string {
@@ -583,10 +596,6 @@ async function completeTrackedRegistrationVerification(
     }
 }
 
-function buildBackendDefaultSummary(apiUrl: string): string {
-    return `Owlvex uses the packaged backend by default for this build: ${apiUrl}`;
-}
-
 export function buildBackendConnectedNoLicenceChoices(): OnboardingActionChoice[] {
     return [
         {
@@ -609,12 +618,16 @@ export function buildBackendConnectedNoLicenceChoices(): OnboardingActionChoice[
 export function buildRegistrationCompletionChoices(): OnboardingActionChoice[] {
     return [
         {
-            label: 'Configure LLM',
-            command: PROFILE.commands.setupAI,
+            label: 'Scan Current File',
+            command: PROFILE.commands.scanFile,
         },
         {
-            label: 'Test Trial Setup',
-            command: PROFILE.commands.testTrialSetup,
+            label: 'Scan Workspace',
+            command: PROFILE.commands.scanWorkspace,
+        },
+        {
+            label: 'Configure LLM',
+            command: PROFILE.commands.setupAI,
         },
     ];
 }
@@ -622,12 +635,16 @@ export function buildRegistrationCompletionChoices(): OnboardingActionChoice[] {
 export function buildBackendAndLicenceReadyChoices(): OnboardingActionChoice[] {
     return [
         {
-            label: 'Configure LLM',
-            command: PROFILE.commands.setupAI,
+            label: 'Scan Current File',
+            command: PROFILE.commands.scanFile,
         },
         {
-            label: 'Test Trial Setup',
-            command: PROFILE.commands.testTrialSetup,
+            label: 'Scan Workspace',
+            command: PROFILE.commands.scanWorkspace,
+        },
+        {
+            label: 'Configure LLM',
+            command: PROFILE.commands.setupAI,
         },
     ];
 }
@@ -660,6 +677,34 @@ async function promptOnboardingChoices(
     }
 
     await vscode.commands.executeCommand(selected.command, ...(selected.args ?? []));
+}
+
+async function promptOptionalIdentityField(
+    prompt: string,
+    placeHolder: string,
+): Promise<string | undefined> {
+    const value = await vscode.window.showInputBox({
+        prompt,
+        placeHolder,
+        ignoreFocusOut: true,
+    });
+
+    const trimmed = value?.trim();
+    return trimmed ? trimmed : undefined;
+}
+
+async function ensureProjectRootReady(promptLabel = 'Select the Owlvex project root that defines the repo boundary for scans and AI context.'): Promise<vscode.Uri | undefined> {
+    const current = await resolveProjectRootInfo();
+    if (current.uri && current.isConfigured) {
+        return current.uri;
+    }
+
+    vscode.window.showInformationMessage(`${PROFILE.displayLabel}: ${promptLabel}`);
+    const selected = await promptForProjectRootSelection({
+        title: 'Select Owlvex project root',
+        openLabel: 'Use As Project Root',
+    });
+    return selected?.uri;
 }
 
 export function getProviderConnectionSettingKeys(providerId: string): string[] {
@@ -758,7 +803,7 @@ async function readJsonResponse(res: Response, prefix: string): Promise<any> {
 
 async function registerTrackedAccessRequest(
     apiUrl: string,
-    payload: { email: string; plan: 'free' | 'trial' },
+    payload: RegisterTrackedAccessPayload,
 ): Promise<RegisterAccessResponse> {
     const response = await fetch(`${apiUrl}/v1/licences/register`, {
         method: 'POST',
@@ -1338,7 +1383,7 @@ export function activate(context: vscode.ExtensionContext) {
             const licenceKey = await licenceMgr.getKey();
             if (!licenceKey) {
                 await promptOnboardingChoices(
-                    `${PROFILE.displayLabel}: Backend override connected (${backend.latencyMs}ms).\n${buildBackendDefaultSummary(normalizedApiUrl)}\nNext step: register Free, start Trial, or enter a licence key.`,
+                    `${PROFILE.displayLabel}: Backend override connected (${backend.latencyMs}ms).\n${buildBackendConnectionSummary(normalizedApiUrl)}\nNext step: register Free, start Trial, or enter a licence key.`,
                     buildBackendConnectedNoLicenceChoices(),
                 );
                 return;
@@ -1364,6 +1409,42 @@ export function activate(context: vscode.ExtensionContext) {
                     `${PROFILE.displayLabel}: Backend override connected (${backend.latencyMs}ms), but licence validation failed. ${error.message}`,
                 );
             }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.showOnboarding, async () => {
+            const projectRoot = await resolveProjectRootInfo();
+            await promptOnboardingChoices(
+                [
+                    `${PROFILE.displayLabel}: Choose how you want to start.`,
+                    buildBackendConnectionSummary(getConfiguredApiUrl()),
+                    `Project root: ${projectRoot.summary}`,
+                ].join('\n'),
+                [
+                    ...buildBackendConnectedNoLicenceChoices(),
+                    {
+                        label: 'Select Project Root',
+                        command: PROFILE.commands.selectProjectRoot,
+                    },
+                ],
+            );
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.selectProjectRoot, async () => {
+            const selected = await promptForProjectRootSelection({
+                title: 'Select Owlvex project root',
+                openLabel: 'Use As Project Root',
+            });
+            if (!selected?.uri) {
+                return;
+            }
+
+            vscode.window.showInformationMessage(
+                `${PROFILE.displayLabel}: Project root set to ${selected.label}. Repo scans and repo AI context will stay inside this boundary.`,
+            );
         })
     );
 
@@ -1408,10 +1489,24 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
+            const name = await promptOptionalIdentityField(
+                'Enter your name (optional)',
+                'Jane Doe',
+            );
+            const company = await promptOptionalIdentityField(
+                'Enter your company or team name (optional)',
+                'Acme',
+            );
+            if (!(await ensureProjectRootReady())) {
+                return;
+            }
+
             try {
                 const registration = await registerTrackedAccessRequest(getConfiguredApiUrl(), {
                     email: email.trim(),
                     plan: selectedPlan,
+                    name,
+                    company,
                 });
 
                 vscode.window.showInformationMessage(
@@ -2265,7 +2360,7 @@ export function activate(context: vscode.ExtensionContext) {
             if (!allowed) {
                 return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
             }
-            const root = requestedRoot ?? await pickScanRoot();
+            const root = requestedRoot ?? await ensureProjectRootReady('Select the repo root Owlvex should treat as this project before scanning the workspace.');
             if (!root) {
                 return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
             }
@@ -2483,7 +2578,7 @@ export function activate(context: vscode.ExtensionContext) {
                     };
                 }
 
-                const root = await pickScanRoot();
+                const root = await ensureProjectRootReady('Select the repo root Owlvex should use when generating a workspace report.');
                 if (!root) return { status: 'cancelled' };
 
                 statusBar.showScanning();
