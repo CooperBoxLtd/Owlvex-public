@@ -18,6 +18,7 @@ from app.services.licence_service import (
 )
 from app.services.rate_limit import allow_control_plane_request
 from app.services.email_service import send_licence_issued_email, send_verification_email
+from app.services.registration_funnel_service import record_registration_funnel_event
 from app.config import get_settings
 
 router = APIRouter(prefix="/v1/licences", tags=["licences"])
@@ -384,6 +385,23 @@ async def register(
             detail="Email verification delivery is not configured.",
         )
 
+    delivery = "email" if current_settings.resend_api_key else "development_inline"
+    await record_registration_funnel_event(
+        db,
+        customer_id=customer.id,
+        email=normalized_email,
+        plan=plan,
+        event_name="registration_started",
+        delivery=delivery,
+    )
+    await record_registration_funnel_event(
+        db,
+        customer_id=customer.id,
+        email=normalized_email,
+        plan=plan,
+        event_name="verification_sent",
+        delivery=delivery,
+    )
     await db.commit()
     return _build_registration_response(
         email=normalized_email,
@@ -450,6 +468,20 @@ async def verify_email_registration(
         expires_at=expires_dt,
     )
     db.add(licence)
+    await record_registration_funnel_event(
+        db,
+        customer_id=customer.id,
+        email=customer.email,
+        plan=plan,
+        event_name="verification_completed",
+    )
+    await record_registration_funnel_event(
+        db,
+        customer_id=customer.id,
+        email=customer.email,
+        plan=plan,
+        event_name="licence_issued",
+    )
     await db.commit()
     await db.refresh(licence)
 

@@ -22,6 +22,7 @@ from app.db.models import (
     CustomerNote,
     Licence,
     LicenceSeat,
+    RegistrationFunnelEvent,
     ScanHistory,
     TeamPrompt,
     UsageEvent,
@@ -269,6 +270,19 @@ def _serialize_usage_event(event: UsageEvent) -> dict:
     }
 
 
+def _serialize_registration_funnel_event(event: RegistrationFunnelEvent) -> dict:
+    return {
+        "event_id": str(event.id),
+        "customer_id": str(event.customer_id) if event.customer_id else None,
+        "email": event.email,
+        "plan": event.plan,
+        "event_name": event.event_name,
+        "delivery": event.delivery,
+        "metadata": event.event_data or {},
+        "created_at": event.created_at.isoformat() if event.created_at else None,
+    }
+
+
 def _serialize_comparison(item: Comparison) -> dict:
     return {
         "comparison_id": str(item.id),
@@ -509,23 +523,43 @@ async def _metrics_funnel(
     date_to: datetime | None,
     plan: str | None,
 ) -> dict:
-    registration_query = select(func.count(Customer.id))
-    registration_query = _apply_date_range(registration_query, Customer.created_at, date_from=date_from, date_to=date_to)
+    registration_query = select(func.count(RegistrationFunnelEvent.id)).where(
+        RegistrationFunnelEvent.event_name == "registration_started"
+    )
+    if plan:
+        registration_query = registration_query.where(RegistrationFunnelEvent.plan == plan)
+    registration_query = _apply_date_range(
+        registration_query,
+        RegistrationFunnelEvent.created_at,
+        date_from=date_from,
+        date_to=date_to,
+    )
     registrations_started = int((await db.execute(registration_query)).scalar() or 0)
 
-    verification_query = select(func.count(Customer.id)).where(Customer.email_verified_at.is_not(None))
+    verification_query = select(func.count(RegistrationFunnelEvent.id)).where(
+        RegistrationFunnelEvent.event_name == "verification_completed"
+    )
+    if plan:
+        verification_query = verification_query.where(RegistrationFunnelEvent.plan == plan)
     verification_query = _apply_date_range(
         verification_query,
-        Customer.email_verified_at,
+        RegistrationFunnelEvent.created_at,
         date_from=date_from,
         date_to=date_to,
     )
     verification_completed = int((await db.execute(verification_query)).scalar() or 0)
 
-    licence_query = select(func.count(Licence.id))
+    licence_query = select(func.count(RegistrationFunnelEvent.id)).where(
+        RegistrationFunnelEvent.event_name == "licence_issued"
+    )
     if plan:
-        licence_query = licence_query.where(Licence.plan == plan)
-    licence_query = _apply_date_range(licence_query, Licence.created_at, date_from=date_from, date_to=date_to)
+        licence_query = licence_query.where(RegistrationFunnelEvent.plan == plan)
+    licence_query = _apply_date_range(
+        licence_query,
+        RegistrationFunnelEvent.created_at,
+        date_from=date_from,
+        date_to=date_to,
+    )
     licences_issued = int((await db.execute(licence_query)).scalar() or 0)
 
     first_scan_subquery = (
@@ -868,7 +902,7 @@ async def metrics_usage(
 async def export_metrics(
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
     x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
-    dataset: str = Query(pattern="^(customers|licences|usage_events|scan_history|comparisons|customer_notes|admin_audit_log|metrics_summary|metrics_funnel|metrics_usage)$"),
+    dataset: str = Query(pattern="^(customers|licences|usage_events|registration_funnel_events|scan_history|comparisons|customer_notes|admin_audit_log|metrics_summary|metrics_funnel|metrics_usage)$"),
     format: str = Query(default="json", pattern="^(json|csv)$"),
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
@@ -891,6 +925,7 @@ async def export_metrics(
             "customers": select(Customer).options(selectinload(Customer.licences)).order_by(Customer.created_at.desc()),
             "licences": select(Licence).order_by(Licence.created_at.desc()),
             "usage_events": select(UsageEvent).join(Licence, Licence.id == UsageEvent.licence_id).order_by(UsageEvent.created_at.desc()),
+            "registration_funnel_events": select(RegistrationFunnelEvent).order_by(RegistrationFunnelEvent.created_at.desc()),
             "scan_history": select(ScanHistory).join(Licence, Licence.id == ScanHistory.licence_id).order_by(ScanHistory.created_at.desc()),
             "comparisons": select(Comparison).join(Licence, Licence.id == Comparison.licence_id).order_by(Comparison.created_at.desc()),
             "customer_notes": select(CustomerNote).join(Customer, Customer.id == CustomerNote.customer_id).order_by(CustomerNote.created_at.desc()),
@@ -907,6 +942,10 @@ async def export_metrics(
             query = _apply_date_range(query, UsageEvent.created_at, date_from=start, date_to=end)
             if plan:
                 query = query.where(Licence.plan == plan)
+        elif dataset == "registration_funnel_events":
+            query = _apply_date_range(query, RegistrationFunnelEvent.created_at, date_from=start, date_to=end)
+            if plan:
+                query = query.where(RegistrationFunnelEvent.plan == plan)
         elif dataset == "scan_history":
             query = _apply_date_range(query, ScanHistory.created_at, date_from=start, date_to=end)
             if plan:
@@ -929,6 +968,8 @@ async def export_metrics(
             payload = [_serialize_licence(item) for item in items]
         elif dataset == "usage_events":
             payload = [_serialize_usage_event(item) for item in items]
+        elif dataset == "registration_funnel_events":
+            payload = [_serialize_registration_funnel_event(item) for item in items]
         elif dataset == "scan_history":
             payload = [_serialize_scan(item) for item in items]
         elif dataset == "comparisons":

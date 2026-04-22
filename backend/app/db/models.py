@@ -219,6 +219,19 @@ class UsageEvent(Base):
     created_at  = Column(TIMESTAMP(timezone=True), server_default=func.now())
 
 
+class RegistrationFunnelEvent(Base):
+    __tablename__ = "registration_funnel_events"
+
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    customer_id  = Column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="SET NULL"))
+    email        = Column(String(200), nullable=False)
+    plan         = Column(String(20), nullable=False)
+    event_name   = Column(String(80), nullable=False)
+    delivery     = Column(String(40))
+    event_data   = Column("metadata", JSONB, default=dict)
+    created_at   = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
 class CustomerNote(Base):
     __tablename__ = "customer_notes"
 

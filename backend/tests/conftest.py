@@ -236,6 +236,18 @@ def _create_sqlite_tables(conn):
         )
     """))
     conn.execute(__import__('sqlalchemy').text("""
+        CREATE TABLE IF NOT EXISTS registration_funnel_events (
+            id TEXT PRIMARY KEY,
+            customer_id TEXT,
+            email TEXT NOT NULL,
+            plan TEXT NOT NULL,
+            event_name TEXT NOT NULL,
+            metadata TEXT DEFAULT '{}',
+            delivery TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.execute(__import__('sqlalchemy').text("""
         CREATE TABLE IF NOT EXISTS customer_notes (
             id TEXT PRIMARY KEY,
             customer_id TEXT NOT NULL,

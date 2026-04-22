@@ -793,6 +793,33 @@ async def test_register_trial_licence_sets_expiry(client):
 
 
 @pytest.mark.asyncio
+async def test_registration_funnel_events_are_recorded_and_exportable(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "funnel-user@example.com", "plan": "free"},
+    )
+    assert registration.status_code == 201
+    verification_code = registration.json()["verification_code"]
+
+    verification = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "funnel-user@example.com", "code": verification_code},
+    )
+    assert verification.status_code == 201
+
+    export_response = await client.get(
+        "/v1/admin/metrics/export",
+        params={"dataset": "registration_funnel_events", "format": "json"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert export_response.status_code == 200
+    rows = export_response.json()["rows"]
+    target_rows = [row for row in rows if row["email"] == "funnel-user@example.com"]
+    event_names = {row["event_name"] for row in target_rows}
+    assert {"registration_started", "verification_sent", "verification_completed", "licence_issued"} <= event_names
+
+
+@pytest.mark.asyncio
 async def test_register_licence_uses_email_delivery_when_resend_is_configured(client):
     configured_settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",
@@ -1049,7 +1076,7 @@ async def test_usage_event_records_valid_event(client):
         response = await client.post(
             "/v1/usage/events",
             headers={"X-Licence-Key": "owlvex_lic_validkey"},
-            json={"event_name": "scan_run", "metadata": {"scope": "file", "finding_count": 2}},
+            json={"event_name": "scan_run", "metadata": {"scope": "file", "finding_count": 2, "provider": "anthropic", "model": "claude-sonnet-4", "project_id": "proj_1234", "project_mode": "configured", "project_configured": True}},
         )
 
     assert response.status_code == 201
@@ -1079,6 +1106,52 @@ async def test_usage_event_rejects_unexpected_fields(client):
         )
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_usage_event_rejects_unknown_event_name(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {"frameworks": ["OWASP"], "scans_per_day": None, "telemetry_enabled": True},
+        "expires_at": None,
+    }
+    with patch("app.routers.usage.validate_licence", return_value=mock_result):
+        response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={"event_name": "unknown_event", "metadata": {}},
+        )
+
+    assert response.status_code == 422
+    assert "Unsupported usage event" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_usage_event_rejects_unknown_metadata_fields(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {"frameworks": ["OWASP"], "scans_per_day": None, "telemetry_enabled": True},
+        "expires_at": None,
+    }
+    with patch("app.routers.usage.validate_licence", return_value=mock_result):
+        response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={"event_name": "scan_run", "metadata": {"scope": "file", "raw_path": "d:\\repo\\secret.ts"}},
+        )
+
+    assert response.status_code == 422
+    assert "Unsupported metadata fields" in response.json()["detail"]
 
 
 @pytest.mark.asyncio

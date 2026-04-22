@@ -195,6 +195,17 @@ CREATE TABLE usage_events (
     created_at  TIMESTAMPTZ  DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS registration_funnel_events (
+    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_id UUID         REFERENCES customers(id) ON DELETE SET NULL,
+    email       VARCHAR(200) NOT NULL,
+    plan        VARCHAR(20)  NOT NULL,
+    event_name  VARCHAR(80)  NOT NULL,
+    delivery    VARCHAR(40),
+    metadata    JSONB        DEFAULT '{}',
+    created_at  TIMESTAMPTZ  DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS customer_notes (
     id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
     customer_id UUID         NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
@@ -231,6 +242,9 @@ CREATE INDEX idx_licence_seats_lic   ON licence_seats(licence_id);
 CREATE INDEX idx_comparisons_licence ON comparisons(licence_id);
 CREATE INDEX idx_usage_events_licence ON usage_events(licence_id);
 CREATE INDEX idx_usage_events_name ON usage_events(event_name);
+CREATE INDEX idx_registration_funnel_email ON registration_funnel_events(email);
+CREATE INDEX idx_registration_funnel_event ON registration_funnel_events(event_name);
+CREATE INDEX idx_registration_funnel_created ON registration_funnel_events(created_at DESC);
 CREATE INDEX idx_customer_notes_customer ON customer_notes(customer_id);
 CREATE INDEX idx_admin_audit_customer ON admin_audit_log(customer_id);
 CREATE INDEX idx_admin_audit_action ON admin_audit_log(action);
