@@ -103,7 +103,7 @@
       gap: 12px;
     }
     .connection-grid { grid-template-columns: 140px 1fr 240px 220px auto auto; align-items: end; }
-    .filter-grid { grid-template-columns: 1.4fr repeat(4, minmax(120px, 1fr)); align-items: end; }
+    .filter-grid { grid-template-columns: 1.4fr repeat(5, minmax(120px, 1fr)); align-items: end; }
     .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .metrics-grid { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr); }
     .metrics-card-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -365,6 +365,17 @@
               </select>
             </div>
             <div>
+              <label class="small" for="workflowPreset">Workflow queue</label>
+              <select id="workflowPreset">
+                <option value="all">All</option>
+                <option value="pending-24h">Pending verification > 24h</option>
+                <option value="trial-expiring">Trial expiring in 3 days</option>
+                <option value="high-usage-free">Free users near quota</option>
+                <option value="inactive-after-verify">Verified but inactive</option>
+                <option value="banned-review">Banned customers</option>
+              </select>
+            </div>
+            <div>
               <label class="small" for="sortBy">Sort</label>
               <select id="sortBy">
                 <option value="updated_desc">Recently updated</option>
@@ -525,6 +536,7 @@
     const statusFilterEl = document.getElementById('statusFilter');
     const planFilterEl = document.getElementById('planFilter');
     const activityFilterEl = document.getElementById('activityFilter');
+    const workflowPresetEl = document.getElementById('workflowPreset');
     const sortByEl = document.getElementById('sortBy');
     const customerTableBodyEl = document.getElementById('customerTableBody');
     const detailPanelEl = document.getElementById('detailPanel');
@@ -662,6 +674,37 @@
       return true;
     }
 
+    function daysUntil(value) {
+      if (!value) return Number.POSITIVE_INFINITY;
+      return (new Date(value).getTime() - Date.now()) / (24 * 60 * 60 * 1000);
+    }
+
+    function matchesWorkflowPreset(customer) {
+      const preset = workflowPresetEl.value;
+      if (preset === 'all') return true;
+      const summary = customer.summary || {};
+      const currentPlan = planForCustomer(customer);
+      const primaryLicence = customer.licences?.[0] || null;
+      const createdAgeDays = customer.created_at ? (Date.now() - new Date(customer.created_at).getTime()) / (24 * 60 * 60 * 1000) : 0;
+
+      if (preset === 'pending-24h') {
+        return Boolean(summary.verification_pending) && createdAgeDays >= 1;
+      }
+      if (preset === 'trial-expiring') {
+        return currentPlan === 'trial' && primaryLicence?.is_active && daysUntil(primaryLicence.expires_at) <= 3;
+      }
+      if (preset === 'high-usage-free') {
+        return currentPlan === 'free' && (summary.scan_count || 0) >= 40;
+      }
+      if (preset === 'inactive-after-verify') {
+        return Boolean(customer.email_verified_at) && !summary.last_activity_at && createdAgeDays >= 1;
+      }
+      if (preset === 'banned-review') {
+        return Boolean(customer.is_banned);
+      }
+      return true;
+    }
+
     function applyFilters() {
       const search = searchEl.value.trim().toLowerCase();
       const filtered = state.customers.filter((customer) => {
@@ -673,6 +716,7 @@
         if (!matchesStatusFilter(customer)) return false;
         if (!matchesPlanFilter(customer)) return false;
         if (!matchesActivityFilter(customer)) return false;
+        if (!matchesWorkflowPreset(customer)) return false;
         return true;
       });
 
@@ -797,6 +841,36 @@
       `;
     }
 
+    function buildTimelineItems(customer) {
+      const items = [];
+      if (customer.created_at) {
+        items.push({ at: customer.created_at, label: 'Customer registered', detail: customer.pending_plan || customer.source || 'extension' });
+      }
+      if (customer.email_verified_at) {
+        items.push({ at: customer.email_verified_at, label: 'Email verified', detail: customer.email });
+      }
+      for (const licence of (customer.licences || [])) {
+        if (licence.created_at) {
+          items.push({ at: licence.created_at, label: `Licence issued (${licence.plan})`, detail: licence.licence_id });
+        }
+        if (licence.expires_at) {
+          items.push({ at: licence.expires_at, label: `Licence expiry (${licence.plan})`, detail: licence.licence_id });
+        }
+      }
+      for (const event of (customer.audit_history || [])) {
+        if (event.created_at) {
+          items.push({ at: event.created_at, label: event.action, detail: event.reason || event.actor || 'admin action' });
+        }
+      }
+      for (const scan of (customer.activity?.recent_scans || [])) {
+        if (scan.created_at) {
+          items.push({ at: scan.created_at, label: 'Scan completed', detail: scan.file_name || scan.language || 'scan' });
+        }
+      }
+      items.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+      return items.slice(0, 20);
+    }
+
     function renderCustomerDetail() {
       const customer = selectedCustomer();
       renderSelectionBadge(customer);
@@ -810,6 +884,7 @@
       const licences = customer.licences || [];
       const notes = customer.notes || [];
       const auditHistory = customer.audit_history || [];
+      const timelineItems = buildTimelineItems(customer);
 
       detailPanelEl.innerHTML = `
         <div class="panel-header">
@@ -950,6 +1025,19 @@
                 `).join('') : '<div class="small">No audit events recorded.</div>'}
               </div>
             </div>
+          </div>
+        </div>
+
+        <div class="detail-section stack">
+          <h3 style="margin:0;">Lifecycle timeline</h3>
+          <div class="list-box">
+            ${timelineItems.length ? timelineItems.map((item) => `
+              <div class="activity-card">
+                <div><strong>${escapeHtml(item.label)}</strong></div>
+                <div class="small">${escapeHtml(formatDate(item.at))}</div>
+                <div class="small">${escapeHtml(item.detail || '')}</div>
+              </div>
+            `).join('') : '<div class="small">No lifecycle events available.</div>'}
           </div>
         </div>
       `;
@@ -1244,6 +1332,7 @@
       statusFilterEl.addEventListener(eventName, renderAll);
       planFilterEl.addEventListener(eventName, renderAll);
       activityFilterEl.addEventListener(eventName, renderAll);
+      workflowPresetEl.addEventListener(eventName, renderAll);
       sortByEl.addEventListener(eventName, renderAll);
     });
 

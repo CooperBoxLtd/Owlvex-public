@@ -91,7 +91,7 @@ docker_available() {
 }
 
 resolve_acr_login_server() {
-  az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --query loginServer -o tsv
+  az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --query loginServer -o tsv | tr -d '\r'
 }
 
 resolve_api_url() {

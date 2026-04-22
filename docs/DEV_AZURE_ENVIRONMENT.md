@@ -107,6 +107,25 @@ docker run --rm --platform linux/amd64 hello-world
 
 If these fail, the problem is usually that Docker Desktop is not running, not that the machine is ARM.
 
+### Cross-builder setup for this workstation
+
+The default Docker Desktop builders on this machine may only advertise `linux/arm64`, which causes `linux/amd64` builds to fail with `exec format error`.
+
+Use a dedicated cross builder instead:
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install amd64
+docker buildx create --name owlvex-cross --driver docker-container --use
+docker buildx inspect owlvex-cross --bootstrap
+```
+
+Expected result:
+
+- the builder reports `linux/amd64` in its supported platforms
+- `infra/build-image.sh` will then use `owlvex-cross` automatically
+
+You only need to create this builder once per workstation unless Docker Desktop resets its builder state.
+
 ### Recommended local image build
 
 Use a unique image tag every time:

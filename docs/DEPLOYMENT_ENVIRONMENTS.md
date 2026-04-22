@@ -233,6 +233,18 @@ On this machine, "local build" still means a container build for Azure:
 
 If Docker Desktop is stopped, local builds will fail in a way that can look like an ARM issue. Treat Docker availability as the first prerequisite check.
 
+On this Windows ARM workstation, use the dedicated `docker-container` builder rather than the default `docker` driver builder. The default builder can remain arm64-only and fail `linux/amd64` `RUN` steps with `exec format error`.
+
+One-time setup:
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install amd64
+docker buildx create --name owlvex-cross --driver docker-container --use
+docker buildx inspect owlvex-cross --bootstrap
+```
+
+`infra/build-image.sh` now targets `owlvex-cross` automatically by default, and still falls back to ACR remote build when Docker is unavailable.
+
 This preserves a stable market-facing environment while still keeping Azure as the shared hosted model.
 
 ## What Must Not Change
