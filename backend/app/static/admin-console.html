@@ -62,11 +62,11 @@
     }
     a { color: var(--accent-2); }
     .app {
-      max-width: 1600px;
+      max-width: 1500px;
       margin: 0 auto;
-      padding: 20px;
+      padding: 16px;
       display: grid;
-      gap: 18px;
+      gap: 14px;
     }
     .panel {
       background: linear-gradient(180deg, rgba(255,255,255,0.02), transparent 40%), var(--panel);
@@ -75,13 +75,13 @@
       box-shadow: var(--shadow);
     }
     .panel-header {
-      padding: 16px 18px 0;
+      padding: 12px 14px 0;
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      gap: 12px;
+      gap: 10px;
     }
-    .panel-body { padding: 18px; }
+    .panel-body { padding: 14px; }
     .page-header {
       display: flex;
       justify-content: space-between;
@@ -90,7 +90,7 @@
     }
     .page-header h1 {
       margin: 0 0 4px;
-      font-size: 28px;
+      font-size: 24px;
       line-height: 1.1;
     }
     .page-header p,
@@ -102,22 +102,22 @@
       display: grid;
       gap: 12px;
     }
-    .connection-grid { grid-template-columns: 140px 1fr 240px 220px auto auto; align-items: end; }
-    .filter-grid { grid-template-columns: 1.4fr repeat(5, minmax(120px, 1fr)); align-items: end; }
+    .connection-grid { grid-template-columns: 110px minmax(280px, 1fr) 220px 170px auto auto; align-items: end; }
+    .filter-grid { grid-template-columns: 1.6fr repeat(5, minmax(108px, 1fr)); align-items: end; }
     .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
     .metrics-grid { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr); }
     .metrics-card-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .stat-card {
-      padding: 14px;
+      padding: 11px 12px;
       background: var(--panel-2);
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 11px;
     }
     .stat-card strong {
       display: block;
-      font-size: 22px;
+      font-size: 20px;
       line-height: 1.1;
-      margin-top: 6px;
+      margin-top: 4px;
     }
     .layout {
       display: grid;
@@ -132,10 +132,10 @@
     table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 980px;
+      min-width: 860px;
     }
     th, td {
-      padding: 12px 14px;
+      padding: 9px 10px;
       border-bottom: 1px solid var(--border);
       vertical-align: top;
       text-align: left;
@@ -164,11 +164,12 @@
       align-items: center;
       gap: 6px;
       border: 1px solid var(--border);
-      padding: 3px 9px;
+      padding: 2px 8px;
       border-radius: 999px;
       color: var(--muted);
       background: rgba(255,255,255,0.02);
       white-space: nowrap;
+      font-size: 12px;
     }
     .badge.ok { color: var(--accent); }
     .badge.info { color: var(--accent-2); }
@@ -179,12 +180,12 @@
       gap: 10px;
     }
     .detail-empty {
-      padding: 22px;
+      padding: 18px;
       text-align: center;
       color: var(--muted);
     }
     .detail-section {
-      padding: 18px;
+      padding: 14px;
       border-top: 1px solid var(--border);
     }
     .detail-section:first-of-type { border-top: 0; }
@@ -192,8 +193,8 @@
     .kv {
       background: var(--panel-2);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 12px;
+      border-radius: 11px;
+      padding: 10px;
     }
     .kv label {
       display: block;
@@ -205,9 +206,9 @@
     }
     .licence-card,
     .activity-card {
-      padding: 14px;
+      padding: 11px;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 11px;
       background: var(--panel-2);
     }
     .stack { display: grid; gap: 12px; }
@@ -223,11 +224,42 @@
     .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
     .small { font-size: 12px; color: var(--muted); }
     .status-banner {
-      padding: 12px 14px;
+      padding: 10px 12px;
       border: 1px solid var(--border);
-      border-radius: 12px;
+      border-radius: 11px;
       background: rgba(255,255,255,0.02);
       color: var(--muted);
+    }
+    .metrics-split {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .metrics-table {
+      width: 100%;
+      min-width: 0;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .metrics-table th,
+    .metrics-table td {
+      padding: 7px 8px;
+    }
+    .metrics-table thead th {
+      position: static;
+      background: transparent;
+      color: var(--muted);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+    }
+    .metrics-table tbody tr:last-child td {
+      border-bottom: 0;
+    }
+    .compact-note {
+      padding: 10px 12px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+      background: rgba(255,255,255,0.02);
     }
     .status-banner.error {
       color: var(--danger);
@@ -245,6 +277,7 @@
       .filter-grid { grid-template-columns: 1fr 1fr; }
       .stats-grid, .metrics-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .metrics-grid { grid-template-columns: 1fr; }
+      .metrics-split { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
       .app { padding: 12px; }
@@ -252,9 +285,10 @@
       .filter-grid,
       .detail-grid,
       .stats-grid,
-      .metrics-card-grid { grid-template-columns: 1fr; }
+      .metrics-card-grid,
+      .metrics-split { grid-template-columns: 1fr; }
       .page-header { display: block; }
-      table { min-width: 720px; }
+      table { min-width: 700px; }
     }
   </style>
 </head>
@@ -274,8 +308,8 @@
     <section class="panel">
       <div class="panel-header">
         <div>
-          <h2 style="margin:0;">Connection</h2>
-          <div class="small">Switch environments, load the customer directory, and export a snapshot when needed.</div>
+          <h2 style="margin:0;">Control Bar</h2>
+          <div class="small">Switch environment, authenticate, refresh the directory, or export a full snapshot.</div>
         </div>
       </div>
       <div class="panel-body">
@@ -319,10 +353,10 @@
     <section class="layout">
       <section class="panel">
         <div class="panel-header">
-          <div>
-            <h2 style="margin:0;">Customer Directory</h2>
-            <div class="small">Filter by state, plan, and activity. Select a row to inspect account details and take actions.</div>
-          </div>
+        <div>
+          <h2 style="margin:0;">Customer Directory</h2>
+          <div class="small">Dense operational view of accounts, plan state, and recent activity.</div>
+        </div>
           <div class="small" id="directoryCount">0 results</div>
         </div>
         <div class="panel-body">
@@ -429,18 +463,26 @@
               <label class="small" for="metricsDateTo">Date to</label>
               <input id="metricsDateTo" type="date" />
             </div>
-            <div>
-              <label class="small" for="metricsPlan">Plan</label>
-              <select id="metricsPlan">
-                <option value="">All plans</option>
-                <option value="free">free</option>
-                <option value="trial">trial</option>
-                <option value="developer">developer</option>
-                <option value="team">team</option>
-                <option value="enterprise">enterprise</option>
-              </select>
+              <div>
+                <label class="small" for="metricsPlan">Plan</label>
+                <select id="metricsPlan">
+                  <option value="">All plans</option>
+                  <option value="free">free</option>
+                  <option value="trial">trial</option>
+                  <option value="developer">developer</option>
+                  <option value="team">team</option>
+                  <option value="enterprise">enterprise</option>
+                </select>
+              </div>
+              <div>
+                <label class="small" for="metricsGroupBy">Group by</label>
+                <select id="metricsGroupBy">
+                  <option value="overall">overall</option>
+                  <option value="plan" selected>plan</option>
+                  <option value="customer">customer</option>
+                </select>
+              </div>
             </div>
-          </div>
           <div class="row actions">
             <button class="secondary" id="loadMetrics">Refresh metrics</button>
           </div>
@@ -452,14 +494,14 @@
             <div class="stat-card"><div class="small">Usage events</div><strong>0</strong></div>
             <div class="stat-card"><div class="small">Audit events</div><strong>0</strong></div>
           </div>
-          <div class="detail-grid">
+          <div class="metrics-split">
             <div class="kv">
               <label>Funnel</label>
-              <pre id="metricsFunnel" class="mono small"></pre>
+              <div id="metricsFunnel" class="mono small"></div>
             </div>
             <div class="kv">
-              <label>Usage By Plan</label>
-              <pre id="metricsUsage" class="mono small"></pre>
+              <label id="metricsUsageLabel">Usage By Plan</label>
+              <div id="metricsUsage" class="mono small"></div>
             </div>
           </div>
         </div>
@@ -489,9 +531,9 @@
           <div class="row actions">
             <button id="runExport">Download export</button>
           </div>
-          <div class="kv">
+          <div class="compact-note">
             <label>Export guidance</label>
-            <div class="small">Use `metrics_*` datasets for summary analysis. Use raw datasets for offline joins, BI tools, or ad-hoc review.</div>
+            <div class="small">Use `metrics_*` datasets for aggregated analysis. Use raw datasets for joins, BI work, or case-level review.</div>
           </div>
         </div>
       </div>
@@ -500,13 +542,13 @@
     <section class="panel">
       <div class="panel-header">
         <div>
-          <h2 style="margin:0;">Raw API Response</h2>
-          <div class="small">Kept for debugging, not as the primary UI.</div>
+          <h2 style="margin:0;">Developer Tools</h2>
+          <div class="small">Debug-only payload inspection. Hidden by default.</div>
         </div>
       </div>
       <div class="panel-body">
         <details>
-          <summary class="small">Show latest payload</summary>
+          <summary class="small">Show latest raw API payload</summary>
           <pre id="response" class="mono small"></pre>
         </details>
       </div>
@@ -549,8 +591,10 @@
     const metricsDateFromEl = document.getElementById('metricsDateFrom');
     const metricsDateToEl = document.getElementById('metricsDateTo');
     const metricsPlanEl = document.getElementById('metricsPlan');
+    const metricsGroupByEl = document.getElementById('metricsGroupBy');
     const metricsSummaryGridEl = document.getElementById('metricsSummaryGrid');
     const metricsFunnelEl = document.getElementById('metricsFunnel');
+    const metricsUsageLabelEl = document.getElementById('metricsUsageLabel');
     const metricsUsageEl = document.getElementById('metricsUsage');
     const exportDatasetEl = document.getElementById('exportDataset');
     const exportFormatEl = document.getElementById('exportFormat');
@@ -780,8 +824,77 @@
           <strong>${escapeHtml(String(value))}</strong>
         </div>
       `).join('');
-      metricsFunnelEl.textContent = JSON.stringify(funnel, null, 2);
-      metricsUsageEl.textContent = JSON.stringify(usage, null, 2);
+      metricsFunnelEl.innerHTML = renderMetricsTable(
+        ['Metric', 'Value'],
+        [
+          ['Registrations', funnel.registrations_started || 0],
+          ['Verifications', funnel.verification_completed || 0],
+          ['Licences issued', funnel.licences_issued || 0],
+          ['Pending verification', funnel.pending_verification || 0],
+          ['First scans', funnel.first_scan_completed || 0],
+        ]
+      );
+      const groupBy = usage.group_by || metricsGroupByEl.value || 'plan';
+      metricsUsageLabelEl.textContent = `Usage By ${String(groupBy).charAt(0).toUpperCase()}${String(groupBy).slice(1)}`;
+      metricsUsageEl.innerHTML = renderUsageMetricsTable(usage, groupBy);
+    }
+
+    function renderMetricsTable(headers, rows) {
+      return `
+        <table class="metrics-table">
+          <thead><tr>${headers.map((header) => `<th>${escapeHtml(header)}</th>`).join('')}</tr></thead>
+          <tbody>
+            ${rows.map((row) => `<tr>${row.map((cell) => `<td>${escapeHtml(String(cell))}</td>`).join('')}</tr>`).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderUsageMetricsTable(usage, groupBy) {
+      const rows = usage.rows || [];
+      if (!rows.length) {
+        return '<div class="small">No usage data for the selected filters.</div>';
+      }
+
+      if (groupBy === 'overall') {
+        return renderMetricsTable(
+          ['Scope', 'Scans', 'Customers', 'Findings', 'Reports', 'Usage events'],
+          rows.map((row) => [
+            row.group || 'overall',
+            row.scans || 0,
+            row.active_customers || 0,
+            row.findings || 0,
+            row.comparisons || 0,
+            row.usage_events || 0,
+          ])
+        );
+      }
+
+      if (groupBy === 'customer') {
+        return renderMetricsTable(
+          ['Customer', 'Plan', 'Scans', 'Findings', 'Reports', 'Usage events'],
+          rows.map((row) => [
+            row.customer || 'unknown',
+            row.plan || 'unknown',
+            row.scans || 0,
+            row.findings || 0,
+            row.comparisons || 0,
+            row.usage_events || 0,
+          ])
+        );
+      }
+
+      return renderMetricsTable(
+        ['Plan', 'Scans', 'Customers', 'Findings', 'Reports', 'Usage events'],
+        rows.map((row) => [
+          row.plan || 'unknown',
+          row.scans || 0,
+          row.active_customers || 0,
+          row.findings || 0,
+          row.comparisons || 0,
+          row.usage_events || 0,
+        ])
+      );
     }
 
     function renderDirectory() {
@@ -1106,6 +1219,7 @@
       if (metricsDateFromEl.value) params.set('date_from', metricsDateFromEl.value);
       if (metricsDateToEl.value) params.set('date_to', metricsDateToEl.value);
       if (metricsPlanEl.value) params.set('plan', metricsPlanEl.value);
+      if (metricsGroupByEl.value) params.set('group_by', metricsGroupByEl.value);
       return params;
     }
 

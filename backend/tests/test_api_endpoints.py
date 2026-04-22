@@ -5,6 +5,7 @@ Covers the production extension/backend contract surfaces.
 import pytest
 import uuid
 from unittest.mock import patch, MagicMock
+from sqlalchemy import text
 from app.config import Settings
 
 
@@ -759,6 +760,177 @@ async def test_admin_metrics_export_csv_returns_downloadable_payload(client):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/csv")
     assert "email" in response.text
+
+
+@pytest.mark.asyncio
+async def test_admin_metrics_usage_supports_overall_plan_and_customer_grouping(client, db_session):
+    for email, plan in (
+        ("usage-trial@example.com", "trial"),
+        ("usage-free@example.com", "free"),
+    ):
+        registration = await client.post(
+            "/v1/licences/register",
+            json={"email": email, "plan": plan},
+        )
+        code = registration.json()["verification_code"]
+        verification = await client.post(
+            "/v1/licences/verify-email",
+            json={"email": email, "code": code},
+        )
+        assert verification.status_code == 201
+
+    licence_rows = (
+        await db_session.execute(text("SELECT id, customer_id, email, plan FROM licences ORDER BY email ASC"))
+    ).all()
+    assert len(licence_rows) == 2
+
+    for licence_id, customer_id, email, plan in licence_rows:
+        scan_a_id = str(uuid.uuid4())
+        scan_b_id = str(uuid.uuid4())
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO scan_history (
+                    id, licence_id, user_email, file_hash, file_name, language, prompt_id,
+                    model, provider, frameworks, score, finding_count, findings_summary,
+                    token_count, duration_ms, status
+                ) VALUES (
+                    :id, :licence_id, :user_email, :file_hash, :file_name, :language, :prompt_id,
+                    :model, :provider, :frameworks, :score, :finding_count, :findings_summary,
+                    :token_count, :duration_ms, :status
+                )
+                """
+            ),
+            {
+                "id": scan_a_id,
+                "licence_id": str(licence_id),
+                "user_email": email,
+                "file_hash": "hash-a",
+                "file_name": f"{plan}-a.py",
+                "language": "python",
+                "prompt_id": None,
+                "model": "claude-sonnet-4",
+                "provider": "anthropic",
+                "frameworks": '["OWASP"]',
+                "score": 7.0,
+                "finding_count": 3,
+                "findings_summary": "{}",
+                "token_count": 120,
+                "duration_ms": 450,
+                "status": "completed",
+            },
+        )
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO scan_history (
+                    id, licence_id, user_email, file_hash, file_name, language, prompt_id,
+                    model, provider, frameworks, score, finding_count, findings_summary,
+                    token_count, duration_ms, status
+                ) VALUES (
+                    :id, :licence_id, :user_email, :file_hash, :file_name, :language, :prompt_id,
+                    :model, :provider, :frameworks, :score, :finding_count, :findings_summary,
+                    :token_count, :duration_ms, :status
+                )
+                """
+            ),
+            {
+                "id": scan_b_id,
+                "licence_id": str(licence_id),
+                "user_email": email,
+                "file_hash": "hash-b",
+                "file_name": f"{plan}-b.py",
+                "language": "python",
+                "prompt_id": None,
+                "model": "claude-sonnet-4",
+                "provider": "anthropic",
+                "frameworks": '["OWASP"]',
+                "score": 8.0,
+                "finding_count": 5,
+                "findings_summary": "{}",
+                "token_count": 180,
+                "duration_ms": 520,
+                "status": "completed",
+            },
+        )
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO usage_events (id, licence_id, user_email, event_name, metadata)
+                VALUES (:id, :licence_id, :user_email, :event_name, :metadata)
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "licence_id": str(licence_id),
+                "user_email": email,
+                "event_name": "scan_run",
+                "metadata": '{"scope":"workspace"}',
+            },
+        )
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO comparisons (id, licence_id, scan_a_id, scan_b_id, score_change, new_findings, resolved_findings, diff_summary)
+                VALUES (:id, :licence_id, :scan_a_id, :scan_b_id, :score_change, :new_findings, :resolved_findings, :diff_summary)
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "licence_id": str(licence_id),
+                "scan_a_id": scan_a_id,
+                "scan_b_id": scan_b_id,
+                "score_change": 1.0,
+                "new_findings": 2,
+                "resolved_findings": 1,
+                "diff_summary": "{}",
+            },
+        )
+    await db_session.commit()
+
+    overall_response = await client.get(
+        "/v1/admin/metrics/usage",
+        params={"group_by": "overall"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    plan_response = await client.get(
+        "/v1/admin/metrics/usage",
+        params={"group_by": "plan"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    customer_response = await client.get(
+        "/v1/admin/metrics/usage",
+        params={"group_by": "customer"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert overall_response.status_code == 200
+    assert plan_response.status_code == 200
+    assert customer_response.status_code == 200
+
+    overall_usage = overall_response.json()["usage"]
+    assert overall_usage["group_by"] == "overall"
+    assert len(overall_usage["rows"]) == 1
+    assert overall_usage["totals"]["scans"] == 4
+    assert overall_usage["totals"]["comparisons"] == 2
+    assert overall_usage["totals"]["usage_events"] == 2
+
+    plan_usage = plan_response.json()["usage"]
+    assert plan_usage["group_by"] == "plan"
+    assert {row["plan"] for row in plan_usage["rows"]} == {"free", "trial"}
+
+    customer_usage = customer_response.json()["usage"]
+    assert customer_usage["group_by"] == "customer"
+    assert {row["customer"] for row in customer_usage["rows"]} == {"usage-free@example.com", "usage-trial@example.com"}
+
+    export_response = await client.get(
+        "/v1/admin/metrics/export",
+        params={"dataset": "metrics_usage", "format": "json", "group_by": "customer"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert export_response.status_code == 200
+    export_rows = export_response.json()["rows"]
+    assert {row["customer"] for row in export_rows} == {"usage-free@example.com", "usage-trial@example.com"}
 
 
 @pytest.mark.asyncio

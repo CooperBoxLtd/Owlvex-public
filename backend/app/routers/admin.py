@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import delete, func, select, and_, false
+from sqlalchemy import delete, func, select, and_, false, literal
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -597,64 +597,170 @@ async def _metrics_usage(
     date_from: datetime | None,
     date_to: datetime | None,
     plan: str | None,
+    group_by: str = "plan",
 ) -> dict:
-    scan_query = (
-        select(
-            Licence.plan,
-            func.count(ScanHistory.id),
-            func.count(func.distinct(Licence.customer_id)),
-            func.sum(ScanHistory.finding_count),
+    if group_by not in {"overall", "plan", "customer"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported group_by value: {group_by}")
+
+    if group_by == "customer":
+        group_value = func.coalesce(Customer.email, Licence.email)
+        key_name = "customer"
+        group_sources = (
+            select(
+                group_value.label("group_key"),
+                Licence.plan.label("plan"),
+                func.count(ScanHistory.id).label("scans"),
+                func.count(func.distinct(Licence.customer_id)).label("active_customers"),
+                func.sum(ScanHistory.finding_count).label("findings"),
+            )
+            .select_from(Licence)
+            .join(ScanHistory, ScanHistory.licence_id == Licence.id)
+            .outerjoin(Customer, Customer.id == Licence.customer_id)
+            .group_by(group_value, Licence.plan)
         )
-        .join(ScanHistory, ScanHistory.licence_id == Licence.id)
-        .group_by(Licence.plan)
-    )
-    comparison_query = (
-        select(Licence.plan, func.count(Comparison.id))
-        .join(Comparison, Comparison.licence_id == Licence.id)
-        .group_by(Licence.plan)
-    )
-    usage_query = (
-        select(Licence.plan, func.count(UsageEvent.id))
-        .join(UsageEvent, UsageEvent.licence_id == Licence.id)
-        .group_by(Licence.plan)
-    )
+        comparison_query = (
+            select(group_value.label("group_key"), Licence.plan.label("plan"), func.count(Comparison.id).label("comparisons"))
+            .select_from(Licence)
+            .join(Comparison, Comparison.licence_id == Licence.id)
+            .outerjoin(Customer, Customer.id == Licence.customer_id)
+            .group_by(group_value, Licence.plan)
+        )
+        usage_query = (
+            select(group_value.label("group_key"), Licence.plan.label("plan"), func.count(UsageEvent.id).label("usage_events"))
+            .select_from(Licence)
+            .join(UsageEvent, UsageEvent.licence_id == Licence.id)
+            .outerjoin(Customer, Customer.id == Licence.customer_id)
+            .group_by(group_value, Licence.plan)
+        )
+    elif group_by == "overall":
+        group_value = literal("overall")
+        key_name = "group"
+        group_sources = (
+            select(
+                group_value.label("group_key"),
+                func.count(ScanHistory.id).label("scans"),
+                func.count(func.distinct(Licence.customer_id)).label("active_customers"),
+                func.sum(ScanHistory.finding_count).label("findings"),
+            )
+            .select_from(Licence)
+            .join(ScanHistory, ScanHistory.licence_id == Licence.id)
+            .group_by(group_value)
+        )
+        comparison_query = (
+            select(group_value.label("group_key"), func.count(Comparison.id).label("comparisons"))
+            .select_from(Licence)
+            .join(Comparison, Comparison.licence_id == Licence.id)
+            .group_by(group_value)
+        )
+        usage_query = (
+            select(group_value.label("group_key"), func.count(UsageEvent.id).label("usage_events"))
+            .select_from(Licence)
+            .join(UsageEvent, UsageEvent.licence_id == Licence.id)
+            .group_by(group_value)
+        )
+    else:
+        group_value = Licence.plan
+        key_name = "plan"
+        group_sources = (
+            select(
+                group_value.label("group_key"),
+                func.count(ScanHistory.id).label("scans"),
+                func.count(func.distinct(Licence.customer_id)).label("active_customers"),
+                func.sum(ScanHistory.finding_count).label("findings"),
+            )
+            .select_from(Licence)
+            .join(ScanHistory, ScanHistory.licence_id == Licence.id)
+            .group_by(group_value)
+        )
+        comparison_query = (
+            select(group_value.label("group_key"), func.count(Comparison.id).label("comparisons"))
+            .select_from(Licence)
+            .join(Comparison, Comparison.licence_id == Licence.id)
+            .group_by(group_value)
+        )
+        usage_query = (
+            select(group_value.label("group_key"), func.count(UsageEvent.id).label("usage_events"))
+            .select_from(Licence)
+            .join(UsageEvent, UsageEvent.licence_id == Licence.id)
+            .group_by(group_value)
+        )
+
     if plan:
-        scan_query = scan_query.where(Licence.plan == plan)
+        group_sources = group_sources.where(Licence.plan == plan)
         comparison_query = comparison_query.where(Licence.plan == plan)
         usage_query = usage_query.where(Licence.plan == plan)
-    scan_query = _apply_date_range(scan_query, ScanHistory.created_at, date_from=date_from, date_to=date_to)
+    group_sources = _apply_date_range(group_sources, ScanHistory.created_at, date_from=date_from, date_to=date_to)
     comparison_query = _apply_date_range(comparison_query, Comparison.created_at, date_from=date_from, date_to=date_to)
     usage_query = _apply_date_range(usage_query, UsageEvent.created_at, date_from=date_from, date_to=date_to)
 
-    scan_rows = {
-        row[0]: {
-            "plan": row[0],
-            "scans": int(row[1] or 0),
-            "active_customers": int(row[2] or 0),
-            "findings": int(row[3] or 0),
-        }
-        for row in (await db.execute(scan_query)).all()
-    }
-    for row in (await db.execute(comparison_query)).all():
-        scan_rows.setdefault(row[0], {"plan": row[0], "scans": 0, "active_customers": 0, "findings": 0})["comparisons"] = int(row[1] or 0)
-    for row in (await db.execute(usage_query)).all():
-        scan_rows.setdefault(row[0], {"plan": row[0], "scans": 0, "active_customers": 0, "findings": 0})["usage_events"] = int(row[1] or 0)
+    grouped_rows: dict[str, dict] = {}
+    for row in (await db.execute(group_sources)).all():
+        if group_by == "customer":
+            group_key, item_plan, scans, active_customers, findings = row
+            grouped_rows[str(group_key)] = {
+                key_name: group_key,
+                "plan": item_plan,
+                "scans": int(scans or 0),
+                "active_customers": int(active_customers or 0),
+                "findings": int(findings or 0),
+            }
+        else:
+            group_key, scans, active_customers, findings = row
+            grouped_rows[str(group_key)] = {
+                key_name: group_key,
+                "scans": int(scans or 0),
+                "active_customers": int(active_customers or 0),
+                "findings": int(findings or 0),
+            }
 
-    plan_breakdown = []
-    for item in scan_rows.values():
+    for row in (await db.execute(comparison_query)).all():
+        if group_by == "customer":
+            group_key, item_plan, comparisons = row
+            grouped_rows.setdefault(
+                str(group_key),
+                {key_name: group_key, "plan": item_plan, "scans": 0, "active_customers": 0, "findings": 0},
+            )["comparisons"] = int(comparisons or 0)
+        else:
+            group_key, comparisons = row
+            grouped_rows.setdefault(
+                str(group_key),
+                {key_name: group_key, "scans": 0, "active_customers": 0, "findings": 0},
+            )["comparisons"] = int(comparisons or 0)
+
+    for row in (await db.execute(usage_query)).all():
+        if group_by == "customer":
+            group_key, item_plan, usage_events = row
+            grouped_rows.setdefault(
+                str(group_key),
+                {key_name: group_key, "plan": item_plan, "scans": 0, "active_customers": 0, "findings": 0},
+            )["usage_events"] = int(usage_events or 0)
+        else:
+            group_key, usage_events = row
+            grouped_rows.setdefault(
+                str(group_key),
+                {key_name: group_key, "scans": 0, "active_customers": 0, "findings": 0},
+            )["usage_events"] = int(usage_events or 0)
+
+    rows = []
+    for item in grouped_rows.values():
         item.setdefault("comparisons", 0)
         item.setdefault("usage_events", 0)
-        plan_breakdown.append(item)
-    plan_breakdown.sort(key=lambda item: item["plan"])
+        rows.append(item)
+
+    if group_by == "customer":
+        rows.sort(key=lambda item: (str(item.get("plan") or ""), str(item.get("customer") or "")))
+    elif group_by == "plan":
+        rows.sort(key=lambda item: str(item.get("plan") or ""))
 
     return {
-        "plan_breakdown": plan_breakdown,
+        "group_by": group_by,
+        "rows": rows,
         "totals": {
-            "scans": sum(item["scans"] for item in plan_breakdown),
-            "active_customers": sum(item["active_customers"] for item in plan_breakdown),
-            "findings": sum(item["findings"] for item in plan_breakdown),
-            "comparisons": sum(item["comparisons"] for item in plan_breakdown),
-            "usage_events": sum(item["usage_events"] for item in plan_breakdown),
+            "scans": sum(item["scans"] for item in rows),
+            "active_customers": sum(item["active_customers"] for item in rows),
+            "findings": sum(item["findings"] for item in rows),
+            "comparisons": sum(item["comparisons"] for item in rows),
+            "usage_events": sum(item["usage_events"] for item in rows),
         },
     }
 
@@ -885,6 +991,7 @@ async def metrics_usage(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     plan: str | None = Query(default=None, pattern="^(free|trial|developer|team|enterprise)$"),
+    group_by: str = Query(default="plan", pattern="^(overall|plan|customer)$"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -894,7 +1001,8 @@ async def metrics_usage(
         "date_from": start.isoformat() if start else None,
         "date_to": end.isoformat() if end else None,
         "plan": plan,
-        "usage": await _metrics_usage(db, date_from=start, date_to=end, plan=plan),
+        "group_by": group_by,
+        "usage": await _metrics_usage(db, date_from=start, date_to=end, plan=plan, group_by=group_by),
     }
 
 
@@ -907,6 +1015,7 @@ async def export_metrics(
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
     plan: str | None = Query(default=None, pattern="^(free|trial|developer|team|enterprise)$"),
+    group_by: str = Query(default="plan", pattern="^(overall|plan|customer)$"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -918,8 +1027,8 @@ async def export_metrics(
     elif dataset == "metrics_funnel":
         payload = [await _metrics_funnel(db, date_from=start, date_to=end, plan=plan)]
     elif dataset == "metrics_usage":
-        usage_payload = await _metrics_usage(db, date_from=start, date_to=end, plan=plan)
-        payload = usage_payload["plan_breakdown"] or [usage_payload["totals"]]
+        usage_payload = await _metrics_usage(db, date_from=start, date_to=end, plan=plan, group_by=group_by)
+        payload = usage_payload["rows"] or [usage_payload["totals"]]
     else:
         query_map = {
             "customers": select(Customer).options(selectinload(Customer.licences)).order_by(Customer.created_at.desc()),
@@ -990,6 +1099,7 @@ async def export_metrics(
             "date_from": start.isoformat() if start else None,
             "date_to": end.isoformat() if end else None,
             "plan": plan,
+            "group_by": group_by,
         },
     )
     await db.commit()
@@ -1003,6 +1113,7 @@ async def export_metrics(
         "date_from": start.isoformat() if start else None,
         "date_to": end.isoformat() if end else None,
         "plan": plan,
+        "group_by": group_by,
         "rows": payload,
     }
 
