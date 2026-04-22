@@ -31,8 +31,8 @@ if [[ "${ACR_USE_MANAGED_IDENTITY}" == "1" ]]; then
 else
   echo "-> Updating Web App using registry credentials..."
   set_webapp_container_image "${CONTAINER_IMAGE}" \
-    --docker-registry-server-user "$(az acr credential show --name "${ACR_NAME}" --query username -o tsv)" \
-    --docker-registry-server-password "$(az acr credential show --name "${ACR_NAME}" --query passwords[0].value -o tsv)" \
+    --container-registry-user "$(az acr credential show --name "${ACR_NAME}" --query username -o tsv)" \
+    --container-registry-password "$(az acr credential show --name "${ACR_NAME}" --query passwords[0].value -o tsv)"
 fi
 
 az webapp restart --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --output none
