@@ -1507,9 +1507,65 @@ describe('parseChatIntent', () => {
         const request = complete.mock.calls[0][0];
         expect(request.systemPrompt).toContain('Working scope: Workspace');
         expect(request.userMessage).toContain('Working scope: Workspace');
-        expect(request.userMessage).toContain('Workspace folder: demo-app');
+        expect(request.userMessage).toContain('Project root: d:\\repo');
         expect(request.userMessage).toContain('README.md:');
         expect(request.userMessage).toContain('package.json:');
+    });
+
+    it('rejects overbroad single-file rewrites during fix preview generation', async () => {
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\service.js');
+        const originalText = Array.from({ length: 24 }, (_, index) => `const line${index + 1} = ${index + 1};`).join('\n');
+        const replacementText = Array.from({ length: 24 }, (_, index) => `const rewritten${index + 1} = secure(${index + 1});`).join('\n');
+        const complete = jest.fn().mockResolvedValue({
+            content: `\`\`\`javascript\n${replacementText}\n\`\`\``,
+        });
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({
+            uri: targetUri,
+            getText: () => originalText,
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await provider.generateFixPreview({
+            id: 'finding-broad-rewrite',
+            line: 10,
+            lineEnd: 10,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'GEN-001',
+            title: 'Unsafe command execution',
+            explanation: 'User input reaches a shell sink.',
+            threat: 'Command execution.',
+            fix: 'Use execFile with explicit arguments.',
+            confidence: 0.9,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+        } as any, targetUri.fsPath);
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('rewrote too much of the file');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+        ]));
+        expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+            'vscode.diff',
+            expect.anything(),
+            expect.anything(),
+            expect.stringContaining('Fix Preview'),
+        );
     });
 
     it('prefers a targeted repo module when the repo question names it', async () => {
@@ -1587,7 +1643,7 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('Module path: tools/demo-app');
         expect(request.userMessage).toContain('tools/demo-app');
         expect(request.userMessage).toContain('src/server.js:');
-        expect(request.userMessage).toContain('Prefer this module/app as the primary interpretation target.');
+        expect(request.userMessage).toContain('Owlvex may use the full selected project root as context, but should keep this targeted module as the primary interpretation target.');
         expect(request.userMessage).not.toContain('Workspace folder: CodeScanner');
     });
 
@@ -1627,6 +1683,71 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('Active file: d:\\repo\\src\\app.js');
         expect(request.userMessage).not.toContain('Workspace folder:');
         expect(request.userMessage).not.toContain('README.md:');
+    });
+
+    it('blocks combined fix previews when the findings span different families', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await provider.generateBatchFixPreview([
+            {
+                targetPath: 'd:\\repo\\src\\one.js',
+                finding: {
+                    id: 'finding-sqli',
+                    line: 3,
+                    lineEnd: 3,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'SQ-001',
+                    title: 'SQL Injection',
+                    canonicalId: 'owlvex.issue.sql_injection.001',
+                    explanation: 'Unsafe SQL.',
+                    threat: 'Data exposure.',
+                    fix: 'Use parameters.',
+                    confidence: 0.9,
+                    provenance: 'ai',
+                    likelihood: 'HIGH',
+                    riskScore: 9,
+                },
+            },
+            {
+                targetPath: 'd:\\repo\\src\\two.js',
+                finding: {
+                    id: 'finding-ssrf',
+                    line: 4,
+                    lineEnd: 4,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'GR-003',
+                    title: 'SSRF',
+                    canonicalId: 'owlvex.issue.ssrf.001',
+                    explanation: 'Unsafe outbound request.',
+                    threat: 'Internal network reachability.',
+                    fix: 'Allow-list destinations.',
+                    confidence: 0.9,
+                    provenance: 'ai',
+                    likelihood: 'HIGH',
+                    riskScore: 9,
+                },
+            },
+        ] as any);
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('do not share the same finding family');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Fix code', kind: 'generateBatchFixPreview' }),
+        ]));
+        expect((provider as any).pendingFixPreview).toBeUndefined();
     });
 
     it('runs the project context quick action and reports readiness', async () => {
@@ -1843,6 +1964,11 @@ describe('parseChatIntent', () => {
         expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(3, PROFILE.commands.scanFile, expect.objectContaining({ fsPath: 'd:\\repo\\src\\target.js' }));
         expect((provider as any).messages[(provider as any).messages.length - 2].content).toContain('Kept the reviewed fix');
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Verification complete: the reviewed finding is no longer present');
+        expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
+            expect.objectContaining({ label: 'Scan current file', kind: 'quickAction', quickAction: 'scanFile' }),
+            expect.objectContaining({ label: 'Scan workspace', kind: 'quickAction', quickAction: 'scanFolder' }),
+        ]));
         expect((provider as any).pendingFixPreview).toBeUndefined();
     });
 
@@ -2054,6 +2180,11 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
             'Verification complete: the finding is still present after the kept fix.',
         );
+        expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Regenerate diff', kind: 'generateFixPreview' }),
+            expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
+            expect.objectContaining({ label: 'Scan current file', kind: 'quickAction', quickAction: 'scanFile' }),
+        ]));
     });
 
     it('treats the same finding family on a different rescanned line as still present', async () => {
@@ -2260,6 +2391,11 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
             'Verification complete: the finding still exists, but its risk dropped from 9/10 to 7/10.',
         );
+        expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Regenerate diff', kind: 'generateFixPreview' }),
+            expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
+            expect.objectContaining({ label: 'Scan workspace', kind: 'quickAction', quickAction: 'scanFolder' }),
+        ]));
     });
 
     it('opens a source action from a context summary message', async () => {

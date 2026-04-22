@@ -3,6 +3,7 @@ import { buildLicenceBadgeLabel, buildLicenceStatusSummary, buildPlanNextStepGui
 import {
     buildBackendAndLicenceReadyChoices,
     buildBackendConnectedNoLicenceChoices,
+    buildStoredScanComparisonChoice,
     buildProviderConnectedChoices,
     buildRegistrationCompletionChoices,
     buildRegistrationSuccessMessage,
@@ -41,6 +42,35 @@ describe('normalizeComparisonDiff', () => {
         expect(diff.resolved_findings).toBe(1);
         expect(diff.new_finding_details).toEqual([{ line: 10 }, { line: 20 }]);
         expect(diff.resolved_finding_details).toEqual([{ line: 5 }]);
+    });
+});
+
+describe('scan comparison picker helpers', () => {
+    it('builds human-readable scan comparison choices from stored scan metadata', () => {
+        const choice = buildStoredScanComparisonChoice({
+            scanId: '12345678-90ab-cdef-1234-567890abcdef',
+            targetLabel: 'tools/demo-app',
+            scannedAt: '2026-04-22T19:16:27.000Z',
+            result: {
+                scanId: '12345678-90ab-cdef-1234-567890abcdef',
+                score: 10,
+                summary: '',
+                findings: [{ severity: 'HIGH' } as any, { severity: 'MEDIUM' } as any],
+                positives: [],
+                metrics: { critical: 0, high: 1, medium: 1, low: 0 },
+                durationMs: 1200,
+                model: 'owlvex-gpt54mini',
+                provider: 'azure-foundry',
+                warnings: [],
+            } as any,
+        } as any);
+
+        expect(choice.label).toBe('tools/demo-app');
+        expect(choice.description).toContain('2026-04-22 19:16:27 UTC');
+        expect(choice.description).toContain('azure-foundry / owlvex-gpt54mini');
+        expect(choice.detail).toContain('10.0/10');
+        expect(choice.detail).toContain('2 finding(s)');
+        expect(choice.detail).toContain('scan 12345678');
     });
 });
 

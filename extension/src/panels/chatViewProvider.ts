@@ -188,14 +188,25 @@ interface FixBenchmarkUpdate {
     finding: Finding;
     reviewedPaths: string[];
     appliedCleanly: boolean;
+    patchedText?: string;
     rescanned?: ScanResult;
     matchingFinding?: Finding;
     notes?: string;
 }
+type UsageTelemetryEventName =
+    | 'fix_preview_generated'
+    | 'fix_preview_applied'
+    | 'fix_preview_discarded'
+    | 'fix_verification_completed';
+
+type UsageTelemetryEmitter = (eventName: UsageTelemetryEventName, metadata?: Record<string, unknown>) => void;
 const MAX_PERSISTED_MESSAGES = 40;
 const CONTEXT_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cs', '.go', '.rs', '.php', '.rb', '.cpp', '.c', '.h'];
 const DEFAULT_WORKING_SCOPE: WorkingScope = 'scanFolder';
 const WORKSPACE_CONTEXT_FILES = ['README.md', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml'];
+const MAX_BATCH_FIX_FILES = 3;
+const MAX_SINGLE_FILE_REWRITE_RATIO = 0.75;
+const MAX_REWRITE_LINE_THRESHOLD = 20;
 
 interface ImportedSymbolContext {
     specifier: string;
@@ -672,6 +683,106 @@ export function extractPatchedFileContent(raw: string, originalText: string): st
     return trimmed || originalText;
 }
 
+function countChangedLines(originalText: string, patchedText: string): { changedLines: number; totalLines: number } {
+    const originalLines = originalText.split(/\r?\n/);
+    const patchedLines = patchedText.split(/\r?\n/);
+    const totalLines = Math.max(originalLines.length, patchedLines.length, 1);
+    let changedLines = 0;
+
+    for (let index = 0; index < totalLines; index += 1) {
+        if ((originalLines[index] ?? '') !== (patchedLines[index] ?? '')) {
+            changedLines += 1;
+        }
+    }
+
+    return { changedLines, totalLines };
+}
+
+function looksLikeMalformedFixResponse(raw: string): boolean {
+    const trimmed = raw.trim();
+    return trimmed.includes('```') && !/^```[a-zA-Z0-9_-]*\r?\n[\s\S]*\r?\n```$/.test(trimmed);
+}
+
+function validateFixPreviewContent(options: {
+    raw: string;
+    originalText: string;
+    patchedText: string;
+    finding: Finding;
+    targetPath: string;
+}): string | undefined {
+    if (looksLikeMalformedFixResponse(options.raw)) {
+        return 'Owlvex received malformed code fences from the model. Ask "fix code" to regenerate the preview.';
+    }
+
+    if (!hasMeaningfulPreviewChange(options.originalText, options.patchedText)) {
+        return 'Owlvex could not produce a meaningful code diff. Ask "fix code" to regenerate the preview.';
+    }
+
+    const { changedLines, totalLines } = countChangedLines(options.originalText, options.patchedText);
+    if (totalLines >= MAX_REWRITE_LINE_THRESHOLD && (changedLines / totalLines) > MAX_SINGLE_FILE_REWRITE_RATIO) {
+        return `Owlvex rejected the preview for ${vscode.workspace.asRelativePath(vscode.Uri.file(options.targetPath), false)} because it rewrote too much of the file for a finding-anchored fix. Ask "fix code" to regenerate a smaller patch.`;
+    }
+
+    return undefined;
+}
+
+function normalizeFindingFamily(finding: Finding): string {
+    return String(finding.canonicalId || finding.canonicalTitle || finding.title || '')
+        .trim()
+        .toLowerCase();
+}
+
+function validateBatchFixScope(items: ActionableFindingTarget[]): string | undefined {
+    const distinctPaths = [...new Set(items.map(item => item.targetPath).filter((value): value is string => Boolean(value)))];
+    if (distinctPaths.length > MAX_BATCH_FIX_FILES) {
+        return `Owlvex blocked the combined fix preview because it spanned ${distinctPaths.length} files. Combined fixes are limited to ${MAX_BATCH_FIX_FILES} files.`;
+    }
+
+    const distinctFamilies = [...new Set(items.map(item => normalizeFindingFamily(item.finding)).filter(Boolean))];
+    if (distinctFamilies.length > 1) {
+        return 'Owlvex blocked the combined fix preview because the selected findings do not share the same finding family. Regenerate individual fixes instead.';
+    }
+
+    return undefined;
+}
+
+function inferSyntaxValidity(
+    targetPath: string,
+    patchedText: string,
+    rescanned?: ScanResult,
+): boolean | null {
+    const warnings = rescanned?.warnings ?? [];
+    if (warnings.some(warning => /\b(parse|syntax|unexpected token|compile|compilation)\b/i.test(warning))) {
+        return false;
+    }
+
+    const ext = path.extname(targetPath).toLowerCase();
+    if (ext === '.json') {
+        try {
+            JSON.parse(patchedText);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    if (ext === '.js' || ext === '.cjs') {
+        if (/\b(import|export)\b/.test(patchedText)) {
+            return null;
+        }
+        try {
+            // Parse-only validation for CommonJS-style JavaScript.
+            // eslint-disable-next-line no-new-func
+            new Function(patchedText);
+            return true;
+        } catch {
+            return false;
+        }
+    }
+
+    return rescanned ? true : null;
+}
+
 function extractLocalImports(source: string): ImportedSymbolContext[] {
     const contexts = new Map<string, Set<string>>();
 
@@ -1013,6 +1124,44 @@ function buildActiveFixPreviewActions(options: {
     return [...actions, ...buildPendingFixPreviewActions()];
 }
 
+function buildQuickActionAction(id: string, label: string, quickAction: string): ChatMessageAction {
+    return {
+        id,
+        label,
+        kind: 'quickAction',
+        quickAction,
+    };
+}
+
+function buildPostFixVerificationActions(options: {
+    rescanned?: ScanResult;
+    targetPath: string;
+    originalFinding: Finding;
+    matchingFinding?: Finding;
+}): ChatMessageAction[] {
+    const actions: ChatMessageAction[] = [
+        buildQuickActionAction('post-fix-scan-file', 'Scan current file', 'scanFile'),
+        buildQuickActionAction('post-fix-scan-workspace', 'Scan workspace', 'scanFolder'),
+    ];
+
+    if (options.rescanned) {
+        actions.unshift(buildExplainScoreAction('post-fix-explain-score', [{
+            uri: vscode.Uri.file(options.targetPath),
+            result: options.rescanned,
+        }]));
+    }
+
+    if (options.matchingFinding) {
+        actions.unshift({
+            ...buildReviewFixAction(options.originalFinding, options.targetPath),
+            id: 'post-fix-regenerate-diff',
+            label: 'Regenerate diff',
+        });
+    }
+
+    return actions;
+}
+
 function hasMeaningfulPreviewChange(originalText: string, patchedText: string): boolean {
     return Boolean(patchedText.trim()) && patchedText !== originalText;
 }
@@ -1204,6 +1353,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 expiresAt: null,
             }),
         },
+        private readonly emitUsageTelemetry: UsageTelemetryEmitter = () => {},
     ) {
         this.restorableMessages = this.getRestorableMessages();
         this.messages = buildDefaultChatMessages();
@@ -1356,6 +1506,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     'Do not include explanation before or after the code.',
                     'Preserve unrelated behavior and formatting where practical.',
                     'Make the smallest safe change that addresses the finding.',
+                    'Do not refactor, rename, reorder, or rewrite unrelated parts of the file.',
+                    'Prefer a narrow patch around the vulnerable lines unless a surrounding guard is strictly required.',
                     'Follow the grounded canonical remediation contract in the user context, including safe pattern, validation intent, and avoid guidance when relevant.',
                 ].join('\n'),
                 userMessage: [
@@ -1368,8 +1520,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
 
             const patched = extractPatchedFileContent(response.content || '', document.getText());
-            if (!hasMeaningfulPreviewChange(document.getText(), patched)) {
-                throw new Error('Owlvex could not produce a meaningful code diff. Ask "fix code" to regenerate the preview.');
+            const validationError = validateFixPreviewContent({
+                raw: response.content || '',
+                originalText: document.getText(),
+                patchedText: patched,
+                finding,
+                targetPath: document.uri.fsPath,
+            });
+            if (validationError) {
+                throw new Error(validationError);
             }
 
             const previewDoc = createPreviewDocumentUri(
@@ -1400,6 +1559,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 finding,
                 reviewedPaths: [document.uri.fsPath],
             };
+            this.emitUsageTelemetry('fix_preview_generated', {
+                outcome: 'ready',
+                file_count: 1,
+                canonical_id: finding.canonicalId ?? null,
+                severity: finding.severity ?? null,
+            });
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
@@ -1410,6 +1575,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 ],
             };
             this.pendingFixPreview = undefined;
+            this.emitUsageTelemetry('fix_preview_generated', {
+                outcome: 'failed',
+                file_count: 1,
+                canonical_id: finding.canonicalId ?? null,
+                severity: finding.severity ?? null,
+            });
         }
 
         void this.persistState();
@@ -1454,6 +1625,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 groups.set(targetPath, list);
             }
 
+            const batchScopeError = validateBatchFixScope(validItems);
+            if (batchScopeError) {
+                throw new Error(batchScopeError);
+            }
+
             const changes: NonNullable<PendingFixPreview['changes']> = [];
             for (const [targetPath, findings] of groups.entries()) {
                 const targetUri = vscode.Uri.file(targetPath);
@@ -1470,6 +1646,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         'Do not include explanation before or after the code.',
                         'Preserve unrelated behavior and formatting where practical.',
                         'Make the smallest safe changes that address all listed findings in this file.',
+                        'Do not refactor, rename, reorder, or rewrite unrelated parts of the file.',
+                        'Keep the patch constrained to the reviewed finding family and the minimum supporting validation or guard logic.',
                         'Follow the grounded canonical remediation contract in the user context, including safe pattern, validation intent, and avoid guidance when relevant.',
                     ].join('\n'),
                     userMessage: [
@@ -1482,8 +1660,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 });
 
                 const patched = extractPatchedFileContent(response.content || '', document.getText());
-                if (!hasMeaningfulPreviewChange(document.getText(), patched)) {
-                    throw new Error(`Owlvex could not produce a meaningful diff for ${vscode.workspace.asRelativePath(targetUri, false)}. Ask "fix code" to regenerate the preview.`);
+                const validationError = validateFixPreviewContent({
+                    raw: response.content || '',
+                    originalText: document.getText(),
+                    patchedText: patched,
+                    finding: findings[0],
+                    targetPath,
+                });
+                if (validationError) {
+                    throw new Error(validationError);
                 }
                 changes.push({
                     targetPath,
@@ -1534,6 +1719,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     items: validItems,
                 }),
             };
+            this.emitUsageTelemetry('fix_preview_generated', {
+                outcome: 'ready',
+                file_count: changes.length,
+                canonical_id: primaryChange.finding.canonicalId ?? null,
+                severity: primaryChange.finding.severity ?? null,
+            });
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
@@ -1544,6 +1735,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     : undefined,
             };
             this.pendingFixPreview = undefined;
+            this.emitUsageTelemetry('fix_preview_generated', {
+                outcome: 'failed',
+                file_count: validItems.length,
+                canonical_id: validItems[0]?.finding.canonicalId ?? null,
+                severity: validItems[0]?.finding.severity ?? null,
+            });
         }
 
         void this.persistState();
@@ -1611,6 +1808,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'assistant',
                 content: `Kept the reviewed fix across ${changes.length} files. The reviewed code was written into each file from the combined diff.`,
                 kind: 'advisory',
+                actions: [
+                    buildQuickActionAction('multi-fix-scan-workspace', 'Scan workspace', 'scanFolder'),
+                    buildQuickActionAction('multi-fix-review-scores', 'Review scores', 'reviewRiskCalibration'),
+                ],
+            });
+            this.emitUsageTelemetry('fix_preview_applied', {
+                outcome: 'applied',
+                file_count: changes.length,
+                canonical_id: changes[0]?.finding.canonicalId ?? null,
+                severity: changes[0]?.finding.severity ?? null,
             });
             this.pendingFixPreview = undefined;
             void this.persistState();
@@ -1671,6 +1878,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             ].join('\n'),
             kind: 'advisory',
         });
+        this.emitUsageTelemetry('fix_preview_applied', {
+            outcome: 'applied',
+            file_count: 1,
+            canonical_id: originalFinding.canonicalId ?? null,
+            severity: originalFinding.severity ?? null,
+        });
         this.pendingFixPreview = undefined;
 
         try {
@@ -1681,12 +1894,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     role: 'assistant',
                     content: `Verification could not confirm the result for ${vscode.workspace.asRelativePath(targetUri, false)}. The reviewed code was kept, but no completed rescan result was returned.`,
                     kind: 'advisory',
+                    actions: buildPostFixVerificationActions({
+                        targetPath: targetUri.fsPath,
+                        originalFinding,
+                    }),
+                });
+                this.emitUsageTelemetry('fix_verification_completed', {
+                    outcome: 'verification_incomplete',
+                    file_count: 1,
+                    canonical_id: originalFinding.canonicalId ?? null,
+                    severity: originalFinding.severity ?? null,
+                    risk_before: originalFinding.riskScore ?? null,
+                    target_removed: false,
                 });
                 await this.recordFixBenchmarkResult({
                     targetUri,
                     finding: originalFinding,
                     reviewedPaths,
                     appliedCleanly: true,
+                    patchedText: updatedDocument.getText(),
                     notes: 'Fix kept, but verification scan did not return a completed result.',
                 });
             } else {
@@ -1698,18 +1924,62 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         role: 'assistant',
                         content: `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
                         kind: 'advisory',
+                        actions: buildPostFixVerificationActions({
+                            rescanned,
+                            targetPath: targetUri.fsPath,
+                            originalFinding,
+                        }),
+                    });
+                    this.emitUsageTelemetry('fix_verification_completed', {
+                        outcome: 'removed',
+                        file_count: 1,
+                        canonical_id: originalFinding.canonicalId ?? null,
+                        severity: originalFinding.severity ?? null,
+                        risk_before: originalFinding.riskScore ?? null,
+                        risk_after: null,
+                        target_removed: true,
                     });
                 } else if ((matchingFinding.riskScore ?? 0) < (originalFinding.riskScore ?? 0)) {
                     this.messages.push({
                         role: 'assistant',
                         content: `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
                         kind: 'advisory',
+                        actions: buildPostFixVerificationActions({
+                            rescanned,
+                            targetPath: targetUri.fsPath,
+                            originalFinding,
+                            matchingFinding,
+                        }),
+                    });
+                    this.emitUsageTelemetry('fix_verification_completed', {
+                        outcome: 'risk_reduced',
+                        file_count: 1,
+                        canonical_id: originalFinding.canonicalId ?? null,
+                        severity: originalFinding.severity ?? null,
+                        risk_before: originalFinding.riskScore ?? null,
+                        risk_after: matchingFinding.riskScore ?? null,
+                        target_removed: false,
                     });
                 } else {
                     this.messages.push({
                         role: 'assistant',
                         content: `Verification complete: the finding is still present after the kept fix. Review the diff again or generate another fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
                         kind: 'advisory',
+                        actions: buildPostFixVerificationActions({
+                            rescanned,
+                            targetPath: targetUri.fsPath,
+                            originalFinding,
+                            matchingFinding,
+                        }),
+                    });
+                    this.emitUsageTelemetry('fix_verification_completed', {
+                        outcome: 'still_present',
+                        file_count: 1,
+                        canonical_id: originalFinding.canonicalId ?? null,
+                        severity: originalFinding.severity ?? null,
+                        risk_before: originalFinding.riskScore ?? null,
+                        risk_after: matchingFinding.riskScore ?? null,
+                        target_removed: false,
                     });
                 }
                 await this.recordFixBenchmarkResult({
@@ -1717,6 +1987,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     finding: originalFinding,
                     reviewedPaths,
                     appliedCleanly: true,
+                    patchedText: updatedDocument.getText(),
                     rescanned,
                     matchingFinding,
                     notes: matchingFinding
@@ -1729,12 +2000,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'assistant',
                 content: `Verification scan failed after keeping the fix for ${vscode.workspace.asRelativePath(targetUri, false)}: ${error.message}`,
                 kind: 'advisory',
+                actions: buildPostFixVerificationActions({
+                    targetPath: targetUri.fsPath,
+                    originalFinding,
+                }),
+            });
+            this.emitUsageTelemetry('fix_verification_completed', {
+                outcome: 'verification_failed',
+                file_count: 1,
+                canonical_id: originalFinding.canonicalId ?? null,
+                severity: originalFinding.severity ?? null,
+                risk_before: originalFinding.riskScore ?? null,
+                target_removed: false,
             });
             await this.recordFixBenchmarkResult({
                 targetUri,
                 finding: originalFinding,
                 reviewedPaths,
                 appliedCleanly: true,
+                patchedText: updatedDocument.getText(),
                 notes: `Verification scan failed: ${error.message}`,
             });
         }
@@ -2185,6 +2469,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     ? `Discarded the fix preview for ${vscode.workspace.asRelativePath(vscode.Uri.file(discardedPreview.targetPath), false)}. The original file was left unchanged and no code was written.`
                     : 'Discarded the current fix preview. The original file was left unchanged and no code was written.',
                 kind: 'advisory',
+            });
+            this.emitUsageTelemetry('fix_preview_discarded', {
+                file_count: discardedPreview?.changes?.length ?? 1,
+                canonical_id: discardedPreview?.finding.canonicalId ?? null,
+                severity: discardedPreview?.finding.severity ?? null,
             });
             void this.persistState();
             this.refresh();
@@ -3093,7 +3382,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             previewGenerated: true,
             appliedCleanly: update.appliedCleanly,
             filesChanged: changedFiles,
-            syntaxValid: update.rescanned ? true : null,
+            syntaxValid: inferSyntaxValidity(update.targetUri.fsPath, update.patchedText ?? '', update.rescanned),
             targetFindingRemoved: update.rescanned ? !update.matchingFinding : null,
             introducedHighRiskFindings,
             notes: update.notes,
@@ -3330,19 +3619,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     private async pushResolvedState(): Promise<void> {
         const configuredProviders = await this.getConfiguredProviders();
-        let provider = this.registry.getActive();
-
-        if (configuredProviders.length && !configuredProviders.some(item => item.id === provider.id)) {
-            await this.registry.setActiveProvider(configuredProviders[0].id);
-            provider = this.registry.getActive();
-        }
+        const provider = this.registry.getActive();
+        const activeProviderConfigured = configuredProviders.some(item => item.id === provider.id);
 
         const models = await this.getModelsForProvider(provider);
-        const providerStatus = configuredProviders.length
+        const providerStatus = activeProviderConfigured
             ? `LLM status: ${provider.name} is configured`
-            : 'LLM status: no provider configured';
+            : configuredProviders.length
+                ? `LLM status: ${provider.name} is selected but not configured`
+                : 'LLM status: no provider configured';
         const providerHint = configuredProviders.length
-            ? 'Configured providers only are shown here.'
+            ? activeProviderConfigured
+                ? 'Configured providers only are shown here.'
+                : `${getProviderSetupHint(provider.id)} Finish configuring ${provider.name} or switch back to a configured provider.`
             : `${getProviderSetupHint(provider.id)} Use "Configure LLM" to add your first provider.`;
         const configuredApiUrl = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl;
         const backendStatus = `Backend: ${configuredApiUrl}`;
@@ -3353,9 +3642,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             : licenceKey
                 ? 'Licence: key stored, validation pending'
                 : 'Licence: not connected';
-        const visibleProviders = configuredProviders.length
-            ? configuredProviders
-            : [];
+        const visibleProviders = (() => {
+            const all = activeProviderConfigured
+                ? configuredProviders
+                : [{ id: provider.id, name: provider.name }, ...configuredProviders];
+            return [...new Map(all.map(item => [item.id, item])).values()];
+        })();
         this.postState(this.buildState(models, visibleProviders, providerStatus, providerHint, backendStatus, licenceStatus));
     }
 

@@ -10,6 +10,63 @@ from app.services.usage_service import record_usage_event
 
 router = APIRouter(prefix="/v1/usage", tags=["usage"])
 
+COMMON_USAGE_METADATA_FIELDS = {
+    "provider",
+    "model",
+    "project_id",
+    "project_mode",
+    "project_configured",
+}
+
+USAGE_EVENT_METADATA_FIELDS = {
+    "scan_run": COMMON_USAGE_METADATA_FIELDS | {"scope", "file_count", "finding_count"},
+    "finding_viewed": COMMON_USAGE_METADATA_FIELDS | {"rule_code", "canonical_id", "severity", "scan_tier"},
+    "fix_viewed": COMMON_USAGE_METADATA_FIELDS | {"rule_code", "canonical_id", "severity", "scan_tier"},
+    "second_scan": COMMON_USAGE_METADATA_FIELDS | {"scope"},
+    "session_return": COMMON_USAGE_METADATA_FIELDS | {"previous_session_at"},
+    "limit_hit": COMMON_USAGE_METADATA_FIELDS | {"plan", "scans_this_month", "scans_remaining", "scans_per_month"},
+    "feedback_positive": COMMON_USAGE_METADATA_FIELDS | {"scope", "file_count", "finding_count"},
+    "feedback_negative": COMMON_USAGE_METADATA_FIELDS | {"scope", "file_count", "finding_count"},
+    "registration_verified": COMMON_USAGE_METADATA_FIELDS | {"plan", "delivery", "has_project_root"},
+    "project_root_selected": COMMON_USAGE_METADATA_FIELDS,
+    "llm_provider_selected": COMMON_USAGE_METADATA_FIELDS | {"previous_provider"},
+    "llm_model_selected": COMMON_USAGE_METADATA_FIELDS | {"previous_model"},
+    "llm_connection_configured": COMMON_USAGE_METADATA_FIELDS | {"connection_result", "latency_ms"},
+    "fix_preview_generated": COMMON_USAGE_METADATA_FIELDS | {"outcome", "file_count", "canonical_id", "severity"},
+    "fix_preview_applied": COMMON_USAGE_METADATA_FIELDS | {"outcome", "file_count", "canonical_id", "severity"},
+    "fix_preview_discarded": COMMON_USAGE_METADATA_FIELDS | {"file_count", "canonical_id", "severity"},
+    "fix_verification_completed": COMMON_USAGE_METADATA_FIELDS | {"outcome", "file_count", "canonical_id", "severity", "risk_before", "risk_after", "target_removed"},
+}
+
+
+def _sanitize_usage_metadata(event_name: str, metadata: dict) -> dict:
+    allowed_fields = USAGE_EVENT_METADATA_FIELDS.get(event_name)
+    if not allowed_fields:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported usage event '{event_name}'.",
+        )
+
+    unknown_fields = sorted(set(metadata.keys()) - allowed_fields)
+    if unknown_fields:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unsupported metadata fields for {event_name}: {', '.join(unknown_fields)}",
+        )
+
+    sanitized: dict = {}
+    for key, value in metadata.items():
+        if value is None or isinstance(value, (str, int, float, bool)):
+            sanitized[key] = value
+            continue
+
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Metadata field '{key}' must be a scalar JSON value.",
+        )
+
+    return sanitized
+
 
 class UsageEventRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -50,12 +107,14 @@ async def create_usage_event(
             "telemetry_disabled": True,
         }
 
+    sanitized_metadata = _sanitize_usage_metadata(body.event_name, body.metadata)
+
     event = await record_usage_event(
         db,
         licence_id=result["licence_id"],
         user_email=body.user_email,
         event_name=body.event_name,
-        metadata=body.metadata,
+        metadata=sanitized_metadata,
     )
     return {
         "ok": True,

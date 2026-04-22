@@ -149,7 +149,7 @@ Required:
 
 - Free and Trial entry paths are understandable to a new customer without custom engineering help
 - customer registration and licence issuance are traceable to a verified identity, at minimum a verified email address
-- extension onboarding can guide a user from registration through licence, backend, and provider setup
+- extension onboarding can guide a user from registration through licence activation and provider setup while using the packaged backend defaults for the selected build
 - manual operator steps are documented when automation is not yet complete
 
 Exit criteria:
@@ -220,12 +220,19 @@ Required:
 - structured logs exist for startup, shutdown, health, and major API failures
 - operational logs do not leak secrets or source-bearing data
 - failures can be correlated to a request, route, or component during debugging
+- AI-backed scan behavior is observable enough to explain:
+  - provider throttling
+  - budget-driven truncation
+  - scan duration
+  - model usage totals
 
 Exit criteria:
 
 - logs are structured enough to inspect production failures
 - expected high-value events are logged
 - at least one documented place exists to inspect deployment/runtime failures
+- scan/report output makes degraded AI coverage, throttling, and budget truncation visible to the user
+- AI usage totals are surfaced honestly enough that users can estimate provider spend without relying on hidden backend data
 
 ## 4.7 Security Readiness
 
@@ -287,6 +294,7 @@ The following are automatic blockers for calling Owlvex production ready:
 - production secrets are expected to be committed or manually edited into tracked files
 - production-only behavior cannot be health-checked or rolled back
 - grounded packs ship without auditable source provenance or review state
+- user-facing AI usage or cost claims are materially misleading because scan accounting omits major AI passes or hides throttling/truncation behavior
 
 ## 6. Minimum Production Checklist
 
@@ -334,6 +342,7 @@ Based on the current codebase state, the highest-value production-readiness gaps
 7. require auditable trusted-source provenance for grounded packs and remediation content
 8. resolve product-contract drift such as contributed settings or advertised behaviors that are not wired end-to-end in the runtime
 9. if billing is enabled later, add webhook idempotency and duplicate-entitlement protection before treating the billing path as production ready
+10. add full scan-level AI usage accounting so token totals, throttling, and budget truncation are visible and cost estimation is not based on partial data
 
 ## 9. Definition Of Production Ready
 

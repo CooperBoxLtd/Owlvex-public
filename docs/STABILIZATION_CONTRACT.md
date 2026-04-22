@@ -298,6 +298,8 @@ Owlvex must:
 - respect provider `retry-after` signals when available
 - degrade honestly when AI coverage is partial
 - prefer deterministic-only results over pretending a degraded AI scan is complete
+- make provider throttling and budget-driven corroboration truncation distinguishable in user-facing warnings and reports
+- expose enough scan-level AI usage data to explain why a scan was expensive or slow
 
 Future work in this area may include a repo-scan AI budget mode that intentionally switches later files to deterministic-only after repeated throttling.
 

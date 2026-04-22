@@ -138,13 +138,14 @@ This ordering exists because Owlvex's deterministic floor is now materially stro
 - conversation reliability and finding-state continuity
 - fix-review clarity and verification behavior
 - panel and workflow coherence
+- scan observability for AI usage, token totals, throttling, and cost visibility
 - language support only where the same proof discipline can be maintained
 
 Language expansion is valuable, but it must follow the same bounded rule-contract discipline as issue-family expansion.
 
 The current phase should also make demos and trials work without engineer hand-holding. That means:
 
-- backend URL can be configured in-product
+- backend should be package-defaulted for dev/prod builds, with backend override available in-product when intentionally needed
 - licence setup is visible in the shell
 - provider setup is part of the normal workflow
 - one setup check can confirm whether the trial path is ready
@@ -220,6 +221,50 @@ Move Free and Trial entry from manual or anonymous key handoff toward a lightwei
 - a new user can register, receive a licence, and continue setup from inside the extension
 - early customer support can recover or reissue a licence without ad hoc database edits
 - the flow remains compatible with later marketplace and payment automation
+
+## Workstream 0.90: AI Usage Accounting And Cost Visibility
+
+### Goal
+
+Make AI-backed scans observable enough that a user can understand why a scan was slow, how much model usage it consumed, and approximately what that usage cost.
+
+### Tasks
+
+- replace the current single optional token count with structured AI-usage accounting:
+  - prompt/input tokens
+  - completion/output tokens
+  - total tokens
+  - request count
+  - provider/model identifiers
+- accumulate usage across the full AI scan pipeline, not only the first response:
+  - finder
+  - verifier
+  - skeptic
+  - repo-context review passes
+- expose aggregated usage on scan results so single-file and workspace scans can report:
+  - AI requests made
+  - total tokens used
+  - scan duration
+  - provider/model used
+- distinguish budget pressure from actual provider throttling in user-facing warnings and reports
+- add report and panel visibility for scan-level AI usage totals
+- make cost estimation explicitly optional and model-aware:
+  - do not claim exact cost until pricing metadata exists for the selected provider/model
+  - if cost is shown, base it on structured usage totals rather than one collapsed token number
+
+### Current Direction
+
+- providers already return partial token usage metadata in the extension runtime
+- the scan recorder currently stores only one `token_count` integer per scan record
+- current report output does not show token usage, request counts, or estimated cost
+- current scan-level accounting is not yet trustworthy for total-cost estimation because verifier, skeptic, and repo-context passes are not aggregated into one visible total
+
+### Acceptance Criteria
+
+- scan results expose aggregated AI usage totals for the full scan pipeline
+- markdown reports show AI usage totals and make provider throttling versus budget truncation explicit
+- users can estimate model spend from visible scan usage data without reverse-engineering provider logs
+- product wording does not overclaim exact cost when provider pricing is unavailable, asymmetric, or subject to change
 
 ## Workstream 0.85: Benchmarking Department
 
@@ -494,7 +539,7 @@ This workstream exists because engine quality alone is not enough. If conversati
 Make Owlvex testable by external users through the real product path:
 
 - install the VSIX
-- connect to backend
+- use the packaged backend for the selected build
 - enter a licence
 - configure a provider
 - verify readiness
@@ -503,7 +548,7 @@ This workstream exists because the product should be demoable and trialable with
 
 ### Tasks
 
-- make backend URL configuration a first-class extension workflow
+- keep backend override available without making backend URL setup a normal first-run requirement
 - make licence entry and validation visible in the shell
 - expose provider setup as part of the normal UI flow
 - add one explicit trial-readiness check for backend, licence, and provider state
@@ -518,7 +563,7 @@ This workstream exists because the product should be demoable and trialable with
 
 ### Acceptance Criteria
 
-- a tester can configure backend, licence, and provider from the extension UI
+- a tester can complete onboarding using the packaged backend defaults, while still having access to an explicit backend override path when needed
 - the shell shows backend, licence, and LLM state clearly
 - one explicit setup check can confirm whether the trial path is ready
 - incomplete setup does not pretend the full AI-backed flow is available

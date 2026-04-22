@@ -240,6 +240,7 @@ npm run package:prod
 
 Pass:
 - both packages build successfully
+- the two package commands are run sequentially, not in parallel
 - profile-specific defaults are correct
 - backend is preconfigured automatically for each package profile without requiring manual setup
 

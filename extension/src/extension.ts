@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { createHash } from 'crypto';
 import { buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, LicenceInfo, LicenceManager } from './licence/licenceManager';
 import { getProviderApiKeySecretName, ProviderRegistry, persistProviderConnectionSetting, persistProviderSetting } from './providers/registry';
 import { ScanEngine, ScanResult } from './scanner/scanEngine';
@@ -112,7 +113,22 @@ type UsageEventName =
     | 'session_return'
     | 'limit_hit'
     | 'feedback_positive'
-    | 'feedback_negative';
+    | 'feedback_negative'
+    | 'registration_verified'
+    | 'project_root_selected'
+    | 'llm_provider_selected'
+    | 'llm_model_selected'
+    | 'llm_connection_configured'
+    | 'fix_preview_generated'
+    | 'fix_preview_applied'
+    | 'fix_preview_discarded'
+    | 'fix_verification_completed';
+
+interface UsageEventOptions {
+    registry?: ProviderRegistry;
+    includeProviderModel?: boolean;
+    includeProject?: boolean;
+}
 
 const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
 
@@ -154,6 +170,41 @@ export interface OnboardingActionChoice {
     label: string;
     command: string;
     args?: unknown[];
+}
+
+function formatStoredScanTimestamp(value?: string): string {
+    if (!value) {
+        return 'time unknown';
+    }
+
+    const timestamp = new Date(value);
+    if (Number.isNaN(timestamp.getTime())) {
+        return value;
+    }
+
+    return timestamp.toISOString().replace('T', ' ').replace('.000Z', ' UTC').replace('Z', ' UTC');
+}
+
+function shortenScanId(scanId: string): string {
+    return String(scanId ?? '').slice(0, 8) || 'unknown';
+}
+
+export function buildStoredScanComparisonChoice(record: StoredScanRecord): {
+    label: string;
+    description: string;
+    detail: string;
+    record: StoredScanRecord;
+} {
+    const target = record.targetLabel?.trim() || `Scan ${shortenScanId(record.scanId)}`;
+    const result = record.result;
+    const providerModel = [result.provider, result.model].filter(Boolean).join(' / ') || 'provider/model unknown';
+
+    return {
+        label: target,
+        description: `${formatStoredScanTimestamp(record.scannedAt)} | ${providerModel}`,
+        detail: `${result.score.toFixed(1)}/10 | ${result.findings.length} finding(s) | scan ${shortenScanId(record.scanId)}`,
+        record,
+    };
 }
 
 function normalizeStoredScanRecord(item: { scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }): StoredScanRecord {
@@ -320,6 +371,7 @@ async function trackUsageEvent(
     getApiUrl: () => string,
     eventName: UsageEventName,
     metadata: Record<string, unknown> = {},
+    options: UsageEventOptions = {},
 ): Promise<void> {
     try {
         const licenceKey = await licenceMgr.getKey();
@@ -331,6 +383,25 @@ async function trackUsageEvent(
             return;
         }
 
+        const enrichedMetadata: Record<string, unknown> = {
+            ...metadata,
+        };
+
+        if (options.includeProviderModel && options.registry) {
+            const provider = options.registry.getActive();
+            enrichedMetadata.provider ??= provider.id;
+            enrichedMetadata.model ??= provider.selectedModel;
+        }
+
+        if (options.includeProject) {
+            const projectMetadata = await buildProjectUsageMetadata();
+            for (const [key, value] of Object.entries(projectMetadata)) {
+                if (enrichedMetadata[key] === undefined) {
+                    enrichedMetadata[key] = value;
+                }
+            }
+        }
+
         const response = await fetch(`${getApiUrl()}/v1/usage/events`, {
             method: 'POST',
             headers: {
@@ -339,7 +410,7 @@ async function trackUsageEvent(
             },
             body: JSON.stringify({
                 event_name: eventName,
-                metadata,
+                metadata: compactUsageMetadata(enrichedMetadata),
             }),
         });
 
@@ -408,6 +479,25 @@ async function migrateWorkspaceProviderSettingsToGlobalDefaults(): Promise<void>
 
         await config.update(key, inspected.workspaceValue, vscode.ConfigurationTarget.Global);
     }
+}
+
+function compactUsageMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
+    return Object.fromEntries(
+        Object.entries(metadata).filter(([, value]) => value !== undefined),
+    );
+}
+
+async function buildProjectUsageMetadata(): Promise<Record<string, unknown>> {
+    const projectRoot = await resolveProjectRootInfo();
+    const projectMode = projectRoot.uri
+        ? (projectRoot.isConfigured ? 'configured' : 'workspace_default')
+        : 'unset';
+
+    return compactUsageMetadata({
+        project_id: projectRoot.uri ? createHash('sha256').update(projectRoot.uri.fsPath.toLowerCase()).digest('hex').slice(0, 16) : undefined,
+        project_mode: projectMode,
+        project_configured: projectRoot.isConfigured,
+    });
 }
 
 async function updateTelemetryPreferenceRequest(
@@ -883,6 +973,10 @@ export function activate(context: vscode.ExtensionContext) {
     if (previousSessionAt) {
         void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'session_return', {
             previous_session_at: previousSessionAt,
+        }, {
+            registry,
+            includeProviderModel: true,
+            includeProject: true,
         });
     }
     void context.globalState.update(`${PROFILE.storagePrefix}.lastSessionAt`, new Date().toISOString());
@@ -903,9 +997,17 @@ export function activate(context: vscode.ExtensionContext) {
         );
 
         if (choice === 'Helpful') {
-            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'feedback_positive', metadata);
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'feedback_positive', metadata, {
+                registry,
+                includeProviderModel: true,
+                includeProject: true,
+            });
         } else if (choice === 'Not yet') {
-            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'feedback_negative', metadata);
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'feedback_negative', metadata, {
+                registry,
+                includeProviderModel: true,
+                includeProject: true,
+            });
         }
     };
 
@@ -918,6 +1020,10 @@ export function activate(context: vscode.ExtensionContext) {
                 scans_this_month: info.usage.scansThisMonth,
                 scans_remaining: info.usage.scansRemaining,
                 scans_per_month: info.features.scansPerMonth,
+            }, {
+                registry,
+                includeProviderModel: true,
+                includeProject: true,
             });
         }
 
@@ -1275,7 +1381,15 @@ export function activate(context: vscode.ExtensionContext) {
         };
     };
 
-    const chatView = new ChatViewProvider(registry, context.workspaceState, licenceMgr);
+    const emitExtensionUsageEvent = (eventName: UsageEventName, metadata: Record<string, unknown> = {}): void => {
+        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, eventName, metadata, {
+            registry,
+            includeProviderModel: true,
+            includeProject: true,
+        });
+    };
+
+    const chatView = new ChatViewProvider(registry, context.workspaceState, licenceMgr, emitExtensionUsageEvent);
     hydrateRulePackRuntimeFromCache();
 
     vscode.window.registerTreeDataProvider(PROFILE.findingsViewId, sidebar);
@@ -1296,7 +1410,11 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'finding_viewed', buildFindingUsageMetadata(finding));
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'finding_viewed', buildFindingUsageMetadata(finding), {
+                registry,
+                includeProviderModel: true,
+                includeProject: true,
+            });
             await chatView.discussFinding(finding);
         })
     );
@@ -1314,7 +1432,11 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'fix_viewed', buildFindingUsageMetadata(finding));
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'fix_viewed', buildFindingUsageMetadata(finding), {
+                registry,
+                includeProviderModel: true,
+                includeProject: true,
+            });
             await chatView.generateFixPreview(finding);
         })
     );
@@ -1445,6 +1567,9 @@ export function activate(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage(
                 `${PROFILE.displayLabel}: Project root set to ${selected.label}. Repo scans and repo AI context will stay inside this boundary.`,
             );
+            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'project_root_selected', {}, {
+                includeProject: true,
+            });
         })
     );
 
@@ -1517,6 +1642,13 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
                 await licenceMgr.storeKey(verified.licence_key);
+                void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'registration_verified', {
+                    plan: selectedPlan,
+                    delivery: registration.delivery,
+                    has_project_root: true,
+                }, {
+                    includeProject: true,
+                });
                 const info = await licenceMgr.validate(getConfiguredApiUrl());
                 await promptOnboardingChoices(
                     `${PROFILE.displayLabel}: ${buildRegistrationSuccessMessage(selectedPlan, verified.email, info)}`,
@@ -1759,9 +1891,17 @@ export function activate(context: vscode.ExtensionContext) {
                     scope: 'file',
                     file_count: 1,
                     finding_count: result.findings.length,
+                }, {
+                    registry,
+                    includeProviderModel: true,
+                    includeProject: true,
                 });
                 if (sessionScanCount === 2) {
-                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'file' });
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'file' }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
                 }
                 void maybePromptUsefulnessFeedback(allowed, {
                     scope: 'file',
@@ -1829,9 +1969,17 @@ export function activate(context: vscode.ExtensionContext) {
                         scope: 'selected_files',
                         file_count: enrichedResults.length,
                         finding_count: totalFindings,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
                     });
                     if (sessionScanCount === 2) {
-                        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'selected_files' });
+                        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'selected_files' }, {
+                            registry,
+                            includeProviderModel: true,
+                            includeProject: true,
+                        });
                     }
                     void maybePromptUsefulnessFeedback(allowed, {
                         scope: 'selected_files',
@@ -1918,9 +2066,17 @@ export function activate(context: vscode.ExtensionContext) {
                         scope: 'open_editors',
                         file_count: enrichedResults.length,
                         finding_count: totalFindings,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
                     });
                     if (sessionScanCount === 2) {
-                        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'open_editors' });
+                        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'open_editors' }, {
+                            registry,
+                            includeProviderModel: true,
+                            includeProject: true,
+                        });
                     }
                     void maybePromptUsefulnessFeedback(allowed, {
                         scope: 'open_editors',
@@ -1988,6 +2144,7 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.switchModel, async () => {
             const provider = registry.getActive();
+            const previousModel = provider.selectedModel;
             const models = await provider.listModels();
             const picked = await vscode.window.showQuickPick(models, {
                 placeHolder: `Select model (current: ${provider.selectedModel})`,
@@ -1995,6 +2152,13 @@ export function activate(context: vscode.ExtensionContext) {
 
             if (picked) {
                 provider.selectedModel = picked;
+                void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_model_selected', {
+                    previous_model: previousModel,
+                }, {
+                    registry,
+                    includeProviderModel: true,
+                    includeProject: true,
+                });
                 vscode.window.showInformationMessage(`${PROFILE.displayLabel}: Model switched to ${picked}`);
             }
         })
@@ -2051,6 +2215,21 @@ export function activate(context: vscode.ExtensionContext) {
                 const { success, latencyMs } = await provider.testConnection();
                 if (success) {
                     await registry.setActiveProvider(provider.id);
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_provider_selected', {
+                        previous_provider: currentProvider.id,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_connection_configured', {
+                        connection_result: 'success',
+                        latency_ms: latencyMs,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
                     vscode.window.showInformationMessage(`Ollama connected (${latencyMs}ms) using ${provider.selectedModel} at ${host}`);
                 } else {
                     vscode.window.showErrorMessage('Ollama connection failed. Check the host URL, confirm Ollama is running, and verify the model is installed.');
@@ -2185,12 +2364,42 @@ export function activate(context: vscode.ExtensionContext) {
                         provider.selectedModel = activeModel;
                     }
                     await registry.setActiveProvider(provider.id);
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_provider_selected', {
+                        previous_provider: currentProvider.id,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_connection_configured', {
+                        connection_result: 'success',
+                        latency_ms: latencyMs,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
                     await promptOnboardingChoices(
                         `${provider.name} connected (${latencyMs}ms) using ${activeModel}`,
                         buildProviderConnectedChoices(),
                     );
                 } catch {
                     await registry.setActiveProvider(provider.id);
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_provider_selected', {
+                        previous_provider: currentProvider.id,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_connection_configured', {
+                        connection_result: 'success',
+                        latency_ms: latencyMs,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
                     await promptOnboardingChoices(
                         `${provider.name} connected (${latencyMs}ms)`,
                         buildProviderConnectedChoices(),
@@ -2392,9 +2601,17 @@ export function activate(context: vscode.ExtensionContext) {
                 scope: 'workspace',
                 file_count: summary.completed,
                 finding_count: summary.totalFindings,
+            }, {
+                registry,
+                includeProviderModel: true,
+                includeProject: true,
             });
             if (sessionScanCount === 2) {
-                void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'workspace' });
+                void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'workspace' }, {
+                    registry,
+                    includeProviderModel: true,
+                    includeProject: true,
+                });
             }
             void maybePromptUsefulnessFeedback(allowed, {
                 scope: 'workspace',
@@ -2665,12 +2882,7 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const scanAChoice = await vscode.window.showQuickPick(storedScans.map(item => ({
-                label: item.targetLabel || item.scanId,
-                description: `${item.result.score.toFixed(1)}/10 | ${item.result.findings.length} finding(s)`,
-                detail: item.scanId,
-                record: item,
-            })), {
+            const scanAChoice = await vscode.window.showQuickPick(storedScans.map(buildStoredScanComparisonChoice), {
                 placeHolder: 'Select baseline scan (Scan A)',
             });
             if (!scanAChoice) return;
@@ -2678,12 +2890,7 @@ export function activate(context: vscode.ExtensionContext) {
             const scanBChoice = await vscode.window.showQuickPick(
                 storedScans
                     .filter(item => item.scanId !== scanAChoice.record.scanId)
-                    .map(item => ({
-                        label: item.targetLabel || item.scanId,
-                        description: `${item.result.score.toFixed(1)}/10 | ${item.result.findings.length} finding(s)`,
-                        detail: item.scanId,
-                        record: item,
-                    })),
+                    .map(buildStoredScanComparisonChoice),
                 { placeHolder: 'Select comparison scan (Scan B)' },
             );
             if (!scanBChoice) return;

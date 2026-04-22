@@ -99,7 +99,7 @@ Trial and demo users follow the same data-boundary model.
 
 If a trial user connects the extension to:
 
-- an Owlvex backend URL
+- the packaged Owlvex backend for the selected build, or an intentional backend override
 - a valid licence
 - a selected AI provider
 
@@ -109,9 +109,11 @@ the backend should still remain on the metadata/control-plane side of the workfl
 
 For a normal trial or demo setup, the user should configure:
 
-- an Owlvex backend URL
 - a valid licence
 - a selected AI provider
+
+The backend should already be preconfigured by the packaged build in normal dev/prod use.
+The backend override command exists for deliberate non-default environments and debugging, not as the normal first-run path.
 
 That setup should not change the core boundary:
 

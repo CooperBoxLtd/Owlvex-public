@@ -88,7 +88,7 @@ The execution plane. Provides:
 - provider and model switching
 - trial and demo onboarding for:
   - lightweight email-based registration for Free or Trial entry
-  - backend URL configuration
+  - package-defaulted backend connectivity per dev/prod build, with backend override available only when intentionally needed
   - licence entry
   - provider setup
   - trial-readiness checks
@@ -192,7 +192,7 @@ The current onboarding path for AI-backed use is:
 
 1. choose Free, Start Trial, or Enter Existing Licence
 2. for Free or Trial, register with email and verify ownership before Owlvex issues the licence and activates it in the extension
-3. configure backend URL
+3. use the packaged backend that is preconfigured for the selected dev/prod build, or intentionally set a backend override only when needed
 4. confirm the active plan or enter an existing licence manually if needed
 5. configure provider/model
 6. run a trial/setup readiness check
@@ -217,7 +217,7 @@ The same boundary applies to demo and trial users:
 
 - backend connectivity and licence validation do not imply source upload to Owlvex backend
 - project-context documents should follow the same default-local handling as source code
-- trial onboarding should make backend dependence explicit without weakening the metadata-only backend contract
+- trial onboarding should make backend dependence explicit without turning backend URL setup into a normal first-run user task
 
 ---
 
@@ -285,7 +285,7 @@ Current remediation posture:
 
 **Working-scope-controlled AI access** - the assistant's bottom scope dropdown should define both what Owlvex scans and what AI is allowed to inspect as context. `Active file`, `Selected files`, `Open editors`, and `Workspace` should act as explicit AI context boundaries rather than letting repo access become an invisible always-on mode.
 
-**Trial onboarding** - choose Free, Start Trial, or Enter Existing Licence; register with email for Free or Trial; verify the email code; let the extension activate the issued licence automatically; configure backend, configure an LLM, and verify whether the AI-backed path is ready without editing settings files by hand.
+**Trial onboarding** - choose Free, Start Trial, or Enter Existing Licence; register with email for Free or Trial; verify the email code; let the extension activate the issued licence automatically; use the packaged backend for the selected build; configure an LLM; and verify whether the AI-backed path is ready without editing settings files by hand.
 
 **Customer entry direction** - Owlvex now supports a lightweight registration path where a user installs the extension, chooses Free or Trial, registers with email, verifies that email, receives an issued tracked licence, and continues setup in-product. The extension activates the licence immediately after verification, while email serves as confirmation rather than raw key delivery. Marketplace distribution and automated payment are later workstreams, not prerequisites for this early customer-entry model.
 
@@ -362,5 +362,6 @@ That is intended to strengthen the existing hybrid scanner, not replace it.
 - Large folder scans can be slow on smaller local models
 - Framework selection is currently a reasoning and reporting lens, not a fully independent framework-native detection engine
 - backend/licence/provider setup is still required for the full AI-backed experience
+- backend is now package-defaulted for dev/prod builds, but licence and provider setup are still required for the full AI-backed experience
 - platform-security and customer trust-boundary hardening now need to be treated as a first-class product workstream
 - Curated framework and cheat-sheet packs are now used in runtime prompt construction, but the AI lane still needs deeper issue-targeted grounding coverage and more eval cases before it can be called fully mature
