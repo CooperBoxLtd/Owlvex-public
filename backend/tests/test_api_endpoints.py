@@ -555,6 +555,8 @@ async def test_admin_export_returns_full_snapshot(client):
     assert any(customer["email"] == "export-user@example.com" for customer in data["customers"])
     assert "licences" in data
     assert "usage_events" in data
+    assert "customer_notes" in data
+    assert "admin_audit_log" in data
 
 
 @pytest.mark.asyncio
@@ -648,6 +650,115 @@ async def test_admin_delete_customer_purges_customer_tree(client):
         headers={"X-Admin-Key": "test-admin-key"},
     )
     assert lookup_response.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_admin_can_add_customer_note_and_lookup_returns_it(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "note-user@example.com", "plan": "free"},
+    )
+    verification_code = registration.json()["verification_code"]
+    await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "note-user@example.com", "code": verification_code},
+    )
+
+    note_response = await client.post(
+        "/v1/admin/customer/notes",
+        headers={"X-Admin-Key": "test-admin-key", "X-Admin-Actor": "ops@example.com"},
+        json={"email": "note-user@example.com", "note": "Customer asked for onboarding follow-up."},
+    )
+    assert note_response.status_code == 201
+    assert note_response.json()["author"] == "ops@example.com"
+
+    lookup_response = await client.get(
+        "/v1/admin/customer",
+        params={"email": "note-user@example.com"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert lookup_response.status_code == 200
+    data = lookup_response.json()
+    assert data["notes"][0]["note"] == "Customer asked for onboarding follow-up."
+    assert any(item["action"] == "customer.note_added" for item in data["audit_history"])
+
+
+@pytest.mark.asyncio
+async def test_admin_ban_writes_audit_log(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "audit-user@example.com", "plan": "free"},
+    )
+    verification_code = registration.json()["verification_code"]
+    await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "audit-user@example.com", "code": verification_code},
+    )
+
+    response = await client.post(
+        "/v1/admin/customer/ban",
+        headers={"X-Admin-Key": "test-admin-key", "X-Admin-Actor": "security@example.com"},
+        json={"email": "audit-user@example.com", "reason": "abuse"},
+    )
+    assert response.status_code == 200
+
+    audit_response = await client.get(
+        "/v1/admin/audit",
+        params={"email": "audit-user@example.com"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert audit_response.status_code == 200
+    events = audit_response.json()["events"]
+    assert any(item["action"] == "customer.ban" and item["actor"] == "security@example.com" for item in events)
+
+
+@pytest.mark.asyncio
+async def test_admin_metrics_summary_and_funnel_return_counts(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "metrics-user@example.com", "plan": "trial"},
+    )
+    verification_code = registration.json()["verification_code"]
+    await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "metrics-user@example.com", "code": verification_code},
+    )
+
+    summary_response = await client.get(
+        "/v1/admin/metrics/summary",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    funnel_response = await client.get(
+        "/v1/admin/metrics/funnel",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert summary_response.status_code == 200
+    assert funnel_response.status_code == 200
+    assert summary_response.json()["summary"]["licences_issued"] >= 1
+    assert funnel_response.json()["funnel"]["registrations_started"] >= 1
+    assert funnel_response.json()["funnel"]["verification_completed"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_admin_metrics_export_csv_returns_downloadable_payload(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "export-metrics@example.com", "plan": "free"},
+    )
+    verification_code = registration.json()["verification_code"]
+    await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "export-metrics@example.com", "code": verification_code},
+    )
+
+    response = await client.get(
+        "/v1/admin/metrics/export",
+        params={"dataset": "customers", "format": "csv"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert "email" in response.text
 
 
 @pytest.mark.asyncio

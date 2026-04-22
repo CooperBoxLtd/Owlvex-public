@@ -102,9 +102,11 @@
       display: grid;
       gap: 12px;
     }
-    .connection-grid { grid-template-columns: 140px 1fr 320px auto auto; align-items: end; }
+    .connection-grid { grid-template-columns: 140px 1fr 240px 220px auto auto; align-items: end; }
     .filter-grid { grid-template-columns: 1.4fr repeat(4, minmax(120px, 1fr)); align-items: end; }
     .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .metrics-grid { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr) minmax(340px, 0.9fr); }
+    .metrics-card-grid { display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .stat-card {
       padding: 14px;
       background: var(--panel-2);
@@ -212,6 +214,12 @@
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; min-width: 0; }
     .row.actions > * { flex: 0 0 auto; }
+    .list-box {
+      max-height: 360px;
+      overflow: auto;
+      display: grid;
+      gap: 10px;
+    }
     .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
     .small { font-size: 12px; color: var(--muted); }
     .status-banner {
@@ -235,14 +243,16 @@
       .layout { grid-template-columns: 1fr; }
       .connection-grid { grid-template-columns: 1fr 1fr; }
       .filter-grid { grid-template-columns: 1fr 1fr; }
-      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .stats-grid, .metrics-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .metrics-grid { grid-template-columns: 1fr; }
     }
     @media (max-width: 760px) {
       .app { padding: 12px; }
       .connection-grid,
       .filter-grid,
       .detail-grid,
-      .stats-grid { grid-template-columns: 1fr; }
+      .stats-grid,
+      .metrics-card-grid { grid-template-columns: 1fr; }
       .page-header { display: block; }
       table { min-width: 720px; }
     }
@@ -285,6 +295,10 @@
           <div>
             <label class="small" for="adminKey">Admin key</label>
             <input id="adminKey" type="password" />
+          </div>
+          <div>
+            <label class="small" for="adminActor">Operator</label>
+            <input id="adminActor" placeholder="name or email" />
           </div>
           <button class="primary" id="loadOverview">Load directory</button>
           <button class="secondary" id="exportJson">Export JSON</button>
@@ -389,6 +403,92 @@
     <section class="panel">
       <div class="panel-header">
         <div>
+          <h2 style="margin:0;">Metrics And Exports</h2>
+          <div class="small">Operational analytics, funnel metrics, and filtered exports for offline analysis.</div>
+        </div>
+      </div>
+      <div class="panel-body metrics-grid">
+        <div class="stack">
+          <div class="row">
+            <div>
+              <label class="small" for="metricsDateFrom">Date from</label>
+              <input id="metricsDateFrom" type="date" />
+            </div>
+            <div>
+              <label class="small" for="metricsDateTo">Date to</label>
+              <input id="metricsDateTo" type="date" />
+            </div>
+            <div>
+              <label class="small" for="metricsPlan">Plan</label>
+              <select id="metricsPlan">
+                <option value="">All plans</option>
+                <option value="free">free</option>
+                <option value="trial">trial</option>
+                <option value="developer">developer</option>
+                <option value="team">team</option>
+                <option value="enterprise">enterprise</option>
+              </select>
+            </div>
+          </div>
+          <div class="row actions">
+            <button class="secondary" id="loadMetrics">Refresh metrics</button>
+          </div>
+          <div class="metrics-card-grid" id="metricsSummaryGrid">
+            <div class="stat-card"><div class="small">Registrations</div><strong>0</strong></div>
+            <div class="stat-card"><div class="small">Verifications</div><strong>0</strong></div>
+            <div class="stat-card"><div class="small">Licences issued</div><strong>0</strong></div>
+            <div class="stat-card"><div class="small">First scans</div><strong>0</strong></div>
+            <div class="stat-card"><div class="small">Usage events</div><strong>0</strong></div>
+            <div class="stat-card"><div class="small">Audit events</div><strong>0</strong></div>
+          </div>
+          <div class="detail-grid">
+            <div class="kv">
+              <label>Funnel</label>
+              <pre id="metricsFunnel" class="mono small"></pre>
+            </div>
+            <div class="kv">
+              <label>Usage By Plan</label>
+              <pre id="metricsUsage" class="mono small"></pre>
+            </div>
+          </div>
+        </div>
+        <div class="stack">
+          <div>
+            <label class="small" for="exportDataset">Export dataset</label>
+            <select id="exportDataset">
+              <option value="metrics_summary">metrics_summary</option>
+              <option value="metrics_funnel">metrics_funnel</option>
+              <option value="metrics_usage">metrics_usage</option>
+              <option value="customers">customers</option>
+              <option value="licences">licences</option>
+              <option value="usage_events">usage_events</option>
+              <option value="scan_history">scan_history</option>
+              <option value="comparisons">comparisons</option>
+              <option value="customer_notes">customer_notes</option>
+              <option value="admin_audit_log">admin_audit_log</option>
+            </select>
+          </div>
+          <div>
+            <label class="small" for="exportFormat">Export format</label>
+            <select id="exportFormat">
+              <option value="json">json</option>
+              <option value="csv">csv</option>
+            </select>
+          </div>
+          <div class="row actions">
+            <button id="runExport">Download export</button>
+          </div>
+          <div class="kv">
+            <label>Export guidance</label>
+            <div class="small">Use `metrics_*` datasets for summary analysis. Use raw datasets for offline joins, BI tools, or ad-hoc review.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
           <h2 style="margin:0;">Raw API Response</h2>
           <div class="small">Kept for debugging, not as the primary UI.</div>
         </div>
@@ -413,12 +513,14 @@
       filteredCustomers: [],
       selectedCustomerId: null,
       latestResponse: {},
+      metrics: { summary: {}, funnel: {}, usage: {} },
       isBusy: false,
     };
 
     const environmentEl = document.getElementById('environment');
     const apiUrlEl = document.getElementById('apiUrl');
     const adminKeyEl = document.getElementById('adminKey');
+    const adminActorEl = document.getElementById('adminActor');
     const searchEl = document.getElementById('search');
     const statusFilterEl = document.getElementById('statusFilter');
     const planFilterEl = document.getElementById('planFilter');
@@ -432,6 +534,14 @@
     const directoryCountEl = document.getElementById('directoryCount');
     const activeEnvironmentBadgeEl = document.getElementById('activeEnvironmentBadge');
     const selectionBadgeEl = document.getElementById('selectionBadge');
+    const metricsDateFromEl = document.getElementById('metricsDateFrom');
+    const metricsDateToEl = document.getElementById('metricsDateTo');
+    const metricsPlanEl = document.getElementById('metricsPlan');
+    const metricsSummaryGridEl = document.getElementById('metricsSummaryGrid');
+    const metricsFunnelEl = document.getElementById('metricsFunnel');
+    const metricsUsageEl = document.getElementById('metricsUsage');
+    const exportDatasetEl = document.getElementById('exportDataset');
+    const exportFormatEl = document.getElementById('exportFormat');
 
     function normalizeUrl(value) {
       return String(value || '').trim().replace(/\/+$/, '');
@@ -447,6 +557,7 @@
     function saveSettings() {
       localStorage.setItem('owlvexAdminApiUrl', normalizeUrl(apiUrlEl.value));
       localStorage.setItem('owlvexAdminKey', adminKeyEl.value);
+      localStorage.setItem('owlvexAdminActor', adminActorEl.value);
     }
 
     function initializeSettings() {
@@ -454,6 +565,7 @@
       apiUrlEl.value = initialApiUrl;
       environmentEl.value = resolveEnvironmentName(initialApiUrl);
       adminKeyEl.value = localStorage.getItem('owlvexAdminKey') || '';
+      adminActorEl.value = localStorage.getItem('owlvexAdminActor') || '';
       renderEnvironmentBadge();
     }
 
@@ -607,6 +719,27 @@
       `).join('');
     }
 
+    function renderMetrics() {
+      const summary = state.metrics.summary || {};
+      const funnel = state.metrics.funnel || {};
+      const usage = state.metrics.usage || {};
+      metricsSummaryGridEl.innerHTML = [
+        ['Registrations', funnel.registrations_started || 0],
+        ['Verifications', funnel.verification_completed || 0],
+        ['Licences issued', summary.licences_issued || 0],
+        ['First scans', funnel.first_scan_completed || 0],
+        ['Usage events', summary.usage_event_count || 0],
+        ['Audit events', summary.admin_audit_event_count || 0],
+      ].map(([label, value]) => `
+        <div class="stat-card">
+          <div class="small">${escapeHtml(label)}</div>
+          <strong>${escapeHtml(String(value))}</strong>
+        </div>
+      `).join('');
+      metricsFunnelEl.textContent = JSON.stringify(funnel, null, 2);
+      metricsUsageEl.textContent = JSON.stringify(usage, null, 2);
+    }
+
     function renderDirectory() {
       directoryCountEl.textContent = `${state.filteredCustomers.length} result${state.filteredCustomers.length === 1 ? '' : 's'}`;
       if (!state.filteredCustomers.length) {
@@ -675,6 +808,8 @@
       const summary = customer.summary || {};
       const activity = customer.activity || {};
       const licences = customer.licences || [];
+      const notes = customer.notes || [];
+      const auditHistory = customer.audit_history || [];
 
       detailPanelEl.innerHTML = `
         <div class="panel-header">
@@ -776,6 +911,47 @@
             </div>
           `, 'No comparisons recorded.')}
         </div>
+
+        <div class="detail-section">
+          <div class="row">
+            <div style="flex: 1.2;">
+              <label class="small" for="customerNoteInput">Internal note</label>
+              <textarea id="customerNoteInput" placeholder="Support context, fraud review, onboarding notes"></textarea>
+            </div>
+            <div style="flex: 0.8;" class="stack">
+              <div class="small">Notes are attributed to the current operator.</div>
+              <button class="secondary" data-action="add-note">Add note</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="detail-grid">
+            <div class="stack">
+              <h3 style="margin:0;">Customer notes</h3>
+              <div class="list-box">
+                ${notes.length ? notes.map((note) => `
+                  <div class="activity-card">
+                    <div class="small">${escapeHtml(note.author || 'unknown')} Â· ${escapeHtml(formatDate(note.created_at))}</div>
+                    <div>${escapeHtml(note.note)}</div>
+                  </div>
+                `).join('') : '<div class="small">No notes recorded.</div>'}
+              </div>
+            </div>
+            <div class="stack">
+              <h3 style="margin:0;">Audit history</h3>
+              <div class="list-box">
+                ${auditHistory.length ? auditHistory.map((item) => `
+                  <div class="activity-card">
+                    <div><strong>${escapeHtml(item.action)}</strong></div>
+                    <div class="small">${escapeHtml(item.actor || 'unknown')} Â· ${escapeHtml(item.environment || 'unknown')} Â· ${escapeHtml(formatDate(item.created_at))}</div>
+                    <div class="small">${escapeHtml(item.reason || '')}</div>
+                  </div>
+                `).join('') : '<div class="small">No audit events recorded.</div>'}
+              </div>
+            </div>
+          </div>
+        </div>
       `;
     }
 
@@ -784,6 +960,7 @@
       renderStats();
       renderDirectory();
       renderCustomerDetail();
+      renderMetrics();
       renderEnvironmentBadge();
     }
 
@@ -794,6 +971,7 @@
         ...options,
         headers: {
           'X-Admin-Key': adminKeyEl.value,
+          'X-Admin-Actor': adminActorEl.value || 'unknown-operator',
           'Content-Type': 'application/json',
           ...(options.headers || {}),
         },
@@ -833,6 +1011,59 @@
       a.click();
       URL.revokeObjectURL(url);
       setStatus('Export ready.');
+    }
+
+    function currentMetricsParams() {
+      const params = new URLSearchParams();
+      if (metricsDateFromEl.value) params.set('date_from', metricsDateFromEl.value);
+      if (metricsDateToEl.value) params.set('date_to', metricsDateToEl.value);
+      if (metricsPlanEl.value) params.set('plan', metricsPlanEl.value);
+      return params;
+    }
+
+    async function loadMetrics() {
+      setStatus('Loading metrics...');
+      const params = currentMetricsParams().toString();
+      const suffix = params ? `?${params}` : '';
+      const [summaryData, funnelData, usageData] = await Promise.all([
+        request(`/v1/admin/metrics/summary${suffix}`, { method: 'GET' }),
+        request(`/v1/admin/metrics/funnel${suffix}`, { method: 'GET' }),
+        request(`/v1/admin/metrics/usage${suffix}`, { method: 'GET' }),
+      ]);
+      state.metrics.summary = summaryData.summary || {};
+      state.metrics.funnel = funnelData.funnel || {};
+      state.metrics.usage = usageData.usage || {};
+      renderMetrics();
+      setStatus('Metrics refreshed.');
+    }
+
+    async function runTargetedExport() {
+      setStatus('Preparing export...');
+      const params = currentMetricsParams();
+      params.set('dataset', exportDatasetEl.value);
+      params.set('format', exportFormatEl.value);
+      saveSettings();
+      const targetApiUrl = normalizeUrl(apiUrlEl.value);
+      const url = `${targetApiUrl}/v1/admin/metrics/export?${params.toString()}`;
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Admin-Key': adminKeyEl.value,
+          'X-Admin-Actor': adminActorEl.value || 'unknown-operator',
+        },
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(text || `HTTP ${response.status}`);
+      }
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `owlvex-${exportDatasetEl.value}.${exportFormatEl.value === 'csv' ? 'csv' : 'json'}`;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+      setStatus('Export downloaded.');
     }
 
     async function refreshSelectedCustomer() {
@@ -948,6 +1179,21 @@
       setStatus('Licence deleted.');
     }
 
+    async function addCustomerNote() {
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      const noteEl = document.getElementById('customerNoteInput');
+      const note = String(noteEl?.value || '').trim();
+      if (!note) throw new Error('A note is required.');
+      setStatus(`Adding note for ${customer.email}...`);
+      await request('/v1/admin/customer/notes', {
+        method: 'POST',
+        body: JSON.stringify({ email: customer.email, note }),
+      });
+      await refreshSelectedCustomer();
+      setStatus('Customer note added.');
+    }
+
     function selectCustomer(customerId) {
       state.selectedCustomerId = customerId;
       renderAll();
@@ -966,6 +1212,7 @@
         else if (action === 'unban-customer') await unbanCustomer();
         else if (action === 'delete-customer') await deleteCustomer();
         else if (action === 'delete-licence') await deleteLicence(dataset.licenceId);
+        else if (action === 'add-note') await addCustomerNote();
       } finally {
         state.isBusy = false;
       }
@@ -990,6 +1237,7 @@
       renderEnvironmentBadge();
     });
     adminKeyEl.addEventListener('change', saveSettings);
+    adminActorEl.addEventListener('change', saveSettings);
 
     ['input', 'change'].forEach((eventName) => {
       searchEl.addEventListener(eventName, renderAll);
@@ -1001,6 +1249,8 @@
 
     document.getElementById('loadOverview').addEventListener('click', () => loadOverview().catch(handleError));
     document.getElementById('exportJson').addEventListener('click', () => exportJson().catch(handleError));
+    document.getElementById('loadMetrics').addEventListener('click', () => loadMetrics().catch(handleError));
+    document.getElementById('runExport').addEventListener('click', () => runTargetedExport().catch(handleError));
 
     customerTableBodyEl.addEventListener('click', (event) => {
       const row = event.target.closest('tr[data-customer-id]');
@@ -1019,6 +1269,7 @@
       handleError(error);
       renderAll();
     });
+    loadMetrics().catch(handleError);
   </script>
 </body>
 </html>

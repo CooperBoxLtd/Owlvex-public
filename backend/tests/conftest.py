@@ -225,6 +225,30 @@ def _create_sqlite_tables(conn):
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """))
+    conn.execute(__import__('sqlalchemy').text("""
+        CREATE TABLE IF NOT EXISTS customer_notes (
+            id TEXT PRIMARY KEY,
+            customer_id TEXT NOT NULL,
+            author TEXT,
+            note TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
+    conn.execute(__import__('sqlalchemy').text("""
+        CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id TEXT PRIMARY KEY,
+            customer_id TEXT,
+            licence_id TEXT,
+            customer_email TEXT,
+            actor TEXT,
+            action TEXT NOT NULL,
+            reason TEXT,
+            environment TEXT,
+            details TEXT DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """))
 
 
 @pytest_asyncio.fixture

@@ -1,20 +1,33 @@
 import hashlib
 import secrets
 import uuid
+import csv
+import io
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, and_, false
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.config import get_settings
-from app.db.models import Comparison, Customer, Licence, LicenceSeat, ScanHistory, TeamPrompt, UsageEvent
+from app.db.models import (
+    AdminAuditLog,
+    Comparison,
+    Customer,
+    CustomerNote,
+    Licence,
+    LicenceSeat,
+    ScanHistory,
+    TeamPrompt,
+    UsageEvent,
+)
 from app.db.session import get_db
+from app.services.admin_ops import record_admin_audit_event
 from app.services.email_service import send_verification_email
 from app.services.licence_service import generate_licence_key, hash_licence_key
 
@@ -53,10 +66,65 @@ class DeleteLicenceRequest(BaseModel):
     licence_id: str
 
 
+class CustomerNoteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr
+    note: str = Field(min_length=1, max_length=4000)
+
+
+class ExportRequestParams(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    dataset: str
+    format: str
+
+
 def _ensure_admin_key(x_admin_key: str) -> None:
     settings = get_settings()
     if x_admin_key != settings.admin_key:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid admin key")
+
+
+def _admin_actor(x_admin_actor: str | None) -> str:
+    value = (x_admin_actor or "").strip()
+    return value or "unknown-operator"
+
+
+def _parse_date_filter(value: str | None, *, inclusive_end: bool = False) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        try:
+            parsed_date = date.fromisoformat(value)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid date filter: {value}",
+            ) from exc
+        parsed = datetime.combine(parsed_date, datetime.min.time(), tzinfo=timezone.utc)
+        if inclusive_end:
+            parsed = parsed + timedelta(days=1)
+        return parsed
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    if inclusive_end and "T" not in value:
+        parsed = parsed + timedelta(days=1)
+    return parsed
+
+
+def _apply_date_range(query, column, *, date_from: datetime | None, date_to: datetime | None):
+    conditions = []
+    if date_from:
+        conditions.append(column >= date_from)
+    if date_to:
+        conditions.append(column < date_to)
+    if conditions:
+        query = query.where(and_(*conditions))
+    return query
 
 
 def _generate_verification_code() -> str:
@@ -215,6 +283,32 @@ def _serialize_comparison(item: Comparison) -> dict:
     }
 
 
+def _serialize_customer_note(note: CustomerNote) -> dict:
+    return {
+        "note_id": str(note.id),
+        "customer_id": str(note.customer_id),
+        "author": note.author,
+        "note": note.note,
+        "created_at": note.created_at.isoformat() if note.created_at else None,
+        "updated_at": note.updated_at.isoformat() if note.updated_at else None,
+    }
+
+
+def _serialize_audit_event(item: AdminAuditLog) -> dict:
+    return {
+        "audit_id": str(item.id),
+        "customer_id": str(item.customer_id) if item.customer_id else None,
+        "licence_id": str(item.licence_id) if item.licence_id else None,
+        "customer_email": item.customer_email,
+        "actor": item.actor,
+        "action": item.action,
+        "reason": item.reason,
+        "environment": item.environment,
+        "details": item.details or {},
+        "created_at": item.created_at.isoformat() if item.created_at else None,
+    }
+
+
 async def _collect_customer_activity_summaries(
     db: AsyncSession,
     customers: list[Customer],
@@ -301,6 +395,236 @@ async def _collect_recent_customer_activity(db: AsyncSession, customer: Customer
     }
 
 
+async def _collect_customer_notes(db: AsyncSession, customer: Customer, *, limit: int = 20) -> list[dict]:
+    result = await db.execute(
+        select(CustomerNote)
+        .where(CustomerNote.customer_id == customer.id)
+        .order_by(CustomerNote.created_at.desc())
+        .limit(limit)
+    )
+    return [_serialize_customer_note(item) for item in result.scalars().all()]
+
+
+async def _collect_customer_audit_history(db: AsyncSession, customer: Customer, *, limit: int = 50) -> list[dict]:
+    licence_ids = [licence.id for licence in customer.licences]
+    query = (
+        select(AdminAuditLog)
+        .where(
+            (AdminAuditLog.customer_id == customer.id)
+            | (AdminAuditLog.customer_email == customer.email)
+            | (AdminAuditLog.licence_id.in_(licence_ids) if licence_ids else false())
+        )
+        .order_by(AdminAuditLog.created_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    return [_serialize_audit_event(item) for item in result.scalars().all()]
+
+
+def _csv_response(*, filename: str, rows: list[dict]) -> Response:
+    output = io.StringIO()
+    if rows:
+        writer = csv.DictWriter(output, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
+    else:
+        output.write("")
+    return Response(
+        content=output.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+async def _metrics_summary(
+    db: AsyncSession,
+    *,
+    date_from: datetime | None,
+    date_to: datetime | None,
+    plan: str | None,
+) -> dict:
+    customer_query = select(func.count(Customer.id))
+    customer_query = _apply_date_range(customer_query, Customer.created_at, date_from=date_from, date_to=date_to)
+    total_customers = int((await db.execute(customer_query)).scalar() or 0)
+
+    verified_query = select(func.count(Customer.id)).where(Customer.email_verified_at.is_not(None))
+    verified_query = _apply_date_range(verified_query, Customer.email_verified_at, date_from=date_from, date_to=date_to)
+    verified_customers = int((await db.execute(verified_query)).scalar() or 0)
+
+    banned_query = select(func.count(Customer.id)).where(Customer.is_banned.is_(True))
+    banned_query = _apply_date_range(banned_query, Customer.updated_at, date_from=date_from, date_to=date_to)
+    banned_customers = int((await db.execute(banned_query)).scalar() or 0)
+
+    licence_query = select(func.count(Licence.id))
+    if plan:
+        licence_query = licence_query.where(Licence.plan == plan)
+    licence_query = _apply_date_range(licence_query, Licence.created_at, date_from=date_from, date_to=date_to)
+    licences_issued = int((await db.execute(licence_query)).scalar() or 0)
+
+    active_licence_query = select(func.count(Licence.id)).where(Licence.is_active.is_(True))
+    if plan:
+        active_licence_query = active_licence_query.where(Licence.plan == plan)
+    active_licence_query = _apply_date_range(
+        active_licence_query,
+        Licence.updated_at,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    active_licences = int((await db.execute(active_licence_query)).scalar() or 0)
+
+    scan_query = select(func.count(ScanHistory.id)).join(Licence, Licence.id == ScanHistory.licence_id)
+    usage_query = select(func.count(UsageEvent.id)).join(Licence, Licence.id == UsageEvent.licence_id)
+    comparison_query = select(func.count(Comparison.id)).join(Licence, Licence.id == Comparison.licence_id)
+    if plan:
+        scan_query = scan_query.where(Licence.plan == plan)
+        usage_query = usage_query.where(Licence.plan == plan)
+        comparison_query = comparison_query.where(Licence.plan == plan)
+    scan_query = _apply_date_range(scan_query, ScanHistory.created_at, date_from=date_from, date_to=date_to)
+    usage_query = _apply_date_range(usage_query, UsageEvent.created_at, date_from=date_from, date_to=date_to)
+    comparison_query = _apply_date_range(comparison_query, Comparison.created_at, date_from=date_from, date_to=date_to)
+
+    note_query = select(func.count(CustomerNote.id))
+    note_query = _apply_date_range(note_query, CustomerNote.created_at, date_from=date_from, date_to=date_to)
+    audit_query = select(func.count(AdminAuditLog.id))
+    audit_query = _apply_date_range(audit_query, AdminAuditLog.created_at, date_from=date_from, date_to=date_to)
+
+    return {
+        "total_customers": total_customers,
+        "verified_customers": verified_customers,
+        "banned_customers": banned_customers,
+        "licences_issued": licences_issued,
+        "active_licences": active_licences,
+        "scan_count": int((await db.execute(scan_query)).scalar() or 0),
+        "usage_event_count": int((await db.execute(usage_query)).scalar() or 0),
+        "comparison_count": int((await db.execute(comparison_query)).scalar() or 0),
+        "customer_note_count": int((await db.execute(note_query)).scalar() or 0),
+        "admin_audit_event_count": int((await db.execute(audit_query)).scalar() or 0),
+    }
+
+
+async def _metrics_funnel(
+    db: AsyncSession,
+    *,
+    date_from: datetime | None,
+    date_to: datetime | None,
+    plan: str | None,
+) -> dict:
+    registration_query = select(func.count(Customer.id))
+    registration_query = _apply_date_range(registration_query, Customer.created_at, date_from=date_from, date_to=date_to)
+    registrations_started = int((await db.execute(registration_query)).scalar() or 0)
+
+    verification_query = select(func.count(Customer.id)).where(Customer.email_verified_at.is_not(None))
+    verification_query = _apply_date_range(
+        verification_query,
+        Customer.email_verified_at,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    verification_completed = int((await db.execute(verification_query)).scalar() or 0)
+
+    licence_query = select(func.count(Licence.id))
+    if plan:
+        licence_query = licence_query.where(Licence.plan == plan)
+    licence_query = _apply_date_range(licence_query, Licence.created_at, date_from=date_from, date_to=date_to)
+    licences_issued = int((await db.execute(licence_query)).scalar() or 0)
+
+    first_scan_subquery = (
+        select(Licence.customer_id.label("customer_id"), func.min(ScanHistory.created_at).label("first_scan_at"))
+        .join(ScanHistory, ScanHistory.licence_id == Licence.id)
+        .where(Licence.customer_id.is_not(None))
+        .group_by(Licence.customer_id)
+        .subquery()
+    )
+    first_scan_query = select(func.count(first_scan_subquery.c.customer_id))
+    first_scan_query = _apply_date_range(
+        first_scan_query,
+        first_scan_subquery.c.first_scan_at,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    first_scan_completed = int((await db.execute(first_scan_query)).scalar() or 0)
+
+    pending_query = select(func.count(Customer.id)).where(Customer.verification_code_hash.is_not(None))
+    pending_query = _apply_date_range(pending_query, Customer.created_at, date_from=date_from, date_to=date_to)
+    pending_verification = int((await db.execute(pending_query)).scalar() or 0)
+
+    return {
+        "registrations_started": registrations_started,
+        "verification_completed": verification_completed,
+        "licences_issued": licences_issued,
+        "first_scan_completed": first_scan_completed,
+        "pending_verification": pending_verification,
+    }
+
+
+async def _metrics_usage(
+    db: AsyncSession,
+    *,
+    date_from: datetime | None,
+    date_to: datetime | None,
+    plan: str | None,
+) -> dict:
+    scan_query = (
+        select(
+            Licence.plan,
+            func.count(ScanHistory.id),
+            func.count(func.distinct(Licence.customer_id)),
+            func.sum(ScanHistory.finding_count),
+        )
+        .join(ScanHistory, ScanHistory.licence_id == Licence.id)
+        .group_by(Licence.plan)
+    )
+    comparison_query = (
+        select(Licence.plan, func.count(Comparison.id))
+        .join(Comparison, Comparison.licence_id == Licence.id)
+        .group_by(Licence.plan)
+    )
+    usage_query = (
+        select(Licence.plan, func.count(UsageEvent.id))
+        .join(UsageEvent, UsageEvent.licence_id == Licence.id)
+        .group_by(Licence.plan)
+    )
+    if plan:
+        scan_query = scan_query.where(Licence.plan == plan)
+        comparison_query = comparison_query.where(Licence.plan == plan)
+        usage_query = usage_query.where(Licence.plan == plan)
+    scan_query = _apply_date_range(scan_query, ScanHistory.created_at, date_from=date_from, date_to=date_to)
+    comparison_query = _apply_date_range(comparison_query, Comparison.created_at, date_from=date_from, date_to=date_to)
+    usage_query = _apply_date_range(usage_query, UsageEvent.created_at, date_from=date_from, date_to=date_to)
+
+    scan_rows = {
+        row[0]: {
+            "plan": row[0],
+            "scans": int(row[1] or 0),
+            "active_customers": int(row[2] or 0),
+            "findings": int(row[3] or 0),
+        }
+        for row in (await db.execute(scan_query)).all()
+    }
+    for row in (await db.execute(comparison_query)).all():
+        scan_rows.setdefault(row[0], {"plan": row[0], "scans": 0, "active_customers": 0, "findings": 0})["comparisons"] = int(row[1] or 0)
+    for row in (await db.execute(usage_query)).all():
+        scan_rows.setdefault(row[0], {"plan": row[0], "scans": 0, "active_customers": 0, "findings": 0})["usage_events"] = int(row[1] or 0)
+
+    plan_breakdown = []
+    for item in scan_rows.values():
+        item.setdefault("comparisons", 0)
+        item.setdefault("usage_events", 0)
+        plan_breakdown.append(item)
+    plan_breakdown.sort(key=lambda item: item["plan"])
+
+    return {
+        "plan_breakdown": plan_breakdown,
+        "totals": {
+            "scans": sum(item["scans"] for item in plan_breakdown),
+            "active_customers": sum(item["active_customers"] for item in plan_breakdown),
+            "findings": sum(item["findings"] for item in plan_breakdown),
+            "comparisons": sum(item["comparisons"] for item in plan_breakdown),
+            "usage_events": sum(item["usage_events"] for item in plan_breakdown),
+        },
+    }
+
+
 async def _purge_licence_tree(db: AsyncSession, licence: Licence) -> None:
     await db.execute(delete(Comparison).where(Comparison.licence_id == licence.id))
     await db.execute(delete(ScanHistory).where(ScanHistory.licence_id == licence.id))
@@ -362,6 +686,8 @@ async def customer_lookup(
     summaries = await _collect_customer_activity_summaries(db, [customer])
     payload = _serialize_customer(customer, summaries.get(str(customer.id)))
     payload["activity"] = await _collect_recent_customer_activity(db, customer)
+    payload["notes"] = await _collect_customer_notes(db, customer)
+    payload["audit_history"] = await _collect_customer_audit_history(db, customer)
     return payload
 
 
@@ -390,20 +716,261 @@ async def export_snapshot(
         scans_result = await db.execute(select(ScanHistory).order_by(ScanHistory.created_at.desc()))
         usage_result = await db.execute(select(UsageEvent).order_by(UsageEvent.created_at.desc()))
         comparisons_result = await db.execute(select(Comparison).order_by(Comparison.created_at.desc()))
+        notes_result = await db.execute(select(CustomerNote).order_by(CustomerNote.created_at.desc()))
+        audit_result = await db.execute(select(AdminAuditLog).order_by(AdminAuditLog.created_at.desc()))
         payload.update({
             "licences": [_serialize_licence(item) for item in licences_result.scalars().all()],
             "scans": [_serialize_scan(item) for item in scans_result.scalars().all()],
             "usage_events": [_serialize_usage_event(item) for item in usage_result.scalars().all()],
             "comparisons": [_serialize_comparison(item) for item in comparisons_result.scalars().all()],
+            "customer_notes": [_serialize_customer_note(item) for item in notes_result.scalars().all()],
+            "admin_audit_log": [_serialize_audit_event(item) for item in audit_result.scalars().all()],
         })
 
     return payload
+
+
+@router.get("/customer/notes")
+async def list_customer_notes(
+    email: str,
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    customer = await _get_customer_with_licences(db, email)
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+    return {
+        "email": customer.email,
+        "notes": await _collect_customer_notes(db, customer, limit=50),
+    }
+
+
+@router.post("/customer/notes", status_code=status.HTTP_201_CREATED)
+async def add_customer_note(
+    body: CustomerNoteRequest,
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    customer = await _get_customer_with_licences(db, str(body.email))
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+
+    note = CustomerNote(
+        customer_id=customer.id,
+        author=_admin_actor(x_admin_actor),
+        note=body.note.strip(),
+    )
+    db.add(note)
+    await record_admin_audit_event(
+        db,
+        action="customer.note_added",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        details={"note_preview": body.note.strip()[:200]},
+    )
+    await db.commit()
+    await db.refresh(note)
+    return _serialize_customer_note(note)
+
+
+@router.get("/audit")
+async def list_audit_events(
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    email: str | None = Query(default=None),
+    action: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=500),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    query = select(AdminAuditLog).order_by(AdminAuditLog.created_at.desc()).limit(limit)
+    if email:
+        query = query.where(AdminAuditLog.customer_email == email)
+    if action:
+        query = query.where(AdminAuditLog.action == action)
+    query = _apply_date_range(
+        query,
+        AdminAuditLog.created_at,
+        date_from=_parse_date_filter(date_from),
+        date_to=_parse_date_filter(date_to, inclusive_end=True),
+    )
+    result = await db.execute(query)
+    events = result.scalars().all()
+    return {
+        "count": len(events),
+        "events": [_serialize_audit_event(item) for item in events],
+    }
+
+
+@router.get("/metrics/summary")
+async def metrics_summary(
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    plan: str | None = Query(default=None, pattern="^(free|trial|developer|team|enterprise)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    start = _parse_date_filter(date_from)
+    end = _parse_date_filter(date_to, inclusive_end=True)
+    return {
+        "date_from": start.isoformat() if start else None,
+        "date_to": end.isoformat() if end else None,
+        "plan": plan,
+        "summary": await _metrics_summary(db, date_from=start, date_to=end, plan=plan),
+    }
+
+
+@router.get("/metrics/funnel")
+async def metrics_funnel(
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    plan: str | None = Query(default=None, pattern="^(free|trial|developer|team|enterprise)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    start = _parse_date_filter(date_from)
+    end = _parse_date_filter(date_to, inclusive_end=True)
+    return {
+        "date_from": start.isoformat() if start else None,
+        "date_to": end.isoformat() if end else None,
+        "plan": plan,
+        "funnel": await _metrics_funnel(db, date_from=start, date_to=end, plan=plan),
+    }
+
+
+@router.get("/metrics/usage")
+async def metrics_usage(
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    plan: str | None = Query(default=None, pattern="^(free|trial|developer|team|enterprise)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    start = _parse_date_filter(date_from)
+    end = _parse_date_filter(date_to, inclusive_end=True)
+    return {
+        "date_from": start.isoformat() if start else None,
+        "date_to": end.isoformat() if end else None,
+        "plan": plan,
+        "usage": await _metrics_usage(db, date_from=start, date_to=end, plan=plan),
+    }
+
+
+@router.get("/metrics/export")
+async def export_metrics(
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
+    dataset: str = Query(pattern="^(customers|licences|usage_events|scan_history|comparisons|customer_notes|admin_audit_log|metrics_summary|metrics_funnel|metrics_usage)$"),
+    format: str = Query(default="json", pattern="^(json|csv)$"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    plan: str | None = Query(default=None, pattern="^(free|trial|developer|team|enterprise)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    start = _parse_date_filter(date_from)
+    end = _parse_date_filter(date_to, inclusive_end=True)
+
+    if dataset == "metrics_summary":
+        payload = [await _metrics_summary(db, date_from=start, date_to=end, plan=plan)]
+    elif dataset == "metrics_funnel":
+        payload = [await _metrics_funnel(db, date_from=start, date_to=end, plan=plan)]
+    elif dataset == "metrics_usage":
+        usage_payload = await _metrics_usage(db, date_from=start, date_to=end, plan=plan)
+        payload = usage_payload["plan_breakdown"] or [usage_payload["totals"]]
+    else:
+        query_map = {
+            "customers": select(Customer).options(selectinload(Customer.licences)).order_by(Customer.created_at.desc()),
+            "licences": select(Licence).order_by(Licence.created_at.desc()),
+            "usage_events": select(UsageEvent).join(Licence, Licence.id == UsageEvent.licence_id).order_by(UsageEvent.created_at.desc()),
+            "scan_history": select(ScanHistory).join(Licence, Licence.id == ScanHistory.licence_id).order_by(ScanHistory.created_at.desc()),
+            "comparisons": select(Comparison).join(Licence, Licence.id == Comparison.licence_id).order_by(Comparison.created_at.desc()),
+            "customer_notes": select(CustomerNote).join(Customer, Customer.id == CustomerNote.customer_id).order_by(CustomerNote.created_at.desc()),
+            "admin_audit_log": select(AdminAuditLog).order_by(AdminAuditLog.created_at.desc()),
+        }
+        query = query_map[dataset]
+        if dataset == "customers":
+            query = _apply_date_range(query, Customer.created_at, date_from=start, date_to=end)
+        elif dataset == "licences":
+            query = _apply_date_range(query, Licence.created_at, date_from=start, date_to=end)
+            if plan:
+                query = query.where(Licence.plan == plan)
+        elif dataset == "usage_events":
+            query = _apply_date_range(query, UsageEvent.created_at, date_from=start, date_to=end)
+            if plan:
+                query = query.where(Licence.plan == plan)
+        elif dataset == "scan_history":
+            query = _apply_date_range(query, ScanHistory.created_at, date_from=start, date_to=end)
+            if plan:
+                query = query.where(Licence.plan == plan)
+        elif dataset == "comparisons":
+            query = _apply_date_range(query, Comparison.created_at, date_from=start, date_to=end)
+            if plan:
+                query = query.where(Licence.plan == plan)
+        elif dataset == "customer_notes":
+            query = _apply_date_range(query, CustomerNote.created_at, date_from=start, date_to=end)
+        elif dataset == "admin_audit_log":
+            query = _apply_date_range(query, AdminAuditLog.created_at, date_from=start, date_to=end)
+
+        result = await db.execute(query)
+        items = result.scalars().all()
+        if dataset == "customers":
+            summaries = await _collect_customer_activity_summaries(db, items)
+            payload = [_serialize_customer(item, summaries.get(str(item.id))) for item in items]
+        elif dataset == "licences":
+            payload = [_serialize_licence(item) for item in items]
+        elif dataset == "usage_events":
+            payload = [_serialize_usage_event(item) for item in items]
+        elif dataset == "scan_history":
+            payload = [_serialize_scan(item) for item in items]
+        elif dataset == "comparisons":
+            payload = [_serialize_comparison(item) for item in items]
+        elif dataset == "customer_notes":
+            payload = [_serialize_customer_note(item) for item in items]
+        else:
+            payload = [_serialize_audit_event(item) for item in items]
+
+    await record_admin_audit_event(
+        db,
+        action="metrics.export",
+        actor=_admin_actor(x_admin_actor),
+        reason=f"{dataset}:{format}",
+        details={
+            "dataset": dataset,
+            "format": format,
+            "date_from": start.isoformat() if start else None,
+            "date_to": end.isoformat() if end else None,
+            "plan": plan,
+        },
+    )
+    await db.commit()
+
+    if format == "csv":
+        rows = payload if isinstance(payload, list) else [payload]
+        return _csv_response(filename=f"owlvex-{dataset}.csv", rows=rows)
+    return {
+        "dataset": dataset,
+        "format": format,
+        "date_from": start.isoformat() if start else None,
+        "date_to": end.isoformat() if end else None,
+        "plan": plan,
+        "rows": payload,
+    }
 
 
 @router.post("/resend-verification")
 async def resend_verification(
     body: ResendVerificationRequest,
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
     settings = get_settings()
@@ -435,6 +1002,15 @@ async def resend_verification(
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Email delivery is not configured.")
 
     await db.commit()
+    await record_admin_audit_event(
+        db,
+        action="customer.resend_verification",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        details={"pending_plan": customer.pending_plan},
+    )
+    await db.commit()
     response = {
         "ok": True,
         "email": customer.email,
@@ -451,6 +1027,7 @@ async def resend_verification(
 async def ban_customer(
     body: BanCustomerRequest,
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -471,6 +1048,15 @@ async def ban_customer(
             licence.is_active = False
             deactivated += 1
 
+    await record_admin_audit_event(
+        db,
+        action="customer.ban",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        reason=body.reason,
+        details={"deactivated_licences": deactivated},
+    )
     await db.commit()
     return {
         "ok": True,
@@ -485,6 +1071,7 @@ async def ban_customer(
 async def unban_customer(
     body: BanCustomerRequest,
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -495,6 +1082,13 @@ async def unban_customer(
     customer.is_banned = False
     customer.banned_at = None
     customer.ban_reason = None
+    await record_admin_audit_event(
+        db,
+        action="customer.unban",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+    )
     await db.commit()
     return {
         "ok": True,
@@ -507,6 +1101,7 @@ async def unban_customer(
 async def deactivate_licence(
     body: CustomerLicenceActionRequest,
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -521,6 +1116,15 @@ async def deactivate_licence(
     for licence in licences:
         licence.is_active = False
 
+    await record_admin_audit_event(
+        db,
+        action="licence.deactivate",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        reason=body.plan,
+        details={"deactivated": len(licences), "licence_ids": [str(licence.id) for licence in licences]},
+    )
     await db.commit()
     return {
         "ok": True,
@@ -534,6 +1138,7 @@ async def deactivate_licence(
 async def rotate_licence(
     body: CustomerLicenceActionRequest,
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -571,6 +1176,16 @@ async def rotate_licence(
         stripe_subscription_id=source_licence.stripe_subscription_id,
     )
     db.add(rotated)
+    await record_admin_audit_event(
+        db,
+        action="licence.rotate",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        licence_id=str(source_licence.id),
+        reason=body.plan,
+        details={"rotated_from_licence_id": str(source_licence.id)},
+    )
     await db.commit()
     await db.refresh(rotated)
 
@@ -588,6 +1203,7 @@ async def rotate_licence(
 async def update_licence_telemetry(
     body: CustomerTelemetryRequest,
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -615,6 +1231,15 @@ async def update_licence_telemetry(
         applied_enabled = bool(features["telemetry_enabled"])
         updated += 1
 
+    await record_admin_audit_event(
+        db,
+        action="licence.telemetry",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        reason=body.plan,
+        details={"telemetry_enabled": applied_enabled, "updated": updated},
+    )
     await db.commit()
     return {
         "ok": True,
@@ -629,6 +1254,7 @@ async def update_licence_telemetry(
 async def delete_licence(
     body: DeleteLicenceRequest,
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -644,6 +1270,15 @@ async def delete_licence(
 
     licence_id = str(licence.id)
     email = licence.email
+    customer_id = str(licence.customer_id) if licence.customer_id else None
+    await record_admin_audit_event(
+        db,
+        action="licence.delete",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=customer_id,
+        customer_email=email,
+        licence_id=licence_id,
+    )
     await _purge_licence_tree(db, licence)
     await db.commit()
     return {
@@ -658,6 +1293,7 @@ async def delete_licence(
 async def delete_customer(
     body: DeleteCustomerRequest,
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
     _ensure_admin_key(x_admin_key)
@@ -666,6 +1302,14 @@ async def delete_customer(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
 
     deleted_licences = await _purge_customer_tree(db, customer)
+    await record_admin_audit_event(
+        db,
+        action="customer.delete",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=None,
+        customer_email=customer.email,
+        details={"deleted_licences": deleted_licences, "deleted_customer_id": str(customer.id)},
+    )
     await db.commit()
     return {
         "ok": True,

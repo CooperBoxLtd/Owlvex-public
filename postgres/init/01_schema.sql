@@ -186,6 +186,28 @@ CREATE TABLE usage_events (
     created_at  TIMESTAMPTZ  DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS customer_notes (
+    id          UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_id UUID         NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    author      VARCHAR(200),
+    note        TEXT         NOT NULL,
+    created_at  TIMESTAMPTZ  DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS admin_audit_log (
+    id             UUID         PRIMARY KEY DEFAULT uuid_generate_v4(),
+    customer_id    UUID         REFERENCES customers(id) ON DELETE SET NULL,
+    licence_id     UUID         REFERENCES licences(id) ON DELETE SET NULL,
+    customer_email VARCHAR(200),
+    actor          VARCHAR(200),
+    action         VARCHAR(100) NOT NULL,
+    reason         TEXT,
+    environment    VARCHAR(50),
+    details        JSONB        DEFAULT '{}',
+    created_at     TIMESTAMPTZ  DEFAULT NOW()
+);
+
 -- ============================================================
 -- INDEXES
 -- ============================================================
@@ -200,3 +222,7 @@ CREATE INDEX idx_licence_seats_lic   ON licence_seats(licence_id);
 CREATE INDEX idx_comparisons_licence ON comparisons(licence_id);
 CREATE INDEX idx_usage_events_licence ON usage_events(licence_id);
 CREATE INDEX idx_usage_events_name ON usage_events(event_name);
+CREATE INDEX idx_customer_notes_customer ON customer_notes(customer_id);
+CREATE INDEX idx_admin_audit_customer ON admin_audit_log(customer_id);
+CREATE INDEX idx_admin_audit_action ON admin_audit_log(action);
+CREATE INDEX idx_admin_audit_created ON admin_audit_log(created_at DESC);

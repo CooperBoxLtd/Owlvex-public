@@ -91,6 +91,8 @@ class Customer(Base):
     updated_at                   = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
 
     licences    = relationship("Licence", back_populates="customer")
+    notes       = relationship("CustomerNote", back_populates="customer", cascade="all, delete")
+    audit_events = relationship("AdminAuditLog", back_populates="customer")
 
 
 class Licence(Base):
@@ -204,3 +206,33 @@ class UsageEvent(Base):
     event_name  = Column(String(80), nullable=False)
     event_data  = Column("metadata", JSONB, default=dict)
     created_at  = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+
+class CustomerNote(Base):
+    __tablename__ = "customer_notes"
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    customer_id = Column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False)
+    author      = Column(String(200))
+    note        = Column(Text, nullable=False)
+    created_at  = Column(TIMESTAMP(timezone=True), server_default=func.now())
+    updated_at  = Column(TIMESTAMP(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    customer    = relationship("Customer", back_populates="notes")
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_log"
+
+    id            = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    customer_id   = Column(UUID(as_uuid=True), ForeignKey("customers.id", ondelete="SET NULL"))
+    licence_id    = Column(UUID(as_uuid=True), ForeignKey("licences.id", ondelete="SET NULL"))
+    customer_email = Column(String(200))
+    actor         = Column(String(200))
+    action        = Column(String(100), nullable=False)
+    reason        = Column(Text)
+    environment   = Column(String(50))
+    details       = Column(JSONB, default=dict)
+    created_at    = Column(TIMESTAMP(timezone=True), server_default=func.now())
+
+    customer      = relationship("Customer", back_populates="audit_events")
