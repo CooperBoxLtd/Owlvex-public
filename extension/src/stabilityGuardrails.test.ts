@@ -250,7 +250,7 @@ describe('stability guardrails', () => {
                         riskScore: 9,
                     }] as any,
                     metrics: { critical: 0, high: 1, medium: 0, low: 0 },
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                 }),
             }],

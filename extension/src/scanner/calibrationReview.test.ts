@@ -31,7 +31,7 @@ describe('buildRiskCalibrationReport', () => {
             positives: [],
             metrics: { critical: 0, high: 0, medium: 1, low: 0 },
             durationMs: 12,
-            model: 'owlvex-gpt4o',
+            model: 'test-foundry-deployment-primary',
             provider: 'openai',
             warnings: [],
             ...overrides,

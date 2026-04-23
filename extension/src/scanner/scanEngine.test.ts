@@ -552,7 +552,7 @@ describe('ScanEngine.scanDocument caching', () => {
         } as any;
         const provider = {
             id: 'azure-foundry',
-            selectedModel: 'owlvex-gpt54mini',
+            selectedModel: 'test-foundry-deployment-secondary',
             complete: jest.fn()
                 .mockRejectedValueOnce(new Error('Azure Foundry error: 429'))
                 .mockRejectedValueOnce(new Error('Azure Foundry error: 429'))

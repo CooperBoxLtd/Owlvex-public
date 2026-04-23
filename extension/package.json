@@ -152,7 +152,7 @@
         },
         "owlvex.foundry.model": {
           "type": "string",
-          "default": "gpt-4o",
+          "default": "",
           "description": "Azure AI Foundry deployment name to use for chat completions"
         },
         "owlvex.foundry.deployments": {

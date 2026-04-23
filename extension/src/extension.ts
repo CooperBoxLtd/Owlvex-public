@@ -2257,7 +2257,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                 const deployment = await vscode.window.showInputBox({
                     prompt: 'Enter the Azure AI Foundry deployment name',
-                    placeHolder: 'Use the deployment name you created in Azure AI Foundry, for example: owlvex-gpt4o',
+                    placeHolder: 'Use the deployment name you created in Azure AI Foundry, for example: security-chat-prod',
                     value: provider.selectedModel,
                     ignoreFocusOut: true,
                     validateInput: (value) => value.trim() ? undefined : 'The deployment name is required.',

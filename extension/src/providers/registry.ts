@@ -291,10 +291,18 @@ class AzureFoundryProvider implements AIProvider {
     name = 'Azure AI Foundry';
 
     get selectedModel(): string {
-        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('foundry.model', 'gpt-4o');
+        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('foundry.model', '');
     }
     set selectedModel(value: string) {
         void persistProviderConnectionSetting('foundry.model', value);
+    }
+
+    private getSelectedDeploymentName(): string {
+        const deployment = this.selectedModel.trim();
+        if (!deployment) {
+            throw new Error('Azure Foundry deployment name not configured. Set owlvex.foundry.model or run "Owlvex: Setup AI Connection".');
+        }
+        return deployment;
     }
 
     private async getCredentials(): Promise<{ endpoint: string; apiKey: string } | null> {
@@ -321,7 +329,7 @@ class AzureFoundryProvider implements AIProvider {
         const creds = await this.getCredentials();
         if (!creds) throw new Error('Azure Foundry not configured. Set owlvex.foundry.endpoint and run "Owlvex: Setup AI Connection".');
 
-        const deployment = this.selectedModel.trim();
+        const deployment = this.getSelectedDeploymentName();
         const url = `${creds.endpoint}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${AZURE_CHAT_API_VERSION}`;
         const res = await fetch(url, {
             method: 'POST',
@@ -350,7 +358,7 @@ class AzureFoundryProvider implements AIProvider {
             await this.complete({
                 systemPrompt: 'Return OK.',
                 userMessage: 'ping',
-                model: this.selectedModel,
+                model: this.getSelectedDeploymentName(),
                 temperature: 0,
             });
             return { success: true, latencyMs: Date.now() - start };

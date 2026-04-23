@@ -18,8 +18,8 @@ describe('ProviderRegistry', () => {
         configState = {
             provider: 'openai',
             'foundry.endpoint': 'https://example.openai.azure.com',
-            'foundry.model': 'owlvex-gpt4o',
-            'foundry.deployments': ['owlvex-gpt4o', 'owlvex-gpt54mini'],
+            'foundry.model': 'test-foundry-deployment-primary',
+            'foundry.deployments': ['test-foundry-deployment-primary', 'test-foundry-deployment-secondary'],
         };
         updateMock = jest.fn(async (key: string, value: any) => {
             configState[key] = value;
@@ -217,13 +217,13 @@ describe('ProviderRegistry', () => {
 
         it('reads selected deployment name from configuration', () => {
             const provider = registry.getProvider('azure-foundry')!;
-            expect(provider.selectedModel).toBe('owlvex-gpt4o');
+            expect(provider.selectedModel).toBe('test-foundry-deployment-primary');
         });
 
         it('lists configured deployment names for Azure Foundry model switching', async () => {
             const provider = registry.getProvider('azure-foundry')!;
             const models = await provider.listModels();
-            expect(models).toEqual(['owlvex-gpt4o', 'owlvex-gpt54mini']);
+            expect(models).toEqual(['test-foundry-deployment-primary', 'test-foundry-deployment-secondary']);
         });
 
         it('persists selected deployment name back to configuration', async () => {
@@ -245,6 +245,16 @@ describe('ProviderRegistry', () => {
             expect(result.message).toContain('Azure Foundry error: 404');
         });
 
+        it('fails early when no Azure deployment name is configured', async () => {
+            configState['foundry.model'] = '';
+
+            const provider = registry.getProvider('azure-foundry')!;
+            const result = await provider.testConnection();
+
+            expect(result.success).toBe(false);
+            expect(result.message).toContain('deployment name not configured');
+        });
+
         it('tests Azure connection against the configured deployment chat endpoint', async () => {
             const fetchMock = jest.fn().mockResolvedValue({
                 ok: true,
@@ -261,7 +271,7 @@ describe('ProviderRegistry', () => {
 
             expect(result.success).toBe(true);
             expect(fetchMock).toHaveBeenCalledWith(
-                expect.stringContaining('/openai/deployments/owlvex-gpt4o/chat/completions?api-version=2024-10-21'),
+                expect.stringContaining('/openai/deployments/test-foundry-deployment-primary/chat/completions?api-version=2024-10-21'),
                 expect.objectContaining({
                     method: 'POST',
                     headers: expect.objectContaining({
@@ -292,7 +302,7 @@ describe('ProviderRegistry', () => {
             });
 
             expect(fetchMock).toHaveBeenCalledWith(
-                expect.stringContaining('/openai/deployments/owlvex-gpt4o/chat/completions?api-version=2024-10-21'),
+                expect.stringContaining('/openai/deployments/test-foundry-deployment-primary/chat/completions?api-version=2024-10-21'),
                 expect.objectContaining({
                     body: expect.stringContaining('"max_completion_tokens":4096'),
                 }),

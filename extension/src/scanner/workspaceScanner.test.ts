@@ -289,7 +289,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 1, medium: 0, low: 0 },
                     durationMs: 10,
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                     warnings: ['AI provider unavailable: Azure Foundry error: 429'],
                 })
@@ -301,7 +301,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 1, medium: 0, low: 0 },
                     durationMs: 12,
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                     warnings: [],
                 })
@@ -313,7 +313,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 11,
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                     warnings: [],
                 }),
@@ -363,7 +363,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 10,
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                     warnings: ['AI provider unavailable: Azure Foundry error: 429 retry-after: 7'],
                 })
@@ -375,7 +375,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 10,
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                     warnings: ['AI provider unavailable: Azure Foundry error: 429'],
                 })
@@ -387,7 +387,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 11,
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                     warnings: [],
                 }),
@@ -431,7 +431,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 10,
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                     warnings: ['AI provider unavailable: Azure Foundry error: 429'],
                 })
@@ -443,7 +443,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 10,
-                    model: 'owlvex-gpt54mini',
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
                     warnings: ['AI provider unavailable: Azure Foundry error: 429'],
                 })
@@ -455,7 +455,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 0,
-                    model: 'owlvex-gpt54mini (deterministic-only)',
+                    model: 'test-foundry-deployment-secondary (deterministic-only)',
                     provider: 'azure-foundry',
                     warnings: ['AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.'],
                 }),
@@ -475,7 +475,7 @@ describe('workspaceScanner', () => {
         });
     });
 
-    it('applies proactive request budgeting for gpt54mini even before 429 warnings', async () => {
+    it('applies proactive request budgeting for Azure Foundry even before 429 warnings', async () => {
         (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
             if (currentPath.endsWith('repo')) {
                 return [
@@ -502,7 +502,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 10,
-                    model: 'owlvex-gpt54mini',
+                    model: 'customer-foundry-deployment-a',
                     provider: 'azure-foundry',
                     warnings: [],
                 })
@@ -514,7 +514,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 11,
-                    model: 'owlvex-gpt54mini',
+                    model: 'customer-foundry-deployment-a',
                     provider: 'azure-foundry',
                     warnings: [],
                 }),
@@ -530,7 +530,7 @@ describe('workspaceScanner', () => {
         setTimeoutSpy.mockRestore();
     });
 
-    it('applies proactive request budgeting for gpt4o with a shorter window', async () => {
+    it('applies the same proactive request budgeting for another Azure Foundry deployment name', async () => {
         (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
             if (currentPath.endsWith('repo')) {
                 return [
@@ -557,7 +557,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 10,
-                    model: 'owlvex-gpt4o',
+                    model: 'customer-foundry-deployment-b',
                     provider: 'azure-foundry',
                     warnings: [],
                 })
@@ -569,7 +569,7 @@ describe('workspaceScanner', () => {
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
                     durationMs: 11,
-                    model: 'owlvex-gpt4o',
+                    model: 'customer-foundry-deployment-b',
                     provider: 'azure-foundry',
                     warnings: [],
                 }),
@@ -581,7 +581,7 @@ describe('workspaceScanner', () => {
             diagnostics: { applyFindings: jest.fn() },
         });
 
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3334);
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 20000);
         setTimeoutSpy.mockRestore();
     });
 });

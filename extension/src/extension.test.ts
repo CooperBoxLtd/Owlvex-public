@@ -59,7 +59,7 @@ describe('scan comparison picker helpers', () => {
                 positives: [],
                 metrics: { critical: 0, high: 1, medium: 1, low: 0 },
                 durationMs: 1200,
-                model: 'owlvex-gpt54mini',
+                model: 'test-foundry-deployment-secondary',
                 provider: 'azure-foundry',
                 warnings: [],
             } as any,
@@ -67,7 +67,7 @@ describe('scan comparison picker helpers', () => {
 
         expect(choice.label).toBe('tools/demo-app');
         expect(choice.description).toContain('2026-04-22 19:16:27 UTC');
-        expect(choice.description).toContain('azure-foundry / owlvex-gpt54mini');
+        expect(choice.description).toContain('azure-foundry / test-foundry-deployment-secondary');
         expect(choice.detail).toContain('10.0/10');
         expect(choice.detail).toContain('2 finding(s)');
         expect(choice.detail).toContain('scan 12345678');

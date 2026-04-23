@@ -548,7 +548,7 @@ describe('reportGenerator', () => {
                             },
                         ],
                         provider: 'azure-foundry',
-                        model: 'owlvex-gpt54mini',
+                        model: 'test-foundry-deployment-secondary',
                         summary: 'Repo context strengthened one finding.',
                     }),
                 },
@@ -606,7 +606,7 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 
 ## AI Usage
 
-- Provider/model mix: azure-foundry / owlvex-gpt54mini
+- Provider/model mix: azure-foundry / test-foundry-deployment-secondary
 - AI requests: 3
 - Total AI tokens: 62
 - Estimated cost: not yet available

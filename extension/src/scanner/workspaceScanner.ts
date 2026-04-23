@@ -36,36 +36,21 @@ interface ProviderRateBudgetProfile {
     estimatedRequestsPerFile: number;
 }
 
-function normalizeModelName(model: string | undefined): string {
-    return String(model ?? '')
-        .replace(/\s*\(deterministic-only\)\s*$/i, '')
-        .trim()
-        .toLowerCase();
-}
-
 function getProviderRateBudgetProfile(provider: string | undefined, model: string | undefined): ProviderRateBudgetProfile | undefined {
+    void model;
+
     if (provider !== 'azure-foundry') {
         return undefined;
     }
 
-    const normalizedModel = normalizeModelName(model);
-    if (normalizedModel === 'owlvex-gpt54mini') {
-        return {
-            requestLimit: 10,
-            requestWindowMs: 60000,
-            estimatedRequestsPerFile: 3,
-        };
-    }
-
-    if (normalizedModel === 'owlvex-gpt4o') {
-        return {
-            requestLimit: 10,
-            requestWindowMs: 10000,
-            estimatedRequestsPerFile: 3,
-        };
-    }
-
-    return undefined;
+    // Foundry deployment names are customer-defined, so pacing cannot depend on
+    // hardcoded deployment strings. Use a conservative provider-level profile
+    // until deployment-specific limits are discoverable from metadata.
+    return {
+        requestLimit: 10,
+        requestWindowMs: 60000,
+        estimatedRequestsPerFile: 3,
+    };
 }
 
 function getProactiveSpacingMs(profile: ProviderRateBudgetProfile | undefined): number {
