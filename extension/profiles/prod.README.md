@@ -35,6 +35,15 @@ Supported provider paths include:
 - Ollama
 - custom OpenAI-compatible endpoints
 
+## Model Guidance
+
+Best results so far have come from:
+
+- GPT-5.4
+- GPT-5.4 Mini
+
+If you are evaluating Owlvex for the first time, start with one of those models before comparing other providers or smaller models.
+
 ## Installation
 
 ### Install From VSIX

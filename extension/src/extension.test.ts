@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { buildLicenceBadgeLabel, buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, isTrialEndingSoon } from './licence/licenceManager';
+import { LicenceManager } from './licence/licenceManager';
 import {
     buildBackendAndLicenceReadyChoices,
     buildProviderThrottleOverrideSnippet,
@@ -269,6 +270,129 @@ describe('provider setup helpers', () => {
                 retryAttempts: 2,
             },
         });
+    });
+});
+
+describe('LicenceManager cached state', () => {
+    const persistedInfo = {
+        valid: true,
+        licenceId: 'lic-123',
+        teamName: 'Cooperbox',
+        plan: 'team',
+        seats: 10,
+        seatsUsed: 2,
+        features: {
+            frameworks: ['OWASP', 'STRIDE'],
+            scansPerMonth: null,
+            promptEditor: true,
+            comparison: true,
+            teamPrompts: true,
+            ciCd: true,
+            pdfReports: true,
+            customRules: true,
+            sso: true,
+            industryPacks: ['pci-dss'],
+            telemetryRequired: false,
+            telemetryEnabled: false,
+            telemetryOptOut: true,
+        },
+        usage: {
+            scansThisMonth: 7,
+            scansRemaining: null,
+            monthlyLimitReached: false,
+        },
+        expiresAt: null,
+    };
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    it('restores cached licence info from global storage on startup', () => {
+        const secrets = {
+            get: jest.fn(),
+            store: jest.fn(),
+            delete: jest.fn(),
+        } as any;
+        const storage = {
+            get: jest.fn(() => persistedInfo),
+            update: jest.fn(),
+        };
+
+        const manager = new LicenceManager(secrets, storage);
+
+        expect(storage.get).toHaveBeenCalledWith('owlvex.cachedLicenceInfo');
+        expect(manager.getCachedInfo()).toEqual(persistedInfo);
+    });
+
+    it('persists validated licence info into global storage', async () => {
+        const secrets = {
+            get: jest.fn().mockResolvedValue('owlvex_lic_test'),
+            store: jest.fn(),
+            delete: jest.fn(),
+        } as any;
+        const storage = {
+            get: jest.fn(),
+            update: jest.fn().mockResolvedValue(undefined),
+        };
+        const fetchMock = jest.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+                valid: true,
+                licence_id: 'lic-validated',
+                team_name: 'Cooperbox',
+                plan: 'developer',
+                seats: 1,
+                seats_used: 1,
+                features: {
+                    frameworks: ['OWASP'],
+                    scans_per_month: 100,
+                    prompt_editor: true,
+                    comparison: true,
+                    team_prompts: false,
+                    ci_cd: false,
+                    pdf_reports: true,
+                    custom_rules: false,
+                    sso: false,
+                    industry_packs: [],
+                    telemetry_required: false,
+                    telemetry_enabled: true,
+                    telemetry_opt_out: true,
+                },
+                usage: {
+                    scans_this_month: 4,
+                    scans_remaining: 96,
+                    monthly_limit_reached: false,
+                },
+                expires_at: null,
+            }),
+        });
+        (global as any).fetch = fetchMock;
+
+        const manager = new LicenceManager(secrets, storage);
+        const info = await manager.validate('https://owlvex-api.azurewebsites.net');
+
+        expect(fetchMock).toHaveBeenCalled();
+        expect(storage.update).toHaveBeenCalledWith('owlvex.cachedLicenceInfo', info);
+        expect(manager.getCachedInfo()).toEqual(info);
+    });
+
+    it('clears persisted cached licence info when the cache is reset', () => {
+        const secrets = {
+            get: jest.fn(),
+            store: jest.fn(),
+            delete: jest.fn(),
+        } as any;
+        const storage = {
+            get: jest.fn(() => persistedInfo),
+            update: jest.fn(),
+        };
+
+        const manager = new LicenceManager(secrets, storage);
+        manager.clearCachedInfo();
+
+        expect(manager.getCachedInfo()).toBeNull();
+        expect(storage.update).toHaveBeenCalledWith('owlvex.cachedLicenceInfo', undefined);
     });
 });
 

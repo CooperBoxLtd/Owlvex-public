@@ -2,7 +2,7 @@
   "name": "owlvex",
   "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "owlvex",
   "repository": {
     "type": "git",
@@ -312,6 +312,8 @@
     "package:prod": "node ./scripts/package-profile.mjs prod",
     "package:dev": "node ./scripts/package-profile.mjs dev",
     "package:all": "npm run package:prod && npm run package:dev",
+    "publish:prod": "npm run package:prod && npx @vscode/vsce publish --packagePath dist/owlvex-prod.vsix",
+    "publish:dev": "npm run package:dev && npx @vscode/vsce publish --packagePath dist/owlvex-dev.vsix",
     "lint": "eslint src --ext ts",
     "test": "jest --coverage",
     "corpus:test": "npm run compile && node ./out/frameworks/corpusRunner.js",

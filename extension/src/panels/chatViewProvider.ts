@@ -1352,6 +1352,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.view = view;
         view.webview.options = { enableScripts: true };
         view.webview.html = this.buildHtml();
+        view.onDidDispose(() => {
+            if (this.view === view) {
+                this.view = undefined;
+            }
+        });
 
         view.webview.onDidReceiveMessage(async (message) => {
             if (message?.type === 'chat:ready') {

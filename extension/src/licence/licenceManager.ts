@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { PROFILE } from '../profile';
 
 const SECRET_KEY = `${PROFILE.secretPrefix}.licenceKey`;
+const CACHED_INFO_KEY = `${PROFILE.storagePrefix}.cachedLicenceInfo`;
 
 export interface LicenceInfo {
     valid: boolean;
@@ -210,7 +211,12 @@ export function buildPlanUpgradeMessage(capability: 'assistant' | 'fix' | 'compa
 export class LicenceManager {
     private info: LicenceInfo | null = null;
 
-    constructor(private readonly secrets: vscode.SecretStorage) {}
+    constructor(
+        private readonly secrets: vscode.SecretStorage,
+        private readonly storage?: Pick<vscode.Memento, 'get' | 'update'>,
+    ) {
+        this.info = restoreCachedInfo(this.storage?.get<unknown>(CACHED_INFO_KEY));
+    }
 
     async getKey(): Promise<string | undefined> {
         return this.secrets.get(SECRET_KEY);
@@ -275,6 +281,7 @@ export class LicenceManager {
             },
             expiresAt: data.expires_at,
         };
+        await this.storage?.update(CACHED_INFO_KEY, this.info);
 
         return this.info;
     }
@@ -285,6 +292,7 @@ export class LicenceManager {
 
     clearCachedInfo(): void {
         this.info = null;
+        void this.storage?.update(CACHED_INFO_KEY, undefined);
     }
 
     isFeatureAllowed(feature: keyof LicenceInfo['features']): boolean {
@@ -294,4 +302,77 @@ export class LicenceManager {
     isFrameworkAllowed(code: string): boolean {
         return this.info?.features.frameworks.includes(code) ?? false;
     }
+}
+
+function restoreCachedInfo(raw: unknown): LicenceInfo | null {
+    if (!raw || typeof raw !== 'object') {
+        return null;
+    }
+
+    const candidate = raw as Partial<LicenceInfo> & {
+        features?: Partial<LicenceInfo['features']>;
+        usage?: Partial<LicenceInfo['usage']>;
+    };
+
+    if (
+        typeof candidate.licenceId !== 'string'
+        || typeof candidate.teamName !== 'string'
+        || typeof candidate.plan !== 'string'
+        || typeof candidate.seats !== 'number'
+        || typeof candidate.seatsUsed !== 'number'
+        || !candidate.features
+        || !candidate.usage
+        || !Array.isArray(candidate.features.frameworks)
+        || !Array.isArray(candidate.features.industryPacks)
+        || typeof candidate.features.promptEditor !== 'boolean'
+        || typeof candidate.features.comparison !== 'boolean'
+        || typeof candidate.features.teamPrompts !== 'boolean'
+        || typeof candidate.features.ciCd !== 'boolean'
+        || typeof candidate.features.pdfReports !== 'boolean'
+        || typeof candidate.features.customRules !== 'boolean'
+        || typeof candidate.features.sso !== 'boolean'
+        || typeof candidate.features.telemetryRequired !== 'boolean'
+        || typeof candidate.features.telemetryEnabled !== 'boolean'
+        || typeof candidate.features.telemetryOptOut !== 'boolean'
+        || typeof candidate.usage.scansThisMonth !== 'number'
+        || typeof candidate.usage.monthlyLimitReached !== 'boolean'
+    ) {
+        return null;
+    }
+
+    return {
+        valid: Boolean(candidate.valid),
+        licenceId: candidate.licenceId,
+        teamName: candidate.teamName,
+        plan: candidate.plan,
+        seats: candidate.seats,
+        seatsUsed: candidate.seatsUsed,
+        features: {
+            frameworks: candidate.features.frameworks,
+            scansPerMonth: typeof candidate.features.scansPerMonth === 'number' || candidate.features.scansPerMonth === null
+                ? candidate.features.scansPerMonth
+                : null,
+            promptEditor: candidate.features.promptEditor,
+            comparison: candidate.features.comparison,
+            teamPrompts: candidate.features.teamPrompts,
+            ciCd: candidate.features.ciCd,
+            pdfReports: candidate.features.pdfReports,
+            customRules: candidate.features.customRules,
+            sso: candidate.features.sso,
+            industryPacks: candidate.features.industryPacks,
+            telemetryRequired: candidate.features.telemetryRequired,
+            telemetryEnabled: candidate.features.telemetryEnabled,
+            telemetryOptOut: candidate.features.telemetryOptOut,
+        },
+        usage: {
+            scansThisMonth: candidate.usage.scansThisMonth,
+            scansRemaining: typeof candidate.usage.scansRemaining === 'number' || candidate.usage.scansRemaining === null
+                ? candidate.usage.scansRemaining
+                : null,
+            monthlyLimitReached: candidate.usage.monthlyLimitReached,
+        },
+        expiresAt: typeof candidate.expiresAt === 'string' || candidate.expiresAt === null
+            ? candidate.expiresAt
+            : null,
+    };
 }

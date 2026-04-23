@@ -1141,7 +1141,7 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl,
     );
 
-    const licenceMgr = new LicenceManager(context.secrets);
+    const licenceMgr = new LicenceManager(context.secrets, context.globalState);
     const previousSessionAt = context.globalState.get<string>(`${PROFILE.storagePrefix}.lastSessionAt`);
     let sessionScanCount = 0;
     let usefulnessFeedbackPrompted = false;
@@ -1685,7 +1685,11 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.window.registerTreeDataProvider(PROFILE.findingsViewId, sidebar);
     context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatView)
+        vscode.window.registerWebviewViewProvider(ChatViewProvider.viewType, chatView, {
+            webviewOptions: {
+                retainContextWhenHidden: true,
+            },
+        })
     );
 
     context.subscriptions.push(
