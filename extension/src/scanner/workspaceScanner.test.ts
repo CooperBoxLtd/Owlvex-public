@@ -261,6 +261,113 @@ describe('workspaceScanner', () => {
         );
     });
 
+    it('paces full Foundry review up front when the batch would otherwise outrun steady request budget', async () => {
+        (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
+            if (currentPath.endsWith('repo')) {
+                return [
+                    { name: 'first.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'second.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'third.js', isDirectory: () => false, isFile: () => true },
+                ];
+            }
+            return [];
+        });
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Folder');
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+        (vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section?: string) => ({
+            get: (key: string, fallback?: any) => {
+                if (section === 'owlvex' && key === 'provider') return 'azure-foundry';
+                if (section === 'owlvex' && key === 'foundry.model') return 'owlvex-gpt54mini';
+                return fallback;
+            },
+        }));
+
+        const scanEngine = {
+            scanDocument: jest.fn().mockResolvedValue({
+                scanId: 'scan-1',
+                score: 8,
+                summary: 'ok',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                durationMs: 10,
+                model: 'owlvex-gpt54mini',
+                provider: 'azure-foundry',
+                warnings: [],
+            }),
+        };
+
+        await scanFolder({
+            root: vscode.Uri.file('d:\\repo'),
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything());
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything());
+        expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+            'Owlvex: Full AI scan will be paced to stay within provider quota. Estimated additional wait: about 60s.',
+        );
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
+        setTimeoutSpy.mockRestore();
+    });
+
+    it('keeps large Foundry batches on full AI review instead of degrading them up front', async () => {
+        (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
+            if (currentPath.endsWith('repo')) {
+                return Array.from({ length: 8 }, (_, index) => ({
+                    name: `file-${index + 1}.js`,
+                    isDirectory: () => false,
+                    isFile: () => true,
+                }));
+            }
+            return [];
+        });
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Folder');
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+        (vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section?: string) => ({
+            get: (key: string, fallback?: any) => {
+                if (section === 'owlvex' && key === 'provider') return 'azure-foundry';
+                if (section === 'owlvex' && key === 'foundry.model') return 'owlvex-gpt54mini';
+                return fallback;
+            },
+        }));
+
+        const scanEngine = {
+            scanDocument: jest.fn().mockResolvedValue({
+                scanId: 'scan-1',
+                score: 8,
+                summary: 'full-ai',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                durationMs: 10,
+                model: 'owlvex-gpt54mini',
+                provider: 'azure-foundry',
+                warnings: [],
+            }),
+        };
+
+        await scanFolder({
+            root: vscode.Uri.file('d:\\repo'),
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything());
+        expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+            'Owlvex: Full AI scan will be paced to stay within provider quota. Estimated additional wait: about 210s.',
+        );
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
+        setTimeoutSpy.mockRestore();
+    });
+
     it('waits before scanning the next file after a provider rate limit warning', async () => {
         (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
             if (currentPath.endsWith('repo')) {

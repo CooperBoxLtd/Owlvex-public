@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ScanEngine, ScanResult } from './scanEngine';
+import { PROFILE } from '../profile';
 
 type ScanDirent = {
     name: string;
@@ -28,12 +29,13 @@ const EXCLUDED_DIRS = new Set([
 
 const RATE_LIMIT_COOLDOWN_MS = 5000;
 const MAX_RATE_LIMIT_COOLDOWN_MS = 60000;
-const AI_BUDGET_FALLBACK_THRESHOLD = 2;
+const FOUNDRY_BATCH_STEADY_STATE_REQUEST_LIMIT = 7;
 
 interface ProviderRateBudgetProfile {
     requestLimit: number;
     requestWindowMs: number;
     estimatedRequestsPerFile: number;
+    steadyStateRequestLimit: number;
 }
 
 function getProviderRateBudgetProfile(provider: string | undefined, model: string | undefined): ProviderRateBudgetProfile | undefined {
@@ -50,16 +52,41 @@ function getProviderRateBudgetProfile(provider: string | undefined, model: strin
         requestLimit: 10,
         requestWindowMs: 60000,
         estimatedRequestsPerFile: 3,
+        steadyStateRequestLimit: FOUNDRY_BATCH_STEADY_STATE_REQUEST_LIMIT,
     };
 }
 
-function getProactiveSpacingMs(profile: ProviderRateBudgetProfile | undefined): number {
+interface BatchRequestBudgetPlan {
+    proactiveSpacingMs: number;
+    estimatedDurationMs: number;
+}
+
+function getProactiveSpacingMs(
+    profile: ProviderRateBudgetProfile | undefined,
+): number {
     if (!profile) {
         return 0;
     }
 
-    const filesPerWindow = Math.max(1, Math.floor(profile.requestLimit / Math.max(1, profile.estimatedRequestsPerFile)));
+    const filesPerWindow = Math.max(1, Math.floor(profile.steadyStateRequestLimit / Math.max(1, profile.estimatedRequestsPerFile)));
     return Math.ceil(profile.requestWindowMs / filesPerWindow);
+}
+
+function planBatchRequestBudget(
+    fileCount: number,
+    provider: string | undefined,
+    model: string | undefined,
+): BatchRequestBudgetPlan {
+    const profile = getProviderRateBudgetProfile(provider, model);
+    if (!profile || fileCount <= 0) {
+        return { proactiveSpacingMs: getProactiveSpacingMs(profile), estimatedDurationMs: 0 };
+    }
+
+    const proactiveSpacingMs = getProactiveSpacingMs(profile);
+    return {
+        proactiveSpacingMs,
+        estimatedDurationMs: Math.max(0, (fileCount - 1) * proactiveSpacingMs),
+    };
 }
 
 function extractRetryAfterMsFromWarnings(warnings: string[] = []): number | undefined {
@@ -272,8 +299,24 @@ async function scanUris(options: {
     let cancelled = false;
     let cooldownUntil = 0;
     let consecutiveRateLimitHits = 0;
-    let deterministicOnlyMode = false;
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    const provider = config.get<string>('provider');
+    const modelSettingKey = provider === 'azure-foundry'
+        ? 'foundry.model'
+        : provider
+            ? `${provider}.model`
+            : undefined;
+    const model = modelSettingKey ? config.get<string>(modelSettingKey) : undefined;
+    const batchBudgetPlan = planBatchRequestBudget(files.length, provider, model);
     let proactiveBudgetUntil = 0;
+
+    if (batchBudgetPlan.proactiveSpacingMs > 0 && files.length > 1) {
+        proactiveBudgetUntil = Date.now() + batchBudgetPlan.proactiveSpacingMs;
+        const estimatedSeconds = Math.ceil(batchBudgetPlan.estimatedDurationMs / 1000);
+        vscode.window.showInformationMessage(
+            `${PROFILE.displayLabel}: Full AI scan will be paced to stay within provider quota. Estimated additional wait: about ${estimatedSeconds}s.`,
+        );
+    }
 
     await vscode.window.withProgress(
         {
@@ -307,12 +350,7 @@ async function scanUris(options: {
 
                 try {
                     const doc = await vscode.workspace.openTextDocument(uri);
-                    const result = await options.scanEngine.scanDocument(doc, deterministicOnlyMode
-                        ? {
-                            forceDeterministicOnly: true,
-                            deterministicOnlyReason: 'AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.',
-                        }
-                        : undefined);
+                    const result = await options.scanEngine.scanDocument(doc);
                     if ((result.warnings ?? []).some(warning => /\b429\b|rate limit/i.test(warning))) {
                         consecutiveRateLimitHits += 1;
                         const providerRetryAfterMs = extractRetryAfterMsFromWarnings(result.warnings);
@@ -321,14 +359,11 @@ async function scanUris(options: {
                             RATE_LIMIT_COOLDOWN_MS * (2 ** Math.max(0, consecutiveRateLimitHits - 1)),
                         );
                         cooldownUntil = Date.now() + Math.max(adaptiveCooldownMs, providerRetryAfterMs ?? 0);
-                        if (consecutiveRateLimitHits >= AI_BUDGET_FALLBACK_THRESHOLD) {
-                            deterministicOnlyMode = true;
-                        }
                     } else {
                         consecutiveRateLimitHits = 0;
                         cooldownUntil = 0;
                     }
-                    const proactiveSpacingMs = getProactiveSpacingMs(
+                    const proactiveSpacingMs = batchBudgetPlan.proactiveSpacingMs || getProactiveSpacingMs(
                         getProviderRateBudgetProfile(result.provider, result.model),
                     );
                     proactiveBudgetUntil = proactiveSpacingMs > 0

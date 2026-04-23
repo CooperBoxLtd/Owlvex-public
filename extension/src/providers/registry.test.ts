@@ -15,11 +15,13 @@ describe('ProviderRegistry', () => {
 
     beforeEach(() => {
         jest.clearAllMocks();
+        jest.useRealTimers();
         configState = {
             provider: 'openai',
             'foundry.endpoint': 'https://example.openai.azure.com',
             'foundry.model': 'test-foundry-deployment-primary',
             'foundry.deployments': ['test-foundry-deployment-primary', 'test-foundry-deployment-secondary'],
+            'providerThrottleOverrides': {},
         };
         updateMock = jest.fn(async (key: string, value: any) => {
             configState[key] = value;
@@ -33,6 +35,10 @@ describe('ProviderRegistry', () => {
             exports: { secrets: { get: secretGetMock, store: jest.fn(), delete: jest.fn() } },
         });
         registry = new ProviderRegistry();
+    });
+
+    afterEach(() => {
+        jest.useRealTimers();
     });
 
     describe('getProvider', () => {
@@ -257,6 +263,8 @@ describe('ProviderRegistry', () => {
             (global.fetch as jest.Mock) = jest.fn().mockResolvedValue({
                 ok: false,
                 status: 404,
+                headers: { get: () => null },
+                text: async () => '',
             });
 
             const provider = registry.getProvider('azure-foundry')!;
@@ -327,6 +335,166 @@ describe('ProviderRegistry', () => {
                     body: expect.stringContaining('"max_completion_tokens":4096'),
                 }),
             );
+        });
+
+        it('serializes Azure Foundry requests behind a shared throttle', async () => {
+            jest.useFakeTimers();
+            const fetchMock = jest.fn()
+                .mockResolvedValue({
+                    ok: true,
+                    json: async () => ({
+                        choices: [{ message: { content: 'ok' } }],
+                        usage: { total_tokens: 12 },
+                    }),
+                });
+            (global.fetch as jest.Mock) = fetchMock;
+
+            const provider = registry.getProvider('azure-foundry')!;
+            const first = provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'first',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+            const second = provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'second',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+
+            await jest.advanceTimersByTimeAsync(0);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            await jest.advanceTimersByTimeAsync(6999);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            await jest.advanceTimersByTimeAsync(1);
+            await Promise.all([first, second]);
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        });
+
+        it('retries Azure Foundry requests after a 429 with retry-after guidance', async () => {
+            jest.useFakeTimers();
+            const fetchMock = jest.fn()
+                .mockResolvedValueOnce({
+                    ok: false,
+                    status: 429,
+                    headers: { get: (name: string) => name.toLowerCase() === 'retry-after' ? '1' : null },
+                    text: async () => 'rate limited',
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({
+                        choices: [{ message: { content: 'ok' } }],
+                        usage: { total_tokens: 12 },
+                    }),
+                });
+            (global.fetch as jest.Mock) = fetchMock;
+
+            const provider = registry.getProvider('azure-foundry')!;
+            const resultPromise = provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'retry me',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+
+            await jest.advanceTimersByTimeAsync(0);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            await jest.advanceTimersByTimeAsync(12000);
+            const result = await resultPromise;
+            expect(result.content).toBe('ok');
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    describe('shared provider throttling', () => {
+        it('retries generic OpenAI-compatible rate limits before surfacing failure', async () => {
+            jest.useFakeTimers();
+            configState.provider = 'openai';
+            secretGetMock.mockImplementation(async (key: string) => {
+                if (key === 'owlvex.openai.apiKey') {
+                    return 'test-openai-key';
+                }
+                return undefined;
+            });
+            const fetchMock = jest.fn()
+                .mockResolvedValueOnce({
+                    ok: false,
+                    status: 429,
+                    headers: { get: () => null },
+                    text: async () => 'Too Many Requests',
+                })
+                .mockResolvedValueOnce({
+                    ok: true,
+                    json: async () => ({
+                        choices: [{ message: { content: 'ok' } }],
+                        usage: { total_tokens: 10 },
+                    }),
+                });
+            (global.fetch as jest.Mock) = fetchMock;
+
+            const provider = registry.getProvider('openai')!;
+            const resultPromise = provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'ping',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+
+            await jest.advanceTimersByTimeAsync(0);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            await jest.advanceTimersByTimeAsync(3000);
+            const result = await resultPromise;
+            expect(result.content).toBe('ok');
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        });
+
+        it('honors configured throttle overrides for a provider', async () => {
+            jest.useFakeTimers();
+            configState['providerThrottleOverrides'] = {
+                'azure-foundry': {
+                    minSpacingMs: 1000,
+                    maxConcurrent: 1,
+                },
+            };
+
+            const fetchMock = jest.fn().mockResolvedValue({
+                ok: true,
+                json: async () => ({
+                    choices: [{ message: { content: 'ok' } }],
+                    usage: { total_tokens: 12 },
+                }),
+            });
+            (global.fetch as jest.Mock) = fetchMock;
+            registry = new ProviderRegistry();
+
+            const provider = registry.getProvider('azure-foundry')!;
+            const first = provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'first',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+            const second = provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'second',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+
+            await jest.advanceTimersByTimeAsync(0);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            await jest.advanceTimersByTimeAsync(999);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+
+            await jest.advanceTimersByTimeAsync(1);
+            await Promise.all([first, second]);
+            expect(fetchMock).toHaveBeenCalledTimes(2);
         });
     });
 });

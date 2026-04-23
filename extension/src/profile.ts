@@ -22,6 +22,7 @@ export const PROFILE = {
         "selectFrameworks": "owlvex.selectFrameworks",
         "openPromptEditor": "owlvex.openPromptEditor",
         "switchModel": "owlvex.switchModel",
+        "configureProviderThrottling": "owlvex.configureProviderThrottling",
         "setupAI": "owlvex.setupAI",
         "configureBackend": "owlvex.configureBackend",
         "removeAIConnection": "owlvex.removeAIConnection",

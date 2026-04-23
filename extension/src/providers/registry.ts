@@ -25,6 +25,84 @@ export interface AIProvider {
     testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }>;
 }
 
+interface ProviderThrottleProfile {
+    maxConcurrent: number;
+    minSpacingMs: number;
+    baseBackoffMs: number;
+    maxBackoffMs: number;
+    retryAttempts: number;
+}
+
+type ProviderThrottleOverride = Partial<Record<keyof ProviderThrottleProfile, number>>;
+
+interface ProviderThrottleState {
+    active: number;
+    lastStartAt: number;
+    cooldownUntil: number;
+    recentRateLimits: number;
+    queue: Array<() => void>;
+}
+
+const DEFAULT_PROVIDER_THROTTLE_PROFILE: ProviderThrottleProfile = {
+    maxConcurrent: 2,
+    minSpacingMs: 250,
+    baseBackoffMs: 2000,
+    maxBackoffMs: 30000,
+    retryAttempts: 2,
+};
+
+const PROVIDER_THROTTLE_PROFILES: Record<string, ProviderThrottleProfile | undefined> = {
+    'azure-foundry': {
+        maxConcurrent: 1,
+        minSpacingMs: 7000,
+        baseBackoffMs: 10000,
+        maxBackoffMs: 60000,
+        retryAttempts: 2,
+    },
+    anthropic: {
+        maxConcurrent: 2,
+        minSpacingMs: 500,
+        baseBackoffMs: 3000,
+        maxBackoffMs: 30000,
+        retryAttempts: 2,
+    },
+    openai: DEFAULT_PROVIDER_THROTTLE_PROFILE,
+    mistral: DEFAULT_PROVIDER_THROTTLE_PROFILE,
+    gemini: DEFAULT_PROVIDER_THROTTLE_PROFILE,
+    groq: {
+        maxConcurrent: 3,
+        minSpacingMs: 100,
+        baseBackoffMs: 1500,
+        maxBackoffMs: 15000,
+        retryAttempts: 2,
+    },
+    custom: DEFAULT_PROVIDER_THROTTLE_PROFILE,
+};
+
+function sanitizePositiveInteger(value: unknown): number | undefined {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+        return undefined;
+    }
+
+    const rounded = Math.floor(numeric);
+    return rounded > 0 ? rounded : undefined;
+}
+
+function getConfiguredProviderThrottleOverride(providerId: string): ProviderThrottleOverride | undefined {
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    const overrides = config.get<Record<string, ProviderThrottleOverride>>('providerThrottleOverrides', {});
+    if (!overrides || typeof overrides !== 'object') {
+        return undefined;
+    }
+
+    return overrides[providerId] ?? overrides.default;
+}
+
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export function getProviderApiKeySecretName(providerId: string): string {
     const secretId = providerId === 'azure-foundry' ? 'foundry' : providerId;
     return `${PROFILE.secretPrefix}.${secretId}.apiKey`;
@@ -118,6 +196,7 @@ const DEFAULT_COMPLETION_TOKENS = 4096;
 
 async function buildProviderErrorMessage(providerName: string, res: Response): Promise<string> {
     let detail = '';
+    const retryAfter = res.headers.get('retry-after');
 
     try {
         const raw = (await res.text()).trim();
@@ -128,9 +207,194 @@ async function buildProviderErrorMessage(providerName: string, res: Response): P
         // Ignore response-body parsing failures and fall back to the status code.
     }
 
+    const retryAfterSuffix = retryAfter ? ` retry-after: ${retryAfter}` : '';
     return detail
-        ? `${providerName} error: ${res.status} ${detail}`
-        : `${providerName} error: ${res.status}`;
+        ? `${providerName} error: ${res.status}${retryAfterSuffix} ${detail}`
+        : `${providerName} error: ${res.status}${retryAfterSuffix}`;
+}
+
+function isRateLimitLikeError(error: unknown): boolean {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    return /\b429\b|rate limit|too many requests/i.test(message);
+}
+
+function extractRetryAfterMs(error: unknown): number | undefined {
+    const message = error instanceof Error ? error.message : String(error ?? '');
+    const secondsMatch = message.match(/retry-after:\s*(\d+(?:\.\d+)?)/i);
+    if (secondsMatch) {
+        return Math.max(0, Math.ceil(Number(secondsMatch[1]) * 1000));
+    }
+
+    const msMatch = message.match(/retry-after-ms:\s*(\d+)/i);
+    if (msMatch) {
+        return Math.max(0, Number(msMatch[1]));
+    }
+
+    return undefined;
+}
+
+class ProviderRequestLimiter {
+    private readonly states = new Map<string, ProviderThrottleState>();
+
+    private stateFor(providerId: string): ProviderThrottleState {
+        let state = this.states.get(providerId);
+        if (!state) {
+            state = {
+                active: 0,
+                lastStartAt: 0,
+                cooldownUntil: 0,
+                recentRateLimits: 0,
+                queue: [],
+            };
+            this.states.set(providerId, state);
+        }
+        return state;
+    }
+
+    private profileFor(providerId: string): ProviderThrottleProfile | undefined {
+        const baseProfile = PROVIDER_THROTTLE_PROFILES[providerId];
+        const override = getConfiguredProviderThrottleOverride(providerId);
+
+        if (!baseProfile && !override) {
+            return undefined;
+        }
+
+        const mergedBase = baseProfile ?? DEFAULT_PROVIDER_THROTTLE_PROFILE;
+        if (!override) {
+            return mergedBase;
+        }
+
+        return {
+            maxConcurrent: sanitizePositiveInteger(override.maxConcurrent) ?? mergedBase.maxConcurrent,
+            minSpacingMs: sanitizePositiveInteger(override.minSpacingMs) ?? mergedBase.minSpacingMs,
+            baseBackoffMs: sanitizePositiveInteger(override.baseBackoffMs) ?? mergedBase.baseBackoffMs,
+            maxBackoffMs: sanitizePositiveInteger(override.maxBackoffMs) ?? mergedBase.maxBackoffMs,
+            retryAttempts: sanitizePositiveInteger(override.retryAttempts) ?? mergedBase.retryAttempts,
+        };
+    }
+
+    private async acquire(providerId: string, profile: ProviderThrottleProfile): Promise<void> {
+        const state = this.stateFor(providerId);
+
+        while (true) {
+            const now = Date.now();
+            const cooldownWaitMs = Math.max(0, state.cooldownUntil - now);
+            const spacingWaitMs = state.lastStartAt
+                ? Math.max(0, (state.lastStartAt + profile.minSpacingMs) - now)
+                : 0;
+
+            if (state.active < profile.maxConcurrent && cooldownWaitMs === 0 && spacingWaitMs === 0) {
+                state.active += 1;
+                state.lastStartAt = Date.now();
+                return;
+            }
+
+            const immediateWaitMs = Math.max(cooldownWaitMs, spacingWaitMs);
+            if (immediateWaitMs > 0) {
+                await sleep(immediateWaitMs);
+                continue;
+            }
+
+            await new Promise<void>(resolve => {
+                state.queue.push(resolve);
+            });
+        }
+    }
+
+    private release(providerId: string): void {
+        const state = this.stateFor(providerId);
+        state.active = Math.max(0, state.active - 1);
+        const next = state.queue.shift();
+        next?.();
+    }
+
+    private noteRateLimit(providerId: string, profile: ProviderThrottleProfile, error: unknown): void {
+        const state = this.stateFor(providerId);
+        state.recentRateLimits += 1;
+
+        const retryAfterMs = extractRetryAfterMs(error);
+        const adaptiveBackoffMs = Math.min(
+            profile.maxBackoffMs,
+            profile.baseBackoffMs * (2 ** Math.max(0, state.recentRateLimits - 1)),
+        );
+        const jitterMs = Math.min(1000, Math.floor(Math.random() * 750));
+        const delayMs = Math.max(retryAfterMs ?? 0, adaptiveBackoffMs) + jitterMs;
+        state.cooldownUntil = Math.max(state.cooldownUntil, Date.now() + delayMs);
+    }
+
+    private noteSuccess(providerId: string): void {
+        const state = this.stateFor(providerId);
+        state.recentRateLimits = 0;
+    }
+
+    async run<T>(providerId: string, execute: () => Promise<T>): Promise<T> {
+        const profile = this.profileFor(providerId);
+        if (!profile) {
+            return execute();
+        }
+
+        let lastError: unknown;
+        for (let attempt = 1; attempt <= profile.retryAttempts + 1; attempt += 1) {
+            await this.acquire(providerId, profile);
+            try {
+                const result = await execute();
+                this.noteSuccess(providerId);
+                return result;
+            } catch (error) {
+                lastError = error;
+                if (!isRateLimitLikeError(error) || attempt > profile.retryAttempts) {
+                    throw error;
+                }
+
+                this.noteRateLimit(providerId, profile, error);
+            } finally {
+                this.release(providerId);
+            }
+        }
+
+        throw lastError instanceof Error
+            ? lastError
+            : new Error('Provider request failed after throttled retries.');
+    }
+}
+
+class ThrottledProvider implements AIProvider {
+    constructor(
+        private readonly base: AIProvider,
+        private readonly limiter: ProviderRequestLimiter,
+    ) {}
+
+    get id(): string {
+        return this.base.id;
+    }
+
+    get name(): string {
+        return this.base.name;
+    }
+
+    get selectedModel(): string {
+        return this.base.selectedModel;
+    }
+
+    set selectedModel(value: string) {
+        this.base.selectedModel = value;
+    }
+
+    async isConfigured(): Promise<boolean> {
+        return this.base.isConfigured();
+    }
+
+    async listModels(): Promise<string[]> {
+        return this.base.listModels();
+    }
+
+    async complete(req: CompletionRequest): Promise<CompletionResponse> {
+        return this.limiter.run(this.base.id, () => this.base.complete(req));
+    }
+
+    async testConnection(): Promise<{ success: boolean; latencyMs: number; message?: string }> {
+        return this.limiter.run(this.base.id, () => this.base.testConnection());
+    }
 }
 
 function getProviderModelSettingKey(providerId: string): string | undefined {
@@ -777,15 +1041,16 @@ class CustomProvider implements AIProvider {
 // Provider Registry
 // ----------------------------------------------------------------
 export class ProviderRegistry {
+    private readonly limiter = new ProviderRequestLimiter();
     private providers = new Map<string, AIProvider>([
-        ['openai',        new OpenAIProvider()],
-        ['anthropic',     new AnthropicProvider()],
-        ['azure-foundry', new AzureFoundryProvider()],
-        ['ollama',        new OllamaProvider()],
-        ['mistral',       new MistralProvider()],
-        ['gemini',        new GeminiProvider()],
-        ['groq',          new GroqProvider()],
-        ['custom',        new CustomProvider()],
+        ['openai',        new ThrottledProvider(new OpenAIProvider(), this.limiter)],
+        ['anthropic',     new ThrottledProvider(new AnthropicProvider(), this.limiter)],
+        ['azure-foundry', new ThrottledProvider(new AzureFoundryProvider(), this.limiter)],
+        ['ollama',        new ThrottledProvider(new OllamaProvider(), this.limiter)],
+        ['mistral',       new ThrottledProvider(new MistralProvider(), this.limiter)],
+        ['gemini',        new ThrottledProvider(new GeminiProvider(), this.limiter)],
+        ['groq',          new ThrottledProvider(new GroqProvider(), this.limiter)],
+        ['custom',        new ThrottledProvider(new CustomProvider(), this.limiter)],
     ]);
 
     getProvider(id: string): AIProvider | undefined {

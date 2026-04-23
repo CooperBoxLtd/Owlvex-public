@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { buildLicenceBadgeLabel, buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, isTrialEndingSoon } from './licence/licenceManager';
 import {
     buildBackendAndLicenceReadyChoices,
+    buildProviderThrottleOverrideSnippet,
     buildBackendConnectedNoLicenceChoices,
     buildStoredScanComparisonChoice,
     buildProviderConnectedChoices,
@@ -10,12 +11,15 @@ import {
     buildVerificationPromptMessage,
     buildUsefulnessPromptMessage,
     clearProviderConnection,
+    configureProviderThrottlingForActiveProvider,
     getProviderConnectionSettingKeys,
     normalizeComparisonDiff,
     providerAllowsOptionalApiKey,
     resolveConnectedModelSelection,
     shouldPromptUsefulnessFeedback,
 } from './extension';
+
+const extensionManifest = require('../package.json');
 
 describe('normalizeComparisonDiff', () => {
     it('keeps the current backend contract unchanged', () => {
@@ -125,6 +129,116 @@ describe('provider setup helpers', () => {
         expect(updateMock).toHaveBeenCalledWith('foundry.deployments', undefined, vscode.ConfigurationTarget.Global);
         expect(deleteMock).toHaveBeenCalledWith('owlvex.foundry.apiKey');
         expect(deleteMock).toHaveBeenCalledWith('owlvex.azure-foundry.apiKey');
+    });
+
+    it('builds throttle override snippets with provider defaults', () => {
+        expect(JSON.parse(buildProviderThrottleOverrideSnippet('azure-foundry'))).toEqual({
+            'azure-foundry': {
+                maxConcurrent: 1,
+                minSpacingMs: 7000,
+                baseBackoffMs: 10000,
+                maxBackoffMs: 60000,
+                retryAttempts: 2,
+            },
+        });
+
+        expect(JSON.parse(buildProviderThrottleOverrideSnippet('groq'))).toEqual({
+            groq: {
+                maxConcurrent: 3,
+                minSpacingMs: 100,
+                baseBackoffMs: 1500,
+                maxBackoffMs: 15000,
+                retryAttempts: 2,
+            },
+        });
+    });
+
+    it('falls back to the default hosted profile for unknown providers', () => {
+        expect(JSON.parse(buildProviderThrottleOverrideSnippet('unknown-provider'))).toEqual({
+            'unknown-provider': {
+                maxConcurrent: 2,
+                minSpacingMs: 250,
+                baseBackoffMs: 2000,
+                maxBackoffMs: 30000,
+                retryAttempts: 2,
+            },
+        });
+    });
+});
+
+describe('extension manifest surface', () => {
+    it('contributes the provider throttling command and advanced setting', () => {
+        const commandIds = extensionManifest.contributes.commands.map((entry: { command: string }) => entry.command);
+        expect(commandIds).toContain('owlvex.configureProviderThrottling');
+
+        expect(extensionManifest.contributes.configuration.properties['owlvex.providerThrottleOverrides']).toMatchObject({
+            type: 'object',
+            default: {},
+        });
+    });
+});
+
+describe('provider throttling command helper', () => {
+    let clipboardWriteTextMock: jest.Mock;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        clipboardWriteTextMock = jest.fn().mockResolvedValue(undefined);
+        (vscode as any).env = {
+            clipboard: {
+                writeText: clipboardWriteTextMock,
+            },
+        };
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+        (vscode.window.showInformationMessage as jest.Mock).mockReturnValue(undefined);
+    });
+
+    it('opens settings and copies a starter override for the active provider', async () => {
+        await configureProviderThrottlingForActiveProvider({
+            getActive: () => ({
+                id: 'azure-foundry',
+                name: 'Azure AI Foundry',
+            }),
+        });
+
+        expect(clipboardWriteTextMock).toHaveBeenCalledWith(JSON.stringify({
+            'azure-foundry': {
+                maxConcurrent: 1,
+                minSpacingMs: 7000,
+                baseBackoffMs: 10000,
+                maxBackoffMs: 60000,
+                retryAttempts: 2,
+            },
+        }, null, 2));
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            'workbench.action.openSettings',
+            'owlvex.providerThrottleOverrides',
+        );
+        expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+            'Owlvex: Opened provider throttling settings. A starter override for Azure AI Foundry was copied to the clipboard.',
+        );
+    });
+
+    it('uses the active provider identity to tailor the copied snippet and message', async () => {
+        await configureProviderThrottlingForActiveProvider({
+            getActive: () => ({
+                id: 'anthropic',
+                name: 'Anthropic',
+            }),
+        });
+
+        expect(clipboardWriteTextMock).toHaveBeenCalledWith(JSON.stringify({
+            anthropic: {
+                maxConcurrent: 2,
+                minSpacingMs: 500,
+                baseBackoffMs: 3000,
+                maxBackoffMs: 30000,
+                retryAttempts: 2,
+            },
+        }, null, 2));
+        expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+            'Owlvex: Opened provider throttling settings. A starter override for Anthropic was copied to the clipboard.',
+        );
     });
 });
 

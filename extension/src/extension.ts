@@ -482,6 +482,84 @@ async function migrateWorkspaceProviderSettingsToGlobalDefaults(): Promise<void>
     }
 }
 
+export function buildProviderThrottleOverrideSnippet(providerId: string): string {
+    const defaults: Record<string, Record<string, number>> = {
+        'azure-foundry': {
+            maxConcurrent: 1,
+            minSpacingMs: 7000,
+            baseBackoffMs: 10000,
+            maxBackoffMs: 60000,
+            retryAttempts: 2,
+        },
+        anthropic: {
+            maxConcurrent: 2,
+            minSpacingMs: 500,
+            baseBackoffMs: 3000,
+            maxBackoffMs: 30000,
+            retryAttempts: 2,
+        },
+        openai: {
+            maxConcurrent: 2,
+            minSpacingMs: 250,
+            baseBackoffMs: 2000,
+            maxBackoffMs: 30000,
+            retryAttempts: 2,
+        },
+        mistral: {
+            maxConcurrent: 2,
+            minSpacingMs: 250,
+            baseBackoffMs: 2000,
+            maxBackoffMs: 30000,
+            retryAttempts: 2,
+        },
+        gemini: {
+            maxConcurrent: 2,
+            minSpacingMs: 250,
+            baseBackoffMs: 2000,
+            maxBackoffMs: 30000,
+            retryAttempts: 2,
+        },
+        groq: {
+            maxConcurrent: 3,
+            minSpacingMs: 100,
+            baseBackoffMs: 1500,
+            maxBackoffMs: 15000,
+            retryAttempts: 2,
+        },
+        custom: {
+            maxConcurrent: 2,
+            minSpacingMs: 250,
+            baseBackoffMs: 2000,
+            maxBackoffMs: 30000,
+            retryAttempts: 2,
+        },
+        ollama: {
+            maxConcurrent: 2,
+            minSpacingMs: 250,
+            baseBackoffMs: 2000,
+            maxBackoffMs: 30000,
+            retryAttempts: 2,
+        },
+    };
+
+    const profile = defaults[providerId] ?? defaults.openai;
+    return JSON.stringify({
+        [providerId]: profile,
+    }, null, 2);
+}
+
+export async function configureProviderThrottlingForActiveProvider(
+    registryLike: { getActive(): { id: string; name: string } },
+): Promise<void> {
+    const provider = registryLike.getActive();
+    const snippet = buildProviderThrottleOverrideSnippet(provider.id);
+    await vscode.env.clipboard.writeText(snippet);
+    await vscode.commands.executeCommand('workbench.action.openSettings', `${PROFILE.configSection}.providerThrottleOverrides`);
+    vscode.window.showInformationMessage(
+        `${PROFILE.displayLabel}: Opened provider throttling settings. A starter override for ${provider.name} was copied to the clipboard.`,
+    );
+}
+
 function compactUsageMetadata(metadata: Record<string, unknown>): Record<string, unknown> {
     return Object.fromEntries(
         Object.entries(metadata).filter(([, value]) => value !== undefined),
@@ -2162,6 +2240,12 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 vscode.window.showInformationMessage(`${PROFILE.displayLabel}: Model switched to ${picked}`);
             }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.configureProviderThrottling, async () => {
+            await configureProviderThrottlingForActiveProvider(registry);
         })
     );
 

@@ -54,6 +54,10 @@
         "title": "Owlvex: Switch AI Model"
       },
       {
+        "command": "owlvex.configureProviderThrottling",
+        "title": "Owlvex: Configure Provider Throttling"
+      },
+      {
         "command": "owlvex.setupAI",
         "title": "Owlvex: Setup AI Connection"
       },
@@ -251,6 +255,11 @@
           "type": "string",
           "default": "",
           "description": "Repo root Owlvex should treat as the active project boundary for workspace scans and repo-wide AI context"
+        },
+        "owlvex.providerThrottleOverrides": {
+          "type": "object",
+          "default": {},
+          "markdownDescription": "Advanced per-provider throttling overrides. Keys are provider ids such as `azure-foundry`, `openai`, `anthropic`, `gemini`, `groq`, `mistral`, `custom`, or `default`. Each value can override `maxConcurrent`, `minSpacingMs`, `baseBackoffMs`, `maxBackoffMs`, and `retryAttempts`. Example: `{ \"azure-foundry\": { \"maxConcurrent\": 1, \"minSpacingMs\": 7000, \"retryAttempts\": 2 }, \"openai\": { \"maxConcurrent\": 1 } }`."
         }
       }
     },
