@@ -261,6 +261,86 @@ describe('workspaceScanner', () => {
         );
     });
 
+    it('batches up to three files per AI pass and preserves result order', async () => {
+        (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
+            if (currentPath.endsWith('repo')) {
+                return [
+                    { name: 'first.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'second.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'third.js', isDirectory: () => false, isFile: () => true },
+                    { name: 'fourth.js', isDirectory: () => false, isFile: () => true },
+                ];
+            }
+            return [];
+        });
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Folder');
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+        (vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section?: string) => ({
+            get: (key: string, fallback?: any) => {
+                if (section === 'owlvex' && key === 'provider') return 'ollama';
+                if (section === 'owlvex' && key === 'ollama.model') return 'qwen2.5:7b';
+                return fallback;
+            },
+        }));
+
+        const scanEngine = {
+            scanDocumentsBatch: jest.fn().mockImplementation(async (documents: any[]) => documents.map((document: any, index: number) => ({
+                scanId: `batch-scan-${index + 1}`,
+                score: 8,
+                summary: `batched ${document.fileName}`,
+                findings: [{ line: index + 1 }],
+                positives: [],
+                metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                durationMs: 10,
+                model: 'owlvex-gpt54mini',
+                provider: 'azure-foundry',
+                warnings: [],
+            }))),
+            scanDocument: jest.fn().mockResolvedValue({
+                scanId: 'scan-4',
+                score: 7,
+                summary: 'single fourth.js',
+                findings: [{ line: 4 }],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                durationMs: 9,
+                model: 'owlvex-gpt54mini',
+                provider: 'azure-foundry',
+                warnings: [],
+            }),
+        };
+        const diagnostics = { applyFindings: jest.fn() };
+
+        const summary = await scanFolder({
+            root: vscode.Uri.file('d:\\repo'),
+            scanEngine: scanEngine as any,
+            diagnostics,
+        });
+
+        expect(summary.status).toBe('completed');
+        expect(scanEngine.scanDocumentsBatch).toHaveBeenCalledTimes(1);
+        expect(scanEngine.scanDocumentsBatch).toHaveBeenCalledWith([
+            expect.objectContaining({ fileName: 'd:\\repo\\first.js' }),
+            expect.objectContaining({ fileName: 'd:\\repo\\second.js' }),
+            expect.objectContaining({ fileName: 'd:\\repo\\third.js' }),
+        ]);
+        expect(scanEngine.scanDocument).toHaveBeenCalledTimes(1);
+        expect(scanEngine.scanDocument).toHaveBeenCalledWith(
+            expect.objectContaining({ fileName: 'd:\\repo\\fourth.js' }),
+        );
+        expect(summary.results.map(entry => entry.uri.fsPath)).toEqual([
+            'd:\\repo\\first.js',
+            'd:\\repo\\second.js',
+            'd:\\repo\\third.js',
+            'd:\\repo\\fourth.js',
+        ]);
+        expect(diagnostics.applyFindings).toHaveBeenCalledTimes(4);
+        setTimeoutSpy.mockRestore();
+    });
+
     it('paces full Foundry review up front when the batch would otherwise outrun steady request budget', async () => {
         (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
             if (currentPath.endsWith('repo')) {
@@ -434,10 +514,10 @@ describe('workspaceScanner', () => {
         });
 
         expect(summary.status).toBe('completed');
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything(), undefined);
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything(), undefined);
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything(), undefined);
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 20000);
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything());
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything());
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything());
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
         expect(summary.results).toHaveLength(3);
         setTimeoutSpy.mockRestore();
     });
@@ -506,11 +586,11 @@ describe('workspaceScanner', () => {
             diagnostics: { applyFindings: jest.fn() },
         });
 
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 20000);
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
         setTimeoutSpy.mockRestore();
     });
 
-    it('switches remaining files to deterministic-only mode after repeated 429 warnings', async () => {
+    it('keeps full-AI file scans even after repeated 429 warnings', async () => {
         (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
             if (currentPath.endsWith('repo')) {
                 return [
@@ -556,15 +636,15 @@ describe('workspaceScanner', () => {
                 })
                 .mockResolvedValueOnce({
                     scanId: 'scan-3',
-                    score: 10,
-                    summary: 'No findings detected.',
+                    score: 7,
+                    summary: 'third',
                     findings: [],
                     positives: [],
                     metrics: { critical: 0, high: 0, medium: 0, low: 0 },
-                    durationMs: 0,
-                    model: 'test-foundry-deployment-secondary (deterministic-only)',
+                    durationMs: 10,
+                    model: 'test-foundry-deployment-secondary',
                     provider: 'azure-foundry',
-                    warnings: ['AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.'],
+                    warnings: [],
                 }),
         };
 
@@ -574,12 +654,9 @@ describe('workspaceScanner', () => {
             diagnostics: { applyFindings: jest.fn() },
         });
 
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything(), undefined);
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything(), undefined);
-        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything(), {
-            forceDeterministicOnly: true,
-            deterministicOnlyReason: 'AI coverage intentionally paused for the rest of this repo scan after repeated provider 429 warnings. Owlvex returned deterministic-only results for this file.',
-        });
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(1, expect.anything());
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(2, expect.anything());
+        expect(scanEngine.scanDocument).toHaveBeenNthCalledWith(3, expect.anything());
     });
 
     it('applies proactive request budgeting for Azure Foundry even before 429 warnings', async () => {
@@ -633,7 +710,7 @@ describe('workspaceScanner', () => {
             diagnostics: { applyFindings: jest.fn() },
         });
 
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 20000);
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
         setTimeoutSpy.mockRestore();
     });
 
@@ -688,7 +765,7 @@ describe('workspaceScanner', () => {
             diagnostics: { applyFindings: jest.fn() },
         });
 
-        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 20000);
+        expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 30000);
         setTimeoutSpy.mockRestore();
     });
 });

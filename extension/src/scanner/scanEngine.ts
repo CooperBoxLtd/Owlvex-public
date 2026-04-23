@@ -85,11 +85,26 @@ interface PromptContext {
     systemPrompt: string;
 }
 
+interface BatchDocumentContext {
+    fileId: string;
+    document: vscode.TextDocument;
+    language: string;
+    code: string;
+    fileName: string;
+    fileHash: string;
+    deterministicFindings: Finding[];
+}
+
 interface AiCorroborationReview {
     id: string;
     verdict: 'support' | 'reject' | 'contradict' | 'clear' | 'unclear';
     reason?: string;
     confidence?: number;
+}
+
+interface BatchFileReviewResult {
+    fileId: string;
+    reviews: AiCorroborationReview[];
 }
 
 interface SeverityMetrics {
@@ -743,6 +758,352 @@ export class ScanEngine {
         private readonly registry: ProviderRegistry,
     ) {}
 
+    async scanDocumentsBatch(documents: vscode.TextDocument[]): Promise<ScanResult[]> {
+        if (documents.length <= 1) {
+            return Promise.all(documents.map(document => this.scanDocument(document)));
+        }
+
+        const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+        const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
+        const frameworks = config.get<string[]>('frameworks', ['OWASP']);
+        const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
+        const provider = this.registry.getActive();
+        const projectContext = await loadProjectContextInfo();
+
+        const contexts: BatchDocumentContext[] = documents.map((document, index) => {
+            const code = document.getText();
+            const deterministicFindings = this.deterministicScanner
+                .scan(code, document.languageId)
+                .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding))
+                .map(f => enrichFindingRisk(f));
+
+            return {
+                fileId: `file-${index + 1}`,
+                document,
+                language: this._detectLanguage(document),
+                code,
+                fileName: document.fileName.split(/[/\\]/).pop() ?? 'unknown',
+                fileHash: crypto.createHash('sha256').update(code).digest('hex'),
+                deterministicFindings,
+            };
+        });
+
+        const licenceKey = await this.licenceMgr.getKey();
+        if (!licenceKey) {
+            return contexts.map(context =>
+                this._buildDeterministicOnlyResult(
+                    context.deterministicFindings,
+                    'Owlvex backend unavailable: no licence key configured. Returning deterministic-only results.',
+                    provider,
+                    projectContext.summary,
+                ),
+            );
+        }
+
+        let promptContext: PromptContext;
+        try {
+            await this._validateLicenceCached(apiUrl, licenceKey);
+            const batchLanguage = [...new Set(contexts.map(context => context.language))].length === 1
+                ? contexts[0].language
+                : 'mixed';
+            promptContext = await this._getPromptContextCached({
+                apiUrl,
+                licenceKey,
+                frameworks,
+                language: batchLanguage,
+                model: provider.selectedModel,
+                severityThreshold,
+            });
+        } catch (error: any) {
+            return contexts.map(context =>
+                this._buildDeterministicOnlyResult(
+                    context.deterministicFindings,
+                    `Owlvex backend unavailable: ${error.message}`,
+                    provider,
+                    projectContext.summary,
+                ),
+            );
+        }
+
+        const systemPrompt = promptContext.systemPrompt;
+        const start = Date.now();
+
+        let finderResponse;
+        try {
+            finderResponse = await this._completeWithRateLimitHandling(provider, {
+                systemPrompt,
+                userMessage: this._buildBatchFinderPrompt({
+                    contexts,
+                    frameworks,
+                    projectContextContract: projectContext.combined,
+                }),
+                model: provider.selectedModel,
+                temperature: 0.1,
+            });
+        } catch (error: any) {
+            return contexts.map(context =>
+                this._buildDeterministicOnlyResult(
+                    context.deterministicFindings,
+                    `AI provider unavailable: ${error.message}`,
+                    provider,
+                    projectContext.summary,
+                ),
+            );
+        }
+
+        const finderUsage = usageFromResponse(finderResponse);
+        let parsedByFile: Map<string, { summary: string; findings: Finding[]; positives: string[]; metrics: SeverityMetrics }>;
+        try {
+            parsedByFile = this._parseBatchAIResponse(finderResponse.content, contexts);
+        } catch (error: any) {
+            return contexts.map(context =>
+                this._buildDeterministicOnlyResult(
+                    context.deterministicFindings,
+                    `AI response unusable: ${error.message}`,
+                    provider,
+                    projectContext.summary,
+                ),
+            );
+        }
+
+        const reviewInputs = contexts.map(context => {
+            const parsed = parsedByFile.get(context.fileId) ?? {
+                summary: '',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+            };
+
+            return {
+                context,
+                parsed,
+                filteredAiFindings: dedupeOverlappingAiFindings(
+                    suppressUnsupportedAiFindings(context.code, parsed.findings),
+                ),
+            };
+        });
+
+        const verifierPass = await this._runBatchAiReviewPass({
+            role: 'Verifier',
+            expectedSupportVerdict: 'support',
+            expectedContradictionVerdict: 'reject',
+            provider,
+            systemPrompt,
+            entries: reviewInputs
+                .filter(entry => entry.filteredAiFindings.length > 0 && entry.filteredAiFindings.length <= MAX_CORROBORATION_CANDIDATES)
+                .map(entry => ({
+                    fileId: entry.context.fileId,
+                    language: entry.context.language,
+                    code: entry.context.code,
+                    findings: entry.filteredAiFindings,
+                })),
+        });
+
+        const verifierWarnings = [...verifierPass.warnings];
+        for (const entry of reviewInputs) {
+            if (entry.filteredAiFindings.length > MAX_CORROBORATION_CANDIDATES) {
+                verifierWarnings.push(
+                    `${entry.context.fileName}: AI corroboration partial: review passes skipped because candidate count ${entry.filteredAiFindings.length} exceeded corroboration budget ${MAX_CORROBORATION_CANDIDATES}.`,
+                );
+            }
+        }
+
+        const skepticPass = verifierWarnings.some(warning => hasRateLimitWarning([warning]))
+            ? {
+                files: [] as BatchFileReviewResult[],
+                warnings: ['AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.'],
+                aiUsage: emptyAiUsage(),
+            }
+            : await this._runBatchAiReviewPass({
+                role: 'Skeptic',
+                expectedSupportVerdict: 'clear',
+                expectedContradictionVerdict: 'contradict',
+                provider,
+                systemPrompt,
+                entries: reviewInputs
+                    .filter(entry => entry.filteredAiFindings.length > 0 && entry.filteredAiFindings.length <= MAX_CORROBORATION_CANDIDATES)
+                    .map(entry => ({
+                        fileId: entry.context.fileId,
+                        language: entry.context.language,
+                        code: entry.context.code,
+                        findings: entry.filteredAiFindings,
+                    })),
+            });
+
+        const durationMs = Date.now() - start;
+
+        return Promise.all(reviewInputs.map(async entry => {
+            const warnings: string[] = [];
+            const verifierReviews = verifierPass.files.find(file => file.fileId === entry.context.fileId)?.reviews ?? [];
+            const skepticReviews = skepticPass.files.find(file => file.fileId === entry.context.fileId)?.reviews ?? [];
+            const verifierMap = new Map(verifierReviews.map(review => [review.id, review]));
+            const skepticMap = new Map(skepticReviews.map(review => [review.id, review]));
+
+            const keptAi = entry.filteredAiFindings
+                .filter(finding => {
+                    const verifier = verifierMap.get(finding.id);
+                    const skeptic = skepticMap.get(finding.id);
+                    if (verifier?.verdict === 'reject') {
+                        return false;
+                    }
+                    if (skeptic?.verdict === 'contradict') {
+                        return false;
+                    }
+                    return true;
+                })
+                .map(finding => {
+                    const verifier = verifierMap.get(finding.id);
+                    const skeptic = skepticMap.get(finding.id);
+                    if (verifier?.verdict === 'support' && skeptic?.verdict === 'clear') {
+                        const finalConfidence = Math.max(finding.confidence ?? 0.8, 0.92);
+                        return {
+                            ...finding,
+                            confidence: finalConfidence,
+                            aiReviewScores: {
+                                finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
+                                verifier: verifier.confidence,
+                                skeptic: skeptic.confidence,
+                                final: finalConfidence,
+                            },
+                            aiReviewNotes: {
+                                finder: finding.aiReviewNotes?.finder,
+                                verifier: verifier.reason,
+                                skeptic: skeptic.reason,
+                            },
+                            corroboration: 'CORROBORATED' as const,
+                        };
+                    }
+
+                    if (verifier?.verdict === 'support') {
+                        const finalConfidence = Math.max(finding.confidence ?? 0.8, 0.88);
+                        return {
+                            ...finding,
+                            confidence: finalConfidence,
+                            aiReviewScores: {
+                                finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
+                                verifier: verifier.confidence,
+                                skeptic: skeptic?.confidence,
+                                final: finalConfidence,
+                            },
+                            aiReviewNotes: {
+                                finder: finding.aiReviewNotes?.finder,
+                                verifier: verifier.reason,
+                                skeptic: skeptic?.reason,
+                            },
+                            corroboration: 'PARTIAL' as const,
+                        };
+                    }
+
+                    if (verifier || skeptic) {
+                        return {
+                            ...finding,
+                            aiReviewScores: {
+                                finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
+                                verifier: verifier?.confidence,
+                                skeptic: skeptic?.confidence,
+                                final: finding.confidence ?? 0.8,
+                            },
+                            aiReviewNotes: {
+                                finder: finding.aiReviewNotes?.finder,
+                                verifier: verifier?.reason,
+                                skeptic: skeptic?.reason,
+                            },
+                            corroboration: 'PARTIAL' as const,
+                        };
+                    }
+
+                    return {
+                        ...finding,
+                        aiReviewScores: {
+                            finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
+                            final: finding.confidence ?? 0.8,
+                        },
+                        aiReviewNotes: {
+                            finder: finding.aiReviewNotes?.finder,
+                        },
+                        corroboration: 'UNVERIFIED' as const,
+                    };
+                });
+
+            warnings.push(
+                ...verifierWarnings.filter(warning =>
+                    warning.startsWith(`${entry.context.fileName}:`) || !warning.includes(':'),
+                ),
+                ...skepticPass.warnings.filter(warning =>
+                    !warning.includes(':') || warning.startsWith(`${entry.context.fileName}:`),
+                ),
+            );
+
+            const allFindings = mergeDeterministicAndAiFindings(entry.context.deterministicFindings, keptAi)
+                .map(finding => enrichFindingRisk(finding));
+            const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
+            const filteredWarnings = warnings.filter(warning =>
+                hasAiFindingsInFinalResult || !isAiCorroborationWarning(warning.replace(`${entry.context.fileName}: `, '')),
+            ).map(warning => warning.replace(`${entry.context.fileName}: `, ''));
+
+            const mergedMetrics = buildMetrics(allFindings);
+            const calculatedScore = calculateScoreFromFindings(allFindings);
+            const summary = allFindings.length
+                ? summarizeFindings(allFindings, entry.parsed.summary)
+                : 'No findings detected.';
+            const aiUsage = mergeAiUsage(
+                finderUsage,
+                verifierPass.aiUsage,
+                skepticPass.aiUsage,
+            );
+
+            let scanId = crypto.randomUUID();
+            try {
+                const recordRes = await fetch(`${apiUrl}/v1/scans/record`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Licence-Key': licenceKey,
+                    },
+                    body: JSON.stringify({
+                        file_name: entry.context.fileName,
+                        file_hash: entry.context.fileHash,
+                        language: entry.context.language,
+                        model: provider.selectedModel,
+                        provider: provider.id,
+                        frameworks,
+                        score: calculatedScore,
+                        findings_summary: mergedMetrics,
+                        finding_count: allFindings.length,
+                        token_count: aiUsage.totalTokens,
+                        duration_ms: durationMs,
+                        prompt_id: promptContext.templateId,
+                    }),
+                });
+
+                if (!recordRes.ok) {
+                    filteredWarnings.push(await this._readErrorResponse(recordRes, 'Failed to record scan'));
+                } else {
+                    const recordData = await this._readJsonResponse(recordRes, 'Scan recorder returned invalid JSON');
+                    scanId = recordData.scan_id ?? scanId;
+                }
+            } catch (error: any) {
+                filteredWarnings.push(`Failed to record scan: ${error.message}`);
+            }
+
+            return {
+                scanId,
+                score: calculatedScore,
+                summary,
+                findings: allFindings,
+                projectContextSummary: projectContext.summary,
+                frameworks,
+                positives: entry.parsed.positives,
+                metrics: mergedMetrics,
+                durationMs,
+                model: provider.selectedModel,
+                provider: provider.id,
+                warnings: filteredWarnings,
+                aiUsage,
+            };
+        }));
+    }
+
     async scanDocument(document: vscode.TextDocument, options?: ScanDocumentOptions): Promise<ScanResult> {
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
@@ -1204,6 +1565,40 @@ export class ScanEngine {
         }
     }
 
+    private async _runBatchAiReviewPass(params: {
+        role: 'Verifier' | 'Skeptic';
+        expectedSupportVerdict: 'support' | 'clear';
+        expectedContradictionVerdict: 'reject' | 'contradict';
+        provider: { complete(req: CompletionRequest): Promise<any>; selectedModel: string };
+        systemPrompt: string;
+        entries: Array<{ fileId: string; language: string; code: string; findings: Finding[] }>;
+    }): Promise<{ files: BatchFileReviewResult[]; warnings: string[]; aiUsage: AiUsageSummary }> {
+        if (!params.entries.length) {
+            return { files: [], warnings: [], aiUsage: emptyAiUsage() };
+        }
+
+        try {
+            const response = await this._completeWithRateLimitHandling(params.provider, {
+                systemPrompt: params.systemPrompt,
+                userMessage: this._buildBatchCorroborationPrompt(params),
+                model: params.provider.selectedModel,
+                temperature: 0,
+                maxCompletionTokens: AI_REVIEW_MAX_COMPLETION_TOKENS,
+            });
+            return {
+                files: this._parseBatchAiReviewResponse(response.content, params.entries, params.role),
+                warnings: [],
+                aiUsage: usageFromResponse(response),
+            };
+        } catch (error: any) {
+            return {
+                files: [],
+                warnings: [`AI corroboration partial: ${params.role.toLowerCase()} pass unavailable: ${error.message}`],
+                aiUsage: emptyAiUsage(),
+            };
+        }
+    }
+
     private _buildFinderPrompt(params: {
         language: string;
         code: string;
@@ -1238,6 +1633,52 @@ export class ScanEngine {
             params.groundedRemediationContext ? `\nGrounded remediation guidance:\n${params.groundedRemediationContext}\n` : '',
             `Code:\n\n${params.code}`,
         ].filter(Boolean).join('\n');
+    }
+
+    private _buildBatchFinderPrompt(params: {
+        contexts: BatchDocumentContext[];
+        frameworks: string[];
+        projectContextContract?: string;
+    }): string {
+        const fileBlocks = params.contexts.map(context => {
+            const groundedFrameworkContext = buildGroundedFrameworkPromptContext(params.frameworks);
+            const groundedRemediationContext = buildGroundedRemediationPromptContext(
+                context.deterministicFindings
+                    .map(finding => finding.canonicalId)
+                    .filter((value): value is string => Boolean(value)),
+            );
+            const groundedAiIssueContext = buildAiIssueGroundingPromptContext(
+                context.code,
+                params.frameworks,
+                context.deterministicFindings
+                    .map(finding => finding.canonicalId)
+                    .filter((value): value is string => Boolean(value)),
+            );
+
+            return [
+                `FILE_ID: ${context.fileId}`,
+                `PATH: ${context.document.fileName}`,
+                `LANGUAGE: ${context.language}`,
+                buildDeterministicGroundingContext(context.deterministicFindings),
+                groundedFrameworkContext ? `\n${groundedFrameworkContext}\n` : '',
+                groundedAiIssueContext ? `\n${groundedAiIssueContext}\n` : '',
+                groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : '',
+                `CODE:\n${context.code}`,
+            ].filter(Boolean).join('\n');
+        }).join('\n\n---\n\n');
+
+        return [
+            `Analyse this batch of ${params.contexts.length} files.`,
+            'You are the Finder pass.',
+            'Your job is candidate discovery, not final confirmation.',
+            'Optimize for bounded recall: nominate plausible security findings that are genuinely visible in each file, but do not claim proof unless the code is unambiguous.',
+            'Treat each file independently. Do not merge findings across files.',
+            'Resolve each finding to the closest Owlvex canonical issue when possible.',
+            'Return JSON only in this shape:',
+            '{"files":[{"file_id":"file-1","summary":"...","positives":["..."],"findings":[{"id":"...","line":1,"line_end":1,"severity":"HIGH","framework":"OWASP","rule_code":"...","title":"...","explanation":"...","threat":"...","fix":"...","plain_language_fix":"...","confidence":0.8,"issue_id":"...","stride":["Tampering"],"mappings":{"cwe":["CWE-89"]},"matched_signals":["..."],"likelihood":"HIGH","likelihood_reasons":["..."]}]}]}',
+            params.projectContextContract ? `Project context contract:\n${params.projectContextContract}\n` : '',
+            fileBlocks,
+        ].filter(Boolean).join('\n\n');
     }
 
     private _buildCorroborationPrompt(params: {
@@ -1295,6 +1736,51 @@ ${JSON.stringify(candidates, null, 2)}
 
 Code:
 ${params.code}`;
+    }
+
+    private _buildBatchCorroborationPrompt(params: {
+        role: 'Verifier' | 'Skeptic';
+        expectedSupportVerdict: 'support' | 'clear';
+        expectedContradictionVerdict: 'reject' | 'contradict';
+        entries: Array<{ fileId: string; language: string; code: string; findings: Finding[] }>;
+    }): string {
+        const roleInstruction = params.role === 'Verifier'
+            ? [
+                'You are the Verifier pass.',
+                'Your job is affirmative validation, not new discovery.',
+                `Return verdict "${params.expectedSupportVerdict}" only when the claimed issue class is concretely supported by the visible code in that same file.`,
+                `Return verdict "${params.expectedContradictionVerdict}" when the claim is unsupported, too broad for the code shown, missing a required sink/path, or mismatched to the issue class.`,
+                'Treat each file independently. Never transfer evidence between files.',
+            ].join(' ')
+            : [
+                'You are the Secondary review pass.',
+                'Your job is contradiction-checking, not new discovery.',
+                `Return verdict "${params.expectedContradictionVerdict}" when stronger contradictory evidence exists or when the visible code shows a meaningful safety control that defeats the claim in that same file.`,
+                `Return verdict "${params.expectedSupportVerdict}" only when the visible code does not show a meaningful contradiction.`,
+                'Treat each file independently. Never transfer evidence between files.',
+            ].join(' ');
+
+        const fileBlocks = params.entries.map(entry => ({
+            file_id: entry.fileId,
+            language: entry.language,
+            candidates: entry.findings.map(finding => ({
+                id: finding.id,
+                line: finding.line,
+                line_end: finding.lineEnd,
+                title: finding.title,
+                canonical_id: finding.canonicalId ?? '',
+                severity: finding.severity,
+                explanation: finding.explanation,
+            })),
+            code: entry.code,
+        }));
+
+        return `${roleInstruction}
+Respond with JSON only in this shape:
+{"files":[{"file_id":"file-1","reviews":[{"id":"candidate-id","verdict":"${params.expectedSupportVerdict}|${params.expectedContradictionVerdict}|unclear","confidence":0.0,"reason":"short reason"}]}]}
+Review all candidates below and do not invent new findings.
+
+${JSON.stringify(fileBlocks, null, 2)}`;
     }
 
     private async _validateLicenceCached(apiUrl: string, licenceKey: string): Promise<void> {
@@ -1476,6 +1962,65 @@ ${params.code}`;
         }
     }
 
+    private _parseBatchAIResponse(
+        raw: string,
+        contexts: BatchDocumentContext[],
+    ): Map<string, { summary: string; findings: Finding[]; positives: string[]; metrics: SeverityMetrics }> {
+        const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+        const byFile = new Map<string, { summary: string; findings: Finding[]; positives: string[]; metrics: SeverityMetrics }>();
+
+        try {
+            const data = JSON.parse(cleaned);
+            const files = Array.isArray(data.files) ? data.files : [];
+            for (const context of contexts) {
+                const match = files.find((file: any) => String(file.file_id ?? '').trim() === context.fileId) ?? {};
+                const findings = Array.isArray(match.findings) ? match.findings : [];
+                byFile.set(context.fileId, {
+                    summary: typeof match.summary === 'string' ? match.summary : '',
+                    positives: Array.isArray(match.positives) ? match.positives.map((item: unknown) => String(item)) : [],
+                    metrics: match.metrics ?? { critical: 0, high: 0, medium: 0, low: 0 },
+                    findings: findings.map((f: any) => ({
+                        id: f.id ?? crypto.randomUUID(),
+                        line: f.line ?? 1,
+                        lineEnd: f.line_end ?? f.line ?? 1,
+                        severity: f.severity ?? 'MEDIUM',
+                        framework: f.framework ?? 'OWASP',
+                        ruleCode: f.rule_code ?? '',
+                        title: f.title ?? '',
+                        explanation: f.explanation ?? '',
+                        threat: f.threat ?? '',
+                        fix: f.fix ?? '',
+                        plainLanguageFix: typeof f.plain_language_fix === 'string'
+                            ? f.plain_language_fix
+                            : typeof f.plainLanguageFix === 'string'
+                                ? f.plainLanguageFix
+                                : '',
+                        confidence: f.confidence ?? 0.8,
+                        provenance: 'ai' as const,
+                        aiReviewScores: {
+                            finder: f.confidence ?? 0.8,
+                            final: f.confidence ?? 0.8,
+                        },
+                        aiReviewNotes: {
+                            finder: typeof f.explanation === 'string' ? f.explanation : undefined,
+                        },
+                        canonicalId: f.issue_id,
+                        stride: normalizeStride(f.stride),
+                        mappings: normalizeMappings(f.mappings),
+                        matchedSignals: normalizeStringList(f.matched_signals),
+                        likelihood: normalizeLikelihood(f.likelihood),
+                        likelihoodReasons: normalizeStringList(f.likelihood_reasons ?? f.likelihoodReasons ?? f.context_reasons),
+                    }))
+                        .map((finding: Finding) => this._resolveCanonicalFinding(finding))
+                        .map((finding: Finding) => sanitizeAiFinding(finding)),
+                });
+            }
+            return byFile;
+        } catch {
+            throw new Error('AI batch response could not be parsed as JSON');
+        }
+    }
+
     private _parseAiReviewResponse(raw: string, candidates: Finding[], role: 'Verifier' | 'Skeptic'): AiCorroborationReview[] {
         const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
 
@@ -1523,6 +2068,36 @@ ${params.code}`;
         }
 
         throw new Error('AI review response could not be parsed as JSON');
+    }
+
+    private _parseBatchAiReviewResponse(
+        raw: string,
+        entries: Array<{ fileId: string; findings: Finding[] }>,
+        role: 'Verifier' | 'Skeptic',
+    ): BatchFileReviewResult[] {
+        const cleaned = raw.replace(/^```(?:json)?\n?/m, '').replace(/\n?```$/m, '').trim();
+
+        try {
+            const data = JSON.parse(cleaned);
+            const files = Array.isArray(data.files) ? data.files : [];
+            return entries.map(entry => {
+                const match = files.find((file: any) => String(file.file_id ?? '').trim() === entry.fileId) ?? {};
+                const reviews = Array.isArray(match.reviews) ? match.reviews : [];
+                return {
+                    fileId: entry.fileId,
+                    reviews: reviews
+                        .map((review: any) => ({
+                            id: String(review.id ?? '').trim(),
+                            verdict: String(review.verdict ?? '').trim().toLowerCase(),
+                            reason: typeof review.reason === 'string' ? review.reason.trim() : undefined,
+                            confidence: normalizeReviewConfidence(review.confidence, role, String(review.verdict ?? '').trim().toLowerCase()),
+                        }))
+                        .filter((review: any) => review.id && ['support', 'reject', 'contradict', 'clear', 'unclear'].includes(review.verdict)),
+                };
+            });
+        } catch {
+            throw new Error('AI batch review response could not be parsed as JSON');
+        }
     }
 
     private _resolveCanonicalFinding(finding: Finding): Finding {

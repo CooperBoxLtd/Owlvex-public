@@ -1685,13 +1685,25 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).not.toContain('README.md:');
     });
 
-    it('blocks combined fix previews when the findings span different families', async () => {
+    it('allows combined fix previews when the findings span different families', async () => {
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (uri: any) => ({
+            uri,
+            fileName: uri.fsPath,
+            getText: () => uri.fsPath.endsWith('one.js')
+                ? 'db.query(req.query.id);'
+                : 'fetch(req.query.url);',
+        }));
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+
+        const complete = jest.fn()
+            .mockResolvedValueOnce({ content: 'const id = Number(req.query.id);\ndb.query(id);' })
+            .mockResolvedValueOnce({ content: 'const target = allowlisted(req.query.url);\nfetch(target);' });
         const provider = new ChatViewProvider({
             getActive: () => ({
                 id: 'test-provider',
                 name: 'Test Provider',
                 selectedModel: 'owlvex-test-model',
-                complete: jest.fn(),
+                complete,
             }),
             allProviders: () => [],
         } as any, {
@@ -1743,11 +1755,9 @@ describe('parseChatIntent', () => {
         ] as any);
 
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
-        expect(finalMessage.content).toContain('do not share the same finding family');
-        expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix code', kind: 'generateBatchFixPreview' }),
-        ]));
-        expect((provider as any).pendingFixPreview).toBeUndefined();
+        expect(finalMessage.content).toContain('Fix preview ready for 2 files.');
+        expect(complete).toHaveBeenCalledTimes(2);
+        expect((provider as any).pendingFixPreview?.changes).toHaveLength(2);
     });
 
     it('runs the project context quick action and reports readiness', async () => {

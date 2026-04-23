@@ -726,21 +726,10 @@ function validateFixPreviewContent(options: {
     return undefined;
 }
 
-function normalizeFindingFamily(finding: Finding): string {
-    return String(finding.canonicalId || finding.canonicalTitle || finding.title || '')
-        .trim()
-        .toLowerCase();
-}
-
 function validateBatchFixScope(items: ActionableFindingTarget[]): string | undefined {
     const distinctPaths = [...new Set(items.map(item => item.targetPath).filter((value): value is string => Boolean(value)))];
     if (distinctPaths.length > MAX_BATCH_FIX_FILES) {
         return `Owlvex blocked the combined fix preview because it spanned ${distinctPaths.length} files. Combined fixes are limited to ${MAX_BATCH_FIX_FILES} files.`;
-    }
-
-    const distinctFamilies = [...new Set(items.map(item => normalizeFindingFamily(item.finding)).filter(Boolean))];
-    if (distinctFamilies.length > 1) {
-        return 'Owlvex blocked the combined fix preview because the selected findings do not share the same finding family. Regenerate individual fixes instead.';
     }
 
     return undefined;
@@ -1647,7 +1636,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         'Preserve unrelated behavior and formatting where practical.',
                         'Make the smallest safe changes that address all listed findings in this file.',
                         'Do not refactor, rename, reorder, or rewrite unrelated parts of the file.',
-                        'Keep the patch constrained to the reviewed finding family and the minimum supporting validation or guard logic.',
+                        'Keep the patch constrained to the reviewed findings and the minimum supporting validation or guard logic.',
                         'Follow the grounded canonical remediation contract in the user context, including safe pattern, validation intent, and avoid guidance when relevant.',
                     ].join('\n'),
                     userMessage: [

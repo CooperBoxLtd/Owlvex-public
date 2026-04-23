@@ -27,6 +27,8 @@ const EXCLUDED_DIRS = new Set([
     '.turbo',
 ]);
 
+const AI_BATCH_SIZE = 3;
+
 const RATE_LIMIT_COOLDOWN_MS = 5000;
 const MAX_RATE_LIMIT_COOLDOWN_MS = 60000;
 const FOUNDRY_BATCH_STEADY_STATE_REQUEST_LIMIT = 7;
@@ -325,7 +327,8 @@ async function scanUris(options: {
             cancellable: true,
         },
         async (progress, token) => {
-            for (const uri of files) {
+            for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
+                const uri = files[fileIndex];
                 if (token.isCancellationRequested) {
                     cancelled = true;
                     break;
@@ -349,30 +352,48 @@ async function scanUris(options: {
                 });
 
                 try {
-                    const doc = await vscode.workspace.openTextDocument(uri);
-                    const result = await options.scanEngine.scanDocument(doc);
-                    if ((result.warnings ?? []).some(warning => /\b429\b|rate limit/i.test(warning))) {
-                        consecutiveRateLimitHits += 1;
-                        const providerRetryAfterMs = extractRetryAfterMsFromWarnings(result.warnings);
-                        const adaptiveCooldownMs = Math.min(
-                            MAX_RATE_LIMIT_COOLDOWN_MS,
-                            RATE_LIMIT_COOLDOWN_MS * (2 ** Math.max(0, consecutiveRateLimitHits - 1)),
+                    const remainingFiles = files.slice(fileIndex);
+                    const shouldBatch = typeof (options.scanEngine as any).scanDocumentsBatch === 'function' && remainingFiles.length > 1;
+                    const batchUris = shouldBatch ? remainingFiles.slice(0, AI_BATCH_SIZE) : [uri];
+                    const documents = await Promise.all(batchUris.map(batchUri => vscode.workspace.openTextDocument(batchUri)));
+                    const batchResults: ScanResult[] = shouldBatch
+                        ? await (options.scanEngine as any).scanDocumentsBatch(documents)
+                        : [await options.scanEngine.scanDocument(documents[0])];
+
+                    for (let batchIndex = 0; batchIndex < batchResults.length; batchIndex += 1) {
+                        const batchResult = batchResults[batchIndex];
+                        const batchUri = batchUris[batchIndex];
+                        const batchDoc = documents[batchIndex];
+
+                        if ((batchResult.warnings ?? []).some(warning => /\b429\b|rate limit/i.test(warning))) {
+                            consecutiveRateLimitHits += 1;
+                            const providerRetryAfterMs = extractRetryAfterMsFromWarnings(batchResult.warnings);
+                            const adaptiveCooldownMs = Math.min(
+                                MAX_RATE_LIMIT_COOLDOWN_MS,
+                                RATE_LIMIT_COOLDOWN_MS * (2 ** Math.max(0, consecutiveRateLimitHits - 1)),
+                            );
+                            cooldownUntil = Date.now() + Math.max(adaptiveCooldownMs, providerRetryAfterMs ?? 0);
+                        } else {
+                            consecutiveRateLimitHits = 0;
+                            cooldownUntil = 0;
+                        }
+
+                        const proactiveSpacingMs = batchBudgetPlan.proactiveSpacingMs || getProactiveSpacingMs(
+                            getProviderRateBudgetProfile(batchResult.provider, batchResult.model),
                         );
-                        cooldownUntil = Date.now() + Math.max(adaptiveCooldownMs, providerRetryAfterMs ?? 0);
-                    } else {
-                        consecutiveRateLimitHits = 0;
-                        cooldownUntil = 0;
+                        proactiveBudgetUntil = proactiveSpacingMs > 0
+                            ? Date.now() + proactiveSpacingMs
+                            : 0;
+                        options.diagnostics.applyFindings(batchDoc, batchResult.findings);
+                        totalFindings += batchResult.findings.length;
+                        results.push({ uri: batchUri, result: batchResult });
+                        completed++;
                     }
-                    const proactiveSpacingMs = batchBudgetPlan.proactiveSpacingMs || getProactiveSpacingMs(
-                        getProviderRateBudgetProfile(result.provider, result.model),
-                    );
-                    proactiveBudgetUntil = proactiveSpacingMs > 0
-                        ? Date.now() + proactiveSpacingMs
-                        : 0;
-                    options.diagnostics.applyFindings(doc, result.findings);
-                    totalFindings += result.findings.length;
-                    results.push({ uri, result });
-                    completed++;
+
+                    if (shouldBatch) {
+                        fileIndex += batchUris.length - 1;
+                        continue;
+                    }
                 } catch (error: any) {
                     errors.push(`${shortName}: ${error.message}`);
                 }
