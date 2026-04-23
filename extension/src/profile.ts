@@ -36,6 +36,7 @@ export const PROFILE = {
         "toggleTelemetry": "owlvex.toggleTelemetry",
         "registerAccess": "owlvex.registerAccess",
         "compareScans": "owlvex.compareScans",
+        "compareLatestReports": "owlvex.compareLatestReports",
         "reviewRiskCalibration": "owlvex.reviewRiskCalibration",
         "discussFinding": "owlvex.discussFinding",
         "generateFixPreview": "owlvex.generateFixPreview",

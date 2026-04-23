@@ -109,6 +109,10 @@
           "command": "owlvex.compareScans",
           "title": "Owlvex: Compare Reports"
         },
+        {
+          "command": "owlvex.compareLatestReports",
+          "title": "Owlvex: Compare Last 2 Reports"
+        },
       {
         "command": "owlvex.reviewRiskCalibration",
         "title": "Owlvex: Review Risk Calibration"

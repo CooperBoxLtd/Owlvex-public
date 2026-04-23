@@ -261,6 +261,52 @@ describe('workspaceScanner', () => {
         );
     });
 
+    it('keeps small selected-file Foundry scans interactive while still batching them', async () => {
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Selected Files');
+        const setTimeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementation(((fn: any) => {
+            fn();
+            return 0 as any;
+        }) as any);
+        (vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section?: string) => ({
+            get: (key: string, fallback?: any) => {
+                if (section === 'owlvex' && key === 'provider') return 'azure-foundry';
+                if (section === 'owlvex' && key === 'foundry.model') return 'owlvex-gpt54mini';
+                return fallback;
+            },
+        }));
+
+        const scanEngine = {
+            scanDocumentsBatch: jest.fn().mockImplementation(async (documents: any[]) => documents.map((document: any, index: number) => ({
+                scanId: `scan-${index + 1}`,
+                score: 8,
+                summary: `batched ${document.fileName}`,
+                findings: [{ line: index + 1 }],
+                positives: [],
+                metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                durationMs: 10,
+                model: 'owlvex-gpt54mini',
+                provider: 'azure-foundry',
+                warnings: [],
+            }))),
+            scanDocument: jest.fn(),
+        };
+
+        const summary = await scanSelectedFiles({
+            files: [vscode.Uri.file('d:\\repo\\src\\one.js'), vscode.Uri.file('d:\\repo\\src\\two.js')],
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+        });
+
+        expect(summary.status).toBe('completed');
+        expect(scanEngine.scanDocumentsBatch).toHaveBeenCalledTimes(1);
+        expect(scanEngine.scanDocument).not.toHaveBeenCalled();
+        expect(vscode.window.showInformationMessage).not.toHaveBeenCalledWith(
+            'Owlvex: Full AI scan will be paced to stay within provider quota. Estimated additional wait: about 30s.',
+        );
+        expect(setTimeoutSpy).not.toHaveBeenCalledWith(expect.any(Function), 30000);
+        setTimeoutSpy.mockRestore();
+    });
+
     it('batches up to three files per AI pass and preserves result order', async () => {
         (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
             if (currentPath.endsWith('repo')) {

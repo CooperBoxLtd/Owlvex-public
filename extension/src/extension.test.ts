@@ -4,6 +4,7 @@ import {
     buildBackendAndLicenceReadyChoices,
     buildProviderThrottleOverrideSnippet,
     buildBackendConnectedNoLicenceChoices,
+    buildStoredReportComparisonChoice,
     buildStoredScanComparisonChoice,
     buildProviderConnectedChoices,
     buildRegistrationCompletionChoices,
@@ -16,6 +17,7 @@ import {
     normalizeComparisonDiff,
     providerAllowsOptionalApiKey,
     resolveConnectedModelSelection,
+    selectLatestTwoReports,
     shouldPromptUsefulnessFeedback,
 } from './extension';
 
@@ -49,8 +51,8 @@ describe('normalizeComparisonDiff', () => {
     });
 });
 
-describe('scan comparison picker helpers', () => {
-    it('builds human-readable report comparison choices from stored scan metadata', () => {
+describe('comparison picker helpers', () => {
+    it('builds human-readable scan comparison choices from stored scan metadata', () => {
         const choice = buildStoredScanComparisonChoice({
             scanId: '12345678-90ab-cdef-1234-567890abcdef',
             targetLabel: 'tools/demo-app',
@@ -75,6 +77,50 @@ describe('scan comparison picker helpers', () => {
         expect(choice.detail).toContain('10.0/10');
         expect(choice.detail).toContain('2 finding(s)');
         expect(choice.detail).toContain('scan 12345678');
+    });
+
+    it('builds human-readable report comparison choices from stored report metadata', () => {
+        const choice = buildStoredReportComparisonChoice({
+            reportId: 'report-12345678',
+            reportUri: 'file:///d:/repo/tools/demo/owlvex-scan-report-20260423-120213.md',
+            reportFileName: 'owlvex-scan-report-20260423-120213.md',
+            targetLabel: 'demo-app workspace',
+            createdAt: '2026-04-23T12:02:13.000Z',
+            fileCount: 3,
+            totalFindings: 7,
+            averageScore: 8.7,
+            providers: ['azure-foundry'],
+            models: ['owlvex-gpt54mini'],
+            results: [],
+        } as any);
+
+        expect(choice.label).toBe('demo-app workspace');
+        expect(choice.description).toContain('2026-04-23 12:02:13 UTC');
+        expect(choice.description).toContain('azure-foundry / owlvex-gpt54mini');
+        expect(choice.detail).toContain('3 file(s)');
+        expect(choice.detail).toContain('7 finding(s)');
+        expect(choice.detail).toContain('avg 8.7/10');
+        expect(choice.detail).toContain('owlvex-scan-report-20260423-120213.md');
+    });
+
+    it('selects the two most recent reports as baseline and current', () => {
+        const selection = selectLatestTwoReports([
+            {
+                reportId: 'older',
+                createdAt: '2026-04-23T10:00:00.000Z',
+            },
+            {
+                reportId: 'current',
+                createdAt: '2026-04-23T12:00:00.000Z',
+            },
+            {
+                reportId: 'middle',
+                createdAt: '2026-04-23T11:00:00.000Z',
+            },
+        ] as any);
+
+        expect(selection?.baseline.reportId).toBe('middle');
+        expect(selection?.current.reportId).toBe('current');
     });
 });
 
@@ -170,6 +216,7 @@ describe('extension manifest surface', () => {
     it('contributes the provider throttling command and advanced setting', () => {
         const commandIds = extensionManifest.contributes.commands.map((entry: { command: string }) => entry.command);
         expect(commandIds).toContain('owlvex.configureProviderThrottling');
+        expect(commandIds).toContain('owlvex.compareLatestReports');
 
         expect(extensionManifest.contributes.configuration.properties['owlvex.providerThrottleOverrides']).toMatchObject({
             type: 'object',

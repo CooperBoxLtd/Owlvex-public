@@ -24,8 +24,11 @@ import { RulePackRuntimeContext } from './packs/packRuntime';
 export let secrets: vscode.SecretStorage;
 
 const MAX_STORED_SCANS = 20;
+const MAX_STORED_REPORTS = 20;
 const scanStore = new Map<string, StoredScanRecord>();
+const reportStore = new Map<string, StoredReportRecord>();
 const SCAN_STORE_KEY = `${PROFILE.storagePrefix}.scanStore`;
+const REPORT_STORE_KEY = `${PROFILE.storagePrefix}.reportStore`;
 const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
 const ISSUE_PACK_ID = 'owlvex.issue-pack.v1';
 const ISSUE_MAPPING_PACK_ID = 'owlvex.issue-mapping-pack.v1';
@@ -78,6 +81,20 @@ interface ReportCommandResult {
     };
 }
 
+interface StoredReportRecord {
+    reportId: string;
+    reportUri: string;
+    reportFileName: string;
+    targetLabel: string;
+    createdAt: string;
+    fileCount: number;
+    totalFindings: number;
+    averageScore: number;
+    providers: string[];
+    models: string[];
+    results: Array<{ uri: string; result: ScanResult }>;
+}
+
 function storeScanResult(scanId: string, result: ScanResult, targetLabel?: string): void {
     if (scanStore.size >= MAX_STORED_SCANS) {
         const firstKey = scanStore.keys().next().value;
@@ -98,11 +115,35 @@ function serializeScanStore(): StoredScanRecord[] {
     }));
 }
 
+function storeReportResult(record: StoredReportRecord): void {
+    if (reportStore.size >= MAX_STORED_REPORTS) {
+        const firstKey = reportStore.keys().next().value;
+        if (firstKey) reportStore.delete(firstKey);
+    }
+    reportStore.set(record.reportId, normalizeStoredReportRecord(record));
+}
+
+function serializeReportStore(): StoredReportRecord[] {
+    return Array.from(reportStore.values()).map(item => normalizeStoredReportRecord(item));
+}
+
 function normalizeScanResult(result: ScanResult): ScanResult {
     return {
         ...result,
         warnings: result.warnings ?? [],
         aiUsage: result.aiUsage ?? { requestCount: 0, totalTokens: 0 },
+    };
+}
+
+function normalizeStoredReportRecord(item: StoredReportRecord): StoredReportRecord {
+    return {
+        ...item,
+        providers: item.providers ?? [],
+        models: item.models ?? [],
+        results: (item.results ?? []).map(entry => ({
+            uri: entry.uri,
+            result: normalizeScanResult(entry.result),
+        })),
     };
 }
 
@@ -205,6 +246,41 @@ export function buildStoredScanComparisonChoice(record: StoredScanRecord): {
         description: `${formatStoredScanTimestamp(record.scannedAt)} | ${providerModel}`,
         detail: `${result.score.toFixed(1)}/10 | ${result.findings.length} finding(s) | scan ${shortenScanId(record.scanId)}`,
         record,
+    };
+}
+
+export function buildStoredReportComparisonChoice(record: StoredReportRecord): {
+    label: string;
+    description: string;
+    detail: string;
+    record: StoredReportRecord;
+} {
+    const providerModel = [record.providers.join(', '), record.models.join(', ')].filter(Boolean).join(' / ') || 'provider/model unknown';
+    return {
+        label: record.targetLabel?.trim() || record.reportFileName,
+        description: `${formatStoredScanTimestamp(record.createdAt)} | ${providerModel}`,
+        detail: `${record.fileCount} file(s) | ${record.totalFindings} finding(s) | avg ${record.averageScore.toFixed(1)}/10 | ${record.reportFileName}`,
+        record,
+    };
+}
+
+export function selectLatestTwoReports(records: StoredReportRecord[]): {
+    baseline: StoredReportRecord;
+    current: StoredReportRecord;
+} | undefined {
+    if (records.length < 2) {
+        return undefined;
+    }
+
+    const sorted = [...records].sort((left, right) => {
+        const leftTime = new Date(left.createdAt).getTime();
+        const rightTime = new Date(right.createdAt).getTime();
+        return rightTime - leftTime;
+    });
+
+    return {
+        baseline: sorted[1],
+        current: sorted[0],
     };
 }
 
@@ -1040,6 +1116,10 @@ export function activate(context: vscode.ExtensionContext) {
     for (const item of restoredScans) {
         scanStore.set(item.scanId, normalizeStoredScanRecord(item));
     }
+    const restoredReports = context.workspaceState.get<StoredReportRecord[]>(REPORT_STORE_KEY, []);
+    for (const item of restoredReports) {
+        reportStore.set(item.reportId, normalizeStoredReportRecord(item));
+    }
     const lastStoredScan = restoredScans[restoredScans.length - 1]?.result;
     if (lastStoredScan) {
         sidebar.refresh(lastStoredScan);
@@ -1047,6 +1127,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     const persistScans = async () => {
         await context.workspaceState.update(SCAN_STORE_KEY, serializeScanStore());
+    };
+    const persistReports = async () => {
+        await context.workspaceState.update(REPORT_STORE_KEY, serializeReportStore());
     };
 
     if (previousSessionAt) {
@@ -1413,6 +1496,24 @@ export function activate(context: vscode.ExtensionContext) {
         const totalFindings = safeSnapshot.results.reduce((total, item) => total + item.result.findings.length, 0);
         const warningCount = safeSnapshot.results.reduce((total, item) => total + (item.result.warnings ?? []).length, 0);
 
+        storeReportResult({
+            reportId: createHash('sha256').update(`${reportUri.toString()}|${Date.now()}`).digest('hex').slice(0, 16),
+            reportUri: reportUri.toString(),
+            reportFileName: path.basename(reportUri.fsPath),
+            targetLabel: safeSnapshot.targetLabel,
+            createdAt: new Date().toISOString(),
+            fileCount: safeSnapshot.results.length,
+            totalFindings,
+            averageScore,
+            providers: [...new Set(safeSnapshot.results.map(item => item.result.provider).filter(Boolean))],
+            models: [...new Set(safeSnapshot.results.map(item => item.result.model).filter(Boolean))],
+            results: safeSnapshot.results.map(item => ({
+                uri: item.uri.toString(),
+                result: item.result,
+            })),
+        });
+        await persistReports();
+
         statusBar.showResult({
             score: averageScore,
             model: modelNames,
@@ -1458,6 +1559,66 @@ export function activate(context: vscode.ExtensionContext) {
                 'Report output root was invalid, so Owlvex used the first scanned file folder instead.',
             ],
         };
+    };
+
+    const compareStoredReports = async (
+        compareApiUrl: string,
+        licenceKey: string,
+        reportA: StoredReportRecord,
+        reportB: StoredReportRecord,
+    ): Promise<void> => {
+        const findingsA = reportA.results.flatMap(item => item.result.findings);
+        const findingsB = reportB.results.flatMap(item => item.result.findings);
+
+        const res = await fetch(`${compareApiUrl}/v1/scans/compare`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Licence-Key': licenceKey,
+            },
+            body: JSON.stringify({
+                scan_a_id: reportA.reportId,
+                scan_b_id: reportB.reportId,
+                findings_a: findingsA.map(f => ({
+                    issue_id: f.canonicalId,
+                    canonical_title: f.canonicalTitle,
+                    line: f.line,
+                    framework: f.framework,
+                    rule_code: f.ruleCode,
+                    severity: f.severity,
+                    title: f.title,
+                })),
+                findings_b: findingsB.map(f => ({
+                    issue_id: f.canonicalId,
+                    canonical_title: f.canonicalTitle,
+                    line: f.line,
+                    framework: f.framework,
+                    rule_code: f.ruleCode,
+                    severity: f.severity,
+                    title: f.title,
+                })),
+                score_a: reportA.averageScore,
+                score_b: reportB.averageScore,
+            }),
+        });
+
+        if (!res.ok) {
+            throw new Error(await readErrorResponse(res, 'Compare request failed'));
+        }
+
+        const diff = await readJsonResponse(res, 'Compare response returned invalid JSON');
+        const scoreChange = diff.score_change > 0
+            ? `+${diff.score_change.toFixed(1)}`
+            : diff.score_change.toFixed(1);
+
+        const panel = vscode.window.createWebviewPanel(
+            PROFILE.comparisonPanelId,
+            `${PROFILE.displayLabel}: Report Comparison`,
+            vscode.ViewColumn.One,
+            {},
+        );
+
+        panel.webview.html = buildComparisonHtmlV2(diff, scoreChange);
     };
 
     const emitExtensionUsageEvent = (eventName: UsageEventName, metadata: Record<string, unknown> = {}): void => {
@@ -2959,82 +3120,63 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const storedScans = Array.from(scanStore.values());
-            if (storedScans.length < 2) {
+            const storedReports = Array.from(reportStore.values());
+            if (storedReports.length < 2) {
                 vscode.window.showWarningMessage(
-                    'Owlvex: Need at least 2 scans in this session to compare. Scan a file or folder twice first.'
+                    'Owlvex: Need at least 2 reports to compare. Create two reports first.'
                 );
                 return;
             }
 
-            const scanAChoice = await vscode.window.showQuickPick(storedScans.map(buildStoredScanComparisonChoice), {
-                placeHolder: 'Select baseline scan (Scan A)',
+            const newestFirstReports = [...storedReports].sort((left, right) =>
+                new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+            );
+            const scanAChoice = await vscode.window.showQuickPick(newestFirstReports.map(buildStoredReportComparisonChoice), {
+                placeHolder: 'Select baseline report',
             });
             if (!scanAChoice) return;
 
             const scanBChoice = await vscode.window.showQuickPick(
-                storedScans
-                    .filter(item => item.scanId !== scanAChoice.record.scanId)
-                    .map(buildStoredScanComparisonChoice),
-                { placeHolder: 'Select comparison report (Current Report)' },
+                newestFirstReports
+                    .filter(item => item.reportId !== scanAChoice.record.reportId)
+                    .map(buildStoredReportComparisonChoice),
+                { placeHolder: 'Select current report' },
             );
             if (!scanBChoice) return;
 
-            const scanAId = scanAChoice.record.scanId;
-            const scanBId = scanBChoice.record.scanId;
-            const scanA = scanAChoice.record.result;
-            const scanB = scanBChoice.record.result;
+            try {
+                await compareStoredReports(compareApiUrl, licenceKey, scanAChoice.record, scanBChoice.record);
+            } catch (error: any) {
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel} compare failed: ${error.message}`);
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.compareLatestReports, async () => {
+            const licenceInfo = await resolveLicenceInfoForAccess(licenceMgr, getConfiguredApiUrl);
+            if (!hasComparisonAccess(licenceInfo)) {
+                vscode.window.showInformationMessage(buildPlanUpgradeMessage('comparison'));
+                return;
+            }
+            const cfg = vscode.workspace.getConfiguration(PROFILE.configSection);
+            const compareApiUrl = cfg.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
+            const licenceKey = await licenceMgr.getKey();
+            if (!licenceKey) {
+                vscode.window.showErrorMessage('No licence key. Run "Owlvex: Enter Licence Key".');
+                return;
+            }
+
+            const selection = selectLatestTwoReports(Array.from(reportStore.values()));
+            if (!selection) {
+                vscode.window.showWarningMessage(
+                    'Owlvex: Need at least 2 reports to compare. Create two reports first.'
+                );
+                return;
+            }
 
             try {
-                const res = await fetch(`${compareApiUrl}/v1/scans/compare`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Licence-Key': licenceKey,
-                    },
-                    body: JSON.stringify({
-                        scan_a_id: scanAId,
-                        scan_b_id: scanBId,
-                        findings_a: scanA.findings.map(f => ({
-                            issue_id: f.canonicalId,
-                            canonical_title: f.canonicalTitle,
-                            line: f.line,
-                            framework: f.framework,
-                            rule_code: f.ruleCode,
-                            severity: f.severity,
-                            title: f.title,
-                        })),
-                        findings_b: scanB.findings.map(f => ({
-                            issue_id: f.canonicalId,
-                            canonical_title: f.canonicalTitle,
-                            line: f.line,
-                            framework: f.framework,
-                            rule_code: f.ruleCode,
-                            severity: f.severity,
-                            title: f.title,
-                        })),
-                        score_a: scanA.score,
-                        score_b: scanB.score,
-                    }),
-                });
-
-                if (!res.ok) {
-                    throw new Error(await readErrorResponse(res, 'Compare request failed'));
-                }
-
-                const diff = await readJsonResponse(res, 'Compare response returned invalid JSON');
-                const scoreChange = diff.score_change > 0
-                    ? `+${diff.score_change.toFixed(1)}`
-                    : diff.score_change.toFixed(1);
-
-                const panel = vscode.window.createWebviewPanel(
-                    PROFILE.comparisonPanelId,
-                    `${PROFILE.displayLabel}: Report Comparison`,
-                    vscode.ViewColumn.One,
-                    {},
-                );
-
-                panel.webview.html = buildComparisonHtmlV2(diff, scoreChange);
+                await compareStoredReports(compareApiUrl, licenceKey, selection.baseline, selection.current);
             } catch (error: any) {
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} compare failed: ${error.message}`);
             }

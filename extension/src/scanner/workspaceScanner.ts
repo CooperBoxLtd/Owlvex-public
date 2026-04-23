@@ -63,6 +63,8 @@ interface BatchRequestBudgetPlan {
     estimatedDurationMs: number;
 }
 
+type ScanPacingMode = 'workspace' | 'interactive';
+
 function getProactiveSpacingMs(
     profile: ProviderRateBudgetProfile | undefined,
 ): number {
@@ -78,10 +80,15 @@ function planBatchRequestBudget(
     fileCount: number,
     provider: string | undefined,
     model: string | undefined,
+    pacingMode: ScanPacingMode,
 ): BatchRequestBudgetPlan {
     const profile = getProviderRateBudgetProfile(provider, model);
     if (!profile || fileCount <= 0) {
         return { proactiveSpacingMs: getProactiveSpacingMs(profile), estimatedDurationMs: 0 };
+    }
+
+    if (pacingMode === 'interactive' && fileCount <= AI_BATCH_SIZE) {
+        return { proactiveSpacingMs: 0, estimatedDurationMs: 0 };
     }
 
     const proactiveSpacingMs = getProactiveSpacingMs(profile);
@@ -240,6 +247,7 @@ export async function scanFolder(options: {
         files,
         scanEngine: options.scanEngine,
         diagnostics: options.diagnostics,
+        pacingMode: 'workspace',
         confirmLabel: 'Scan Folder',
         confirmMessage: `Owlvex: Scan ${files.length} file(s) in ${path.basename(options.root.fsPath)}?`,
         progressTitle: `Owlvex: Scanning ${path.basename(options.root.fsPath)}`,
@@ -263,6 +271,7 @@ export async function scanSelectedFiles(options: {
         files: options.files,
         scanEngine: options.scanEngine,
         diagnostics: options.diagnostics,
+        pacingMode: 'interactive',
         confirmLabel: 'Scan Selected Files',
         confirmMessage: `Owlvex: Scan ${options.files.length} selected file(s)?`,
         progressTitle: 'Owlvex: Scanning selected files',
@@ -275,6 +284,7 @@ async function scanUris(options: {
     files: vscode.Uri[];
     scanEngine: ScanEngine;
     diagnostics: { applyFindings(doc: vscode.TextDocument, findings: any[]): void };
+    pacingMode: ScanPacingMode;
     confirmLabel: string;
     confirmMessage: string;
     progressTitle: string;
@@ -309,7 +319,7 @@ async function scanUris(options: {
             ? `${provider}.model`
             : undefined;
     const model = modelSettingKey ? config.get<string>(modelSettingKey) : undefined;
-    const batchBudgetPlan = planBatchRequestBudget(files.length, provider, model);
+    const batchBudgetPlan = planBatchRequestBudget(files.length, provider, model, options.pacingMode);
     let proactiveBudgetUntil = 0;
 
     if (batchBudgetPlan.proactiveSpacingMs > 0 && files.length > 1) {
