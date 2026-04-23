@@ -13,9 +13,11 @@ import {
     buildUsefulnessPromptMessage,
     clearProviderConnection,
     configureProviderThrottlingForActiveProvider,
+    getReportComparisonAnchorScanId,
     getProviderConnectionSettingKeys,
     normalizeComparisonDiff,
     providerAllowsOptionalApiKey,
+    resolveProviderApiKeyInput,
     resolveConnectedModelSelection,
     selectLatestTwoReports,
     shouldPromptUsefulnessFeedback,
@@ -122,6 +124,47 @@ describe('comparison picker helpers', () => {
         expect(selection?.baseline.reportId).toBe('middle');
         expect(selection?.current.reportId).toBe('current');
     });
+
+    it('picks the first stored scan id as the report comparison anchor', () => {
+        const scanId = getReportComparisonAnchorScanId({
+            reportId: 'report-12345678',
+            reportUri: 'file:///d:/repo/tools/demo/report.md',
+            reportFileName: 'report.md',
+            targetLabel: 'demo',
+            createdAt: '2026-04-23T12:02:13.000Z',
+            fileCount: 2,
+            totalFindings: 3,
+            averageScore: 7.5,
+            providers: ['azure-foundry'],
+            models: ['test-foundry-deployment-secondary'],
+            results: [
+                { uri: 'file:///d:/repo/a.js', result: { scanId: 'scan-a', findings: [] } as any },
+                { uri: 'file:///d:/repo/b.js', result: { scanId: 'scan-b', findings: [] } as any },
+            ],
+        });
+
+        expect(scanId).toBe('scan-a');
+    });
+
+    it('returns undefined when a stored report has no scan ids', () => {
+        const scanId = getReportComparisonAnchorScanId({
+            reportId: 'report-12345678',
+            reportUri: 'file:///d:/repo/tools/demo/report.md',
+            reportFileName: 'report.md',
+            targetLabel: 'demo',
+            createdAt: '2026-04-23T12:02:13.000Z',
+            fileCount: 1,
+            totalFindings: 0,
+            averageScore: 0,
+            providers: ['azure-foundry'],
+            models: ['test-foundry-deployment-secondary'],
+            results: [
+                { uri: 'file:///d:/repo/a.js', result: { findings: [] } as any },
+            ],
+        });
+
+        expect(scanId).toBeUndefined();
+    });
 });
 
 describe('provider setup helpers', () => {
@@ -146,6 +189,23 @@ describe('provider setup helpers', () => {
         expect(providerAllowsOptionalApiKey('gemini')).toBe(false);
         expect(providerAllowsOptionalApiKey('groq')).toBe(false);
         expect(providerAllowsOptionalApiKey('ollama')).toBe(false);
+    });
+
+    it('keeps an existing API key when the user leaves the prompt blank', () => {
+        expect(resolveProviderApiKeyInput('', { hasExistingKey: true, allowBlank: false })).toEqual({ action: 'keep' });
+        expect(resolveProviderApiKeyInput('   ', { hasExistingKey: true, allowBlank: true })).toEqual({ action: 'keep' });
+    });
+
+    it('stores a new API key when the user enters one', () => {
+        expect(resolveProviderApiKeyInput('  sk-test  ', { hasExistingKey: true, allowBlank: false })).toEqual({
+            action: 'store',
+            key: 'sk-test',
+        });
+    });
+
+    it('allows blank optional API keys only when no saved key exists', () => {
+        expect(resolveProviderApiKeyInput('', { hasExistingKey: false, allowBlank: true })).toEqual({ action: 'delete' });
+        expect(resolveProviderApiKeyInput('', { hasExistingKey: false, allowBlank: false })).toEqual({ action: 'invalid' });
     });
 
     it('returns the expected settings to clear for every provider', () => {

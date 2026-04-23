@@ -291,6 +291,18 @@ async def generate(
     if body.plan not in PLAN_FEATURES:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unknown plan: {body.plan}")
 
+    normalized_email = _normalize_email(str(body.email))
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    customer = await _get_or_create_customer(
+        db,
+        email=normalized_email,
+        name=None,
+        company=body.team_name,
+        source="admin",
+    )
+    if not customer.email_verified_at:
+        customer.email_verified_at = now
+
     raw_key = generate_licence_key()
     key_hash = hash_licence_key(raw_key)
 
@@ -306,9 +318,10 @@ async def generate(
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="expires_at must be a valid ISO 8601 datetime")
 
     licence = Licence(
+        customer_id=customer.id,
         licence_key_hash=key_hash,
         team_name=body.team_name,
-        email=body.email,
+        email=normalized_email,
         plan=body.plan,
         seats=body.seats,
         features=PLAN_FEATURES[body.plan],

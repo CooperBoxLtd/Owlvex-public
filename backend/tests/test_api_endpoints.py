@@ -379,6 +379,29 @@ async def test_generate_licence_valid(client):
 
 
 @pytest.mark.asyncio
+async def test_generate_licence_creates_customer_and_links_admin_issued_licence(client):
+    response = await client.post(
+        "/v1/licences/generate",
+        json={"team_name": "Owlvex Team", "email": "team-admin@example.com", "plan": "team", "seats": 5},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert response.status_code == 201
+
+    overview = await client.get(
+        "/v1/admin/overview",
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert overview.status_code == 200
+    customer = next(customer for customer in overview.json()["customers"] if customer["email"] == "team-admin@example.com")
+    assert customer["source"] == "admin"
+    assert customer["email_verified_at"] is not None
+    assert customer["summary"]["active_licence_count"] == 1
+    assert customer["summary"]["active_plan"] == "team"
+    assert customer["licences"][0]["plan"] == "team"
+    assert customer["licences"][0]["customer_id"] == customer["customer_id"]
+
+
+@pytest.mark.asyncio
 async def test_generate_licence_invalid_plan(client):
     response = await client.post(
         "/v1/licences/generate",

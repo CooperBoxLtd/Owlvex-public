@@ -95,6 +95,17 @@ interface StoredReportRecord {
     results: Array<{ uri: string; result: ScanResult }>;
 }
 
+export function getReportComparisonAnchorScanId(record: StoredReportRecord): string | undefined {
+    for (const entry of record.results ?? []) {
+        const scanId = String(entry?.result?.scanId ?? '').trim();
+        if (scanId) {
+            return scanId;
+        }
+    }
+
+    return undefined;
+}
+
 function storeScanResult(scanId: string, result: ScanResult, targetLabel?: string): void {
     if (scanStore.size >= MAX_STORED_SCANS) {
         const firstKey = scanStore.keys().next().value;
@@ -979,6 +990,40 @@ export function providerAllowsOptionalApiKey(providerId: string): boolean {
     return providerId === 'custom';
 }
 
+export type ProviderApiKeyInputResolution =
+    | { action: 'cancel' }
+    | { action: 'keep' }
+    | { action: 'store'; key: string }
+    | { action: 'delete' }
+    | { action: 'invalid' };
+
+export function resolveProviderApiKeyInput(
+    input: string | undefined,
+    options: {
+        hasExistingKey: boolean;
+        allowBlank: boolean;
+    },
+): ProviderApiKeyInputResolution {
+    if (input === undefined) {
+        return { action: 'cancel' };
+    }
+
+    const trimmed = input.trim();
+    if (trimmed) {
+        return { action: 'store', key: trimmed };
+    }
+
+    if (options.hasExistingKey) {
+        return { action: 'keep' };
+    }
+
+    if (options.allowBlank) {
+        return { action: 'delete' };
+    }
+
+    return { action: 'invalid' };
+}
+
 export function resolveConnectedModelSelection(selectedModel: string, discoveredModels: string[]): string {
     const normalizedSelectedModel = selectedModel.trim();
     if (normalizedSelectedModel) {
@@ -1567,6 +1612,12 @@ export function activate(context: vscode.ExtensionContext) {
         reportA: StoredReportRecord,
         reportB: StoredReportRecord,
     ): Promise<void> => {
+        const scanAId = getReportComparisonAnchorScanId(reportA);
+        const scanBId = getReportComparisonAnchorScanId(reportB);
+        if (!scanAId || !scanBId) {
+            throw new Error('One of the selected reports does not contain stored scan IDs, so it cannot be compared yet.');
+        }
+
         const findingsA = reportA.results.flatMap(item => item.result.findings);
         const findingsB = reportB.results.flatMap(item => item.result.findings);
 
@@ -1577,8 +1628,8 @@ export function activate(context: vscode.ExtensionContext) {
                 'X-Licence-Key': licenceKey,
             },
             body: JSON.stringify({
-                scan_a_id: reportA.reportId,
-                scan_b_id: reportB.reportId,
+                scan_a_id: scanAId,
+                scan_b_id: scanBId,
                 findings_a: findingsA.map(f => ({
                     issue_id: f.canonicalId,
                     canonical_title: f.canonicalTitle,
@@ -2580,24 +2631,40 @@ export function activate(context: vscode.ExtensionContext) {
 
             let key: string | undefined;
             if (provider.id !== 'ollama') {
+                const secretName = getProviderApiKeySecretName(provider.id);
+                const existingKey = await context.secrets.get(secretName);
                 key = await vscode.window.showInputBox({
                     prompt: providerAllowsOptionalApiKey(provider.id)
-                        ? `Enter API key for ${provider.name} (leave blank if this endpoint does not require auth)`
-                        : `Enter API key for ${provider.name}`,
+                        ? existingKey
+                            ? `Enter API key for ${provider.name} to replace the saved key, or leave blank to keep it`
+                            : `Enter API key for ${provider.name} (leave blank if this endpoint does not require auth)`
+                        : existingKey
+                            ? `Enter API key for ${provider.name} to replace the saved key, or leave blank to keep it`
+                            : `Enter API key for ${provider.name}`,
+                    placeHolder: existingKey
+                        ? 'Leave blank to keep the saved key'
+                        : undefined,
                     ignoreFocusOut: true,
                     password: true,
                 });
 
-                if (key === undefined) {
+                const apiKeyResolution = resolveProviderApiKeyInput(key, {
+                    hasExistingKey: Boolean(existingKey),
+                    allowBlank: providerAllowsOptionalApiKey(provider.id),
+                });
+
+                if (apiKeyResolution.action === 'cancel') {
                     return;
                 }
 
-                if (key.trim()) {
-                    await context.secrets.store(getProviderApiKeySecretName(provider.id), key.trim());
-                } else if (providerAllowsOptionalApiKey(provider.id)) {
-                    await context.secrets.delete(getProviderApiKeySecretName(provider.id));
-                } else {
+                if (apiKeyResolution.action === 'invalid') {
                     return;
+                }
+
+                if (apiKeyResolution.action === 'store') {
+                    await context.secrets.store(secretName, apiKeyResolution.key);
+                } else if (apiKeyResolution.action === 'delete') {
+                    await context.secrets.delete(secretName);
                 }
             }
 

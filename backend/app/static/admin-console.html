@@ -775,6 +775,33 @@
       localStorage.setItem('owlvexAdminActor', adminActorEl.value);
     }
 
+    function buildTransferState() {
+      return {
+        apiUrl: normalizeUrl(apiUrlEl.value),
+        adminKey: adminKeyEl.value,
+        adminActor: adminActorEl.value,
+      };
+    }
+
+    function encodeTransferState(state) {
+      try {
+        return btoa(JSON.stringify(state));
+      } catch (error) {
+        console.warn('Failed to encode admin console transfer state.', error);
+        return '';
+      }
+    }
+
+    function decodeTransferState(encoded) {
+      if (!encoded) return null;
+      try {
+        return JSON.parse(atob(encoded));
+      } catch (error) {
+        console.warn('Failed to decode admin console transfer state.', error);
+        return null;
+      }
+    }
+
     function setActiveView(viewName) {
       const showMetrics = viewName === 'metrics';
       operationsViewEl.classList.toggle('hidden', showMetrics);
@@ -786,6 +813,18 @@
     }
 
     function initializeSettings() {
+      const transferState = decodeTransferState(window.location.hash.replace(/^#state=/, ''));
+      if (transferState) {
+        if (transferState.apiUrl) localStorage.setItem('owlvexAdminApiUrl', normalizeUrl(transferState.apiUrl));
+        if (typeof transferState.adminKey === 'string') localStorage.setItem('owlvexAdminKey', transferState.adminKey);
+        if (typeof transferState.adminActor === 'string') localStorage.setItem('owlvexAdminActor', transferState.adminActor);
+        if (window.history && typeof window.history.replaceState === 'function') {
+          window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        } else {
+          window.location.hash = '';
+        }
+      }
+
       const initialApiUrl = normalizeUrl(localStorage.getItem('owlvexAdminApiUrl') || window.location.origin);
       apiUrlEl.value = initialApiUrl;
       environmentEl.value = resolveEnvironmentName(initialApiUrl);
@@ -802,6 +841,22 @@
     function setResponse(data) {
       state.latestResponse = data || {};
       responseEl.textContent = JSON.stringify(state.latestResponse, null, 2);
+    }
+
+    function syncConsoleOrigin(targetApiUrl) {
+      const normalizedTarget = normalizeUrl(targetApiUrl);
+      const currentOrigin = normalizeUrl(window.location.origin);
+      if (!normalizedTarget || normalizedTarget === currentOrigin) {
+        return false;
+      }
+
+      saveSettings();
+      const transferState = encodeTransferState(buildTransferState());
+      const targetUrl = transferState
+        ? `${normalizedTarget}/v1/admin/app#state=${transferState}`
+        : `${normalizedTarget}/v1/admin/app`;
+      window.location.assign(targetUrl);
+      return true;
     }
 
     function formatDate(value) {
@@ -1559,6 +1614,7 @@
       saveSettings();
       renderEnvironmentBadge();
       setStatus(`Selected ${environmentEl.value} environment.`);
+      syncConsoleOrigin(apiUrlEl.value);
     });
 
     apiUrlEl.addEventListener('change', () => {
