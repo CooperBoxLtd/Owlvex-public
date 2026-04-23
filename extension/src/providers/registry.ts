@@ -68,7 +68,10 @@ function getGlobalConfigurationTarget(): vscode.ConfigurationTarget {
 }
 
 function getEffectiveConfigurationTarget(settingKey: string): vscode.ConfigurationTarget {
-    const inspected = vscode.workspace.getConfiguration(PROFILE.configSection).inspect(settingKey);
+    const configuration = vscode.workspace.getConfiguration(PROFILE.configSection);
+    const inspected = typeof configuration.inspect === 'function'
+        ? configuration.inspect(settingKey)
+        : undefined;
     if (inspected?.workspaceValue !== undefined) {
         return vscode.ConfigurationTarget.Workspace;
     }
@@ -804,7 +807,7 @@ export class ProviderRegistry {
             throw new Error(`Unknown provider '${providerId}'`);
         }
 
-        await persistProviderConnectionSetting(settingKey, model);
+        await persistProviderSetting(settingKey, model, getEffectiveConfigurationTarget(settingKey));
     }
 
     allProviders(): AIProvider[] {

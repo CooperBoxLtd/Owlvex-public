@@ -239,6 +239,20 @@ describe('ProviderRegistry', () => {
             expect(updateMock).toHaveBeenCalledWith('foundry.model', 'test-foundry-deployment-tertiary', vscode.ConfigurationTarget.Global);
         });
 
+        it('persists the selected deployment to workspace scope when the deployment is overridden there', async () => {
+            (vscode.workspace.getConfiguration as jest.Mock).mockImplementation(() => ({
+                get: (key: string, def: any) => key in configState ? configState[key] : def,
+                inspect: (key: string) => key === 'foundry.model'
+                    ? { workspaceValue: 'test-foundry-deployment-primary', globalValue: 'test-foundry-deployment-secondary' }
+                    : { workspaceValue: undefined, globalValue: undefined },
+                update: updateMock,
+            }));
+
+            await registry.setProviderModel('azure-foundry', 'test-foundry-deployment-tertiary');
+
+            expect(updateMock).toHaveBeenCalledWith('foundry.model', 'test-foundry-deployment-tertiary', vscode.ConfigurationTarget.Workspace);
+        });
+
         it('fails connection test when configured deployment is missing', async () => {
             (global.fetch as jest.Mock) = jest.fn().mockResolvedValue({
                 ok: false,
