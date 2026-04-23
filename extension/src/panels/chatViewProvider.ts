@@ -4123,6 +4123,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       margin-top: 10px;
       flex-wrap: wrap;
     }
+    .quick-actions details {
+      position: relative;
+    }
+    .quick-actions summary {
+      list-style: none;
+    }
+    .quick-actions summary::-webkit-details-marker {
+      display: none;
+    }
+    .more-actions-panel {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid color-mix(in srgb, var(--vscode-widget-border) 80%, transparent);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
     .chip {
       border: 1px solid var(--vscode-button-border, var(--vscode-widget-border));
       background: var(--vscode-button-secondaryBackground);
@@ -4417,18 +4434,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <div class="meta" id="projectContext">Project context: loading...</div>
           <div class="quick-actions">
             <button class="chip" data-action="showOnboarding">Onboarding</button>
-            <button class="chip" data-action="useFree">Use Free</button>
-            <button class="chip" data-action="viewPlans">View Plans</button>
-            <button class="chip" data-action="startTrial">Start Trial</button>
             <button class="chip" data-action="selectProjectRoot">Project Root</button>
-            <button class="chip" data-action="configureBackend">Backend Override</button>
-            <button class="chip" data-action="enterLicence">Enter Licence</button>
-            <button class="chip" data-action="toggleTelemetry">Telemetry</button>
-            <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
             <button class="chip" data-action="testAI">Test Connection</button>
-            <button class="chip" data-action="securityBoundary">Security Boundary</button>
             <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
-            <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
+            <details>
+              <summary class="chip">More</summary>
+              <div class="more-actions-panel">
+                <button class="chip" data-action="enterLicence">Enter Licence</button>
+                <button class="chip" data-action="useFree">Use Free</button>
+                <button class="chip" data-action="startTrial">Start Trial</button>
+                <button class="chip" data-action="viewPlans">View Plans</button>
+                <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
+                <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
+                <button class="chip" data-action="securityBoundary">Security Boundary</button>
+                <button class="chip" data-action="toggleTelemetry">Telemetry</button>
+                <button class="chip" data-action="configureBackend">Backend Override</button>
+              </div>
+            </details>
           </div>
         </div>
       </div>
