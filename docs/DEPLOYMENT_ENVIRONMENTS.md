@@ -9,6 +9,14 @@ It exists to keep one simple operating rule in place:
 - local Docker or ad hoc hosts are optional developer tools, not the named shared development environment
 - the extension and CLI keep scanning locally in every environment
 
+It also establishes the release rule for the backend:
+
+- build one backend container image per release candidate
+- deploy that exact image to Azure `dev`
+- validate it there
+- promote the exact same image tag to Azure `prod`
+- do not rebuild a separate production image from the same commit
+
 If this document conflicts with [IMPLEMENTATION_DESIGN.md](D:/Dev/repos/CodeScanner/docs/IMPLEMENTATION_DESIGN.md), the design document wins.
 
 ## Deployment Model
@@ -164,7 +172,7 @@ bash infra/deploy-prod.sh
 
 This provisions or updates the market-facing Azure control plane.
 
-For normal promotion after dev validation, do not rebuild the image. Promote the validated tag:
+For normal promotion after dev validation, do not rebuild the image. Promote the validated tag from the shared dev registry:
 
 ```bash
 IMAGE_TAG=dev-20260419-1234 bash infra/promote-to-prod.sh
@@ -172,10 +180,36 @@ IMAGE_TAG=dev-20260419-1234 bash infra/promote-to-prod.sh
 
 That path:
 
-1. switches prod App Service to the exact validated image tag
+1. switches prod App Service to the exact validated image tag stored in `owlvexdevregistry`
 2. applies schema files
 3. verifies required tables/columns
 4. fails loudly if schema or health checks are not correct
+
+## Environment Parity Rule
+
+`prod` must mirror `dev` in backend code and feature-enabling environment settings unless a difference is deliberate, documented, and release-approved.
+
+That means:
+
+- the deployed backend container image should be identical between `dev` and `prod` for the same release candidate
+- the shared backend image source of truth is `owlvexdevregistry`
+- production must not be missing required feature settings that were present during `dev` validation
+- customer-facing flows such as registration, verification, licence issuance, and telemetry behavior must be exercised against `dev` before promotion and expected to behave the same way in `prod`
+
+Allowed differences are limited to environment-scoped values such as:
+
+- backend URL
+- database connection
+- secrets and keys
+- billing/live provider credentials
+- logging and retention policy
+- branding/package profile defaults
+
+Not allowed:
+
+- separate ad hoc backend image builds for `prod`
+- shipping a feature from `dev` to `prod` without the required production environment settings to make that feature work
+- relying on undocumented environment drift as normal operating practice
 
 ### Shared Deploy Engine
 

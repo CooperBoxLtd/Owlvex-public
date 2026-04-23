@@ -162,6 +162,12 @@ IMAGE_TAG=dev-20260419-1234 bash infra/promote-to-prod.sh
 
 Do not rebuild the image separately for production promotion.
 
+Current backend image source-of-truth:
+
+- `owlvexdevregistry`
+
+Production should pull the validated backend tag from the shared dev registry rather than from a separate production registry.
+
 ### Important note
 
 Do not reuse old image tags for dev promotion if the backend code changed.

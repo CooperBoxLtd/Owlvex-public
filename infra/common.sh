@@ -81,6 +81,7 @@ ensure_defaults() {
   IMAGE_TAG="${IMAGE_TAG:-$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || echo 'latest')}"
   APP_NAME="${APP_NAME:-${PREFIX}-api}"
   ACR_NAME="${ACR_NAME:-${PREFIX}registry}"
+  ACR_RESOURCE_GROUP="${ACR_RESOURCE_GROUP:-${RESOURCE_GROUP}}"
   PG_SERVER_NAME="${PG_SERVER_NAME:-${PREFIX}-db}"
   ACR_USE_MANAGED_IDENTITY="${ACR_USE_MANAGED_IDENTITY:-0}"
   FROM_EMAIL="${FROM_EMAIL:-noreply@owlvex.io}"
@@ -91,7 +92,7 @@ docker_available() {
 }
 
 resolve_acr_login_server() {
-  az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --query loginServer -o tsv | tr -d '\r'
+  az acr show --name "${ACR_NAME}" --resource-group "${ACR_RESOURCE_GROUP}" --query loginServer -o tsv | tr -d '\r'
 }
 
 resolve_api_url() {
@@ -257,7 +258,7 @@ configure_managed_identity_acr_pull() {
 
   az webapp identity assign --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --output none
   principal_id="$(az webapp identity show --name "${APP_NAME}" --resource-group "${RESOURCE_GROUP}" --query principalId -o tsv)"
-  acr_id="$(az acr show --name "${ACR_NAME}" --resource-group "${RESOURCE_GROUP}" --query id -o tsv)"
+  acr_id="$(az acr show --name "${ACR_NAME}" --resource-group "${ACR_RESOURCE_GROUP}" --query id -o tsv)"
 
   ensure_acr_pull_role "${principal_id}" "${acr_id}"
   az webapp config set \

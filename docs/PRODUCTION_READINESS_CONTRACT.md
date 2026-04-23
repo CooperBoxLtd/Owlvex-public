@@ -196,9 +196,11 @@ Required:
 
 - production backend is deployed to Azure App Service for Containers
 - production and development are separated at the environment level, not just by convention
+- the production backend is promoted from the validated `dev` image tag rather than rebuilt separately
 - production database schema is versioned and repeatable
 - secrets are injected securely and are not committed to the repo
 - health checks exist and are meaningful
+- production environment settings required for validated customer flows are present before release
 
 Exit criteria:
 
@@ -207,6 +209,8 @@ Exit criteria:
 - required production secrets are enumerated
 - production and development do not share the same Azure resource group or default deploy path
 - the deployment path supports redeploy without reprovisioning everything
+- the exact image tag validated in `dev` is the one running in `prod`
+- critical customer-entry flows validated in `dev` are not broken in `prod` by missing environment configuration
 
 Billing-specific note:
 

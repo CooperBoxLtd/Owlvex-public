@@ -14,6 +14,7 @@ export LOCATION="${LOCATION:-uksouth}"
 export PREFIX="${PREFIX:-owlvexdev}"
 export APP_NAME="${APP_NAME:-owlvexdev-api}"
 export ACR_NAME="${ACR_NAME:-owlvexdevregistry}"
+export ACR_RESOURCE_GROUP="${ACR_RESOURCE_GROUP:-owlvex-dev}"
 export PG_SERVER_NAME="${PG_SERVER_NAME:-owlvexdev-db}"
 export ACR_USE_MANAGED_IDENTITY="${ACR_USE_MANAGED_IDENTITY:-1}"
 
