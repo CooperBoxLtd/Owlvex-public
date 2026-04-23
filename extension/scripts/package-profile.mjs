@@ -26,7 +26,8 @@ if (!fs.existsSync(profilePath)) {
 
 const originalManifestText = fs.readFileSync(packageJsonPath, "utf8");
 const originalProfileSource = fs.readFileSync(profileSourcePath, "utf8");
-const originalReadmeText = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8") : "";
+const hadOriginalReadme = fs.existsSync(readmePath);
+const originalReadmeText = hadOriginalReadme ? fs.readFileSync(readmePath, "utf8") : "";
 let manifest = JSON.parse(originalManifestText);
 const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
 const prodProfile = JSON.parse(fs.readFileSync(path.join(extensionRoot, "profiles", "prod.json"), "utf8"));
@@ -83,7 +84,11 @@ try {
 } finally {
   fs.writeFileSync(packageJsonPath, originalManifestText, "utf8");
   fs.writeFileSync(profileSourcePath, originalProfileSource, "utf8");
-  fs.writeFileSync(readmePath, originalReadmeText, "utf8");
+  if (hadOriginalReadme) {
+    fs.writeFileSync(readmePath, originalReadmeText, "utf8");
+  } else if (fs.existsSync(readmePath)) {
+    fs.unlinkSync(readmePath);
+  }
 }
 
 if (exitCode !== 0) {

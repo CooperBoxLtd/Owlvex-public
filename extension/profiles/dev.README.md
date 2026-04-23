@@ -13,6 +13,7 @@ Internal Owlvex development build.
 - this build is not intended as customer-facing documentation
 - behavior can change quickly between builds
 - dev and prod may differ in backend wiring, seed data, and feature validation state
+- if both `Owlvex` and `Owlvex Dev` are installed in the same VS Code instance, status bar indicators and activity views can be misread as a single environment; verify which extension view is active before interpreting licence or provider state
 
 ## Internal Workflow
 

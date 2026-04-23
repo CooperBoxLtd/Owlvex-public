@@ -7,7 +7,7 @@
   "activityBarIcon": "media/owlvex-dev.svg",
   "configSection": "owlvexDev",
   "storagePrefix": "owlvexDev",
-  "secretPrefix": "owlvex",
+  "secretPrefix": "owlvexDev",
   "diagnosticCollection": "owlvexDev",
   "viewContainerId": "owlvexDev",
   "findingsViewId": "owlvexDev.findings",

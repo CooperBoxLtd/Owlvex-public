@@ -2650,7 +2650,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'system',
                 content: configured
                     ? `${provider.name} is configured and ready using ${provider.selectedModel}.`
-                    : `${provider.name} still needs setup. ${getProviderSetupHint(provider.id)}`,
+                    : `${provider.name} is selected but not configured yet. Finish configuring it or switch to another provider.`,
                 kind: 'advisory',
             });
             void this.persistState();
@@ -3020,7 +3020,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 role: 'system',
                 content: configured
                     ? `Connection test ran for ${provider.name}.`
-                    : `${provider.name} is not configured yet. ${getProviderSetupHint(provider.id)}`,
+                    : `${provider.name} is selected but not configured yet. Finish configuring it or switch to another provider.`,
                 kind: 'advisory',
             });
             void this.persistState();
@@ -3620,7 +3620,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const providerHint = configuredProviders.length
             ? activeProviderConfigured
                 ? 'Configured providers only are shown here.'
-                : `${getProviderSetupHint(provider.id)} Finish configuring ${provider.name} or switch back to a configured provider.`
+                : `${provider.name} is selected but not configured. Finish configuring it or switch to another configured provider.`
             : `${getProviderSetupHint(provider.id)} Use "Configure LLM" to add your first provider.`;
         const configuredApiUrl = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl;
         const backendStatus = `Backend: ${configuredApiUrl}`;

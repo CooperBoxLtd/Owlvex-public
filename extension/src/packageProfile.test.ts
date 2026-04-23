@@ -9,6 +9,43 @@ function loadPackagingHelpers() {
 }
 
 describe('package profile helpers', () => {
+    it('keeps dev and prod profiles aligned except for intentional environment-specific fields', async () => {
+        const devProfile = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'profiles', 'dev.json'), 'utf8'));
+        const prodProfile = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'profiles', 'prod.json'), 'utf8'));
+
+        expect(Object.keys(devProfile).sort()).toEqual(Object.keys(prodProfile).sort());
+
+        const intentionallyDifferentFields = new Set([
+            'name',
+            'displayName',
+            'description',
+            'statusBarLabel',
+            'activityBarIcon',
+            'configSection',
+            'storagePrefix',
+            'secretPrefix',
+            'diagnosticCollection',
+            'viewContainerId',
+            'findingsViewId',
+            'chatViewId',
+            'comparisonPanelId',
+            'commandPrefix',
+            'apiUrl',
+            'packagePath',
+        ]);
+
+        for (const key of Object.keys(prodProfile)) {
+            if (intentionallyDifferentFields.has(key)) {
+                continue;
+            }
+
+            expect(devProfile[key]).toEqual(prodProfile[key]);
+        }
+
+        expect(devProfile.publisher).toBe(prodProfile.publisher);
+        expect(devProfile.secretPrefix).not.toBe(prodProfile.secretPrefix);
+    });
+
     it('rewrites commands, settings, and views for the dev profile', async () => {
         const { rewriteManifestForProfile } = loadPackagingHelpers();
         const manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'package.json'), 'utf8'));
