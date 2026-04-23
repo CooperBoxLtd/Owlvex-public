@@ -2423,7 +2423,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const provider = this.registry.getActive();
         const models = await this.getModelsForProvider(provider);
         if (models.length && !models.includes(provider.selectedModel)) {
-            provider.selectedModel = models[0];
+            await this.registry.setProviderModel(provider.id, models[0]);
         }
 
         this.messages.push({
@@ -2627,7 +2627,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private async handleSetModel(model: string): Promise<void> {
         const provider = this.registry.getActive();
         if (!model) return;
-        provider.selectedModel = model;
+        await this.registry.setProviderModel(provider.id, model);
         this.messages.push({
             role: 'system',
             content: `Model switched to ${model}.`,

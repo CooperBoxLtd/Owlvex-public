@@ -130,6 +130,29 @@ async function buildProviderErrorMessage(providerName: string, res: Response): P
         : `${providerName} error: ${res.status}`;
 }
 
+function getProviderModelSettingKey(providerId: string): string | undefined {
+    switch (providerId) {
+        case 'openai':
+            return 'openai.model';
+        case 'anthropic':
+            return 'anthropic.model';
+        case 'azure-foundry':
+            return 'foundry.model';
+        case 'ollama':
+            return 'ollama.model';
+        case 'mistral':
+            return 'mistral.model';
+        case 'gemini':
+            return 'gemini.model';
+        case 'groq':
+            return 'groq.model';
+        case 'custom':
+            return 'custom.model';
+        default:
+            return undefined;
+    }
+}
+
 export function isLikelyOpenAIChatModel(modelId: string): boolean {
     const normalized = modelId.trim().toLowerCase();
     return OPENAI_CHAT_PREFIXES.some(prefix => normalized.startsWith(prefix));
@@ -773,6 +796,15 @@ export class ProviderRegistry {
 
     async setActiveProvider(id: string): Promise<void> {
         await vscode.workspace.getConfiguration(PROFILE.configSection).update('provider', id, getEffectiveConfigurationTarget('provider'));
+    }
+
+    async setProviderModel(providerId: string, model: string): Promise<void> {
+        const settingKey = getProviderModelSettingKey(providerId);
+        if (!settingKey) {
+            throw new Error(`Unknown provider '${providerId}'`);
+        }
+
+        await persistProviderConnectionSetting(settingKey, model);
     }
 
     allProviders(): AIProvider[] {

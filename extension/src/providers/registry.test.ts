@@ -233,6 +233,12 @@ describe('ProviderRegistry', () => {
             expect(updateMock).toHaveBeenCalledWith('foundry.model', 'owlvex-security-chat', expect.anything());
         });
 
+        it('can persist a selected deployment name through the registry', async () => {
+            await registry.setProviderModel('azure-foundry', 'test-foundry-deployment-tertiary');
+
+            expect(updateMock).toHaveBeenCalledWith('foundry.model', 'test-foundry-deployment-tertiary', vscode.ConfigurationTarget.Global);
+        });
+
         it('fails connection test when configured deployment is missing', async () => {
             (global.fetch as jest.Mock) = jest.fn().mockResolvedValue({
                 ok: false,

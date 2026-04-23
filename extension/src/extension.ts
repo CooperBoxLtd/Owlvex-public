@@ -2152,7 +2152,7 @@ export function activate(context: vscode.ExtensionContext) {
             });
 
             if (picked) {
-                provider.selectedModel = picked;
+                await registry.setProviderModel(provider.id, picked);
                 void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_model_selected', {
                     previous_model: previousModel,
                 }, {
@@ -2212,7 +2212,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                provider.selectedModel = model.trim();
+                await registry.setProviderModel(provider.id, model.trim());
                 const { success, latencyMs } = await provider.testConnection();
                 if (success) {
                     await registry.setActiveProvider(provider.id);
@@ -2288,7 +2288,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                provider.selectedModel = model.trim();
+                await registry.setProviderModel(provider.id, model.trim());
             }
 
             if (provider.id === 'openai' || provider.id === 'gemini' || provider.id === 'mistral' || provider.id === 'groq') {
@@ -2304,7 +2304,7 @@ export function activate(context: vscode.ExtensionContext) {
                     return;
                 }
 
-                provider.selectedModel = model.trim();
+                await registry.setProviderModel(provider.id, model.trim());
             }
 
             if (provider.id === 'custom') {
@@ -2362,7 +2362,7 @@ export function activate(context: vscode.ExtensionContext) {
                     const models = await provider.listModels();
                     const activeModel = resolveConnectedModelSelection(provider.selectedModel, models);
                     if (activeModel && activeModel !== provider.selectedModel) {
-                        provider.selectedModel = activeModel;
+                        await registry.setProviderModel(provider.id, activeModel);
                     }
                     await registry.setActiveProvider(provider.id);
                     void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'llm_provider_selected', {
