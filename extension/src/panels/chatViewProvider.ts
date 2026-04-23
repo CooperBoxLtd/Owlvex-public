@@ -1234,7 +1234,7 @@ function getTopActionableFindingResult(
 
 function getActionableFindingResults(
     items: Array<{ uri?: vscode.Uri; result?: ScanResult }>,
-    limit = 3,
+    limit?: number,
 ): ActionableFindingTarget[] {
     const candidates = items.flatMap(item =>
         (item.result?.findings ?? []).map(finding => ({
@@ -1246,7 +1246,7 @@ function getActionableFindingResults(
     return candidates
         .slice()
         .sort((left, right) => riskRank(right.finding) - riskRank(left.finding))
-        .slice(0, limit);
+        .slice(0, typeof limit === 'number' ? limit : candidates.length);
 }
 
 function buildReviewFixActions(items: ActionableFindingTarget[]): ChatMessageAction[] {
