@@ -102,6 +102,7 @@ function normalizeScanResult(result: ScanResult): ScanResult {
     return {
         ...result,
         warnings: result.warnings ?? [],
+        aiUsage: result.aiUsage ?? { requestCount: 0, totalTokens: 0 },
     };
 }
 
@@ -2891,7 +2892,7 @@ export function activate(context: vscode.ExtensionContext) {
                 storedScans
                     .filter(item => item.scanId !== scanAChoice.record.scanId)
                     .map(buildStoredScanComparisonChoice),
-                { placeHolder: 'Select comparison scan (Scan B)' },
+                { placeHolder: 'Select comparison report (Current Report)' },
             );
             if (!scanBChoice) return;
 
@@ -2944,7 +2945,7 @@ export function activate(context: vscode.ExtensionContext) {
 
                 const panel = vscode.window.createWebviewPanel(
                     PROFILE.comparisonPanelId,
-                    `${PROFILE.displayLabel}: Scan Comparison`,
+                    `${PROFILE.displayLabel}: Report Comparison`,
                     vscode.ViewColumn.One,
                     {},
                 );
@@ -3081,7 +3082,7 @@ function buildComparisonHtml(diff: any, scoreChange: string): string {
   tr.resolved td:first-child { color: #4ec9b0; font-weight: bold; }
   h2 { font-size: 14px; margin-top: 24px; }
 </style></head><body>
-<h1>Scan Comparison</h1>
+<h1>Report Comparison</h1>
 <div class="summary">
   <div class="stat"><div class="value ${Number(scoreChange) >= 0 ? 'positive' : 'negative'}">${scoreChange}</div><div class="label">Score Change</div></div>
   <div class="stat"><div class="value negative">${normalizedDiff.new_findings ?? 0}</div><div class="label">New Findings</div></div>
@@ -3240,8 +3241,8 @@ function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
   tr.resolved td:first-child { color: #4ec9b0; font-weight: bold; }
   h2 { font-size: 14px; margin-top: 24px; }
 </style></head><body>
-<h1>Scan Comparison</h1>
-<div class="lede">A canonical before/after view of how security changed between the two scans.</div>
+<h1>Report Comparison</h1>
+  <div class="lede">A canonical before/after view of how security changed between the two reports.</div>
 <div class="hero">
   <div class="eyebrow">Security Posture</div>
   <div class="headline ${weightedAfter <= weightedBefore ? 'positive' : 'negative'}">${weightedAfter <= weightedBefore ? `Improved by ${weightedImprovement}%` : `Regressed by ${Math.abs(weightedImprovement)}%`}</div>

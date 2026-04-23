@@ -102,7 +102,7 @@ Current status:
 - fixed in the extension
 - scan recording now sends `prompt_id` only, not the full assembled prompt
 
-### 3. Improved: scan comparison payloads are now metadata-shaped
+### 3. Improved: report comparison payloads are now metadata-shaped
 
 Severity: Medium
 

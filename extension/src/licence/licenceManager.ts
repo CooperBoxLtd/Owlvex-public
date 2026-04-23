@@ -196,7 +196,7 @@ export function buildScanLimitMessage(info: LicenceInfo | null | undefined): str
 export function buildPlanUpgradeMessage(capability: 'assistant' | 'fix' | 'comparison' | 'prompt-editor'): string {
     switch (capability) {
         case 'comparison':
-            return 'Scan comparison is not available for this licence. Free normally includes it, so this account may need a trial or Developer upgrade.';
+            return 'Report comparison is not available for this licence. Free normally includes it, so this account may need a trial or Developer upgrade.';
         case 'prompt-editor':
             return 'The guided AI assistant is not available for this licence. Free normally includes it, so this account may need a trial or Developer upgrade.';
         case 'fix':

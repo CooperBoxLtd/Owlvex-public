@@ -46,7 +46,7 @@ describe('normalizeComparisonDiff', () => {
 });
 
 describe('scan comparison picker helpers', () => {
-    it('builds human-readable scan comparison choices from stored scan metadata', () => {
+    it('builds human-readable report comparison choices from stored scan metadata', () => {
         const choice = buildStoredScanComparisonChoice({
             scanId: '12345678-90ab-cdef-1234-567890abcdef',
             targetLabel: 'tools/demo-app',
@@ -147,7 +147,7 @@ describe('plan access helpers', () => {
     it('returns clear upgrade messages for gated capabilities', () => {
         expect(buildPlanUpgradeMessage('assistant')).toContain('not available');
         expect(buildPlanUpgradeMessage('fix')).toContain('fix previews');
-        expect(buildPlanUpgradeMessage('comparison')).toContain('Scan comparison');
+        expect(buildPlanUpgradeMessage('comparison')).toContain('Report comparison');
     });
 
     it('blocks scans only when the backend says the monthly limit is reached', () => {

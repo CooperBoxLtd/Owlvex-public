@@ -57,7 +57,7 @@ The current user experience direction appears stronger than some of the older do
   - backend configuration
   - provider/model setup
   - project-context editing
-  - scan comparison
+  - report comparison
   - review-first fix preview and apply
 - The backend exposes real control-plane routes for:
   - licence validation

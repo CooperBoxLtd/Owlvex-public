@@ -2709,7 +2709,13 @@ class Demo {
             verifier: 'The code sends request-controlled input into eval().',
             skeptic: 'No guard or sanitizing parser is visible around eval().',
         });
+        expect(result.aiUsage).toEqual({
+            requestCount: 3,
+            totalTokens: 62,
+        });
         expect(result.warnings).toEqual([]);
+        const recordedBody = JSON.parse((global.fetch as jest.Mock).mock.calls[1][1].body as string);
+        expect(recordedBody.token_count).toBe(62);
     });
 
     it('suppresses AI findings rejected by the verifier pass', async () => {

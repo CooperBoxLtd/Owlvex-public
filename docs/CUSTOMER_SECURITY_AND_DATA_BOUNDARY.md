@@ -82,7 +82,7 @@ It can receive:
   - score
   - finding counts and summaries
   - prompt id
-- scan comparison metadata
+- report comparison metadata
 - pack manifest and pack artifact requests
 
 ## What is not supposed to reach Owlvex backend

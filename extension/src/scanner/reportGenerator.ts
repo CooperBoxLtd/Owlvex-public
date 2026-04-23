@@ -147,6 +147,10 @@ function usesAiForFindings(result: ScanResult): boolean {
     return result.findings.some(finding => finding.provenance === 'ai');
 }
 
+function getAiUsageSummary(result: ScanResult): { requestCount: number; totalTokens: number } {
+    return result.aiUsage ?? { requestCount: 0, totalTokens: 0 };
+}
+
 function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     const scanTier = getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'));
     const confidence = getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'));
@@ -669,6 +673,13 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
     const cleanFiles = snapshot.results.filter(item => item.result.findings.length === 0).length;
     const lowConfidenceAiCount = allFindingItems.filter(item => isLowConfidenceAiFinding(item.finding)).length;
     const allFindings = snapshot.results.flatMap(item => item.result.findings);
+    const aggregateAiUsage = snapshot.results.reduce((total, item) => {
+        const usage = getAiUsageSummary(item.result);
+        return {
+            requestCount: total.requestCount + usage.requestCount,
+            totalTokens: total.totalTokens + usage.totalTokens,
+        };
+    }, { requestCount: 0, totalTokens: 0 });
 
     const lines: string[] = [
         '# Owlvex Vulnerability Scan Report',
@@ -698,6 +709,13 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- AI findings needing manual review: ${lowConfidenceAiCount}`,
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
         '',
+        '## AI Usage',
+        '',
+        `- Provider/model mix: ${[...new Set(snapshot.results.map(item => `${item.result.provider} / ${item.result.model}`))].join(' | ') || 'n/a'}`,
+        `- AI requests: ${aggregateAiUsage.requestCount}`,
+        `- Total AI tokens: ${aggregateAiUsage.totalTokens}`,
+        `- Estimated cost: not yet available`,
+        '',
         '## Coverage And Context',
         '',
         `- Coverage: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Normal for the current provider and runtime state'}`,
@@ -717,6 +735,8 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push('');
             lines.push(`- File risk score: ${item.result.score.toFixed(1)}/10`);
             lines.push(`- Findings: ${item.result.findings.length}`);
+            const fileAiUsage = getAiUsageSummary(item.result);
+            lines.push(`- AI usage: ${fileAiUsage.requestCount} request(s), ${fileAiUsage.totalTokens} token(s)`);
             if (item.result.findings.length) {
                 const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];
                 lines.push(`- Fix first: ${topFinding.canonicalTitle || topFinding.title} (${topFinding.riskScore ?? 'n/a'}/10 risk)`);

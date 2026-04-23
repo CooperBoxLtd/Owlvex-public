@@ -35,7 +35,7 @@ Investor-style framing:
 - The problem: code ships faster than traditional security review can keep up.
 - The wedge: a security scanner embedded directly in the developer workflow.
 - The differentiation: deterministic-first reasoning, bring-your-own-model, framework-aware interpretation and reporting.
-- The expansion path: scan comparison, review-first remediation diffs, team policy, CI/CD, compliance packs, multi-provider review.
+- The expansion path: report comparison, review-first remediation diffs, team policy, CI/CD, compliance packs, multi-provider review.
 
 ---
 
@@ -84,7 +84,7 @@ The execution plane. Provides:
 - controlled remediation flow that can propose file changes for a finding, show a diff, and let the user decide whether to apply it
 - review-scoped fix application that blocks writes when the reviewed file set no longer matches the preview target
 - report creation with concise per-file findings, remediation guidance, and scan errors/warnings when present
-- scan comparison
+- report comparison
 - provider and model switching
 - trial and demo onboarding for:
   - lightweight email-based registration for Free or Trial entry
@@ -266,7 +266,7 @@ OpenAI, Anthropic, Azure AI Foundry, Ollama, Mistral, Google Gemini, Groq, and c
 
 **Create a report** - concise scan artifact with summary, per-file findings, remediation guidance, and scan errors/warnings when present.
 
-**Compare scans** - new findings, resolved findings, and score delta between two stored scans.
+**Compare reports** - new findings, resolved findings, and score delta between two stored reports.
 
 **Advisory chat** - exploratory guidance clearly distinguished from formal scan output. This is the place for plain-language fix explanations grounded in the active file or latest scan.
 

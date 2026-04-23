@@ -68,6 +68,7 @@ describe('reportGenerator', () => {
             model: 'qwen2.5:7b',
             provider: 'ollama',
             warnings: [],
+            aiUsage: { requestCount: 3, totalTokens: 62 },
             projectContextSummary: 'inline project contract',
             packContext: {
                 mode: 'fresh',
@@ -115,6 +116,11 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Confidence posture: 1 cross-checked');
         expect(written).not.toContain('- Average file risk score:');
         expect(written).toContain('- AI findings needing manual review: 0');
+        expect(written).toContain('## AI Usage');
+        expect(written).toContain('- Provider/model mix: ollama / qwen2.5:7b');
+        expect(written).toContain('- AI requests: 3');
+        expect(written).toContain('- Total AI tokens: 62');
+        expect(written).toContain('- Estimated cost: not yet available');
         expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
         expect(written).toContain('- Knowledge sources: Fresh packs (1)');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
@@ -127,6 +133,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
+        expect(written).toContain('- AI usage: 3 request(s), 62 token(s)');
         expect(written).toContain('- Fix first: Unsanitized SQL query construction (7/10 risk)');
         expect(written).toContain('- Why this matters: User input is concatenated into a query.');
         expect(written).toContain('- What to change: Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs');
@@ -596,6 +603,13 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 - Static findings: 0
 - AI findings needing manual review: 0
 - Confidence posture: 1 cross-checked
+
+## AI Usage
+
+- Provider/model mix: azure-foundry / owlvex-gpt54mini
+- AI requests: 3
+- Total AI tokens: 62
+- Estimated cost: not yet available
 
 ## Coverage And Context
 

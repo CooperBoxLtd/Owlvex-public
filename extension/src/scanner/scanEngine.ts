@@ -68,6 +68,10 @@ export interface ScanResult {
     model: string;
     provider: string;
     warnings: string[];
+    aiUsage?: {
+        requestCount: number;
+        totalTokens: number;
+    };
     packContext?: RulePackRuntimeContext;
 }
 
@@ -95,6 +99,11 @@ interface SeverityMetrics {
     low: number;
 }
 
+interface AiUsageSummary {
+    requestCount: number;
+    totalTokens: number;
+}
+
 type FindingSeverity = Finding['severity'];
 type FindingLikelihood = NonNullable<Finding['likelihood']>;
 
@@ -117,6 +126,31 @@ function buildMetrics(findings: Finding[]): SeverityMetrics {
         medium: findings.filter(f => f.severity === 'MEDIUM').length,
         low: findings.filter(f => f.severity === 'LOW').length,
     };
+}
+
+function emptyAiUsage(): AiUsageSummary {
+    return {
+        requestCount: 0,
+        totalTokens: 0,
+    };
+}
+
+function usageFromResponse(response: { tokenCount?: number } | undefined): AiUsageSummary {
+    if (!response) {
+        return emptyAiUsage();
+    }
+
+    return {
+        requestCount: 1,
+        totalTokens: Math.max(0, response.tokenCount ?? 0),
+    };
+}
+
+function mergeAiUsage(...items: Array<AiUsageSummary | undefined>): AiUsageSummary {
+    return items.reduce<AiUsageSummary>((total, item) => ({
+        requestCount: total.requestCount + (item?.requestCount ?? 0),
+        totalTokens: total.totalTokens + (item?.totalTokens ?? 0),
+    }), emptyAiUsage());
 }
 
 function normalizeLikelihood(value: unknown): FindingLikelihood | undefined {
@@ -808,6 +842,7 @@ export class ScanEngine {
         }
 
         const durationMs = Date.now() - start;
+        const finderUsage = usageFromResponse(aiResponse);
         let parsed;
         try {
             parsed = this._parseAIResponse(aiResponse.content);
@@ -838,6 +873,7 @@ export class ScanEngine {
             code,
             findings: filteredAiFindings,
         });
+        const aiUsage = mergeAiUsage(finderUsage, corroboratedAi.aiUsage);
         const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, corroboratedAi.findings)
             .map(finding => enrichFindingRisk(finding));
         const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
@@ -870,7 +906,7 @@ export class ScanEngine {
                     score: calculatedScore,
                     findings_summary: mergedMetrics,
                     finding_count: allFindings.length,
-                    token_count: aiResponse.tokenCount,
+                    token_count: aiUsage.totalTokens,
                     duration_ms: durationMs,
                     prompt_id: promptContext.templateId,
                 }),
@@ -899,6 +935,7 @@ export class ScanEngine {
             model: provider.selectedModel,
             provider: provider.id,
             warnings,
+            aiUsage,
         };
     }
 
@@ -908,9 +945,9 @@ export class ScanEngine {
         language: string;
         code: string;
         findings: Finding[];
-    }): Promise<{ findings: Finding[]; warnings: string[] }> {
+    }): Promise<{ findings: Finding[]; warnings: string[]; aiUsage: AiUsageSummary }> {
         if (!params.findings.length) {
-            return { findings: [], warnings: [] };
+            return { findings: [], warnings: [], aiUsage: emptyAiUsage() };
         }
 
         if (params.findings.length > MAX_CORROBORATION_CANDIDATES) {
@@ -922,6 +959,7 @@ export class ScanEngine {
                 warnings: [
                     `AI corroboration partial: review passes skipped because candidate count ${params.findings.length} exceeded corroboration budget ${MAX_CORROBORATION_CANDIDATES}.`,
                 ],
+                aiUsage: emptyAiUsage(),
             };
         }
 
@@ -942,6 +980,7 @@ export class ScanEngine {
             ? {
                 reviews: [] as AiCorroborationReview[],
                 warnings: ['AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.'],
+                aiUsage: emptyAiUsage(),
             }
             : await this._runAiReviewPass({
                 role: 'Skeptic',
@@ -1047,6 +1086,7 @@ export class ScanEngine {
         return {
             findings: kept,
             warnings,
+            aiUsage: mergeAiUsage(verifierReviews.aiUsage, skepticReviews.aiUsage),
         };
     }
 
@@ -1078,6 +1118,7 @@ export class ScanEngine {
             model: `${provider.selectedModel} (deterministic-only)`,
             provider: provider.id,
             warnings: [warning],
+            aiUsage: emptyAiUsage(),
         };
     }
 
@@ -1140,7 +1181,7 @@ export class ScanEngine {
         language: string;
         code: string;
         findings: Finding[];
-    }): Promise<{ reviews: AiCorroborationReview[]; warnings: string[] }> {
+    }): Promise<{ reviews: AiCorroborationReview[]; warnings: string[]; aiUsage: AiUsageSummary }> {
         try {
             const response = await this._completeWithRateLimitHandling(params.provider, {
                 systemPrompt: params.systemPrompt,
@@ -1152,11 +1193,13 @@ export class ScanEngine {
             return {
                 reviews: this._parseAiReviewResponse(response.content, params.findings, params.role),
                 warnings: [],
+                aiUsage: usageFromResponse(response),
             };
         } catch (error: any) {
             return {
                 reviews: [],
                 warnings: [`AI corroboration partial: ${params.role.toLowerCase()} pass unavailable: ${error.message}`],
+                aiUsage: emptyAiUsage(),
             };
         }
     }

@@ -325,7 +325,7 @@ Before a production sign-off, capture:
   - prompt build
   - single-file scan
   - scan metadata record
-  - scan comparison
+  - report comparison
 
 This evidence should be lightweight, but it must exist.
 
@@ -333,7 +333,7 @@ This evidence should be lightweight, but it must exist.
 
 Based on the current codebase state, the highest-value production-readiness gaps are:
 
-1. close extension/backend response-shape mismatches in scan comparison
+1. close extension/backend response-shape mismatches in report comparison
 2. align deterministic claims with actual rule certainty and benchmark coverage
 3. raise coverage on orchestration paths in `extension.ts`, provider integration, and backend route contracts
 4. tighten what scan-related prompt context is persisted so the backend stores prompt identity and minimal metadata rather than broad prompt snapshots where possible

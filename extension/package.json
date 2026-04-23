@@ -101,10 +101,10 @@
         "command": "owlvex.registerAccess",
         "title": "Owlvex: Register Free Or Trial Access"
       },
-      {
-        "command": "owlvex.compareScans",
-        "title": "Owlvex: Compare Scans"
-      },
+        {
+          "command": "owlvex.compareScans",
+          "title": "Owlvex: Compare Reports"
+        },
       {
         "command": "owlvex.reviewRiskCalibration",
         "title": "Owlvex: Review Risk Calibration"
