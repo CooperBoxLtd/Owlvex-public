@@ -204,7 +204,6 @@ const MAX_PERSISTED_MESSAGES = 40;
 const CONTEXT_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cs', '.go', '.rs', '.php', '.rb', '.cpp', '.c', '.h'];
 const DEFAULT_WORKING_SCOPE: WorkingScope = 'scanFolder';
 const WORKSPACE_CONTEXT_FILES = ['README.md', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml'];
-const MAX_BATCH_FIX_FILES = 3;
 const MAX_SINGLE_FILE_REWRITE_RATIO = 0.75;
 const MAX_REWRITE_LINE_THRESHOLD = 20;
 
@@ -744,10 +743,9 @@ function validateBroadFixPreviewContent(options: {
 
 function validateBatchFixScope(items: ActionableFindingTarget[]): string | undefined {
     const distinctPaths = [...new Set(items.map(item => item.targetPath).filter((value): value is string => Boolean(value)))];
-    if (distinctPaths.length > MAX_BATCH_FIX_FILES) {
-        return `Owlvex blocked the combined fix preview because it spanned ${distinctPaths.length} files. Combined fixes are limited to ${MAX_BATCH_FIX_FILES} files.`;
+    if (!distinctPaths.length) {
+        return 'Owlvex could not determine any actionable files for the combined fix preview.';
     }
-
     return undefined;
 }
 
