@@ -817,7 +817,7 @@ describe('parseChatIntent', () => {
         const state = (provider as any).buildState([], [], '', '', '', '');
         expect(state.activeModeLabel).toBe('Scan');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix code', kind: 'generateBatchFixPreview' }),
+            expect.objectContaining({ label: 'Fix scan broadly', kind: 'generateBatchFixPreview' }),
         ]));
     });
 
@@ -1758,6 +1758,67 @@ describe('parseChatIntent', () => {
         expect(finalMessage.content).toContain('Fix preview ready for 2 files.');
         expect(complete).toHaveBeenCalledTimes(2);
         expect((provider as any).pendingFixPreview?.changes).toHaveLength(2);
+    });
+
+    it('allows broader rewrites for latest-scan batch fixes without tripping the finding-anchored guardrail', async () => {
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\sessionHost.js');
+        const originalLines = Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`).join('\n');
+        const rewrittenLines = Array.from({ length: 40 }, (_, index) => `const safeLine${index + 1} = ${index + 1};`).join('\n');
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({
+            uri: targetUri,
+            fileName: targetUri.fsPath,
+            getText: () => originalLines,
+        });
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+
+        const complete = jest.fn().mockResolvedValue({ content: rewrittenLines });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await provider.generateBatchFixPreview([
+            {
+                targetPath: targetUri.fsPath,
+                finding: {
+                    id: 'finding-host-lock',
+                    line: 10,
+                    lineEnd: 28,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'AC-001',
+                    title: 'Peer-controlled lock ownership',
+                    canonicalId: 'owlvex.issue.access_control.001',
+                    explanation: 'Peer identity controls lock ownership.',
+                    threat: 'Authorization bypass.',
+                    fix: 'Bind lock ownership to the server-side session.',
+                    confidence: 0.9,
+                    provenance: 'ai',
+                    likelihood: 'HIGH',
+                    riskScore: 9,
+                },
+            },
+        ] as any);
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Fix preview ready for 1 file.');
+        expect(finalMessage.content).not.toContain('rewrote too much of the file');
+        expect((provider as any).pendingFixPreview?.changes).toHaveLength(1);
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            'vscode.diff',
+            expect.anything(),
+            expect.anything(),
+            expect.stringContaining('Fix Preview - Latest Scan'),
+        );
     });
 
     it('runs the project context quick action and reports readiness', async () => {

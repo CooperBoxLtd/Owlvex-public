@@ -46,6 +46,10 @@ If you are evaluating Owlvex for the first time, start with one of those models 
 
 ## Installation
 
+### Download From GitHub
+
+If Owlvex is being distributed through a public GitHub repository, download the latest production `.vsix` from that repository's `Releases` page.
+
 ### Install From VSIX
 
 1. Open VS Code.

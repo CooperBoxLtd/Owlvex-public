@@ -1,0 +1,125 @@
+name: Publish production extension to public GitHub repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      public_branch:
+        description: "Branch in the public repo to update"
+        required: true
+        default: "main"
+      release_tag:
+        description: "Release tag to publish in the public repo (defaults to v<extension version>)"
+        required: false
+        default: ""
+
+jobs:
+  publish:
+    name: Package prod VSIX and publish public bundle
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install extension dependencies
+        run: npm ci
+        working-directory: extension
+
+      - name: Package production VSIX
+        run: npm run package:prod
+        working-directory: extension
+
+      - name: Derive release metadata
+        shell: bash
+        run: |
+          EXT_VERSION=$(node -p "require('./extension/package.json').version")
+          if [[ -n "${{ github.event.inputs.release_tag }}" ]]; then
+            RELEASE_TAG="${{ github.event.inputs.release_tag }}"
+          else
+            RELEASE_TAG="v${EXT_VERSION}"
+          fi
+          sha256sum extension/dist/owlvex-prod.vsix > extension/dist/owlvex-prod.vsix.sha256
+          {
+            echo "EXT_VERSION=${EXT_VERSION}"
+            echo "RELEASE_TAG=${RELEASE_TAG}"
+          } >> "$GITHUB_ENV"
+
+      - name: Prepare public repo files
+        shell: bash
+        run: |
+          mkdir -p .public-export/downloads
+          cp extension/profiles/prod.README.md .public-export/README.md
+          cp extension/LICENSE.txt .public-export/LICENSE.txt
+          cp extension/CHANGELOG.md .public-export/CHANGELOG.md
+          cp extension/dist/owlvex-prod.vsix.sha256 .public-export/downloads/owlvex-prod.vsix.sha256
+          cat > .public-export/latest.json <<EOF
+          {
+            "name": "owlvex",
+            "displayName": "Owlvex",
+            "version": "${EXT_VERSION}",
+            "releaseTag": "${RELEASE_TAG}",
+            "asset": "owlvex-prod.vsix",
+            "sha256File": "downloads/owlvex-prod.vsix.sha256"
+          }
+          EOF
+
+      - name: Sync README and metadata to public repo
+        shell: bash
+        env:
+          PUBLIC_EXTENSION_REPO: ${{ secrets.PUBLIC_EXTENSION_REPO }}
+          PUBLIC_EXTENSION_REPO_TOKEN: ${{ secrets.PUBLIC_EXTENSION_REPO_TOKEN }}
+          PUBLIC_BRANCH: ${{ github.event.inputs.public_branch }}
+        run: |
+          if [[ -z "${PUBLIC_EXTENSION_REPO}" || -z "${PUBLIC_EXTENSION_REPO_TOKEN}" ]]; then
+            echo "Missing PUBLIC_EXTENSION_REPO or PUBLIC_EXTENSION_REPO_TOKEN secret."
+            exit 1
+          fi
+
+          git clone --depth 1 --branch "${PUBLIC_BRANCH}" "https://x-access-token:${PUBLIC_EXTENSION_REPO_TOKEN}@github.com/${PUBLIC_EXTENSION_REPO}.git" public-extension-repo
+          cp .public-export/README.md public-extension-repo/README.md
+          cp .public-export/LICENSE.txt public-extension-repo/LICENSE.txt
+          cp .public-export/CHANGELOG.md public-extension-repo/CHANGELOG.md
+          mkdir -p public-extension-repo/downloads
+          cp .public-export/downloads/owlvex-prod.vsix.sha256 public-extension-repo/downloads/owlvex-prod.vsix.sha256
+          cp .public-export/latest.json public-extension-repo/latest.json
+
+          cd public-extension-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          if [[ -z "$(git status --porcelain -- README.md LICENSE.txt CHANGELOG.md downloads/owlvex-prod.vsix.sha256 latest.json)" ]]; then
+            echo "Public repo metadata already up to date."
+            exit 0
+          fi
+
+          git add README.md LICENSE.txt CHANGELOG.md downloads/owlvex-prod.vsix.sha256 latest.json
+          git commit -m "Publish Owlvex ${EXT_VERSION}"
+          git push origin "${PUBLIC_BRANCH}"
+
+      - name: Publish VSIX release in public repo
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ secrets.PUBLIC_EXTENSION_REPO }}
+          token: ${{ secrets.PUBLIC_EXTENSION_REPO_TOKEN }}
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Owlvex ${{ env.EXT_VERSION }}
+          body: |
+            Production Owlvex prototype extension package.
+
+            Files:
+            - `owlvex-prod.vsix`
+            - `owlvex-prod.vsix.sha256`
+
+            Install in VS Code via `Extensions -> ... -> Install from VSIX...`.
+          prerelease: true
+          files: |
+            extension/dist/owlvex-prod.vsix
+            extension/dist/owlvex-prod.vsix.sha256
+          fail_on_unmatched_files: true

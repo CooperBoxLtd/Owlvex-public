@@ -726,6 +726,22 @@ function validateFixPreviewContent(options: {
     return undefined;
 }
 
+function validateBroadFixPreviewContent(options: {
+    raw: string;
+    originalText: string;
+    patchedText: string;
+}): string | undefined {
+    if (looksLikeMalformedFixResponse(options.raw)) {
+        return 'Owlvex received malformed code fences from the model. Ask "fix code" to regenerate the preview.';
+    }
+
+    if (!hasMeaningfulPreviewChange(options.originalText, options.patchedText)) {
+        return 'Owlvex could not produce a meaningful code diff. Ask "fix code" to regenerate the preview.';
+    }
+
+    return undefined;
+}
+
 function validateBatchFixScope(items: ActionableFindingTarget[]): string | undefined {
     const distinctPaths = [...new Set(items.map(item => item.targetPath).filter((value): value is string => Boolean(value)))];
     if (distinctPaths.length > MAX_BATCH_FIX_FILES) {
@@ -1072,7 +1088,7 @@ function buildBatchReviewFixAction(items: ActionableFindingTarget[]): ChatMessag
 
     return {
         id: 'generate-batch-fix-preview',
-        label: 'Fix code',
+        label: 'Fix scan broadly',
         kind: 'generateBatchFixPreview',
         findings: items,
     };
@@ -1593,17 +1609,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         if (!options.reuseCurrentTurn) {
             this.messages.push({
                 role: 'user',
-                content: `Fix code for the latest scan (${validItems.length} file(s))`,
+                content: `Fix the latest workspace scan broadly (${validItems.length} file(s))`,
             });
             this.messages.push({
                 role: 'assistant',
-                content: 'Preparing combined code fix diff...',
+                content: 'Preparing broad remediation diff for the latest scan...',
                 kind: 'advisory',
             });
         } else {
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
-                content: 'Preparing combined code fix diff...',
+                content: 'Preparing broad remediation diff for the latest scan...',
                 kind: 'advisory',
             };
         }
@@ -1654,12 +1670,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 });
 
                 const patched = extractPatchedFileContent(response.content || '', document.getText());
-                const validationError = validateFixPreviewContent({
+                const validationError = validateBroadFixPreviewContent({
                     raw: response.content || '',
                     originalText: document.getText(),
                     patchedText: patched,
-                    finding: findings[0],
-                    targetPath,
                 });
                 if (validationError) {
                     throw new Error(validationError);
