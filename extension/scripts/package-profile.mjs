@@ -16,6 +16,8 @@ const extensionRoot = process.cwd();
 const packageJsonPath = path.join(extensionRoot, "package.json");
 const profilePath = path.join(extensionRoot, "profiles", `${profileName}.json`);
 const profileSourcePath = path.join(extensionRoot, "src", "profile.ts");
+const readmePath = path.join(extensionRoot, "README.md");
+const profileReadmePath = path.join(extensionRoot, "profiles", `${profileName}.README.md`);
 
 if (!fs.existsSync(profilePath)) {
   console.error(`Unknown profile '${profileName}'. Expected ${profilePath}`);
@@ -24,9 +26,11 @@ if (!fs.existsSync(profilePath)) {
 
 const originalManifestText = fs.readFileSync(packageJsonPath, "utf8");
 const originalProfileSource = fs.readFileSync(profileSourcePath, "utf8");
+const originalReadmeText = fs.existsSync(readmePath) ? fs.readFileSync(readmePath, "utf8") : "";
 let manifest = JSON.parse(originalManifestText);
 const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
 const prodProfile = JSON.parse(fs.readFileSync(path.join(extensionRoot, "profiles", "prod.json"), "utf8"));
+const profileReadmeText = fs.existsSync(profileReadmePath) ? fs.readFileSync(profileReadmePath, "utf8") : originalReadmeText;
 
 if (manifest.name !== prodProfile.name || !originalProfileSource.includes(`"profileName": "prod"`)) {
   console.error("Packaging must start from the checked-in prod baseline. Restore extension/package.json and src/profile.ts, then retry.");
@@ -48,6 +52,7 @@ let exitCode = 0;
 try {
   fs.writeFileSync(packageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
   fs.writeFileSync(profileSourcePath, generatedProfileSource, "utf8");
+  fs.writeFileSync(readmePath, profileReadmeText, "utf8");
 
   const compile = spawnSync("npm", ["run", "compile"], {
     cwd: extensionRoot,
@@ -78,6 +83,7 @@ try {
 } finally {
   fs.writeFileSync(packageJsonPath, originalManifestText, "utf8");
   fs.writeFileSync(profileSourcePath, originalProfileSource, "utf8");
+  fs.writeFileSync(readmePath, originalReadmeText, "utf8");
 }
 
 if (exitCode !== 0) {
