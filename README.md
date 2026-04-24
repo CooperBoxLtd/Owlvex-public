@@ -82,6 +82,33 @@ AI setup is optional. Local deterministic checks can still run without an AI pro
 
 For larger repositories, start with selected files or open editors. AI-backed workspace scans can be slower depending on provider limits and throttling.
 
+## Support and feedback
+
+Owlvex is an early prototype, so support is focused on making the product usable and learning where it fails.
+
+Use GitHub Issues in this repository for:
+
+- installation problems
+- extension activation errors
+- scan failures
+- incorrect findings
+- missed findings
+- confusing reports
+- fix previews that look unsafe or incomplete
+- AI provider setup problems
+
+When opening an issue, include:
+
+- your operating system
+- VS Code version
+- Owlvex version
+- whether the issue happens with deterministic scanning, AI scanning, or both
+- the command you ran
+- any visible error message
+- whether you are using OpenAI, Azure AI Foundry, Anthropic, Mistral, Gemini, Groq, Ollama, or a custom endpoint
+
+Do not paste secrets, API keys, proprietary source code, or customer data into public issues. If a code sample is needed, reduce it to a small safe reproduction first.
+
 ## AI provider setup
 
 Owlvex supports several provider modes, including OpenAI, Azure AI Foundry, Anthropic, Mistral, Gemini, Groq, Ollama, and custom OpenAI-compatible endpoints.
