@@ -102,6 +102,12 @@ interface AiCorroborationReview {
     confidence?: number;
 }
 
+interface AiFindingReviewState {
+    finding: Finding;
+    verifier?: AiCorroborationReview;
+    skeptic?: AiCorroborationReview;
+}
+
 interface BatchFileReviewResult {
     fileId: string;
     reviews: AiCorroborationReview[];
@@ -133,6 +139,12 @@ const MAX_CORROBORATION_CANDIDATES = 4;
 const AI_REQUEST_MIN_SPACING_MS = 1200;
 const AI_RATE_LIMIT_COOLDOWN_MS = 5000;
 const AI_REVIEW_MAX_COMPLETION_TOKENS = 1200;
+const FINDER_HIGH_CONFIDENCE = 0.9;
+const FINDER_REVIEW_FLOOR = 0.7;
+const VERIFIER_STRONG_SUPPORT = 0.9;
+const VERIFIER_REJECT_CONFIDENCE = 0.8;
+const VERIFIER_BORDERLINE_SUPPORT = 0.6;
+const CORROBORATION_SPREAD_THRESHOLD = 0.1;
 
 function buildMetrics(findings: Finding[]): SeverityMetrics {
     return {
@@ -549,6 +561,15 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     const snippet = getLineWindow(code, finding.line, 6);
     const localSnippet = getLineWindow(code, finding.line, 1);
     const normalizedText = `${finding.title}\n${finding.explanation}\n${finding.canonicalId ?? ''}`;
+    const lineCount = code.split(/\r?\n/).length;
+
+    if (finding.line < 1 || finding.line > lineCount) {
+        return true;
+    }
+
+    if (finding.canonicalId === 'owlvex.issue.code_injection.eval.001' && !/\beval\s*\(/i.test(code)) {
+        return true;
+    }
 
     if (finding.canonicalId === 'owlvex.issue.insecure_deserialization.001') {
         return !hasExecutableDeserializationPrimitive(code);
@@ -592,7 +613,7 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     }
 
     if (finding.canonicalId === 'owlvex.issue.weak_jwt_validation.001'
-        && (hasManualJwtVerification(snippet) || hasVerifiedPythonJwtDecode(snippet) || hasVerifiedJavaJwtDecode(snippet) || hasVerifiedGoJwtDecode(snippet))) {
+        && (hasManualJwtVerification(getLineWindow(code, finding.line, 20)) || hasVerifiedPythonJwtDecode(snippet) || hasVerifiedJavaJwtDecode(snippet) || hasVerifiedGoJwtDecode(snippet))) {
         return true;
     }
 
@@ -647,6 +668,40 @@ function dedupeOverlappingAiFindings(findings: Finding[]): Finding[] {
     return kept.sort((left, right) => left.line - right.line || (left.lineEnd ?? left.line) - (right.lineEnd ?? right.line));
 }
 
+function sameDeterministicOwnership(det: Finding, ai: Finding): boolean {
+    if (!findingsOverlap(det, ai)) {
+        return false;
+    }
+
+    if (det.canonicalId && ai.canonicalId) {
+        return det.canonicalId === ai.canonicalId;
+    }
+
+    if (det.ruleCode && ai.ruleCode) {
+        return det.ruleCode === ai.ruleCode;
+    }
+
+    if (det.canonicalFamily && ai.canonicalFamily) {
+        return det.canonicalFamily === ai.canonicalFamily;
+    }
+
+    if (det.canonicalFamilyLabel && ai.canonicalFamilyLabel) {
+        return det.canonicalFamilyLabel === ai.canonicalFamilyLabel;
+    }
+
+    return false;
+}
+
+function filterStaticOwnedAiFindings(deterministicFindings: Finding[], aiFindings: Finding[]): Finding[] {
+    if (!deterministicFindings.length || !aiFindings.length) {
+        return aiFindings;
+    }
+
+    return aiFindings.filter(ai =>
+        !deterministicFindings.some(det => sameDeterministicOwnership(det, ai)),
+    );
+}
+
 function buildDeterministicGroundingContext(findings: Finding[]): string {
     if (!findings.length) {
         return 'No deterministic findings were proven for this file. AI may analyze uncovered regions, but it must stay evidence-based.';
@@ -672,34 +727,8 @@ function findingsOverlap(left: Finding, right: Finding): boolean {
     return leftStart <= (rightEnd + 2) && rightStart <= (leftEnd + 2);
 }
 
-function sameCanonicalRegion(det: Finding, ai: Finding): boolean {
-    return findingsOverlap(det, ai)
-        || (!!det.canonicalId && det.canonicalId === ai.canonicalId)
-        || (!!det.ruleCode && det.ruleCode === ai.ruleCode && findingsOverlap(det, ai));
-}
-
 function conflictsWithDeterministic(det: Finding, ai: Finding): boolean {
-    if (!sameCanonicalRegion(det, ai)) {
-        return false;
-    }
-
-    if (det.canonicalId && ai.canonicalId && det.canonicalId === ai.canonicalId) {
-        return true;
-    }
-
-    if (det.ruleCode && ai.ruleCode && det.ruleCode === ai.ruleCode) {
-        return true;
-    }
-
-    if (det.canonicalFamily && ai.canonicalFamily && det.canonicalFamily !== ai.canonicalFamily) {
-        return true;
-    }
-
-    if (det.canonicalFamilyLabel && ai.canonicalFamilyLabel && det.canonicalFamilyLabel !== ai.canonicalFamilyLabel) {
-        return true;
-    }
-
-    return true;
+    return sameDeterministicOwnership(det, ai);
 }
 
 function mergeDeterministicAndAiFindings(deterministicFindings: Finding[], aiFindings: Finding[]): Finding[] {
@@ -712,6 +741,138 @@ function mergeDeterministicAndAiFindings(deterministicFindings: Finding[], aiFin
     );
 
     return [...deterministicFindings, ...filteredAiFindings];
+}
+
+function finderConfidence(finding: Finding): number {
+    return Math.max(0, Math.min(1, finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8));
+}
+
+function isHighImpactFinding(finding: Finding): boolean {
+    return finding.severity === 'HIGH' || finding.severity === 'CRITICAL';
+}
+
+function shouldRunVerifier(finding: Finding): boolean {
+    const confidence = finderConfidence(finding);
+    if (finding.severity === 'CRITICAL') {
+        return true;
+    }
+
+    if (confidence >= FINDER_HIGH_CONFIDENCE) {
+        return false;
+    }
+
+    if (confidence >= FINDER_REVIEW_FLOOR) {
+        return true;
+    }
+
+    return isHighImpactFinding(finding);
+}
+
+function shouldKeepFinderOnly(finding: Finding): boolean {
+    return finderConfidence(finding) >= FINDER_HIGH_CONFIDENCE;
+}
+
+function shouldRunSkeptic(finding: Finding, verifier?: AiCorroborationReview): boolean {
+    if (!verifier) {
+        return false;
+    }
+
+    const verifierConfidence = verifier.confidence ?? 0;
+    if (verifier.verdict === 'reject' && verifierConfidence >= VERIFIER_REJECT_CONFIDENCE) {
+        return false;
+    }
+
+    if (verifier.verdict === 'support' && verifierConfidence >= VERIFIER_STRONG_SUPPORT && finding.severity !== 'CRITICAL') {
+        return false;
+    }
+
+    const spread = Math.abs(finderConfidence(finding) - verifierConfidence);
+    if (spread >= CORROBORATION_SPREAD_THRESHOLD) {
+        return true;
+    }
+
+    if (verifier.verdict === 'unclear') {
+        return isHighImpactFinding(finding);
+    }
+
+    if (verifier.verdict === 'support' && verifierConfidence >= VERIFIER_BORDERLINE_SUPPORT && verifierConfidence < VERIFIER_STRONG_SUPPORT) {
+        return isHighImpactFinding(finding);
+    }
+
+    return finding.severity === 'CRITICAL';
+}
+
+function finalizeAiFindingReview(state: AiFindingReviewState): Finding | undefined {
+    const { finding, verifier, skeptic } = state;
+    const baseConfidence = finderConfidence(finding);
+
+    if (verifier?.verdict === 'reject' && (verifier.confidence ?? 0) >= VERIFIER_REJECT_CONFIDENCE) {
+        return undefined;
+    }
+
+    if (skeptic?.verdict === 'contradict') {
+        return undefined;
+    }
+
+    if (verifier?.verdict === 'support') {
+        const strongSupport = (verifier.confidence ?? 0) >= VERIFIER_STRONG_SUPPORT;
+        const skepticCleared = skeptic?.verdict === 'clear';
+        const finalConfidence = Math.max(
+            finding.confidence ?? baseConfidence,
+            strongSupport || skepticCleared ? 0.9 : 0.88,
+        );
+
+        return {
+            ...finding,
+            confidence: finalConfidence,
+            aiReviewScores: {
+                finder: baseConfidence,
+                verifier: verifier.confidence,
+                skeptic: skeptic?.confidence,
+                final: finalConfidence,
+            },
+            aiReviewNotes: {
+                finder: finding.aiReviewNotes?.finder,
+                verifier: verifier.reason,
+                skeptic: skeptic?.reason,
+            },
+            corroboration: strongSupport || skepticCleared ? 'CORROBORATED' as const : 'PARTIAL' as const,
+        };
+    }
+
+    if (verifier || skeptic) {
+        return {
+            ...finding,
+            aiReviewScores: {
+                finder: baseConfidence,
+                verifier: verifier?.confidence,
+                skeptic: skeptic?.confidence,
+                final: finding.confidence ?? baseConfidence,
+            },
+            aiReviewNotes: {
+                finder: finding.aiReviewNotes?.finder,
+                verifier: verifier?.reason,
+                skeptic: skeptic?.reason,
+            },
+            corroboration: 'PARTIAL' as const,
+        };
+    }
+
+    if (!shouldKeepFinderOnly(finding)) {
+        return undefined;
+    }
+
+    return {
+        ...finding,
+        aiReviewScores: {
+            finder: baseConfidence,
+            final: finding.confidence ?? baseConfidence,
+        },
+        aiReviewNotes: {
+            finder: finding.aiReviewNotes?.finder,
+        },
+        corroboration: 'UNVERIFIED' as const,
+    };
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -878,10 +1039,18 @@ export class ScanEngine {
                 context,
                 parsed,
                 filteredAiFindings: dedupeOverlappingAiFindings(
-                    suppressUnsupportedAiFindings(context.code, parsed.findings),
+                    filterStaticOwnedAiFindings(
+                        context.deterministicFindings,
+                        suppressUnsupportedAiFindings(context.code, parsed.findings),
+                    ),
                 ),
             };
         });
+
+        const verifierInputs = reviewInputs.map(entry => ({
+            ...entry,
+            verifierCandidates: entry.filteredAiFindings.filter(shouldRunVerifier),
+        }));
 
         const verifierPass = await this._runBatchAiReviewPass({
             role: 'Verifier',
@@ -889,13 +1058,13 @@ export class ScanEngine {
             expectedContradictionVerdict: 'reject',
             provider,
             systemPrompt,
-            entries: reviewInputs
-                .filter(entry => entry.filteredAiFindings.length > 0 && entry.filteredAiFindings.length <= MAX_CORROBORATION_CANDIDATES)
+            entries: verifierInputs
+                .filter(entry => entry.verifierCandidates.length > 0 && entry.filteredAiFindings.length <= MAX_CORROBORATION_CANDIDATES)
                 .map(entry => ({
                     fileId: entry.context.fileId,
                     language: entry.context.language,
                     code: entry.context.code,
-                    findings: entry.filteredAiFindings,
+                    findings: entry.verifierCandidates,
                 })),
         });
 
@@ -908,10 +1077,36 @@ export class ScanEngine {
             }
         }
 
-        const skepticPass = verifierWarnings.some(warning => hasRateLimitWarning([warning]))
+        const verifierMaps = new Map<string, Map<string, AiCorroborationReview>>();
+        for (const entry of verifierInputs) {
+            const reviews = verifierPass.files.find(file => file.fileId === entry.context.fileId)?.reviews ?? [];
+            const reviewMap = new Map(reviews.map(review => [review.id, review]));
+            for (const candidate of entry.verifierCandidates) {
+                if (!reviewMap.has(candidate.id)) {
+                    reviewMap.set(candidate.id, {
+                        id: candidate.id,
+                        verdict: 'unclear',
+                        reason: 'Verifier pass did not return a verdict for this candidate.',
+                    });
+                }
+            }
+            verifierMaps.set(entry.context.fileId, reviewMap);
+        }
+
+        const skepticInputs = verifierInputs.map(entry => ({
+            ...entry,
+            skepticCandidates: entry.filteredAiFindings.filter(finding =>
+                shouldRunSkeptic(finding, verifierMaps.get(entry.context.fileId)?.get(finding.id)),
+            ),
+        }));
+
+        const verifierRateLimited = verifierWarnings.some(warning => hasRateLimitWarning([warning]));
+        const skepticPass = verifierRateLimited
             ? {
                 files: [] as BatchFileReviewResult[],
-                warnings: ['AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.'],
+                warnings: skepticInputs.some(entry => entry.verifierCandidates.length > 0)
+                    ? ['AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.']
+                    : [],
                 aiUsage: emptyAiUsage(),
             }
             : await this._runBatchAiReviewPass({
@@ -920,110 +1115,40 @@ export class ScanEngine {
                 expectedContradictionVerdict: 'contradict',
                 provider,
                 systemPrompt,
-                entries: reviewInputs
-                    .filter(entry => entry.filteredAiFindings.length > 0 && entry.filteredAiFindings.length <= MAX_CORROBORATION_CANDIDATES)
+                entries: skepticInputs
+                    .filter(entry => entry.skepticCandidates.length > 0 && entry.filteredAiFindings.length <= MAX_CORROBORATION_CANDIDATES)
                     .map(entry => ({
                         fileId: entry.context.fileId,
                         language: entry.context.language,
                         code: entry.context.code,
-                        findings: entry.filteredAiFindings,
+                        findings: entry.skepticCandidates,
                     })),
             });
 
         const durationMs = Date.now() - start;
 
-        return Promise.all(reviewInputs.map(async entry => {
+        return Promise.all(skepticInputs.map(async entry => {
             const warnings: string[] = [];
-            const verifierReviews = verifierPass.files.find(file => file.fileId === entry.context.fileId)?.reviews ?? [];
             const skepticReviews = skepticPass.files.find(file => file.fileId === entry.context.fileId)?.reviews ?? [];
-            const verifierMap = new Map(verifierReviews.map(review => [review.id, review]));
+            const verifierMap = verifierMaps.get(entry.context.fileId) ?? new Map<string, AiCorroborationReview>();
             const skepticMap = new Map(skepticReviews.map(review => [review.id, review]));
+            for (const candidate of entry.skepticCandidates) {
+                if (!skepticMap.has(candidate.id)) {
+                    skepticMap.set(candidate.id, {
+                        id: candidate.id,
+                        verdict: 'unclear',
+                        reason: 'Skeptic pass did not return a verdict for this candidate.',
+                    });
+                }
+            }
 
             const keptAi = entry.filteredAiFindings
-                .filter(finding => {
-                    const verifier = verifierMap.get(finding.id);
-                    const skeptic = skepticMap.get(finding.id);
-                    if (verifier?.verdict === 'reject') {
-                        return false;
-                    }
-                    if (skeptic?.verdict === 'contradict') {
-                        return false;
-                    }
-                    return true;
-                })
-                .map(finding => {
-                    const verifier = verifierMap.get(finding.id);
-                    const skeptic = skepticMap.get(finding.id);
-                    if (verifier?.verdict === 'support' && skeptic?.verdict === 'clear') {
-                        const finalConfidence = Math.max(finding.confidence ?? 0.8, 0.92);
-                        return {
-                            ...finding,
-                            confidence: finalConfidence,
-                            aiReviewScores: {
-                                finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
-                                verifier: verifier.confidence,
-                                skeptic: skeptic.confidence,
-                                final: finalConfidence,
-                            },
-                            aiReviewNotes: {
-                                finder: finding.aiReviewNotes?.finder,
-                                verifier: verifier.reason,
-                                skeptic: skeptic.reason,
-                            },
-                            corroboration: 'CORROBORATED' as const,
-                        };
-                    }
-
-                    if (verifier?.verdict === 'support') {
-                        const finalConfidence = Math.max(finding.confidence ?? 0.8, 0.88);
-                        return {
-                            ...finding,
-                            confidence: finalConfidence,
-                            aiReviewScores: {
-                                finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
-                                verifier: verifier.confidence,
-                                skeptic: skeptic?.confidence,
-                                final: finalConfidence,
-                            },
-                            aiReviewNotes: {
-                                finder: finding.aiReviewNotes?.finder,
-                                verifier: verifier.reason,
-                                skeptic: skeptic?.reason,
-                            },
-                            corroboration: 'PARTIAL' as const,
-                        };
-                    }
-
-                    if (verifier || skeptic) {
-                        return {
-                            ...finding,
-                            aiReviewScores: {
-                                finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
-                                verifier: verifier?.confidence,
-                                skeptic: skeptic?.confidence,
-                                final: finding.confidence ?? 0.8,
-                            },
-                            aiReviewNotes: {
-                                finder: finding.aiReviewNotes?.finder,
-                                verifier: verifier?.reason,
-                                skeptic: skeptic?.reason,
-                            },
-                            corroboration: 'PARTIAL' as const,
-                        };
-                    }
-
-                    return {
-                        ...finding,
-                        aiReviewScores: {
-                            finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
-                            final: finding.confidence ?? 0.8,
-                        },
-                        aiReviewNotes: {
-                            finder: finding.aiReviewNotes?.finder,
-                        },
-                        corroboration: 'UNVERIFIED' as const,
-                    };
-                });
+                .map(finding => finalizeAiFindingReview({
+                    finding,
+                    verifier: verifierMap.get(finding.id),
+                    skeptic: skepticMap.get(finding.id),
+                }))
+                .filter((finding): finding is Finding => Boolean(finding));
 
             warnings.push(
                 ...verifierWarnings.filter(warning =>
@@ -1225,7 +1350,10 @@ export class ScanEngine {
         // Deduplicate by canonicalId + line to avoid doubling up when the AI
         // also found the same issue at the same location.
         const filteredAiFindings = dedupeOverlappingAiFindings(
-            suppressUnsupportedAiFindings(code, parsed.findings),
+            filterStaticOwnedAiFindings(
+                deterministicFindings,
+                suppressUnsupportedAiFindings(code, parsed.findings),
+            ),
         );
         const corroboratedAi = await this._runSingleAgentCorroboration({
             provider,
@@ -1325,124 +1453,76 @@ export class ScanEngine {
         }
 
         const warnings: string[] = [];
-        const verifierReviews = await this._runAiReviewPass({
-            role: 'Verifier',
-            expectedSupportVerdict: 'support',
-            expectedContradictionVerdict: 'reject',
-            provider: params.provider,
-            systemPrompt: params.systemPrompt,
-            language: params.language,
-            code: params.code,
-            findings: params.findings,
-        });
-        warnings.push(...verifierReviews.warnings);
-
-        const skepticReviews = hasRateLimitWarning(verifierReviews.warnings)
-            ? {
-                reviews: [] as AiCorroborationReview[],
-                warnings: ['AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.'],
-                aiUsage: emptyAiUsage(),
-            }
-            : await this._runAiReviewPass({
-                role: 'Skeptic',
-                expectedSupportVerdict: 'clear',
-                expectedContradictionVerdict: 'contradict',
+        const verifierCandidates = params.findings.filter(shouldRunVerifier);
+        const verifierReviews = verifierCandidates.length
+            ? await this._runAiReviewPass({
+                role: 'Verifier',
+                expectedSupportVerdict: 'support',
+                expectedContradictionVerdict: 'reject',
                 provider: params.provider,
                 systemPrompt: params.systemPrompt,
                 language: params.language,
                 code: params.code,
-                findings: params.findings,
-            });
-        warnings.push(...skepticReviews.warnings);
+                findings: verifierCandidates,
+            })
+            : { reviews: [] as AiCorroborationReview[], warnings: [], aiUsage: emptyAiUsage() };
+        warnings.push(...verifierReviews.warnings);
 
         const verifierMap = new Map(verifierReviews.reviews.map(review => [review.id, review]));
+        for (const candidate of verifierCandidates) {
+            if (!verifierMap.has(candidate.id)) {
+                verifierMap.set(candidate.id, {
+                    id: candidate.id,
+                    verdict: 'unclear',
+                    reason: 'Verifier pass did not return a verdict for this candidate.',
+                });
+            }
+        }
+
+        const skepticCandidates = hasRateLimitWarning(verifierReviews.warnings)
+            ? []
+            : params.findings.filter(finding => shouldRunSkeptic(finding, verifierMap.get(finding.id)));
+
+        const skepticReviews = hasRateLimitWarning(verifierReviews.warnings)
+            ? {
+                reviews: [] as AiCorroborationReview[],
+                warnings: skepticCandidates.length || verifierCandidates.length
+                    ? ['AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.']
+                    : [],
+                aiUsage: emptyAiUsage(),
+            }
+            : skepticCandidates.length
+                ? await this._runAiReviewPass({
+                    role: 'Skeptic',
+                    expectedSupportVerdict: 'clear',
+                    expectedContradictionVerdict: 'contradict',
+                    provider: params.provider,
+                    systemPrompt: params.systemPrompt,
+                    language: params.language,
+                    code: params.code,
+                    findings: skepticCandidates,
+                })
+                : { reviews: [] as AiCorroborationReview[], warnings: [], aiUsage: emptyAiUsage() };
+        warnings.push(...skepticReviews.warnings);
+
         const skepticMap = new Map(skepticReviews.reviews.map(review => [review.id, review]));
+        for (const candidate of skepticCandidates) {
+            if (!skepticMap.has(candidate.id)) {
+                skepticMap.set(candidate.id, {
+                    id: candidate.id,
+                    verdict: 'unclear',
+                    reason: 'Skeptic pass did not return a verdict for this candidate.',
+                });
+            }
+        }
 
         const kept = params.findings
-            .filter(finding => {
-                const verifier = verifierMap.get(finding.id);
-                const skeptic = skepticMap.get(finding.id);
-                if (verifier?.verdict === 'reject') {
-                    return false;
-                }
-                if (skeptic?.verdict === 'contradict') {
-                    return false;
-                }
-                return true;
-            })
-            .map(finding => {
-                const verifier = verifierMap.get(finding.id);
-                const skeptic = skepticMap.get(finding.id);
-                if (verifier?.verdict === 'support' && skeptic?.verdict === 'clear') {
-                    const finalConfidence = Math.max(finding.confidence ?? 0.8, 0.92);
-                    return {
-                        ...finding,
-                        confidence: finalConfidence,
-                        aiReviewScores: {
-                            finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
-                            verifier: verifier.confidence,
-                            skeptic: skeptic.confidence,
-                            final: finalConfidence,
-                        },
-                        aiReviewNotes: {
-                            finder: finding.aiReviewNotes?.finder,
-                            verifier: verifier.reason,
-                            skeptic: skeptic.reason,
-                        },
-                        corroboration: 'CORROBORATED' as const,
-                    };
-                }
-
-                if (verifier?.verdict === 'support') {
-                    const finalConfidence = Math.max(finding.confidence ?? 0.8, 0.88);
-                    return {
-                        ...finding,
-                        confidence: finalConfidence,
-                        aiReviewScores: {
-                            finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
-                            verifier: verifier.confidence,
-                            skeptic: skeptic?.confidence,
-                            final: finalConfidence,
-                        },
-                        aiReviewNotes: {
-                            finder: finding.aiReviewNotes?.finder,
-                            verifier: verifier.reason,
-                            skeptic: skeptic?.reason,
-                        },
-                        corroboration: 'PARTIAL' as const,
-                    };
-                }
-
-                if (verifier || skeptic) {
-                    return {
-                        ...finding,
-                        aiReviewScores: {
-                            finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
-                            verifier: verifier?.confidence,
-                            skeptic: skeptic?.confidence,
-                            final: finding.confidence ?? 0.8,
-                        },
-                        aiReviewNotes: {
-                            finder: finding.aiReviewNotes?.finder,
-                            verifier: verifier?.reason,
-                            skeptic: skeptic?.reason,
-                        },
-                        corroboration: 'PARTIAL' as const,
-                    };
-                }
-
-                return {
-                    ...finding,
-                    aiReviewScores: {
-                        finder: finding.aiReviewScores?.finder ?? finding.resolverConfidence ?? finding.confidence ?? 0.8,
-                        final: finding.confidence ?? 0.8,
-                    },
-                    aiReviewNotes: {
-                        finder: finding.aiReviewNotes?.finder,
-                    },
-                    corroboration: 'UNVERIFIED' as const,
-                };
-            });
+            .map(finding => finalizeAiFindingReview({
+                finding,
+                verifier: verifierMap.get(finding.id),
+                skeptic: skepticMap.get(finding.id),
+            }))
+            .filter((finding): finding is Finding => Boolean(finding));
 
         return {
             findings: kept,

@@ -99,8 +99,8 @@ describe('stability guardrails', () => {
                     summary: 'Potential missing finance-admin authorization detected.',
                     findings: [{
                         id: 'ai-finance-admin',
-                        line: 2,
-                        line_end: 2,
+                        line: 1,
+                        line_end: 1,
                         severity: 'MEDIUM',
                         framework: 'OWASP',
                         rule_code: 'A01-AUTHZ',
