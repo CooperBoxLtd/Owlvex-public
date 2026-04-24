@@ -2,7 +2,7 @@
   "name": "owlvex",
   "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "publisher": "owlvex",
   "repository": {
     "type": "git",
@@ -105,14 +105,14 @@
         "command": "owlvex.registerAccess",
         "title": "Owlvex: Register Free Or Trial Access"
       },
-        {
-          "command": "owlvex.compareScans",
-          "title": "Owlvex: Compare Reports"
-        },
-        {
-          "command": "owlvex.compareLatestReports",
-          "title": "Owlvex: Compare Last 2 Reports"
-        },
+      {
+        "command": "owlvex.compareScans",
+        "title": "Owlvex: Compare Reports"
+      },
+      {
+        "command": "owlvex.compareLatestReports",
+        "title": "Owlvex: Compare Last 2 Reports"
+      },
       {
         "command": "owlvex.reviewRiskCalibration",
         "title": "Owlvex: Review Risk Calibration"
