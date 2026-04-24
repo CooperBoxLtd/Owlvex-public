@@ -1760,6 +1760,123 @@ describe('parseChatIntent', () => {
         expect((provider as any).pendingFixPreview?.changes).toHaveLength(2);
     });
 
+    it('rescans each file after applying a combined fix preview', async () => {
+        const originals = new Map([
+            ['d:\\repo\\src\\one.js', 'db.query(req.query.id);'],
+            ['d:\\repo\\src\\two.js', 'fetch(req.query.url);'],
+        ]);
+        const patched = new Map([
+            ['d:\\repo\\src\\one.js', 'const id = Number(req.query.id);\ndb.query(id);'],
+            ['d:\\repo\\src\\two.js', 'const target = allowlisted(req.query.url);\nfetch(target);'],
+        ]);
+        let applied = false;
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (uri: any) => ({
+            uri,
+            fileName: uri.fsPath,
+            getText: () => applied
+                ? patched.get(uri.fsPath) ?? originals.get(uri.fsPath) ?? ''
+                : originals.get(uri.fsPath) ?? '',
+        }));
+        (vscode.workspace.applyEdit as jest.Mock).mockImplementation(async () => {
+            applied = true;
+            return true;
+        });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 0,
+                        findings: [],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: 'No findings detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
+
+        const complete = jest.fn()
+            .mockResolvedValueOnce({ content: patched.get('d:\\repo\\src\\one.js') })
+            .mockResolvedValueOnce({ content: patched.get('d:\\repo\\src\\two.js') });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await provider.generateBatchFixPreview([
+            {
+                targetPath: 'd:\\repo\\src\\one.js',
+                finding: {
+                    id: 'finding-sqli',
+                    line: 3,
+                    lineEnd: 3,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'SQ-001',
+                    title: 'SQL Injection',
+                    canonicalId: 'owlvex.issue.sql_injection.001',
+                    explanation: 'Unsafe SQL.',
+                    threat: 'Data exposure.',
+                    fix: 'Use parameters.',
+                    confidence: 0.9,
+                    provenance: 'ai',
+                    likelihood: 'HIGH',
+                    riskScore: 9,
+                },
+            },
+            {
+                targetPath: 'd:\\repo\\src\\two.js',
+                finding: {
+                    id: 'finding-ssrf',
+                    line: 4,
+                    lineEnd: 4,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'GR-003',
+                    title: 'SSRF',
+                    canonicalId: 'owlvex.issue.ssrf.001',
+                    explanation: 'Unsafe outbound request.',
+                    threat: 'Internal network reachability.',
+                    fix: 'Allow-list destinations.',
+                    confidence: 0.9,
+                    provenance: 'ai',
+                    likelihood: 'HIGH',
+                    riskScore: 9,
+                },
+            },
+        ] as any);
+
+        await provider.applyPendingFixPreview();
+
+        expect(vscode.workspace.applyEdit).toHaveBeenCalledTimes(1);
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            PROFILE.commands.scanFile,
+            expect.objectContaining({ fsPath: 'd:\\repo\\src\\one.js' }),
+        );
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            PROFILE.commands.scanFile,
+            expect.objectContaining({ fsPath: 'd:\\repo\\src\\two.js' }),
+        );
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Verifying the 2 updated files now');
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Verification complete: the reviewed finding is no longer present');
+    });
+
     it('allows broader rewrites for latest-scan batch fixes without tripping the finding-anchored guardrail', async () => {
         const targetUri = vscode.Uri.file('d:\\repo\\src\\sessionHost.js');
         const originalLines = Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`).join('\n');

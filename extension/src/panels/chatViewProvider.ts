@@ -1826,6 +1826,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 severity: changes[0]?.finding.severity ?? null,
             });
             this.pendingFixPreview = undefined;
+            this.messages.push({
+                role: 'assistant',
+                content: `Verifying the ${changes.length} updated file${changes.length === 1 ? '' : 's'} now...`,
+                kind: 'advisory',
+            });
+            for (const change of changes) {
+                await this.verifyAppliedFixChange({
+                    targetUri: vscode.Uri.file(change.targetPath),
+                    originalFinding: change.finding,
+                    reviewedPaths,
+                    patchedText: change.patchedText,
+                });
+            }
             void this.persistState();
             this.refresh();
             return;
@@ -2030,6 +2043,153 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
         void this.persistState();
         this.refresh();
+    }
+
+    private async verifyAppliedFixChange(options: {
+        targetUri: vscode.Uri;
+        originalFinding: Finding;
+        reviewedPaths: string[];
+        patchedText: string;
+    }): Promise<void> {
+        const { targetUri, originalFinding, reviewedPaths, patchedText } = options;
+        try {
+            const scanResult = await vscode.commands.executeCommand(PROFILE.commands.scanFile, targetUri) as { status?: string; result?: ScanResult } | undefined;
+            const rescanned = scanResult?.status === 'completed' ? scanResult.result : undefined;
+            if (!rescanned) {
+                this.messages.push({
+                    role: 'assistant',
+                    content: `Verification could not confirm the result for ${vscode.workspace.asRelativePath(targetUri, false)}. The reviewed code was kept, but no completed rescan result was returned.`,
+                    kind: 'advisory',
+                    actions: buildPostFixVerificationActions({
+                        targetPath: targetUri.fsPath,
+                        originalFinding,
+                    }),
+                });
+                this.emitUsageTelemetry('fix_verification_completed', {
+                    outcome: 'verification_incomplete',
+                    file_count: 1,
+                    canonical_id: originalFinding.canonicalId ?? null,
+                    severity: originalFinding.severity ?? null,
+                    risk_before: originalFinding.riskScore ?? null,
+                    target_removed: false,
+                });
+                await this.recordFixBenchmarkResult({
+                    targetUri,
+                    finding: originalFinding,
+                    reviewedPaths,
+                    appliedCleanly: true,
+                    patchedText,
+                    notes: 'Fix kept, but verification scan did not return a completed result.',
+                });
+                return;
+            }
+
+            const matchingFinding = rescanned.findings.find(candidate =>
+                this.isSameFindingFamily(candidate, originalFinding)
+            );
+            if (!matchingFinding) {
+                this.messages.push({
+                    role: 'assistant',
+                    content: `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                    kind: 'advisory',
+                    actions: buildPostFixVerificationActions({
+                        rescanned,
+                        targetPath: targetUri.fsPath,
+                        originalFinding,
+                    }),
+                });
+                this.emitUsageTelemetry('fix_verification_completed', {
+                    outcome: 'removed',
+                    file_count: 1,
+                    canonical_id: originalFinding.canonicalId ?? null,
+                    severity: originalFinding.severity ?? null,
+                    risk_before: originalFinding.riskScore ?? null,
+                    risk_after: null,
+                    target_removed: true,
+                });
+            } else if ((matchingFinding.riskScore ?? 0) < (originalFinding.riskScore ?? 0)) {
+                this.messages.push({
+                    role: 'assistant',
+                    content: `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                    kind: 'advisory',
+                    actions: buildPostFixVerificationActions({
+                        rescanned,
+                        targetPath: targetUri.fsPath,
+                        originalFinding,
+                        matchingFinding,
+                    }),
+                });
+                this.emitUsageTelemetry('fix_verification_completed', {
+                    outcome: 'risk_reduced',
+                    file_count: 1,
+                    canonical_id: originalFinding.canonicalId ?? null,
+                    severity: originalFinding.severity ?? null,
+                    risk_before: originalFinding.riskScore ?? null,
+                    risk_after: matchingFinding.riskScore ?? null,
+                    target_removed: false,
+                });
+            } else {
+                this.messages.push({
+                    role: 'assistant',
+                    content: `Verification complete: the finding is still present after the kept fix. Review the diff again or generate another fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
+                    kind: 'advisory',
+                    actions: buildPostFixVerificationActions({
+                        rescanned,
+                        targetPath: targetUri.fsPath,
+                        originalFinding,
+                        matchingFinding,
+                    }),
+                });
+                this.emitUsageTelemetry('fix_verification_completed', {
+                    outcome: 'still_present',
+                    file_count: 1,
+                    canonical_id: originalFinding.canonicalId ?? null,
+                    severity: originalFinding.severity ?? null,
+                    risk_before: originalFinding.riskScore ?? null,
+                    risk_after: matchingFinding.riskScore ?? null,
+                    target_removed: false,
+                });
+            }
+
+            await this.recordFixBenchmarkResult({
+                targetUri,
+                finding: originalFinding,
+                reviewedPaths,
+                appliedCleanly: true,
+                patchedText,
+                rescanned,
+                matchingFinding,
+                notes: matchingFinding
+                    ? 'Fix kept and verification scan completed; the target finding still matched after the rescan.'
+                    : 'Fix kept and verification scan completed; the target finding was no longer present.',
+            });
+        } catch (error: any) {
+            this.messages.push({
+                role: 'assistant',
+                content: `Verification scan failed after keeping the fix for ${vscode.workspace.asRelativePath(targetUri, false)}: ${error.message}`,
+                kind: 'advisory',
+                actions: buildPostFixVerificationActions({
+                    targetPath: targetUri.fsPath,
+                    originalFinding,
+                }),
+            });
+            this.emitUsageTelemetry('fix_verification_completed', {
+                outcome: 'verification_failed',
+                file_count: 1,
+                canonical_id: originalFinding.canonicalId ?? null,
+                severity: originalFinding.severity ?? null,
+                risk_before: originalFinding.riskScore ?? null,
+                target_removed: false,
+            });
+            await this.recordFixBenchmarkResult({
+                targetUri,
+                finding: originalFinding,
+                reviewedPaths,
+                appliedCleanly: true,
+                patchedText,
+                notes: `Verification scan failed: ${error.message}`,
+            });
+        }
     }
 
     private async handleUserMessage(prompt: string, options: UserPromptOptions = {}): Promise<void> {
