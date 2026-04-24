@@ -572,6 +572,40 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toBe('Good morning! I am ready to help.');
     });
 
+    it('injects recent conversation context for short general follow-ups', async () => {
+        const complete = jest.fn()
+            .mockResolvedValueOnce({ content: 'Stockton-on-Tees is in northeast England.' })
+            .mockResolvedValueOnce({ content: 'I do not have live weather access, but you asked about Stockton-on-Tees.' });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [{
+                id: 'test-provider',
+                name: 'Test Provider',
+                isConfigured: async () => true,
+                listModels: async () => ['owlvex-test-model'],
+            }],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('Stockton-on-Tees');
+        await (provider as any).handleUserMessage('weather');
+
+        const secondRequest = complete.mock.calls[1][0];
+        expect(secondRequest.systemPrompt).toContain('Use recent conversation context to resolve short follow-ups');
+        expect(secondRequest.userMessage).toContain('Recent conversation context:');
+        expect(secondRequest.userMessage).toContain('User: Stockton-on-Tees');
+        expect(secondRequest.userMessage).toContain('Assistant: Stockton-on-Tees is in northeast England.');
+        expect(secondRequest.userMessage).toContain('Repo context: not injected by default in General mode.');
+    });
+
     it('blocks AI chat when no valid licence is available', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'This should not run.' });
         const provider = new ChatViewProvider({
@@ -1777,6 +1811,77 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('Owlvex Demo App');
         expect(request.userMessage).toContain('package.json:');
         expect(request.userMessage).toContain('No active editor is open.');
+    });
+
+    it('injects recent conversation context for repo follow-ups about the same app', async () => {
+        const complete = jest.fn()
+            .mockResolvedValueOnce({ content: 'The demo app is an intentionally vulnerable Express app.' })
+            .mockResolvedValueOnce({ content: 'That app has routes for safe and unsafe examples.' });
+        (vscode.workspace.workspaceFolders as any) = [{ name: 'CodeScanner', uri: vscode.Uri.file('d:\\repo') }];
+        (vscode.workspace.fs as any).readDirectory = jest.fn().mockImplementation(async (uri: any) => {
+            const filePath = String(uri.fsPath).toLowerCase();
+            if (filePath === 'd:\\repo\\tools\\demo-app') {
+                return [
+                    ['README.md', vscode.FileType.File],
+                    ['package.json', vscode.FileType.File],
+                    ['src', vscode.FileType.Directory],
+                ];
+            }
+            return [];
+        });
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            const filePath = String(uri.fsPath).toLowerCase();
+            if (filePath.endsWith('tools\\demo-app\\readme.md')) {
+                return Buffer.from('# Owlvex Demo App\nA small Express app for validating scanner and prompt behavior.');
+            }
+            if (filePath.endsWith('tools\\demo-app\\package.json')) {
+                return Buffer.from(JSON.stringify({ name: 'owlvex-demo-app', main: 'src/server.js' }, null, 2));
+            }
+            if (filePath.endsWith('tools\\demo-app\\src\\server.js')) {
+                return Buffer.from("const express = require('express');");
+            }
+            throw new Error('not found');
+        });
+        (vscode.workspace.fs.stat as jest.Mock).mockResolvedValue({ type: vscode.FileType.Directory });
+        (vscode.window.activeTextEditor as any) = undefined;
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                if (key === 'projectRoot') {
+                    return 'd:\\repo\\tools\\demo-app';
+                }
+                return defaultValue;
+            }),
+            update: jest.fn(),
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                if (key === `${PROFILE.storagePrefix}.chat.workingScope`) {
+                    return 'scanFile';
+                }
+                return defaultValue;
+            }),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('what can you tell me about that app?');
+        await (provider as any).handleUserMessage('show the top-level files and folders in that repo');
+
+        const secondRequest = complete.mock.calls[1][0];
+        expect(secondRequest.systemPrompt).toContain('Interaction mode: Repo Q&A');
+        expect(secondRequest.systemPrompt).toContain('Use recent conversation context to resolve short follow-ups');
+        expect(secondRequest.userMessage).toContain('Recent conversation context:');
+        expect(secondRequest.userMessage).toContain('User: what can you tell me about that app?');
+        expect(secondRequest.userMessage).toContain('Assistant: The demo app is an intentionally vulnerable Express app.');
+        expect(secondRequest.userMessage).toContain('Selected project root: d:\\repo\\tools\\demo-app');
     });
 
     it('allows combined fix previews when the findings span different families', async () => {

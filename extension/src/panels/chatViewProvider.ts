@@ -206,6 +206,8 @@ const DEFAULT_WORKING_SCOPE: WorkingScope = 'scanFolder';
 const WORKSPACE_CONTEXT_FILES = ['README.md', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml'];
 const MAX_SINGLE_FILE_REWRITE_RATIO = 0.75;
 const MAX_REWRITE_LINE_THRESHOLD = 20;
+const MAX_RECENT_CHAT_CONTEXT_MESSAGES = 8;
+const MAX_RECENT_CHAT_CONTEXT_CHARS = 4000;
 
 interface ImportedSymbolContext {
     specifier: string;
@@ -2301,6 +2303,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 : shouldUseLatestScanContext(trimmed, options)
                     ? buildLatestReportPromptContext(this.storage)
                     : undefined;
+            const recentConversationContext = this.buildRecentConversationContext();
 
             const response = await provider.complete({
                 systemPrompt: [
@@ -2313,6 +2316,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     'When relevant, explicitly say what the current code is doing wrong, what to stop doing, and what safe pattern should replace it.',
                     'If the active file or latest scan already points to a concrete finding, ground the answer in that finding instead of answering generically.',
                     'If the visible local code snippet appears to contradict the finding label, say that explicitly before giving advice and do not claim dangerous code paths that are not shown.',
+                    'Use recent conversation context to resolve short follow-ups, pronouns, locations, and references like "that app" or "weather"; do not ignore the latest user message.',
                     this.currentMode === 'general'
                         ? 'In General mode, answer as a normal assistant. Do not imply repo inspection, scan evidence, or finding posture unless the user explicitly asks for repo or security analysis.'
                         : this.currentMode === 'repo'
@@ -2338,6 +2342,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 ].join('\n'),
                 userMessage: [
                     trimmed,
+                    recentConversationContext,
                     options.injectedContext ?? autoInjectedContext ?? 'Injected discussion context: none',
                     ...(this.currentMode === 'general'
                         ? ['Repo context: not injected by default in General mode.']
@@ -2394,6 +2399,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         void this.persistState();
         this.refresh();
+    }
+
+    private buildRecentConversationContext(): string {
+        const completedMessages = this.messages
+            .slice(0, -2)
+            .filter(message => message.role === 'user' || message.role === 'assistant')
+            .filter(message => message.content && message.content !== 'Thinking...')
+            .slice(-MAX_RECENT_CHAT_CONTEXT_MESSAGES);
+
+        if (!completedMessages.length) {
+            return 'Recent conversation context: none';
+        }
+
+        let remaining = MAX_RECENT_CHAT_CONTEXT_CHARS;
+        const lines: string[] = [];
+        for (const message of completedMessages) {
+            const role = message.role === 'user' ? 'User' : 'Assistant';
+            const perMessageLimit = message.role === 'user' ? 1200 : 800;
+            let content = message.content.trim();
+            if (content.length > perMessageLimit) {
+                content = `${content.slice(0, perMessageLimit)}\n[truncated]`;
+            }
+            const line = `${role}: ${content}`;
+            if (line.length > remaining) {
+                lines.push(`${line.slice(0, Math.max(0, remaining))}\n[conversation context truncated]`);
+                break;
+            }
+            lines.push(line);
+            remaining -= line.length;
+            if (remaining <= 0) {
+                break;
+            }
+        }
+
+        return `Recent conversation context:\n${lines.join('\n\n')}`;
     }
 
     private async tryHandleLocalAction(prompt: string): Promise<LocalActionResult> {
