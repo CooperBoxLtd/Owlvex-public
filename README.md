@@ -86,7 +86,11 @@ For larger repositories, start with selected files or open editors. AI-backed wo
 
 Owlvex is an early prototype, so support is focused on making the product usable and learning where it fails.
 
-Use GitHub Issues in this repository for:
+Contact support by opening a GitHub issue:
+
+- [Open an Owlvex support issue](https://github.com/CooperBoxLtd/Owlvex-public/issues/new)
+
+Use GitHub Issues for:
 
 - installation problems
 - extension activation errors
@@ -108,6 +112,8 @@ When opening an issue, include:
 - whether you are using OpenAI, Azure AI Foundry, Anthropic, Mistral, Gemini, Groq, Ollama, or a custom endpoint
 
 Do not paste secrets, API keys, proprietary source code, or customer data into public issues. If a code sample is needed, reduce it to a small safe reproduction first.
+
+For private or sensitive support requests, do not post details publicly. Use the public issue only to request a private contact path.
 
 ## AI provider setup
 
