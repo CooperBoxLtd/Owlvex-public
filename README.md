@@ -90,6 +90,10 @@ Contact support by opening a GitHub issue:
 
 - [Open an Owlvex support issue](https://github.com/CooperBoxLtd/Owlvex-public/issues/new)
 
+You can also contact support by email:
+
+- info@cooperbox.co.uk
+
 Use GitHub Issues for:
 
 - installation problems
@@ -113,7 +117,7 @@ When opening an issue, include:
 
 Do not paste secrets, API keys, proprietary source code, or customer data into public issues. If a code sample is needed, reduce it to a small safe reproduction first.
 
-For private or sensitive support requests, do not post details publicly. Use the public issue only to request a private contact path.
+For private or sensitive support requests, do not post details publicly. Email info@cooperbox.co.uk instead.
 
 ## AI provider setup
 
