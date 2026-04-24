@@ -10,6 +10,10 @@ describe('parseChatIntent', () => {
     beforeEach(() => {
         jest.clearAllMocks();
         resetRulePackRuntime();
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        });
         (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath ?? String(uri));
         (vscode.workspace.workspaceFolders as any) = [];
         (vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([]);
@@ -1647,8 +1651,24 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).not.toContain('Workspace folder: CodeScanner');
     });
 
-    it('keeps repo overview out of chat prompts when the working scope is current file', async () => {
+    it('includes repo overview for repo questions when the working scope is current file', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'This file looks like a route.' });
+        (vscode.workspace.workspaceFolders as any) = [{ name: 'CodeScanner', uri: vscode.Uri.file('d:\\repo') }];
+        (vscode.workspace.fs as any).readDirectory = jest.fn().mockResolvedValue([
+            ['README.md', vscode.FileType.File],
+            ['package.json', vscode.FileType.File],
+            ['src', vscode.FileType.Directory],
+        ]);
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            const filePath = String(uri.fsPath).toLowerCase();
+            if (filePath.endsWith('readme.md')) {
+                return Buffer.from('# CodeScanner Demo\nA demo app used to exercise Owlvex repo context.');
+            }
+            if (filePath.endsWith('package.json')) {
+                return Buffer.from(JSON.stringify({ name: 'codescanner-demo', main: 'src/app.js' }, null, 2));
+            }
+            throw new Error('not found');
+        });
         (vscode.window.activeTextEditor as any) = {
             document: {
                 uri: vscode.Uri.file('d:\\repo\\src\\app.js'),
@@ -1679,10 +1699,84 @@ describe('parseChatIntent', () => {
         await (provider as any).handleUserMessage('what is this app doing?');
 
         const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Interaction mode: Repo Q&A');
         expect(request.systemPrompt).toContain('Working scope: Current file');
+        expect(request.userMessage).toContain('Working scope: Workspace');
+        expect(request.userMessage).toContain('Project root: d:\\repo');
+        expect(request.userMessage).toContain('README.md:');
+        expect(request.userMessage).toContain('package.json:');
         expect(request.userMessage).toContain('Active file: d:\\repo\\src\\app.js');
-        expect(request.userMessage).not.toContain('Workspace folder:');
-        expect(request.userMessage).not.toContain('README.md:');
+        expect(request.userMessage).toContain('Additional working-scope code context:');
+    });
+
+    it('uses selected project root context for app description questions without an active editor', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'The demo app exposes intentionally vulnerable routes for scanner validation.' });
+        (vscode.workspace.workspaceFolders as any) = [{ name: 'CodeScanner', uri: vscode.Uri.file('d:\\repo') }];
+        (vscode.workspace.fs as any).readDirectory = jest.fn().mockImplementation(async (uri: any) => {
+            const filePath = String(uri.fsPath).toLowerCase();
+            if (filePath === 'd:\\repo\\tools\\demo-app') {
+                return [
+                    ['README.md', vscode.FileType.File],
+                    ['package.json', vscode.FileType.File],
+                    ['src', vscode.FileType.Directory],
+                ];
+            }
+            return [];
+        });
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            const filePath = String(uri.fsPath).toLowerCase();
+            if (filePath.endsWith('tools\\demo-app\\readme.md')) {
+                return Buffer.from('# Owlvex Demo App\nA small Express app for validating scanner and prompt behavior.');
+            }
+            if (filePath.endsWith('tools\\demo-app\\package.json')) {
+                return Buffer.from(JSON.stringify({ name: 'owlvex-demo-app', main: 'src/server.js' }, null, 2));
+            }
+            if (filePath.endsWith('tools\\demo-app\\src\\server.js')) {
+                return Buffer.from("const express = require('express');\napp.get('/health', health);");
+            }
+            throw new Error('not found');
+        });
+        (vscode.workspace.fs.stat as jest.Mock).mockResolvedValue({ type: vscode.FileType.Directory });
+        (vscode.window.activeTextEditor as any) = undefined;
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                if (key === 'projectRoot') {
+                    return 'd:\\repo\\tools\\demo-app';
+                }
+                return defaultValue;
+            }),
+            update: jest.fn(),
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((key: string, defaultValue?: unknown) => {
+                if (key === `${PROFILE.storagePrefix}.chat.workingScope`) {
+                    return 'scanFile';
+                }
+                return defaultValue;
+            }),
+            update: jest.fn(),
+        } as any);
+
+        await (provider as any).handleUserMessage('describe the app');
+
+        const request = complete.mock.calls[0][0];
+        expect(request.systemPrompt).toContain('Interaction mode: Repo Q&A');
+        expect(request.systemPrompt).toContain('Project root: d:\\repo\\tools\\demo-app');
+        expect(request.userMessage).toContain('Selected project root: d:\\repo\\tools\\demo-app');
+        expect(request.userMessage).toContain('Project root: d:\\repo\\tools\\demo-app');
+        expect(request.userMessage).toContain('README.md:');
+        expect(request.userMessage).toContain('Owlvex Demo App');
+        expect(request.userMessage).toContain('package.json:');
+        expect(request.userMessage).toContain('No active editor is open.');
     });
 
     it('allows combined fix previews when the findings span different families', async () => {

@@ -2284,7 +2284,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const workingScope = this.getWorkingScope();
             const editorContext = this.currentMode === 'general'
                 ? { summary: 'Working context: not injected by default in General mode', promptContext: 'Working context: not injected by default in General mode.' }
-                : await this.buildWorkingScopeContext(workingScope, this.currentMode === 'repo' ? trimmed : undefined);
+                : this.currentMode === 'repo'
+                    ? await this.buildRepoAwareWorkingScopeContext(workingScope, trimmed)
+                    : await this.buildWorkingScopeContext(workingScope);
             const scanContext = this.currentMode === 'general'
                 ? { summary: 'Scan context: not injected by default in General mode', promptContext: 'Scan context: not injected by default in General mode.' }
                 : this.buildScanContext(workingScope);
@@ -3871,6 +3873,26 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             default:
                 return this.buildWorkspaceRepoContext(promptForRepoTarget);
         }
+    }
+
+    private async buildRepoAwareWorkingScopeContext(scope: WorkingScope, promptForRepoTarget: string): Promise<EditorContext> {
+        const repoContext = await this.buildWorkspaceRepoContext(promptForRepoTarget);
+        if (scope === 'scanFolder') {
+            return repoContext;
+        }
+
+        const scopedContext = await this.buildWorkingScopeContext(scope);
+        return {
+            summary: [
+                repoContext.summary,
+                scopedContext.summary,
+            ].filter(Boolean).join('; '),
+            promptContext: [
+                repoContext.promptContext,
+                'Additional working-scope code context:',
+                scopedContext.promptContext,
+            ].join('\n\n'),
+        };
     }
 
     private buildEditorContext(): EditorContext {
