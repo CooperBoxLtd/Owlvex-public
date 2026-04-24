@@ -18,17 +18,82 @@ SHA256:
 
 ## Install
 
-1. Download `owlvex-0.1.4.vsix`.
-2. Open VS Code.
-3. Open the command palette.
+### Install from VS Code
+
+1. Download [owlvex-0.1.4.vsix](releases/owlvex-0.1.4.vsix).
+2. Open Visual Studio Code.
+3. Open the command palette:
+   - Windows/Linux: `Ctrl+Shift+P`
+   - macOS: `Cmd+Shift+P`
 4. Run `Extensions: Install from VSIX...`.
-5. Select the downloaded file.
+5. Select the downloaded `owlvex-0.1.4.vsix` file.
+6. Reload VS Code if prompted.
+
+After installation, Owlvex appears in the VS Code activity bar and its commands are available from the command palette.
+
+### Install from terminal
 
 You can also install from a terminal:
 
 ```powershell
 code --install-extension .\releases\owlvex-0.1.4.vsix
 ```
+
+If you downloaded the file to another folder, run the command from that folder or pass the full path to the `.vsix` file.
+
+## First use
+
+1. Open the project you want to scan in VS Code.
+2. Open the command palette.
+3. Run `Owlvex: Register Free Or Trial Access`.
+4. Run `Owlvex: Setup AI Connection` if you want AI-assisted review.
+5. Run one of the scan commands:
+   - `Owlvex: Scan Current File`
+   - `Owlvex: Scan Selected Files`
+   - `Owlvex: Scan Open Editors`
+   - `Owlvex: Scan Workspace`
+   - `Owlvex: Create Report`
+
+AI setup is optional. Local deterministic checks can still run without an AI provider, but AI-backed explanations, broader review, and fix assistance require a configured provider.
+
+## Common commands
+
+| Command | Use |
+| --- | --- |
+| `Owlvex: Scan Current File` | Scan the active editor file. |
+| `Owlvex: Scan Selected Files` | Scan files selected in the VS Code explorer. |
+| `Owlvex: Scan Workspace` | Scan the current workspace. |
+| `Owlvex: Create Report` | Generate a markdown scan report. |
+| `Owlvex: Open AI Chat` | Ask questions about the current project or findings. |
+| `Owlvex: Review Fix` | Generate a fix preview for a finding. |
+| `Owlvex: Apply Fix Preview` | Apply a reviewed fix preview. |
+| `Owlvex: Select Project Root` | Set the project boundary used for workspace scans and repo context. |
+| `Owlvex: Open Project Context` | Open or edit project context used to ground AI review. |
+| `Owlvex: Switch AI Model` | Change the configured AI model. |
+
+## Recommended workflow
+
+1. Select the project root with `Owlvex: Select Project Root`.
+2. Scan a small scope first, such as the current file or selected files.
+3. Review the findings and generated report.
+4. Use `Owlvex: Review Fix` to preview any proposed fix before applying it.
+5. Re-scan after changing code to confirm the result.
+6. Use workspace scans when the smaller flow is behaving as expected.
+
+For larger repositories, start with selected files or open editors. AI-backed workspace scans can be slower depending on provider limits and throttling.
+
+## AI provider setup
+
+Owlvex supports several provider modes, including OpenAI, Azure AI Foundry, Anthropic, Mistral, Gemini, Groq, Ollama, and custom OpenAI-compatible endpoints.
+
+To configure AI:
+
+1. Run `Owlvex: Setup AI Connection`.
+2. Choose your provider.
+3. Enter the requested endpoint, model, or API key details.
+4. Run `Owlvex: Test AI Connection`.
+
+Credentials are stored using VS Code secret storage where applicable. Do not commit API keys or provider secrets into your project.
 
 ## What it does
 
@@ -38,6 +103,24 @@ code --install-extension .\releases\owlvex-0.1.4.vsix
 - supports optional AI providers using your own configured credentials
 - supports project context for more grounded AI review
 - lets you review generated fixes before applying them
+
+## Updating Owlvex
+
+To update from a newer `.vsix` file, download the new release and install it the same way:
+
+```powershell
+code --install-extension .\releases\owlvex-0.1.4.vsix --force
+```
+
+Then reload VS Code if prompted.
+
+## Uninstall
+
+1. Open the Extensions view in VS Code.
+2. Search for `Owlvex`.
+3. Select the extension.
+4. Click `Uninstall`.
+5. Reload VS Code if prompted.
 
 ## Prototype status
 
