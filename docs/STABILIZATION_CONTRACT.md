@@ -179,15 +179,16 @@ During stabilization:
 
 ## AI Verification Direction
 
-Owlvex adopts single-model, multi-pass corroboration as the primary AI verification strategy for the stabilization phase.
+Owlvex adopts single-model, confidence-routed corroboration as the primary AI verification strategy for the stabilization phase.
 
 This means:
 
-- one selected model or agent is reused across multiple sequential reasoning passes
+- one selected model or agent may be reused across multiple sequential reasoning passes
 - the passes must use distinct roles and instructions
 - the product must reconcile agreement and disagreement explicitly rather than pretending consensus
+- verifier and skeptic passes are triggered only when they can materially change the decision
 
-The default role set is:
+The role set is:
 
 1. `Finder`
    Propose candidate issues from the code.
@@ -200,14 +201,15 @@ The default role set is:
 
 These roles may be implemented using the same underlying model in separate passes. Owlvex must not require customers to provision multiple models, multiple agents, or specialized infrastructure just to benefit from corroboration.
 
-The default implementation target is:
+The implementation target is:
 
 - one selected provider/model
 - one agent identity
-- three sequential prompts or passes
+- one finder pass for AI-backed candidates
+- verifier and skeptic passes only when confidence routing requires them
 - one Owlvex-controlled adjudication step
 
-Those three passes must remain behaviorally distinct in implementation, not just named differently in the UI.
+When verifier or skeptic runs, the passes must remain behaviorally distinct in implementation, not just named differently in the UI.
 
 Minimum pass contracts:
 
@@ -227,6 +229,129 @@ If those role boundaries drift, the confidence story of the AI lane also drifts.
 
 Owlvex may evolve beyond that later, but stabilization work should assume the simple default unless there is a benchmark-backed reason to add more complexity.
 
+### Static Ownership Rule
+
+Deterministic findings own the exact code span, sink, and issue family they prove.
+
+That does not mean a file with deterministic findings should skip AI review entirely.
+
+The required behavior is:
+
+- run deterministic scanning first
+- build an exclusion map from deterministic findings:
+  - line range
+  - canonical issue id
+  - issue family
+  - matched sink/source where available
+- do not ask AI to re-prove or re-verify the same proven finding
+- suppress AI candidates that overlap the deterministic span and family
+- still allow AI to review the rest of the file for other issue families and other spans
+
+Examples:
+
+- if static `SQ-001` proves SQL injection at line 25, AI should not emit or corroborate another SQL injection finding for line 25
+- AI may still report missing authorization, sensitive logging, weak JWT validation, or another non-overlapping issue in the same file
+
+This preserves the product rule:
+
+> Static proof is final for what it covers. AI explores what static proof does not cover.
+
+### Confidence-Routed Pass Triggering
+
+Verifier and skeptic are not default third and second opinions for every candidate.
+
+The intended route is:
+
+1. Finder proposes bounded candidates and gives confidence in candidate existence.
+2. High-confidence finder candidates may be kept without verifier or skeptic unless policy requires extra review.
+3. Low or medium finder confidence triggers verifier when the candidate is important enough to consider.
+4. Very low verifier confidence drops or demotes the candidate; skeptic should not normally run.
+5. Very high verifier support keeps or upgrades the candidate; skeptic should not normally run unless severity or policy requires it.
+6. Skeptic runs as an arbiter when finder and verifier disagree, both are borderline, or the finding is high-impact and context-sensitive.
+
+Initial threshold guidance:
+
+- finder confidence `>= 0.90`: keep as AI-supported unless static duplicate, critical policy, or known false-positive family requires verifier
+- finder confidence `0.70-0.89`: run verifier
+- finder confidence `< 0.70`: drop unless severity, issue family, or local signals justify verifier
+- verifier `support >= 0.90`: keep as corroborated
+- verifier `support 0.60-0.89`: run skeptic when impact is high/critical, confidence spread is large, or family is false-positive prone
+- verifier `reject >= 0.80`: drop
+- verifier `unclear` or low confidence: demote to partial/manual review or run skeptic only if the candidate is high-impact and enough evidence exists
+
+Skeptic should run when:
+
+- finder high but verifier low
+- finder low but verifier high
+- verifier is borderline
+- finder/verifier confidence spread is at least `0.10`
+- issue is high-impact and context-sensitive
+- the finding would trigger fix generation or a strong report claim
+
+Skeptic should be skipped when:
+
+- verifier strongly rejects the candidate
+- verifier says the claim cannot be confirmed from visible evidence
+- finder and verifier are both high confidence, cite the same local evidence, and the issue is not critical
+- provider rate-limit pressure is active
+- candidate is medium/low risk and not fix-triggering
+
+Thresholds are starting defaults, not permanent truth. They must be tuned from recorded pass outcomes and benchmark data.
+
+### Role-Specific Confidence Semantics
+
+Confidence is not global. It is confidence in a role-specific verdict.
+
+Finder confidence means:
+
+> How confident is the finder that this candidate vulnerability exists?
+
+Verifier confidence means:
+
+> How confident is the verifier in its verdict?
+
+The verifier verdict is required:
+
+- `support` with high confidence means the verifier strongly believes local evidence supports the finding
+- `reject` with high confidence means the verifier strongly believes local evidence does not support the finding
+- `unclear` means the verifier cannot resolve the candidate from available evidence
+
+Skeptic confidence means:
+
+> How confident is the skeptic in its challenge verdict?
+
+The skeptic verdict is required:
+
+- `clear` with high confidence means the skeptic tried to disprove the finding and found no meaningful contradiction
+- `contradict` with high confidence means the skeptic found contradictory evidence or a safe pattern strong enough to reject or downgrade the finding
+- `unclear` means the skeptic cannot resolve the dispute
+
+Reports and UI must not display ambiguous naked values such as `skeptic 95%` without the verdict. They should show `Skeptic: clear, 95%` or `Skeptic: contradicted, 95%`.
+
+### Required Pass Outcome Data
+
+Reports currently show only surviving findings. That is not enough to measure whether verifier and skeptic are saving cost or improving quality.
+
+Owlvex should record a local or metadata-safe pass outcome event for AI candidates:
+
+```json
+{
+  "candidate_id": "stable candidate id",
+  "file_hash": "sha256",
+  "issue_id": "owlvex.issue.example",
+  "span": { "line": 12, "line_end": 18 },
+  "finder": { "verdict": "candidate", "confidence": 0.78 },
+  "verifier": { "verdict": "support|reject|unclear|skipped", "confidence": 0.82 },
+  "skeptic": { "verdict": "clear|contradict|unclear|skipped", "confidence": 0.80 },
+  "decision": "kept|dropped|partial|static_duplicate",
+  "decision_reason": "short reason",
+  "route": "finder|finder_verifier|finder_verifier_skeptic",
+  "source": "TARGETED_AI|REPO_AI"
+}
+```
+
+This record must not include raw source code. It may include hashes, issue identifiers, spans, verdicts, confidences, and bounded decision reasons.
+
 ---
 
 ## Adjudication Rule
@@ -236,9 +361,12 @@ When multi-pass AI reasoning is introduced, Owlvex must resolve results using ex
 The intended confidence behavior is:
 
 - deterministic proof -> `PROVEN`
-- finder plus verifier support with no meaningful contradiction -> stronger corroboration
+- finder-only high confidence -> `UNVERIFIED` or `AI-supported`, not `CORROBORATED`
+- finder plus verifier support with no meaningful contradiction -> `CORROBORATED`
+- verifier reject -> suppress the claim unless routed to skeptic by high-impact policy
 - one pass supports and another disputes -> confidence must be reduced or the claim suppressed
-- skeptic finds stronger contradictory local evidence -> suppress or downgrade the claim
+- skeptic `clear` -> the candidate survives challenge
+- skeptic `contradict` -> suppress or downgrade the claim
 - if AI review runs but no AI finding survives into the final file result, the file should still read as `Static proof` and may explicitly say AI review was not used for the final finding set
 
 Owlvex may expose the multi-pass reasoning trail for AI-backed findings in reports, but that trail must remain AI-only.

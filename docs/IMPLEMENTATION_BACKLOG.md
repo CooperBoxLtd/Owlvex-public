@@ -91,13 +91,13 @@ npm run benchmark:refresh-and-evaluate
 
 That command is the practical "is the scanner still aligned with the expectation files?" gate for the current stabilization lane.
 
-The current AI verification direction for stabilization is single-model, multi-pass corroboration:
+The current AI verification direction for stabilization is single-model, confidence-routed corroboration:
 
 - finder pass
-- verifier pass
-- skeptic pass
+- verifier pass only when finder confidence, issue family, severity, or policy requires it
+- skeptic pass only when verifier/finder disagreement or high-impact uncertainty means it can change the decision
 
-Those roles should be implemented first as one selected agent/model running three separate passes in sequence. The goal is to improve verification without requiring customers to provision multiple agents or heavyweight validation infrastructure.
+Those roles should be implemented as one selected agent/model with distinct pass instructions. The goal is to improve verification without requiring customers to provision multiple agents or heavyweight validation infrastructure, while avoiding verifier/skeptic cost when the result is already clear enough.
 
 Model/provider changes during this phase must be evaluated using [MODEL_SELECTION_MATRIX.md](D:/Dev/repos/CodeScanner/docs/MODEL_SELECTION_MATRIX.md) rather than by anecdotal scan quality alone.
 
@@ -265,6 +265,106 @@ Make AI-backed scans observable enough that a user can understand why a scan was
 - markdown reports show AI usage totals and make provider throttling versus budget truncation explicit
 - users can estimate model spend from visible scan usage data without reverse-engineering provider logs
 - product wording does not overclaim exact cost when provider pricing is unavailable, asymmetric, or subject to change
+
+## Workstream 0.91: Confidence-Routed AI Corroboration
+
+### Goal
+
+Replace fixed finder/verifier/skeptic execution with an intelligent adjudication path that spends verifier and skeptic passes only when they can change the outcome.
+
+This workstream exists because mass AI scanning is currently too slow and too throttle-prone when every candidate receives the same corroboration depth. Owlvex should retain the quality benefit of multi-pass reasoning without making skeptic a default third opinion for every finding.
+
+### Product Rules
+
+- deterministic findings own only the exact span/family they prove
+- AI must not duplicate or re-verify deterministic findings
+- a file with deterministic findings may still receive AI review for other spans and issue families
+- finder confidence means confidence that a candidate exists
+- verifier confidence means confidence in the verifier verdict
+- skeptic confidence means confidence in the skeptic verdict
+- reports must show verdict plus confidence, not naked role scores
+
+### Tasks
+
+- add a deterministic exclusion map:
+  - line range
+  - canonical issue id
+  - canonical family
+  - matched sink/source where available
+- filter AI finder candidates against the deterministic exclusion map before corroboration
+- change AI review data structures so verifier and skeptic scores are always attached to verdicts:
+  - verifier: `support | reject | unclear | skipped`
+  - skeptic: `clear | contradict | unclear | skipped`
+- implement confidence routing:
+  - high-confidence finder candidates can be kept without verifier unless family/severity policy requires review
+  - medium-confidence finder candidates trigger verifier
+  - very low finder confidence is dropped unless high-impact policy requires verifier
+  - high-confidence verifier support keeps the candidate without skeptic unless policy requires challenge
+  - verifier reject suppresses the candidate
+  - skeptic runs only for disagreement, borderline verifier confidence, high-impact context-sensitive findings, or fix-triggering findings
+- store pass route metadata on AI findings:
+  - `finder`
+  - `finder_verifier`
+  - `finder_verifier_skeptic`
+- record metadata-safe pass outcomes for kept and dropped AI candidates:
+  - no raw source
+  - file hash, span, issue id, verdicts, confidences, decision, route
+- update report wording:
+  - `Finder-only AI support`
+  - `Verifier supported`
+  - `Skeptic cleared`
+  - `Verifier rejected`
+  - `Skeptic contradicted`
+  - `Partial / needs context`
+- add regression tests for:
+  - deterministic duplicate suppression while preserving non-overlapping AI findings
+  - finder-high route skips verifier/skeptic
+  - finder-medium route triggers verifier
+  - verifier-strong-support route skips skeptic
+  - verifier-low/reject route suppresses or demotes
+  - finder/verifier disagreement triggers skeptic
+  - report output includes verdict-specific confidence
+
+### Initial Thresholds
+
+These are starting defaults to validate against reports and benchmark data:
+
+- finder `>= 0.90`: keep as AI-supported unless static duplicate, critical policy, or known false-positive family requires verifier
+- finder `0.70-0.89`: run verifier
+- finder `< 0.70`: drop unless severity, issue family, or local signals justify verifier
+- verifier `support >= 0.90`: keep as corroborated
+- verifier `support 0.60-0.89`: run skeptic when impact is high/critical, confidence spread is large, or family is false-positive prone
+- verifier `reject >= 0.80`: drop
+- verifier `unclear`: partial/manual review or skeptic only if high-impact and enough evidence exists
+
+### Current Evidence
+
+A first pass over local markdown reports found:
+
+- 94 scan reports inspected
+- 12 reports with AI findings
+- 39 surviving AI findings with finder/verifier/skeptic scores
+- 0 explicit verifier rejects in surviving report output
+- 0 explicit skeptic contradictions in surviving report output
+- 2 findings with verifier below 70%
+- 2 findings with skeptic below 70%
+- 24 reports with rate-limit or corroboration warnings
+
+Interpretation:
+
+- the reports only show surviving findings, so they cannot measure candidates dropped before report output
+- skeptic is rarely changing visible outcomes in the current report set
+- weak verifier/skeptic scores are sometimes still presented too confidently
+- future implementation must record dropped-candidate pass outcomes before contradiction rate can be measured correctly
+
+### Acceptance Criteria
+
+- mass AI scans use fewer verifier/skeptic calls without losing visible high-risk AI findings in the demo and demo-app expectation sets
+- deterministic findings are not re-reviewed by AI on the same span/family
+- AI still reviews the rest of a file when static findings exist
+- report wording makes the AI decision path clear
+- role confidence is always tied to a verdict
+- pass outcome telemetry is sufficient to answer "how often did verifier or skeptic change the decision?"
 
 ## Workstream 0.85: Benchmarking Department
 
