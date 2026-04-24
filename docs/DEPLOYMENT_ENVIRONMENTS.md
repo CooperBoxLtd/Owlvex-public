@@ -185,6 +185,8 @@ That path:
 3. verifies required tables/columns
 4. fails loudly if schema or health checks are not correct
 
+The GitHub production workflow follows the same rule. Run `Deploy to production` manually with the exact image tag already deployed and validated in Azure `dev`; the workflow must not build a new production image from source.
+
 ## Environment Parity Rule
 
 `prod` must mirror `dev` in backend code and feature-enabling environment settings unless a difference is deliberate, documented, and release-approved.
