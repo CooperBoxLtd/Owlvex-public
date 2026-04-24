@@ -100,6 +100,8 @@ The report generator (`extension/src/scanner/reportGenerator.ts`) produces enter
 
 Run `npm run benchmark:status` from `extension/` to inspect the latest recorded deterministic benchmark artifact state.
 
+Important boundary: this 19-suite aggregate gate is not the same as the full live scanner surface. Some stabilization/demo families are implemented and covered by safe/unsafe fixture expectations without yet being represented as separate suites in the aggregate deterministic gate. Product claims should name the evidence layer backing the family: aggregate deterministic suite, stabilization fixture expectation, or AI evaluation.
+
 ---
 
 ## Demo
@@ -116,7 +118,7 @@ Run `npm run benchmark:status` from `extension/` to inspect the latest recorded 
 
 The demo proves three claims in sequence: the engine proves violations (not guesses), it stays silent when code is correct, and findings translate into language a CTO or security lead can act on.
 
-Additional AI-only demo fixtures now exist for uncovered classes such as open redirect and missing CSRF protection. These are useful for demonstrating model-assisted coverage, but they are not part of the deterministic trust claim.
+Additional stabilization demo fixtures now exist for classes such as open redirect, CSRF, CORS, SSRF, JWT validation, path traversal, and multi-language command/SQL coverage. They are useful for validating current scanner behavior and safe companions, but families should only be marketed as aggregate-gate deterministic coverage after they are promoted into the benchmark suites above.
 
 ---
 

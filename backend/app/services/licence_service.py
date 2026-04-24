@@ -55,6 +55,8 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
     if licence.customer_id:
         customer_result = await db.execute(select(Customer).where(Customer.id == licence.customer_id))
         customer = customer_result.scalar_one_or_none()
+        if inspect.isawaitable(customer):
+            customer = await customer
         if customer and customer.is_banned:
             return {"valid": False, "reason": "Customer is banned"}
 

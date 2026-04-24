@@ -147,6 +147,7 @@ async function runCheck(check) {
           || /is not recognized as the name of a cmdlet/i.test(combinedOutput)
           || /is not recognized as an internal or external command/i.test(combinedOutput)
           || /Could not find files for the given pattern/i.test(combinedOutput)
+          || /No module named pytest/i.test(combinedOutput)
           || /command not found/i.test(combinedOutput)
           || /No such file or directory/i.test(combinedOutput)
           || /unable to find/i.test(combinedOutput);

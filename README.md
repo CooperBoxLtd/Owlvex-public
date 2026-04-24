@@ -56,6 +56,8 @@ No config files. No API keys. No network calls. Node 18+ required.
 
 Rules only fire when an invariant is verifiably violated. When the condition is absent, the rule stays silent.
 
+This table is the core CLI-facing rule list. Broader stabilization coverage and language-specific proof status are tracked in `tools/demo/EXPECTATIONS.md` and `docs/DETERMINISTIC_LANGUAGE_MATRIX.md`.
+
 ---
 
 ## Commands

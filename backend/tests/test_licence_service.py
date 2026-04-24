@@ -71,6 +71,7 @@ def _make_licence(**kwargs):
         "expires_at": None,
         "plan": "developer",
         "team_name": "Test Team",
+        "customer_id": None,
         "seats": 5,
         "seats_used": 1,
         "industry_packs": [],
@@ -142,6 +143,23 @@ async def test_validate_licence_no_expiry_is_valid():
     with patch("app.services.licence_service.get_licence_by_key", return_value=licence):
         result = await validate_licence(db, "owlvex_lic_test")
     assert result["valid"] is True
+
+
+@pytest.mark.asyncio
+async def test_validate_licence_rejects_banned_customer():
+    db = AsyncMock()
+    customer = MagicMock()
+    customer.is_banned = True
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = customer
+    db.execute.return_value = result
+
+    licence = _make_licence(customer_id=str(uuid.uuid4()))
+    with patch("app.services.licence_service.get_licence_by_key", return_value=licence):
+        result = await validate_licence(db, "owlvex_lic_test")
+
+    assert result["valid"] is False
+    assert "banned" in result["reason"]
 
 
 @pytest.mark.asyncio

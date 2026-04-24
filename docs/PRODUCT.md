@@ -163,7 +163,7 @@ Lives under `tools/owlvex-benchmark/`. Provides:
   - `second_scan`
   - `session_return`
 
-This is the mechanism that defines what Owlvex can claim with certainty. No deterministic rule ships without benchmark coverage.
+This is the mechanism that defines the strongest Owlvex certainty claims. The aggregate deterministic gate is narrower than the full live scanner: additional stabilization families may be present in `tools/demo/` and language-matrix coverage, but they should be described against their explicit safe/unsafe expectation coverage rather than implied to be part of the 19-suite aggregate gate until promoted there.
 
 ---
 
@@ -308,17 +308,17 @@ The simplest demo path uses `tools/demo/`:
 - `04-debug-safe.js` -> no findings
 - `05-tenant-isolation-unsafe.js` -> deterministic multi-tenant isolation finding
 
-Additional AI-only demo fixtures:
+Additional stabilization demo fixtures:
 
-- `16-open-redirect-unsafe.js` -> AI-only open redirect coverage example
+- `16-open-redirect-unsafe.js` -> open redirect coverage example
 - `17-open-redirect-safe.js` -> safe companion for redirect handling
-- `18-csrf-unsafe.js` -> AI-only CSRF coverage example
+- `18-csrf-unsafe.js` -> CSRF coverage example
 - `19-csrf-safe.js` -> safe companion for CSRF handling
-- `20-cors-unsafe.js` -> AI-only permissive CORS coverage example
+- `20-cors-unsafe.js` -> permissive CORS coverage example
 - `21-cors-safe.js` -> safe companion for CORS handling
-- `22-ssrf-unsafe.js` -> AI-only SSRF coverage example
+- `22-ssrf-unsafe.js` -> SSRF coverage example
 - `23-ssrf-safe.js` -> safe companion for SSRF handling
-- `24-jwt-validation-unsafe.js` -> AI-only weak JWT validation coverage example
+- `24-jwt-validation-unsafe.js` -> weak JWT validation coverage example
 - `25-jwt-validation-safe.js` -> safe companion for JWT validation
 
 Additional deterministic fixture pair:
@@ -365,3 +365,4 @@ That is intended to strengthen the existing hybrid scanner, not replace it.
 - backend is now package-defaulted for dev/prod builds, but licence and provider setup are still required for the full AI-backed experience
 - platform-security and customer trust-boundary hardening now need to be treated as a first-class product workstream
 - Curated framework and cheat-sheet packs are now used in runtime prompt construction, but the AI lane still needs deeper issue-targeted grounding coverage and more eval cases before it can be called fully mature
+- The 19-suite aggregate deterministic gate and the broader stabilization/demo fixture set are related but not identical; product claims should name which evidence layer backs a rule family.
