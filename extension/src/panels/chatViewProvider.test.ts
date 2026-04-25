@@ -2546,12 +2546,19 @@ describe('parseChatIntent', () => {
 
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Verification complete: the reviewed finding is no longer present');
+        expect(finalMessage.content).toContain('Fix continuation required before moving on. This file still has unresolved security findings.');
         expect(finalMessage.content).toContain('File is not clean yet. Next remaining issue: Hardcoded secret in source code (9/10 risk) at line 8.');
         expect(finalMessage.content).toContain('What to change next: Load the signing key from managed configuration or secret storage.');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Preview next fix', kind: 'generateFixPreview' }),
             expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
         ]));
+        expect((provider as any).latestActionableFinding.canonicalTitle).toBe('Hardcoded secret in source code');
+        expect((provider as any).latestActionableTargetPath).toBe(targetUri.fsPath);
+        expect((provider as any).latestActionableItems[0]).toEqual(expect.objectContaining({
+            targetPath: targetUri.fsPath,
+            finding: expect.objectContaining({ canonicalTitle: 'Hardcoded secret in source code' }),
+        }));
     });
 
     it('captures provider disagreement when a later provider finds issues after a clean scan', () => {
@@ -3089,11 +3096,19 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
             'Verification complete: the finding still exists, but its risk dropped from 9/10 to 7/10.',
         );
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
+            'Fix continuation required before moving on.',
+        );
         expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Regenerate diff', kind: 'generateFixPreview' }),
             expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
             expect.objectContaining({ label: 'Scan workspace', kind: 'quickAction', quickAction: 'scanFolder' }),
         ]));
+        expect((provider as any).latestActionableFinding).toEqual(expect.objectContaining({
+            canonicalTitle: 'SQL Injection',
+            riskScore: 7,
+        }));
+        expect((provider as any).latestActionableTargetPath).toBe(targetUri.fsPath);
     });
 
     it('opens a source action from a context summary message', async () => {
