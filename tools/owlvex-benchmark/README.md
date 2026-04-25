@@ -98,6 +98,11 @@ npm run benchmark:deterministic    # from extension/
 npm run benchmark:status
 ```
 
+**Benchmark direction metrics:**
+```bash
+npm run benchmark:metrics
+```
+
 **Engine 1.0 proof-contract gate:**
 ```bash
 npm run benchmark:proof-contracts
@@ -131,6 +136,8 @@ All `benchmark:*` scripts are defined in `extension/package.json`.
 The combined `release:check` script is also defined there and runs fresh backend tests, extension tests, and the deterministic benchmark before reporting current checkout health.
 
 The proof-contract gate currently covers SSRF across JavaScript, Python, Java, C#, and Go, plus representative path traversal, command injection, SQL injection, and client-controlled query-filter cases. It is intentionally narrower than the aggregate deterministic gate: it exists to protect Engine 1.0 evidence semantics, not to replace the axis benchmarks.
+
+Use `benchmark:metrics` to surface movement, not just pass/fail. It reports current pass rates and deltas from the previous recorded run where artifacts exist. For proof contracts, it tracks case pass rate, unsafe recall, safe quietness, evidence-shape completeness, and fixture count growth.
 
 ---
 

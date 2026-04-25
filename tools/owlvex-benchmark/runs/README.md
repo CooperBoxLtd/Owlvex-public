@@ -43,6 +43,8 @@ These artifacts are useful for:
 
 Use these artifacts when debugging Engine 1.0 evidence-contract regressions. They record whether each covered case produced the expected canonical ID, evidence type, source, sink, guard state, verdict, and rationale.
 
+`npm run benchmark:metrics` reads the latest and previous artifacts to report direction of travel. It distinguishes unchanged, improved or expanded, and regressed benchmark movement.
+
 ## AI Eval Artifacts
 
 `npm run benchmark:ai-evals -- <report.md> [model-tag]` writes:

@@ -334,6 +334,7 @@
     "benchmark:proof-contracts": "node ../tools/owlvex-benchmark/engine/proof-contracts/run-proof-contracts.mjs",
     "benchmark:deterministic": "node ../tools/owlvex-benchmark/run-deterministic.mjs",
     "benchmark:status": "node ../tools/owlvex-benchmark/benchmark-status.mjs",
+    "benchmark:metrics": "node ../tools/owlvex-benchmark/benchmark-metrics.mjs",
     "release:check": "node ../tools/release-check.mjs",
     "benchmark:stabilization": "node ../tools/run-stabilization-benchmark.mjs",
     "benchmark:generate-reports": "npm run compile && node ./scripts/generate-stabilization-reports.mjs",
