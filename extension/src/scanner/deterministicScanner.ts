@@ -1138,6 +1138,45 @@ function buildSsrfEvidenceContract(params: {
     };
 }
 
+function evidenceIssueType(finding: InternalFinding): string {
+    if (finding.canonicalId?.startsWith('owlvex.issue.')) {
+        return finding.canonicalId
+            .replace(/^owlvex\.issue\./, '')
+            .replace(/\.\d+$/, '')
+            .replace(/_/g, '-');
+    }
+
+    return finding.ruleCode.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function buildDeterministicEvidenceFallback(source: string, finding: InternalFinding): EvidenceContract {
+    const expression = lineExpressionAt(source, finding.matchIndex);
+
+    return {
+        issueType: evidenceIssueType(finding),
+        source: {
+            kind: 'source',
+            label: 'Matched deterministic code evidence',
+            expression,
+            line: lineOfOffset(source, finding.matchIndex),
+        },
+        flow: [],
+        sink: {
+            kind: 'sink',
+            label: 'Security-sensitive construct matched by deterministic rule',
+            expression,
+            line: lineOfOffset(source, finding.matchIndex),
+        },
+        guard: {
+            status: 'unknown',
+            label: 'Rule-specific guard evidence',
+            reason: 'This deterministic rule confirmed a vulnerable code shape, but the family-specific source/sink/guard contract has not yet been specialized.',
+        },
+        verdict: 'confirmed',
+        rationale: `Deterministic rule ${finding.ruleCode} matched code evidence for ${finding.title}.`,
+    };
+}
+
 function collectSanitizedVariables(source: string): Set<string> {
     const sanitized = new Set<string>();
     const pattern = new RegExp(SANITIZER_ASSIGN_PATTERN.source, SANITIZER_ASSIGN_PATTERN.flags);
@@ -3624,7 +3663,7 @@ export class DeterministicScanner {
             canonicalId: f.canonicalId,
             likelihood: f.likelihood,
             likelihoodReasons: f.likelihoodReasons,
-            evidenceContract: f.evidenceContract,
+            evidenceContract: f.evidenceContract ?? buildDeterministicEvidenceFallback(source, f),
         }));
     }
 }

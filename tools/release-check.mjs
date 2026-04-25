@@ -30,6 +30,12 @@ const checks = [
     cwd: path.resolve(repoRoot, 'extension'),
     commandLines: ['npm run benchmark:deterministic'],
   },
+  {
+    id: 'benchmark-metrics',
+    label: 'Benchmark direction metrics',
+    cwd: path.resolve(repoRoot, 'extension'),
+    commandLines: ['npm run benchmark:metrics'],
+  },
 ];
 
 function prefixLines(text, prefix) {

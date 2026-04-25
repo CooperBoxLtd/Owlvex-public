@@ -98,5 +98,89 @@
     "source": "function matchesFilter(user, filter) {\n  return Object.entries(filter).every(([key, value]) => user[key] === value);\n}\nrouter.post('/users/search-unsafe', requireAdmin, (req, res) => {\n  const filter = req.body && typeof req.body.filter === 'object' && req.body.filter !== null ? req.body.filter : {};\n  const results = fakeUsers.filter(user => matchesFilter(user, filter));\n  res.json({ count: results.length, results });\n});",
     "expectedCanonicalIds": ["owlvex.issue.nosql_injection.001"],
     "expectedEvidenceTypes": ["client-controlled-query-filter"]
+  },
+  {
+    "name": "unsafe JS IDOR fallback proof contract",
+    "language": "javascript",
+    "source": "function getDoc(currentUser, docId, db) {\n  return db.query('SELECT * FROM docs WHERE id = ?', [docId]);\n}",
+    "expectedCanonicalIds": ["owlvex.issue.idor.001"],
+    "expectedEvidenceTypes": ["idor"]
+  },
+  {
+    "name": "unsafe JS tenant isolation fallback proof contract",
+    "language": "javascript",
+    "source": "async function getDocuments(currentUser, tenantId, db) {\n  return db.query('SELECT * FROM documents WHERE user_id = ?', [currentUser.id]);\n}",
+    "expectedCanonicalIds": ["owlvex.issue.tenant_isolation_missing.001"],
+    "expectedEvidenceTypes": ["tenant-isolation-missing"]
+  },
+  {
+    "name": "unsafe JS sensitive logging fallback proof contract",
+    "language": "javascript",
+    "source": "function loginHandler(user) {\n  console.log(user.password);\n  return user;\n}",
+    "expectedCanonicalIds": ["owlvex.issue.sensitive_logging.001"],
+    "expectedEvidenceTypes": ["sensitive-logging"]
+  },
+  {
+    "name": "unsafe JS insecure cookie fallback proof contract",
+    "language": "javascript",
+    "source": "function setSession(res, token) {\n  res.cookie('session', token, { maxAge: 3600, secure: true });\n}",
+    "expectedCanonicalIds": ["owlvex.issue.insecure_cookie.001"],
+    "expectedEvidenceTypes": ["insecure-cookie"]
+  },
+  {
+    "name": "unsafe JS debug mode fallback proof contract",
+    "language": "javascript",
+    "source": "const express = require('express');\nconst app = express();\nif (process.env.NODE_ENV === 'production') {\n  app.listen(80);\n}\napp.set('debug', true);",
+    "expectedCanonicalIds": ["owlvex.issue.debug_mode_production.001"],
+    "expectedEvidenceTypes": ["debug-mode-production"]
+  },
+  {
+    "name": "unsafe JS open redirect fallback proof contract",
+    "language": "javascript",
+    "source": "function redirect(req, res) {\n  res.redirect(req.query.next);\n}",
+    "expectedCanonicalIds": ["owlvex.issue.open_redirect.001"],
+    "expectedEvidenceTypes": ["open-redirect"]
+  },
+  {
+    "name": "unsafe JS weak JWT validation fallback proof contract",
+    "language": "javascript",
+    "source": "function decode(req, jwt) {\n  return jwt.decode(req.headers.authorization);\n}",
+    "expectedCanonicalIds": ["owlvex.issue.weak_jwt_validation.001"],
+    "expectedEvidenceTypes": ["weak-jwt-validation"]
+  },
+  {
+    "name": "unsafe JS hardcoded secret fallback proof contract",
+    "language": "javascript",
+    "source": "const API_SECRET = 'sk_live_1234567890abcdef';",
+    "expectedCanonicalIds": ["owlvex.issue.hardcoded_secret.001"],
+    "expectedEvidenceTypes": ["hardcoded-secret"]
+  },
+  {
+    "name": "unsafe JS hardcoded token fallback proof contract",
+    "language": "javascript",
+    "source": "function requireCsrf(req, res, next) {\n  const token = req.headers['x-csrf-token'];\n  if (!token || token !== 'known-good-demo-token') {\n    return res.status(403).json({ error: 'csrf_invalid' });\n  }\n  next();\n}",
+    "expectedCanonicalIds": ["owlvex.issue.hardcoded_token.001"],
+    "expectedEvidenceTypes": ["hardcoded-token"]
+  },
+  {
+    "name": "unsafe JS insecure CORS fallback proof contract",
+    "language": "javascript",
+    "source": "function enableCors(app) {\n  app.use((req, res, next) => {\n    res.setHeader('Access-Control-Allow-Origin', '*');\n    res.setHeader('Access-Control-Allow-Credentials', 'true');\n    next();\n  });\n}",
+    "expectedCanonicalIds": ["owlvex.issue.insecure_cors.001"],
+    "expectedEvidenceTypes": ["insecure-cors"]
+  },
+  {
+    "name": "unsafe JS missing CSRF fallback proof contract",
+    "language": "javascript",
+    "source": "function updateEmail(req, res, db) {\n  db.query(\n    'UPDATE users SET email = ? WHERE id = ?',\n    [req.body.email, req.session.userId],\n  );\n  res.json({ ok: true });\n}",
+    "expectedCanonicalIds": ["owlvex.issue.csrf_missing_token.001"],
+    "expectedEvidenceTypes": ["csrf-missing-token"]
+  },
+  {
+    "name": "unsafe Python deserialization fallback proof contract",
+    "language": "python",
+    "source": "import pickle\n\ndef load(request):\n    return pickle.loads(request.body)\n",
+    "expectedCanonicalIds": ["owlvex.issue.insecure_deserialization.001"],
+    "expectedEvidenceTypes": ["insecure-deserialization"]
   }
 ]
