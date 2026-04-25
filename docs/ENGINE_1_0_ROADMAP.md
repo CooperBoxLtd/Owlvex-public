@@ -126,6 +126,19 @@ The engine should persist provider/model scan snapshots per file and expose disa
 
 Disagreement should reduce confidence or require manual review. It should not be flattened into whichever answer arrived last.
 
+## Contradiction Proof Pass
+
+When providers disagree, Engine 1.0 should run an evidence proof pass before asking the user to trust either answer.
+
+The proof pass classifies the disagreement:
+
+- `PROVEN_BY_SINK`: deterministic evidence confirms source -> flow -> sink -> missing guard
+- `CONTRADICTED_BY_GUARD`: code shows a recognized guard that defeats the claimed issue
+- `AI_ONLY`: AI evidence exists, but deterministic proof is not available yet
+- `UNRESOLVED`: providers disagree and Owlvex cannot prove or disprove the claim
+
+Reports should render this verdict next to provider comparison notes. The user should be able to tell whether a disagreement is a real source/sink problem, a guarded false positive, an AI-only concern, or an unresolved review item.
+
 ## Engine Tests
 
 Engine 1.0 requires tests in layers:
@@ -185,6 +198,13 @@ The current `npm run test:release` gate is the start. Engine 1.0 should add sour
 - require JSON evidence/verdict responses
 - mark disagreement and misclassification explicitly
 
+### Milestone 5.5: Contradiction Proof Pass
+
+- classify provider disagreements with `PROVEN_BY_SINK`, `CONTRADICTED_BY_GUARD`, `AI_ONLY`, or `UNRESOLVED`
+- prefer deterministic source/sink/guard evidence over provider opinion
+- render proof verdicts in reports and chat
+- add regression cases where one provider reports clean and another provider finds an issue
+
 ### Milestone 6: Engine 1.0 Release Bar
 
 - no high-confidence AI finding without evidence contract
@@ -197,4 +217,3 @@ The current `npm run test:release` gate is the start. Engine 1.0 should add sour
 Engine 1.0 should make Owlvex evidence-led.
 
 The engine should prove what it can, clearly scope what it cannot prove, and use AI to review and explain structured evidence instead of asking a model to guess the security posture of a file.
-

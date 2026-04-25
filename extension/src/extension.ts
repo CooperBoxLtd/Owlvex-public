@@ -3,7 +3,7 @@ import * as path from 'path';
 import { createHash } from 'crypto';
 import { buildLicenceStatusSummary, buildPlanNextStepGuidance, buildPlanUpgradeMessage, buildScanLimitMessage, canRunScan, hasAiAssistantAccess, hasComparisonAccess, hasPromptEditorAccess, LicenceInfo, LicenceManager } from './licence/licenceManager';
 import { getProviderApiKeySecretName, ProviderRegistry, persistProviderConnectionSetting, persistProviderSetting } from './providers/registry';
-import { ScanEngine, ScanResult } from './scanner/scanEngine';
+import { ProviderDisagreementProof, ScanEngine, ScanResult } from './scanner/scanEngine';
 import { DiagnosticsProvider } from './diagnostics/diagnosticsProvider';
 import { StatusBar } from './ui/statusBar';
 import { SidebarProvider } from './panels/sidebarProvider';
@@ -1568,6 +1568,53 @@ export function activate(context: vscode.ExtensionContext) {
         await context.workspaceState.update(RECENT_SCAN_SNAPSHOTS_KEY, snapshots);
     };
 
+    const buildProviderDisagreementProof = (result: ScanResult): ProviderDisagreementProof => {
+        const evidenceFinding = result.findings.find(finding => finding.evidenceContract);
+        if (!evidenceFinding) {
+            return {
+                verdict: result.findings.length ? 'UNRESOLVED' : 'UNRESOLVED',
+                reason: result.findings.length
+                    ? 'Provider disagreement exists, but no structured evidence contract is available yet.'
+                    : 'Provider disagreement exists, and this scan has no findings to prove or disprove.',
+            };
+        }
+
+        const evidence = evidenceFinding.evidenceContract;
+        if (evidence?.verdict === 'guarded' || evidence?.guard?.status === 'present') {
+            return {
+                verdict: 'CONTRADICTED_BY_GUARD',
+                reason: 'Structured evidence shows a guard that may defeat the claimed issue.',
+                findingId: evidenceFinding.id,
+                issueType: evidence.issueType,
+                source: evidence.source?.expression,
+                sink: evidence.sink?.expression,
+                guard: evidence.guard?.expression ?? evidence.guard?.label,
+            };
+        }
+
+        if (evidenceFinding.provenance === 'deterministic' && evidence?.guard?.status === 'missing') {
+            return {
+                verdict: 'PROVEN_BY_SINK',
+                reason: 'Deterministic evidence confirms source-to-sink flow with no recognized guard.',
+                findingId: evidenceFinding.id,
+                issueType: evidence.issueType,
+                source: evidence.source?.expression,
+                sink: evidence.sink?.expression,
+                guard: evidence.guard?.label,
+            };
+        }
+
+        return {
+            verdict: 'AI_ONLY',
+            reason: 'AI returned structured evidence, but deterministic sink proof is not available yet.',
+            findingId: evidenceFinding.id,
+            issueType: evidence?.issueType,
+            source: evidence?.source?.expression,
+            sink: evidence?.sink?.expression,
+            guard: evidence?.guard?.expression ?? evidence?.guard?.label,
+        };
+    };
+
     const annotateProviderComparisonNotes = async (
         results: Array<{ uri: vscode.Uri; result: ScanResult }>,
     ): Promise<Array<{ uri: vscode.Uri; result: ScanResult }>> => {
@@ -1585,11 +1632,14 @@ export function activate(context: vscode.ExtensionContext) {
                 && (previous!.provider !== current.provider || previous!.model !== current.model);
             const label = vscode.workspace.asRelativePath(item.uri, false);
             const notes: string[] = [];
+            const proofs: ProviderDisagreementProof[] = [];
 
             if (previous && providerChanged && previous.findingCount === 0 && current.findingCount > 0) {
                 notes.push(`Provider disagreement: ${previous.provider} / ${previous.model} previously reported 0 findings for ${label}; ${current.provider} / ${current.model} now reports ${current.findingCount}. Treat clean scans as provider/model-scoped evidence.`);
+                proofs.push(buildProviderDisagreementProof(item.result));
             } else if (previous && providerChanged && previous.findingCount > 0 && current.findingCount === 0) {
                 notes.push(`Provider-scoped clean result: ${current.provider} / ${current.model} reports 0 findings for ${label}, while ${previous.provider} / ${previous.model} previously reported ${previous.findingCount}. Consider a second-provider review before calling the file clean.`);
+                proofs.push(buildProviderDisagreementProof(item.result));
             } else if (!previous && current.findingCount === 0) {
                 notes.push(`Clean result scope: ${current.provider} / ${current.model} reported 0 findings for ${label}; this is not proof of absence across other models or deeper review.`);
             }
@@ -1602,6 +1652,9 @@ export function activate(context: vscode.ExtensionContext) {
                     providerComparisonNotes: notes.length
                         ? [...(item.result.providerComparisonNotes ?? []), ...notes]
                         : item.result.providerComparisonNotes,
+                    providerDisagreementProofs: proofs.length
+                        ? [...(item.result.providerDisagreementProofs ?? []), ...proofs]
+                        : item.result.providerDisagreementProofs,
                 },
             };
         });

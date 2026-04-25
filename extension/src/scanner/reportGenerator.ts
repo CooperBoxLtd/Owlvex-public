@@ -213,6 +213,21 @@ function getProviderComparisonNotes(results: ReportEntry[]): string[] {
     return [...new Set(results.flatMap(item => item.result.providerComparisonNotes ?? []))];
 }
 
+function getProviderDisagreementProofLines(root: vscode.Uri, results: ReportEntry[]): string[] {
+    return results.flatMap(item =>
+        (item.result.providerDisagreementProofs ?? []).map(proof => {
+            const parts = [
+                proof.reason,
+                proof.issueType ? `issue ${proof.issueType}` : '',
+                proof.source ? `source \`${proof.source}\`` : '',
+                proof.sink ? `sink \`${proof.sink}\`` : '',
+                proof.guard ? `guard ${proof.guard}` : '',
+            ].filter(Boolean).join(' | ');
+            return `${formatReportPath(root.fsPath, item.uri.fsPath)}: ${proof.verdict}${parts ? ` - ${parts}` : ''}`;
+        }),
+    );
+}
+
 function usesAiForFindings(result: ScanResult): boolean {
     return result.findings.some(finding => finding.provenance === 'ai');
 }
@@ -725,6 +740,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         })),
     );
     const providerComparisonNotes = getProviderComparisonNotes(snapshot.results);
+    const providerDisagreementProofLines = getProviderDisagreementProofLines(root, snapshot.results);
     const packCoverageSummary = buildKnowledgeSourcesSummary(snapshot.results);
     const projectContextSummary = [...new Set(
         snapshot.results
@@ -880,6 +896,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             for (const note of providerComparisonNotes) {
                 lines.push(`- ${note}`);
             }
+            for (const proof of providerDisagreementProofLines) {
+                lines.push(`- Proof pass: ${proof}`);
+            }
             lines.push('');
         }
 
@@ -953,6 +972,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         for (const note of providerComparisonNotes) {
             lines.push(`- ${note}`);
         }
+        for (const proof of providerDisagreementProofLines) {
+            lines.push(`- Proof pass: ${proof}`);
+        }
         lines.push('');
     }
 
@@ -968,6 +990,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- AI usage: ${fileAiUsage.requestCount} request(s), ${fileAiUsage.totalTokens} token(s)`);
             if (item.result.providerComparisonNotes?.length) {
                 lines.push(`- Provider comparison: ${item.result.providerComparisonNotes.join(' | ')}`);
+            }
+            if (item.result.providerDisagreementProofs?.length) {
+                lines.push(`- Provider disagreement proof: ${item.result.providerDisagreementProofs.map(proof => `${proof.verdict}: ${proof.reason}`).join(' | ')}`);
             }
             if (item.result.findings.length) {
                 const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];

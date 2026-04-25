@@ -363,6 +363,16 @@ describe('reportGenerator', () => {
                         providerComparisonNotes: [
                             'Provider disagreement: gpt / model-a previously reported 0 findings for example.js; anthropic / model-b now reports 1. Treat clean scans as provider/model-scoped evidence.',
                         ],
+                        providerDisagreementProofs: [
+                            {
+                                verdict: 'PROVEN_BY_SINK',
+                                reason: 'Deterministic evidence confirms source-to-sink flow with no recognized guard.',
+                                issueType: 'client-controlled-query-filter',
+                                source: 'req.body.filter',
+                                sink: 'matchesFilter(user, filter)',
+                                guard: 'Server-side field/operator allowlist',
+                            },
+                        ],
                     }),
                 },
             ],
@@ -371,7 +381,9 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('## Provider Comparison Notes');
         expect(written).toContain('- Provider disagreement: gpt / model-a previously reported 0 findings for example.js; anthropic / model-b now reports 1. Treat clean scans as provider/model-scoped evidence.');
+        expect(written).toContain('- Proof pass: example.js: PROVEN_BY_SINK - Deterministic evidence confirms source-to-sink flow with no recognized guard. | issue client-controlled-query-filter | source `req.body.filter` | sink `matchesFilter(user, filter)` | guard Server-side field/operator allowlist');
         expect(written).toContain('- Provider comparison: Provider disagreement: gpt / model-a previously reported 0 findings for example.js; anthropic / model-b now reports 1. Treat clean scans as provider/model-scoped evidence.');
+        expect(written).toContain('- Provider disagreement proof: PROVEN_BY_SINK: Deterministic evidence confirms source-to-sink flow with no recognized guard.');
     });
 
     it('renders provider comparison notes in summary reports', async () => {
@@ -389,6 +401,12 @@ describe('reportGenerator', () => {
                         providerComparisonNotes: [
                             'Provider-scoped clean result: anthropic / model-b reports 0 findings for example.js, while gpt / model-a previously reported 2. Consider a second-provider review before calling the file clean.',
                         ],
+                        providerDisagreementProofs: [
+                            {
+                                verdict: 'UNRESOLVED',
+                                reason: 'Provider disagreement exists, and this scan has no findings to prove or disprove.',
+                            },
+                        ],
                     }),
                 },
             ],
@@ -397,6 +415,7 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('## Provider Comparison Notes');
         expect(written).toContain('- Provider-scoped clean result: anthropic / model-b reports 0 findings for example.js, while gpt / model-a previously reported 2. Consider a second-provider review before calling the file clean.');
+        expect(written).toContain('- Proof pass: example.js: UNRESOLVED - Provider disagreement exists, and this scan has no findings to prove or disprove.');
     });
 
     it('marks unverified high-confidence AI findings as needing manual review', async () => {

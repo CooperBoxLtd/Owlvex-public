@@ -95,11 +95,22 @@ export interface ScanResult {
     provider: string;
     warnings: string[];
     providerComparisonNotes?: string[];
+    providerDisagreementProofs?: ProviderDisagreementProof[];
     aiUsage?: {
         requestCount: number;
         totalTokens: number;
     };
     packContext?: RulePackRuntimeContext;
+}
+
+export interface ProviderDisagreementProof {
+    verdict: 'PROVEN_BY_SINK' | 'CONTRADICTED_BY_GUARD' | 'AI_ONLY' | 'UNRESOLVED';
+    reason: string;
+    findingId?: string;
+    issueType?: string;
+    source?: string;
+    sink?: string;
+    guard?: string;
 }
 
 export interface ScanDocumentOptions {
