@@ -34,7 +34,7 @@ If a cell is marked as supported here, there should be:
 | --- | --- | --- | --- | --- | --- | --- |
 | Command injection | Yes | Yes | Yes | Yes | Yes | Python covers `os.system(...)` and `subprocess.*(..., shell=True)`; Java covers `Runtime.getRuntime().exec(...)`; C# covers `Process.Start(...)`; Go covers `exec.Command("sh", "-c", ...)` on request-derived command strings |
 | SQL injection | Yes | Yes | Yes | Yes | Yes | Python covers f-string SQL; Java covers concatenated SQL reaching `Statement.execute*`; C# covers concatenated SQL reaching `SqlCommand`; Go covers concatenated SQL reaching `db.Query/Exec/QueryRow` |
-| Path traversal | Yes | Yes | Yes | Yes | Yes | Python covers `os.path.join(...)`; Java covers `Paths.get(...)` / `Path.of(...)`; C# covers `Path.Combine(...)`; Go covers `filepath.Join(...)` into file-reading or file-serving sinks |
+| Path traversal | Yes | Yes | Yes | Yes | Yes | All five language cells now emit Engine 1.0 evidence contracts in the regression gate: request source, path construction flow, filesystem sink, missing base-directory guard, and safe companion suppression. Python covers `os.path.join(...)`; Java covers `Paths.get(...)` / `Path.of(...)`; C# covers `Path.Combine(...)`; Go covers `filepath.Join(...)` into file-reading or file-serving sinks |
 | SSRF | Yes | Yes | Yes | Yes | Yes | Python covers direct `requests.*(...)`; Java covers `new URL(requestInput).openStream()`; C# covers `HttpClient.GetStringAsync(...)`; Go covers `http.Get(...)` / `client.Get(...)` on request-derived destinations |
 | Weak JWT validation | Yes | Yes | Yes | No | Yes | Python covers `jwt.decode(..., options={"verify_signature": False})`; Java covers `JWT.decode(...)`; Go covers `ParseUnverified(...)` on request-derived tokens |
 | Insecure deserialization | No | Yes | Yes | No | No | Python covers `pickle.loads(request.body)`; Java covers `ObjectInputStream` on request input |
@@ -54,8 +54,9 @@ When a new deterministic language cell is added:
 2. add unsafe and safe fixtures
 3. add detection, posture, and clean expectations
 4. add suppression coverage if the AI lane can still overclaim on the safe companion
+5. add an Engine evidence regression case proving source, sink, flow, guard, and verdict for the unsafe fixture
 
-Do not mark a language/family cell as supported until all four are in place.
+Do not mark a language/family cell as supported until all five are in place.
 
 ## Contract Rule
 

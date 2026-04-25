@@ -971,9 +971,55 @@ function lineOfOffset(source: string, offset: number): number {
     return line;
 }
 
+function lineExpressionAt(source: string, offset: number): string {
+    const lineStart = source.lastIndexOf('\n', Math.max(0, offset - 1)) + 1;
+    const lineEnd = source.indexOf('\n', offset);
+    return source.slice(lineStart, lineEnd >= 0 ? lineEnd : source.length).trim().replace(/;$/, '');
+}
+
 function expressionLine(source: string, expression: string, startOffset = 0): number | undefined {
     const index = source.indexOf(expression, Math.max(0, startOffset));
     return index >= 0 ? lineOfOffset(source, index) : undefined;
+}
+
+function buildPathTraversalEvidenceContract(params: {
+    source: string;
+    languageLabel: string;
+    sourceExpression: string;
+    sourceMatchIndex: number;
+    constructionExpression: string;
+    constructionMatchIndex: number;
+    sinkExpression: string;
+    sinkMatchIndex: number;
+}): EvidenceContract {
+    return {
+        issueType: 'path-traversal',
+        source: {
+            kind: 'source',
+            label: `${params.languageLabel} request-controlled path segment`,
+            expression: params.sourceExpression,
+            line: lineOfOffset(params.source, params.sourceMatchIndex),
+        },
+        flow: [{
+            kind: 'path-construction',
+            label: `${params.languageLabel} path constructed from request input`,
+            expression: params.constructionExpression,
+            line: lineOfOffset(params.source, params.constructionMatchIndex),
+        }],
+        sink: {
+            kind: 'sink',
+            label: `${params.languageLabel} filesystem read or file-serving sink`,
+            expression: params.sinkExpression,
+            line: lineOfOffset(params.source, params.sinkMatchIndex),
+        },
+        guard: {
+            status: 'missing',
+            label: 'Base-directory containment guard',
+            reason: 'No recognized identifier allowlist, canonical path resolution, or base-directory containment check is visible between path construction and the filesystem sink.',
+        },
+        verdict: 'confirmed',
+        rationale: 'Request-controlled input contributes to a constructed filesystem path that reaches a filesystem sink without a recognized containment guard.',
+    };
 }
 
 function collectSanitizedVariables(source: string): Set<string> {
@@ -2084,25 +2130,35 @@ function scanPythonSqlSinks(source: string): InternalFinding[] {
 
 function scanPythonPathTraversalSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
-    const taintedVars = new Set<string>();
+    const taintedVars = new Map<string, { sourceExpression: string; matchIndex: number }>();
     let match: RegExpExecArray | null;
 
     const taintPattern = new RegExp(PYTHON_REQUEST_ASSIGN_RE.source, PYTHON_REQUEST_ASSIGN_RE.flags);
     while ((match = taintPattern.exec(source)) !== null) {
-        taintedVars.add(match[1]);
+        taintedVars.set(match[1], {
+            sourceExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
-    const pathVars = new Set<string>();
+    const pathVars = new Map<string, { sourceExpression: string; sourceMatchIndex: number; constructionExpression: string; matchIndex: number }>();
     const pathAssignPattern = new RegExp(PYTHON_PATH_ASSIGN_RE.source, PYTHON_PATH_ASSIGN_RE.flags);
     while ((match = pathAssignPattern.exec(source)) !== null) {
-        if ([...taintedVars].some(varName => new RegExp(`\\b${varName}\\b`).test(match![2] ?? ''))) {
-            pathVars.add(match[1]);
+        const taintedVar = [...taintedVars.entries()].find(([varName]) => new RegExp(`\\b${varName}\\b`).test(match![2] ?? ''));
+        if (taintedVar) {
+            pathVars.set(match[1], {
+                sourceExpression: taintedVar[1].sourceExpression,
+                sourceMatchIndex: taintedVar[1].matchIndex,
+                constructionExpression: lineExpressionAt(source, match.index),
+                matchIndex: match.index,
+            });
         }
     }
 
     const sinkPattern = new RegExp(PYTHON_FILE_SINK_RE.source, PYTHON_FILE_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
-        if (!pathVars.has(match[1])) { continue; }
+        const pathVar = pathVars.get(match[1]);
+        if (!pathVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2118,6 +2174,16 @@ function scanPythonPathTraversalSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Python path reaches a filesystem sink without a visible boundary check.'],
+            evidenceContract: buildPathTraversalEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                sourceExpression: pathVar.sourceExpression,
+                sourceMatchIndex: pathVar.sourceMatchIndex,
+                constructionExpression: pathVar.constructionExpression,
+                constructionMatchIndex: pathVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2317,26 +2383,36 @@ function scanJavaSqlSinks(source: string): InternalFinding[] {
 
 function scanJavaPathTraversalSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
-    const taintedVars = new Set<string>();
-    const pathVars = new Set<string>();
+    const taintedVars = new Map<string, { sourceExpression: string; matchIndex: number }>();
+    const pathVars = new Map<string, { sourceExpression: string; sourceMatchIndex: number; constructionExpression: string; matchIndex: number }>();
     let match: RegExpExecArray | null;
 
     const taintPattern = new RegExp(JAVA_REQUEST_ASSIGN_RE.source, JAVA_REQUEST_ASSIGN_RE.flags);
     while ((match = taintPattern.exec(source)) !== null) {
-        taintedVars.add(match[1]);
+        taintedVars.set(match[1], {
+            sourceExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const pathPattern = new RegExp(JAVA_PATH_ASSIGN_RE.source, JAVA_PATH_ASSIGN_RE.flags);
     while ((match = pathPattern.exec(source)) !== null) {
         const argsText = match[2] ?? '';
-        if ([...taintedVars].some(varName => new RegExp(`\\b${varName}\\b`).test(argsText))) {
-            pathVars.add(match[1]);
+        const taintedVar = [...taintedVars.entries()].find(([varName]) => new RegExp(`\\b${varName}\\b`).test(argsText));
+        if (taintedVar) {
+            pathVars.set(match[1], {
+                sourceExpression: taintedVar[1].sourceExpression,
+                sourceMatchIndex: taintedVar[1].matchIndex,
+                constructionExpression: lineExpressionAt(source, match.index),
+                matchIndex: match.index,
+            });
         }
     }
 
     const sinkPattern = new RegExp(JAVA_FILE_SINK_RE.source, JAVA_FILE_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
-        if (!pathVars.has(match[1])) { continue; }
+        const pathVar = pathVars.get(match[1]);
+        if (!pathVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2352,6 +2428,16 @@ function scanJavaPathTraversalSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Java file path reaches a filesystem sink without a visible boundary check.'],
+            evidenceContract: buildPathTraversalEvidenceContract({
+                source,
+                languageLabel: 'Java',
+                sourceExpression: pathVar.sourceExpression,
+                sourceMatchIndex: pathVar.sourceMatchIndex,
+                constructionExpression: pathVar.constructionExpression,
+                constructionMatchIndex: pathVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2637,26 +2723,36 @@ function scanCsharpSqlSinks(source: string): InternalFinding[] {
 
 function scanCsharpPathTraversalSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
-    const taintedVars = new Set<string>();
-    const pathVars = new Set<string>();
+    const taintedVars = new Map<string, { sourceExpression: string; matchIndex: number }>();
+    const pathVars = new Map<string, { sourceExpression: string; sourceMatchIndex: number; constructionExpression: string; matchIndex: number }>();
     let match: RegExpExecArray | null;
 
     const taintPattern = new RegExp(CSHARP_REQUEST_ASSIGN_RE.source, CSHARP_REQUEST_ASSIGN_RE.flags);
     while ((match = taintPattern.exec(source)) !== null) {
-        taintedVars.add(match[1]);
+        taintedVars.set(match[1], {
+            sourceExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const pathPattern = new RegExp(CSHARP_PATH_ASSIGN_RE.source, CSHARP_PATH_ASSIGN_RE.flags);
     while ((match = pathPattern.exec(source)) !== null) {
         const argsText = match[2] ?? '';
-        if ([...taintedVars].some(varName => new RegExp(`\\b${varName}\\b`).test(argsText))) {
-            pathVars.add(match[1]);
+        const taintedVar = [...taintedVars.entries()].find(([varName]) => new RegExp(`\\b${varName}\\b`).test(argsText));
+        if (taintedVar) {
+            pathVars.set(match[1], {
+                sourceExpression: taintedVar[1].sourceExpression,
+                sourceMatchIndex: taintedVar[1].matchIndex,
+                constructionExpression: lineExpressionAt(source, match.index),
+                matchIndex: match.index,
+            });
         }
     }
 
     const sinkPattern = new RegExp(CSHARP_FILE_SINK_RE.source, CSHARP_FILE_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
-        if (!pathVars.has(match[1])) { continue; }
+        const pathVar = pathVars.get(match[1]);
+        if (!pathVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2672,6 +2768,16 @@ function scanCsharpPathTraversalSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived C# file path reaches a filesystem sink without a visible boundary check.'],
+            evidenceContract: buildPathTraversalEvidenceContract({
+                source,
+                languageLabel: 'C#',
+                sourceExpression: pathVar.sourceExpression,
+                sourceMatchIndex: pathVar.sourceMatchIndex,
+                constructionExpression: pathVar.constructionExpression,
+                constructionMatchIndex: pathVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2851,26 +2957,36 @@ function scanGoSqlSinks(source: string): InternalFinding[] {
 
 function scanGoPathTraversalSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
-    const taintedVars = new Set<string>();
-    const pathVars = new Set<string>();
+    const taintedVars = new Map<string, { sourceExpression: string; matchIndex: number }>();
+    const pathVars = new Map<string, { sourceExpression: string; sourceMatchIndex: number; constructionExpression: string; matchIndex: number }>();
     let match: RegExpExecArray | null;
 
     const taintPattern = new RegExp(GO_REQUEST_ASSIGN_RE.source, GO_REQUEST_ASSIGN_RE.flags);
     while ((match = taintPattern.exec(source)) !== null) {
-        taintedVars.add(match[1]);
+        taintedVars.set(match[1], {
+            sourceExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const pathPattern = new RegExp(GO_PATH_ASSIGN_RE.source, GO_PATH_ASSIGN_RE.flags);
     while ((match = pathPattern.exec(source)) !== null) {
         const argsText = match[2] ?? '';
-        if ([...taintedVars].some(varName => new RegExp(`\\b${varName}\\b`).test(argsText))) {
-            pathVars.add(match[1]);
+        const taintedVar = [...taintedVars.entries()].find(([varName]) => new RegExp(`\\b${varName}\\b`).test(argsText));
+        if (taintedVar) {
+            pathVars.set(match[1], {
+                sourceExpression: taintedVar[1].sourceExpression,
+                sourceMatchIndex: taintedVar[1].matchIndex,
+                constructionExpression: lineExpressionAt(source, match.index),
+                matchIndex: match.index,
+            });
         }
     }
 
     const sinkPattern = new RegExp(GO_FILE_SINK_RE.source, GO_FILE_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
-        if (!pathVars.has(match[1])) { continue; }
+        const pathVar = pathVars.get(match[1]);
+        if (!pathVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2886,6 +3002,16 @@ function scanGoPathTraversalSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Go file path reaches a filesystem sink without a visible boundary check.'],
+            evidenceContract: buildPathTraversalEvidenceContract({
+                source,
+                languageLabel: 'Go',
+                sourceExpression: pathVar.sourceExpression,
+                sourceMatchIndex: pathVar.sourceMatchIndex,
+                constructionExpression: pathVar.constructionExpression,
+                constructionMatchIndex: pathVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 

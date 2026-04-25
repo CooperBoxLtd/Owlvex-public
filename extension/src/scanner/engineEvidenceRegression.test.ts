@@ -49,6 +49,158 @@ function exportReport(req, res) {
         expectedCanonicalIds: [],
     },
     {
+        name: 'unsafe Python path traversal has source-flow-sink-guard evidence',
+        language: 'python',
+        source: `
+import os
+from flask import request
+
+def export_report():
+    filename = request.args.get("file")
+    target = os.path.join("/srv/app/exports", filename)
+    return open(target, "r").read()
+`,
+        expectedCanonicalIds: ['owlvex.issue.path_traversal.001'],
+        expectedEvidenceTypes: ['path-traversal'],
+    },
+    {
+        name: 'safe Python path traversal fix remains clean',
+        language: 'python',
+        source: `
+import os
+from flask import request
+
+def export_report():
+    base_dir = os.path.abspath("/srv/app/exports")
+    requested = request.args.get("file")
+    candidate = os.path.abspath(os.path.join(base_dir, requested))
+    if not candidate.startswith(base_dir + os.sep):
+        return ("invalid", 400)
+    return open(candidate, "r").read()
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Java path traversal has source-flow-sink-guard evidence',
+        language: 'java',
+        source: `
+import java.nio.file.*;
+
+class Reports {
+    String exportReport(HttpServletRequest request) throws Exception {
+        String filename = request.getParameter("file");
+        Path target = Paths.get("/srv/app/exports", filename);
+        return Files.readString(target);
+    }
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.path_traversal.001'],
+        expectedEvidenceTypes: ['path-traversal'],
+    },
+    {
+        name: 'safe Java path traversal fix remains clean',
+        language: 'java',
+        source: `
+import java.nio.file.*;
+
+class Reports {
+    String exportReport(HttpServletRequest request) throws Exception {
+        Path base = Paths.get("/srv/app/exports").toAbsolutePath().normalize();
+        String filename = request.getParameter("file");
+        Path target = base.resolve(filename).normalize();
+        if (!target.startsWith(base)) {
+            throw new IllegalArgumentException("invalid");
+        }
+        return Files.readString(target);
+    }
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe C# path traversal has source-flow-sink-guard evidence',
+        language: 'csharp',
+        source: `
+using System.IO;
+
+class Reports {
+    string ExportReport() {
+        var filename = Request.Query["file"];
+        var target = Path.Combine("/srv/app/exports", filename);
+        return File.ReadAllText(target);
+    }
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.path_traversal.001'],
+        expectedEvidenceTypes: ['path-traversal'],
+    },
+    {
+        name: 'safe C# path traversal fix remains clean',
+        language: 'csharp',
+        source: `
+using System.IO;
+
+class Reports {
+    string ExportReport() {
+        var baseDir = Path.GetFullPath("/srv/app/exports");
+        var filename = Request.Query["file"];
+        var target = Path.GetFullPath(Path.Combine(baseDir, filename));
+        if (!target.StartsWith(baseDir + Path.DirectorySeparatorChar)) {
+            throw new InvalidOperationException("invalid");
+        }
+        return File.ReadAllText(target);
+    }
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Go path traversal has source-flow-sink-guard evidence',
+        language: 'go',
+        source: `
+package demo
+
+import (
+    "net/http"
+    "os"
+    "path/filepath"
+)
+
+func exportReport(r *http.Request) ([]byte, error) {
+    name := r.URL.Query().Get("file")
+    target := filepath.Join("/srv/app/exports", name)
+    return os.ReadFile(target)
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.path_traversal.001'],
+        expectedEvidenceTypes: ['path-traversal'],
+    },
+    {
+        name: 'safe Go path traversal fix remains clean',
+        language: 'go',
+        source: `
+package demo
+
+import (
+    "net/http"
+    "os"
+    "path/filepath"
+    "strings"
+)
+
+func exportReport(r *http.Request) ([]byte, error) {
+    base := "/srv/app/exports"
+    name := r.URL.Query().Get("file")
+    target := filepath.Clean(filepath.Join(base, name))
+    if !strings.HasPrefix(target, base + string(os.PathSeparator)) {
+        return nil, http.ErrAbortHandler
+    }
+    return os.ReadFile(target)
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
         name: 'unsafe client-controlled filter has source-flow-sink-guard evidence',
         language: 'javascript',
         source: `
