@@ -28,6 +28,7 @@ function parseMarkdownReport(markdown) {
     let primaryScanMode;
     let scanTierPosture;
     let corroborationPosture;
+    let proofPosture;
 
     for (let inner = index + 1; inner < lines.length; inner += 1) {
       const line = lines[inner];
@@ -48,6 +49,11 @@ function parseMarkdownReport(markdown) {
       const corroborationPostureMatch = line.match(/^-\s+(?:Corroboration posture|Evidence):\s+(.+)$/);
       if (corroborationPostureMatch && !corroborationPosture) {
         corroborationPosture = corroborationPostureMatch[1].trim();
+      }
+
+      const proofPostureMatch = line.match(/^-\s+Proof posture:\s+(.+)$/);
+      if (proofPostureMatch && !proofPosture) {
+        proofPosture = proofPostureMatch[1].trim();
       }
 
       const tableMatch = line.match(/^\|\s*(.+?)\s*\|\s*.+\|\s*(.+?)\s*\|$/);
@@ -76,6 +82,7 @@ function parseMarkdownReport(markdown) {
       primaryScanMode,
       scanTierPosture,
       corroborationPosture,
+      proofPosture,
     });
   }
 
@@ -170,6 +177,10 @@ function evaluateParsedReport(report, manifest) {
     scanTierPostureSatisfied: 0,
     corroborationPostureChecks: 0,
     corroborationPostureSatisfied: 0,
+    proofStatusChecks: 0,
+    proofStatusSatisfied: 0,
+    proofPromotionChecks: 0,
+    proofPromotionSatisfied: 0,
     totalFailures: 0,
   };
 
@@ -180,6 +191,11 @@ function evaluateParsedReport(report, manifest) {
     const primaryScanMode = reportEntry?.primaryScanMode ?? 'none';
     const scanTierPosture = reportEntry?.scanTierPosture ?? 'none';
     const corroborationPosture = reportEntry?.corroborationPosture ?? 'none';
+    const proofPosture = reportEntry?.proofPosture ?? 'none';
+    const proofText = [
+      ...(reportEntry?.proofStatuses ?? []),
+      proofPosture,
+    ].map(normalizeText).join(' | ');
 
     if (expectation.expectedState === 'clean') {
       metrics.expectedCleanFiles += 1;
@@ -252,6 +268,27 @@ function evaluateParsedReport(report, manifest) {
         metrics.corroborationPostureSatisfied += 1;
       }
     }
+
+    for (const expected of expectation.requiredProofStatusIncludes ?? []) {
+      metrics.proofStatusChecks += 1;
+      if (!proofText.includes(normalizeText(expected))) {
+        failures.push(`${expectation.file}: proof status missing expected fragment ${expected}`);
+      } else {
+        metrics.proofStatusSatisfied += 1;
+      }
+    }
+
+    if (expectation.forbidProofPromotedFindings) {
+      metrics.proofPromotionChecks += 1;
+      const hasPromotedProof = /\b(static proven|ai plausible)\b/.test(proofText)
+        || /static proven:\s*[1-9]/i.test(proofPosture)
+        || /ai plausible:\s*[1-9]/i.test(proofPosture);
+      if (hasPromotedProof) {
+        failures.push(`${expectation.file}: helper-layer finding was proof-promoted`);
+      } else {
+        metrics.proofPromotionSatisfied += 1;
+      }
+    }
   }
 
   metrics.totalFailures = failures.length;
@@ -280,6 +317,8 @@ function printMetrics(metrics) {
   console.log(`Primary scan modes: ${metrics.primaryScanModesSatisfied}/${metrics.primaryScanModesChecked}`);
   console.log(`Scan tier posture checks: ${metrics.scanTierPostureSatisfied}/${metrics.scanTierPostureChecks}`);
   console.log(`Corroboration posture checks: ${metrics.corroborationPostureSatisfied}/${metrics.corroborationPostureChecks}`);
+  console.log(`Proof status checks: ${metrics.proofStatusSatisfied}/${metrics.proofStatusChecks}`);
+  console.log(`Proof promotion checks: ${metrics.proofPromotionSatisfied}/${metrics.proofPromotionChecks}`);
   console.log(`Total failures: ${metrics.totalFailures}`);
 }
 

@@ -148,7 +148,25 @@ function lineOf(code, pattern) {
   return index >= 0 ? index + 1 : 1;
 }
 
+function issueTypeFromIssueId(issueId, title) {
+  if (/ssrf/i.test(issueId)) return 'ssrf';
+  if (/path_traversal/i.test(issueId)) return 'path-traversal';
+  if (/csrf/i.test(issueId)) return 'csrf-missing-token';
+  if (/jwt/i.test(issueId)) return 'weak-jwt-validation';
+  if (/eval|code_injection/i.test(issueId)) return 'code-injection';
+  if (/broken_object|idor/i.test(issueId)) return 'idor';
+  if (/broken_function/i.test(issueId)) return 'missing-authorization';
+  if (/privilege|role/i.test(issueId)) return 'privilege-escalation-role-assignment';
+  if (/sql/i.test(issueId)) return 'sql-injection';
+  if (/open_redirect/i.test(issueId)) return 'open-redirect';
+  if (/cors/i.test(issueId)) return 'insecure-cors';
+  if (/secret|token/i.test(issueId)) return 'hardcoded-secret';
+  if (/deserialization/i.test(issueId)) return 'insecure-deserialization';
+  return title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'security-finding';
+}
+
 function makeFinding({ id, title, issueId, line, severity = 'HIGH', explanation, threat, fix, confidence = 0.9, likelihood = 'HIGH', likelihoodReasons = [] }) {
+  const issueType = issueTypeFromIssueId(issueId ?? '', title);
   return {
     id,
     line,
@@ -164,6 +182,39 @@ function makeFinding({ id, title, issueId, line, severity = 'HIGH', explanation,
     issue_id: issueId,
     likelihood,
     likelihood_reasons: likelihoodReasons,
+    evidence_contract: {
+      issue_type: issueType,
+      source: {
+        kind: 'source',
+        label: 'Attacker-controlled request data',
+        expression: 'request input',
+        line,
+      },
+      flow: [],
+      sink: {
+        kind: 'sink',
+        label: title,
+        expression: title,
+        line,
+      },
+      guard: {
+        status: 'missing',
+        label: 'Required server-side guard',
+        reason: 'The benchmark fixture intentionally omits the guard for this unsafe workflow.',
+      },
+      verdict: 'confirmed',
+      rationale: explanation,
+      proof_status: 'ai_plausible',
+      attacker_action: 'Send a crafted request to the unsafe route.',
+      required_guard: ['server-side authorization or validation guard'],
+      counter_evidence: ['safe paired route or helper was not used by this unsafe workflow'],
+      responsibility_layer: 'route-policy',
+      proof_checks: [{
+        check: 'unsafe workflow reaches sensitive operation without guard',
+        status: 'pass',
+        evidence: title,
+      }],
+    },
   };
 }
 

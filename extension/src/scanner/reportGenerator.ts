@@ -164,6 +164,10 @@ function getFindingProofStatus(finding: ScanResult['findings'][number], file?: s
         return 'unproven_extra';
     }
 
+    if (finding.proofStatus) {
+        return finding.proofStatus;
+    }
+
     if (finding.evidenceContract?.proofStatus) {
         return finding.evidenceContract.proofStatus;
     }

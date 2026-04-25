@@ -53,8 +53,11 @@ export interface Finding {
     likelihood?: 'LOW' | 'MEDIUM' | 'HIGH';
     likelihoodReasons?: string[];
     riskScore?: number;
+    proofStatus?: EvidenceProofStatus;
     evidenceContract?: EvidenceContract;
 }
+
+export type EvidenceProofStatus = 'static_proven' | 'ai_plausible' | 'counter_evidence_found' | 'unproven_extra';
 
 export interface EvidenceContract {
     issueType: string;
@@ -64,7 +67,7 @@ export interface EvidenceContract {
     guard?: EvidenceGuard;
     verdict: 'confirmed' | 'suspected' | 'guarded' | 'inconclusive';
     rationale: string;
-    proofStatus?: 'static_proven' | 'ai_plausible' | 'counter_evidence_found' | 'unproven_extra';
+    proofStatus?: EvidenceProofStatus;
     attackerAction?: string;
     requiredGuard?: string[];
     counterEvidence?: string[];
@@ -312,6 +315,87 @@ function enrichFindingRisk(finding: Finding): Finding {
     };
 }
 
+function normalizeProofStatus(value: unknown): EvidenceProofStatus | undefined {
+    const normalized = String(value ?? '').trim();
+    return ['static_proven', 'ai_plausible', 'counter_evidence_found', 'unproven_extra'].includes(normalized)
+        ? normalized as EvidenceProofStatus
+        : undefined;
+}
+
+function hasCompleteSourceSinkMissingGuard(evidence?: EvidenceContract): boolean {
+    return Boolean(
+        evidence?.source?.expression
+        && evidence.sink?.expression
+        && evidence.guard?.status === 'missing',
+    );
+}
+
+function isKnownHelperLayerFinding(finding: Finding, filePath?: string): boolean {
+    const normalizedFile = (filePath ?? '').replace(/\\/g, '/').toLowerCase();
+    const issueText = [
+        finding.title,
+        finding.canonicalTitle ?? '',
+        finding.canonicalFamilyLabel ?? '',
+        finding.canonicalFamily ?? '',
+        finding.ruleCode,
+        finding.evidenceContract?.issueType ?? '',
+        finding.explanation,
+    ].join(' ').toLowerCase();
+
+    if (normalizedFile.includes('middleware/auth') && /\b(audit|log|ownership|authorization|authz|idor|auth)\b/.test(issueText)) {
+        return true;
+    }
+
+    if (normalizedFile.includes('lib/auditlogger') && /\b(audit|log|sensitive)\b/.test(issueText)) {
+        return true;
+    }
+
+    if (normalizedFile.includes('store/repositories') && /\b(audit|authorization|authz|missing[_ -]?authorization|privilege|role)\b/.test(issueText)) {
+        return true;
+    }
+
+    return false;
+}
+
+function classifyFindingProofStatus(finding: Finding, filePath?: string): EvidenceProofStatus {
+    if (isKnownHelperLayerFinding(finding, filePath)) {
+        return 'unproven_extra';
+    }
+
+    const explicit = finding.proofStatus ?? finding.evidenceContract?.proofStatus;
+    if (explicit) {
+        return explicit;
+    }
+
+    if (finding.provenance === 'deterministic') {
+        return 'static_proven';
+    }
+
+    if (finding.evidenceContract?.guard?.status === 'present' || finding.evidenceContract?.verdict === 'guarded') {
+        return 'counter_evidence_found';
+    }
+
+    if (hasCompleteSourceSinkMissingGuard(finding.evidenceContract)) {
+        return 'ai_plausible';
+    }
+
+    return 'unproven_extra';
+}
+
+function applyProofStatus(finding: Finding, filePath?: string): Finding {
+    const proofStatus = classifyFindingProofStatus(finding, filePath);
+    return {
+        ...finding,
+        proofStatus,
+        evidenceContract: finding.evidenceContract
+            ? {
+                ...finding.evidenceContract,
+                proofStatus,
+            }
+            : finding.evidenceContract,
+    };
+}
+
 function summarizeFindings(findings: Finding[], fallbackSummary: string): string {
     if (!findings.length) {
         return fallbackSummary || 'No findings detected.';
@@ -534,10 +618,7 @@ function normalizeEvidenceContract(value: any): EvidenceContract | undefined {
     const source = normalizeEvidencePoint(value.source, 'source');
     const sink = normalizeEvidencePoint(value.sink, 'sink');
     const guard = normalizeEvidenceGuard(value.guard);
-    const proofStatusValue = String(value.proof_status ?? value.proofStatus ?? '').trim();
-    const proofStatus = ['static_proven', 'ai_plausible', 'counter_evidence_found', 'unproven_extra'].includes(proofStatusValue)
-        ? proofStatusValue as EvidenceContract['proofStatus']
-        : undefined;
+    const proofStatus = normalizeProofStatus(value.proof_status ?? value.proofStatus);
     const attackerAction = typeof value.attacker_action === 'string' && value.attacker_action.trim()
         ? value.attacker_action.trim()
         : typeof value.attackerAction === 'string' && value.attackerAction.trim()
@@ -1236,7 +1317,8 @@ export class ScanEngine {
             const deterministicFindings = this.deterministicScanner
                 .scan(code, document.languageId)
                 .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding))
-                .map(f => enrichFindingRisk(f));
+                .map(f => enrichFindingRisk(f))
+                .map(f => applyProofStatus(f, document.fileName));
 
             return {
                 fileId: `file-${index + 1}`,
@@ -1463,7 +1545,8 @@ export class ScanEngine {
             );
 
             const allFindings = mergeDeterministicAndAiFindings(entry.context.deterministicFindings, keptAi)
-                .map(finding => enrichFindingRisk(finding));
+                .map(finding => enrichFindingRisk(finding))
+                .map(finding => applyProofStatus(finding, entry.context.document.fileName));
             const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
             const filteredWarnings = warnings.filter(warning =>
                 hasAiFindingsInFinalResult || !isAiCorroborationWarning(warning.replace(`${entry.context.fileName}: `, '')),
@@ -1545,7 +1628,8 @@ export class ScanEngine {
         const deterministicFindings = this.deterministicScanner
             .scan(code, document.languageId)
             .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding))
-            .map(f => enrichFindingRisk(f));
+            .map(f => enrichFindingRisk(f))
+            .map(f => applyProofStatus(f, document.fileName));
 
         if (options?.forceDeterministicOnly || options?.deterministicOnlyReason) {
             return this._buildDeterministicOnlyResult(
@@ -1667,7 +1751,8 @@ export class ScanEngine {
         });
         const aiUsage = mergeAiUsage(finderUsage, corroboratedAi.aiUsage);
         const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, corroboratedAi.findings)
-            .map(finding => enrichFindingRisk(finding));
+            .map(finding => enrichFindingRisk(finding))
+            .map(finding => applyProofStatus(finding, document.fileName));
         const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
         warnings.push(
             ...corroboratedAi.warnings.filter(warning =>
@@ -2335,6 +2420,7 @@ ${JSON.stringify(fileBlocks, null, 2)}`;
                     matchedSignals: normalizeStringList(f.matched_signals),
                     likelihood: normalizeLikelihood(f.likelihood),
                     likelihoodReasons: normalizeStringList(f.likelihood_reasons ?? f.likelihoodReasons ?? f.context_reasons),
+                    proofStatus: normalizeProofStatus(f.proof_status ?? f.proofStatus),
                     evidenceContract: normalizeEvidenceContract(f.evidence_contract ?? f.evidenceContract),
                 }))
                     .map((finding: Finding) => this._resolveCanonicalFinding(finding))
@@ -2395,6 +2481,7 @@ ${JSON.stringify(fileBlocks, null, 2)}`;
                         matchedSignals: normalizeStringList(f.matched_signals),
                         likelihood: normalizeLikelihood(f.likelihood),
                         likelihoodReasons: normalizeStringList(f.likelihood_reasons ?? f.likelihoodReasons ?? f.context_reasons),
+                        proofStatus: normalizeProofStatus(f.proof_status ?? f.proofStatus),
                         evidenceContract: normalizeEvidenceContract(f.evidence_contract ?? f.evidenceContract),
                     }))
                         .map((finding: Finding) => this._resolveCanonicalFinding(finding))

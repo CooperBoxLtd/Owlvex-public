@@ -6,6 +6,9 @@
       "requiredFindings": [
         "Missing object-level authorization"
       ],
+      "requiredProofStatusIncludes": [
+        "static proven"
+      ],
       "forbiddenFindings": [
         "Broken Access Control in getDocumentForTenant"
       ]
@@ -14,6 +17,9 @@
       "file": "src\\routes\\refunds.js",
       "requiredFindings": [
         "Broken function-level authorization"
+      ],
+      "requiredProofStatusIncludes": [
+        "AI plausible"
       ],
       "requiredDetectionIncludes": [
         "AI signal",
@@ -25,6 +31,9 @@
       "requiredFindings": [
         "Privilege escalation via unvalidated role or permission assignment"
       ],
+      "requiredProofStatusIncludes": [
+        "AI plausible"
+      ],
       "requiredDetectionIncludes": [
         "AI signal",
         "finder"
@@ -35,6 +44,9 @@
       "requiredFindings": [
         "Server-side request forgery (SSRF) through untrusted destination"
       ],
+      "requiredProofStatusIncludes": [
+        "static proven"
+      ],
       "forbiddenFindings": [
         "Potential incomplete validation in proxy-safe"
       ]
@@ -43,25 +55,49 @@
       "file": "src\\routes\\reports.js",
       "requiredFindings": [
         "Path Traversal"
+      ],
+      "requiredProofStatusIncludes": [
+        "static proven"
       ]
     },
     {
       "file": "src\\routes\\profile.js",
       "requiredFindings": [
         "Missing CSRF protection on state-changing request"
+      ],
+      "requiredProofStatusIncludes": [
+        "AI plausible"
       ]
     },
     {
       "file": "src\\routes\\imports.js",
       "requiredFindings": [
         "Dynamic code evaluation of untrusted input"
+      ],
+      "requiredProofStatusIncludes": [
+        "AI plausible"
       ]
     },
     {
       "file": "src\\lib\\tokens.js",
       "requiredFindings": [
         "Weak JWT validation"
+      ],
+      "requiredProofStatusIncludes": [
+        "AI plausible"
       ]
+    },
+    {
+      "file": "src\\middleware\\auth.js",
+      "forbidProofPromotedFindings": true
+    },
+    {
+      "file": "src\\lib\\auditLogger.js",
+      "forbidProofPromotedFindings": true
+    },
+    {
+      "file": "src\\store\\repositories.js",
+      "forbidProofPromotedFindings": true
     },
     {
       "file": "src\\server.js",
