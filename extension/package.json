@@ -2,7 +2,7 @@
   "name": "owlvex",
   "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "publisher": "owlvex",
   "repository": {
     "type": "git",

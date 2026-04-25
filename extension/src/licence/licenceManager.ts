@@ -3,6 +3,7 @@ import { PROFILE } from '../profile';
 
 const SECRET_KEY = `${PROFILE.secretPrefix}.licenceKey`;
 const CACHED_INFO_KEY = `${PROFILE.storagePrefix}.cachedLicenceInfo`;
+const CACHED_KEY_BACKUP_KEY = `${PROFILE.storagePrefix}.cachedLicenceKey`;
 
 export interface LicenceInfo {
     valid: boolean;
@@ -219,15 +220,30 @@ export class LicenceManager {
     }
 
     async getKey(): Promise<string | undefined> {
-        return this.secrets.get(SECRET_KEY);
+        const secretKey = await this.secrets.get(SECRET_KEY);
+        if (secretKey) {
+            return secretKey;
+        }
+
+        const cachedKey = this.storage?.get<unknown>(CACHED_KEY_BACKUP_KEY);
+        if (typeof cachedKey === 'string' && cachedKey.trim()) {
+            const restoredKey = cachedKey.trim();
+            await this.secrets.store(SECRET_KEY, restoredKey);
+            return restoredKey;
+        }
+
+        return undefined;
     }
 
     async storeKey(key: string): Promise<void> {
-        await this.secrets.store(SECRET_KEY, key);
+        const trimmedKey = key.trim();
+        await this.secrets.store(SECRET_KEY, trimmedKey);
+        await this.storage?.update(CACHED_KEY_BACKUP_KEY, trimmedKey);
     }
 
     async deleteKey(): Promise<void> {
         await this.secrets.delete(SECRET_KEY);
+        await this.storage?.update(CACHED_KEY_BACKUP_KEY, undefined);
     }
 
     async validate(apiUrl: string): Promise<LicenceInfo> {

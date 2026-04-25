@@ -364,7 +364,7 @@ async def register(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only free and trial registration are supported here")
 
     identity = await _get_or_create_customer_identity(db, email=normalized_email)
-    if plan == "trial" and identity.trial_activated_at:
+    if plan == "trial" and identity.trial_activated_at and current_settings.environment != "development":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="A trial has already been activated for this email.",
@@ -448,7 +448,7 @@ async def verify_email_registration(
 
     plan = customer.pending_plan
     identity = await _get_or_create_customer_identity(db, email=customer.email)
-    if plan == "trial" and identity.trial_activated_at:
+    if plan == "trial" and identity.trial_activated_at and current_settings.environment != "development":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="A trial has already been activated for this email.",

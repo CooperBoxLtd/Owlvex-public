@@ -1176,6 +1176,51 @@ async def test_development_trial_registration_has_no_expiry(client):
 
 
 @pytest.mark.asyncio
+async def test_development_trial_can_be_reissued_for_same_email(client):
+    development_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        resend_api_key="",
+        environment="development",
+    )
+
+    with patch("app.routers.licences.get_settings", return_value=development_settings):
+        first_registration = await client.post(
+            "/v1/licences/register",
+            json={"email": "dev-reissue-trial@example.com", "plan": "trial"},
+        )
+        assert first_registration.status_code == 201
+        first_verify = await client.post(
+            "/v1/licences/verify-email",
+            json={
+                "email": "dev-reissue-trial@example.com",
+                "code": first_registration.json()["verification_code"],
+            },
+        )
+        assert first_verify.status_code == 201
+
+        second_registration = await client.post(
+            "/v1/licences/register",
+            json={"email": "dev-reissue-trial@example.com", "plan": "trial"},
+        )
+        assert second_registration.status_code == 201
+        second_verify = await client.post(
+            "/v1/licences/verify-email",
+            json={
+                "email": "dev-reissue-trial@example.com",
+                "code": second_registration.json()["verification_code"],
+            },
+        )
+
+    assert second_verify.status_code == 201
+    data = second_verify.json()
+    assert data["licence_key"].startswith("owlvex_lic_")
+    assert data["plan"] == "trial"
+    assert data["expires_at"] is None
+
+
+@pytest.mark.asyncio
 async def test_verify_email_registration_emails_licence_when_resend_is_configured(client):
     configured_settings = Settings(
         database_url="sqlite+aiosqlite:///:memory:",

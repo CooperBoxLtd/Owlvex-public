@@ -377,6 +377,45 @@ describe('LicenceManager cached state', () => {
         expect(manager.getCachedInfo()).toEqual(info);
     });
 
+    it('restores the licence key from global storage when SecretStorage is empty', async () => {
+        const secrets = {
+            get: jest.fn().mockResolvedValue(undefined),
+            store: jest.fn().mockResolvedValue(undefined),
+            delete: jest.fn(),
+        } as any;
+        const storage = {
+            get: jest.fn((key: string) => key === 'owlvex.cachedLicenceKey' ? ' owlvex_lic_cached ' : undefined),
+            update: jest.fn(),
+        };
+
+        const manager = new LicenceManager(secrets, storage);
+        const key = await manager.getKey();
+
+        expect(key).toBe('owlvex_lic_cached');
+        expect(secrets.store).toHaveBeenCalledWith('owlvex.licenceKey', 'owlvex_lic_cached');
+    });
+
+    it('stores and deletes the licence key backup with the secret key', async () => {
+        const secrets = {
+            get: jest.fn(),
+            store: jest.fn().mockResolvedValue(undefined),
+            delete: jest.fn().mockResolvedValue(undefined),
+        } as any;
+        const storage = {
+            get: jest.fn(),
+            update: jest.fn().mockResolvedValue(undefined),
+        };
+
+        const manager = new LicenceManager(secrets, storage);
+        await manager.storeKey(' owlvex_lic_new ');
+        await manager.deleteKey();
+
+        expect(secrets.store).toHaveBeenCalledWith('owlvex.licenceKey', 'owlvex_lic_new');
+        expect(storage.update).toHaveBeenCalledWith('owlvex.cachedLicenceKey', 'owlvex_lic_new');
+        expect(secrets.delete).toHaveBeenCalledWith('owlvex.licenceKey');
+        expect(storage.update).toHaveBeenCalledWith('owlvex.cachedLicenceKey', undefined);
+    });
+
     it('clears persisted cached licence info when the cache is reset', () => {
         const secrets = {
             get: jest.fn(),

@@ -177,7 +177,20 @@ describe('ProviderRegistry', () => {
 
         it('Anthropic lists expected models', async () => {
             const models = await registry.getProvider('anthropic')!.listModels();
-            expect(models).toEqual(['claude-opus-4-6']);
+            expect(models).toEqual(['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001']);
+        });
+
+        it('does not let an Azure deployment leak into Anthropic model selection', async () => {
+            configState['anthropic.model'] = 'owlvex-gpt54mini';
+
+            const provider = registry.getProvider('anthropic')!;
+
+            expect(provider.selectedModel).toBe('claude-opus-4-6');
+            await expect(provider.listModels()).resolves.toEqual([
+                'claude-opus-4-6',
+                'claude-sonnet-4-6',
+                'claude-haiku-4-5-20251001',
+            ]);
         });
 
         it('Mistral lists expected models', async () => {

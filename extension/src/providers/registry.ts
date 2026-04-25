@@ -509,7 +509,10 @@ class AnthropicProvider implements AIProvider {
     id = 'anthropic';
     name = 'Anthropic';
     get selectedModel(): string {
-        return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('anthropic.model', 'claude-opus-4-6');
+        const configured = vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('anthropic.model', 'claude-opus-4-6').trim();
+        return configured.toLowerCase().startsWith('claude-')
+            ? configured
+            : ANTHROPIC_MODELS[0];
     }
     set selectedModel(value: string) {
         void persistProviderConnectionSetting('anthropic.model', value);
@@ -524,7 +527,7 @@ class AnthropicProvider implements AIProvider {
     }
 
     async listModels(): Promise<string[]> {
-        return [this.selectedModel];
+        return [...new Set([this.selectedModel, ...ANTHROPIC_MODELS])];
     }
 
     async complete(req: CompletionRequest): Promise<CompletionResponse> {
