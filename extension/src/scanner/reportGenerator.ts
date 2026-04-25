@@ -173,6 +173,26 @@ function getAiConfidence(finding: ScanResult['findings'][number]): number {
     return finding.aiReviewScores?.final ?? finding.resolverConfidence ?? finding.confidence ?? 0;
 }
 
+function hasAiReviewPass(finding: ScanResult['findings'][number], pass: 'verifier' | 'skeptic'): boolean {
+    const score = finding.aiReviewScores?.[pass];
+    return (typeof score === 'number' && Number.isFinite(score)) || Boolean(finding.aiReviewNotes?.[pass]);
+}
+
+function hasIndependentAiReview(finding: ScanResult['findings'][number]): boolean {
+    return hasAiReviewPass(finding, 'verifier') || hasAiReviewPass(finding, 'skeptic');
+}
+
+function getAiReviewPathLabel(finding: ScanResult['findings'][number]): string {
+    const passes = ['finder'];
+    if (hasAiReviewPass(finding, 'verifier')) {
+        passes.push('verifier');
+    }
+    if (hasAiReviewPass(finding, 'skeptic')) {
+        passes.push('skeptic');
+    }
+    return passes.join('+');
+}
+
 function isLowConfidenceAiFinding(finding: ScanResult['findings'][number]): boolean {
     return finding.provenance !== 'deterministic' && getAiConfidence(finding) < 0.75;
 }
@@ -259,16 +279,17 @@ function getAiUsageSummary(result: ScanResult): { requestCount: number; totalTok
 function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     const scanTier = getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'));
     const confidence = getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'));
-    const corroboration = getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'));
+    const evidence = getEvidenceDisplayLabel(finding);
     const reviewFlag = needsManualReview(finding) ? ' | manual review recommended' : '';
     const parts = [
         `mode ${scanTier}`,
         `confidence ${confidence}`,
-        `evidence ${corroboration}`,
+        `evidence ${evidence}`,
     ];
 
     if (finding.provenance !== 'deterministic') {
-        parts.push(`AI signal ${getConfidenceBand(getAiConfidence(finding))}`);
+        parts.push(`AI signal ${getConfidenceBand(getAiConfidence(finding))} (${formatPercent(getAiConfidence(finding))} final)`);
+        parts.push(`review path ${getAiReviewPathLabel(finding)}`);
     }
 
     parts.push(
@@ -320,9 +341,9 @@ function formatEvidenceConfidence(finding: ScanResult['findings'][number]): stri
     }
 
     const confidence = getConfidenceBand(getAiConfidence(finding));
-    const evidence = getCorroborationDisplayLabel(finding.corroboration ?? 'UNVERIFIED');
+    const evidence = getEvidenceDisplayLabel(finding);
     const manual = needsManualReview(finding) ? '; manual review recommended' : '';
-    return `${confidence} AI signal (${evidence}${manual})`;
+    return `${confidence} AI signal, final ${formatPercent(getAiConfidence(finding))} (${getAiReviewPathLabel(finding)}; ${evidence}${manual})`;
 }
 
 function buildAiReviewTrailLines(finding: ScanResult['findings'][number]): string[] {
@@ -350,18 +371,29 @@ function getCorroborationLabel(finding: ScanResult['findings'][number]): string 
     return finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED');
 }
 
+function getEvidenceCountBucket(finding: ScanResult['findings'][number]): 'PROVEN' | 'CORROBORATED' | 'FINDER_ONLY' | 'PARTIAL' | 'UNVERIFIED' {
+    const label = getCorroborationLabel(finding);
+    if (finding.provenance !== 'deterministic' && !hasIndependentAiReview(finding) && (label === 'CORROBORATED' || label === 'UNVERIFIED')) {
+        return 'FINDER_ONLY';
+    }
+    if (label === 'PROVEN' || label === 'CORROBORATED' || label === 'PARTIAL' || label === 'UNVERIFIED') {
+        return label;
+    }
+    return 'UNVERIFIED';
+}
+
 function summarizeCorroborationCounts(findings: ScanResult['findings']): string {
-    const order: Array<'PROVEN' | 'CORROBORATED' | 'PARTIAL' | 'UNVERIFIED'> = ['PROVEN', 'CORROBORATED', 'PARTIAL', 'UNVERIFIED'];
+    const order: Array<'PROVEN' | 'CORROBORATED' | 'FINDER_ONLY' | 'PARTIAL' | 'UNVERIFIED'> = ['PROVEN', 'CORROBORATED', 'FINDER_ONLY', 'PARTIAL', 'UNVERIFIED'];
     const counts = new Map<string, number>();
 
     for (const finding of findings) {
-        const label = getCorroborationLabel(finding);
+        const label = getEvidenceCountBucket(finding);
         counts.set(label, (counts.get(label) ?? 0) + 1);
     }
 
     return order
         .filter(label => (counts.get(label) ?? 0) > 0)
-        .map(label => `${label.toLowerCase()}: ${counts.get(label)}`)
+        .map(label => `${label.toLowerCase().replace('_', '-')}: ${counts.get(label)}`)
         .join(' | ');
 }
 
@@ -430,6 +462,23 @@ function getCorroborationDisplayLabel(value: string): string {
     }
 }
 
+function getEvidenceDisplayLabel(finding: ScanResult['findings'][number]): string {
+    if (finding.provenance === 'deterministic') {
+        return getCorroborationDisplayLabel(finding.corroboration ?? 'PROVEN');
+    }
+
+    const corroboration = finding.corroboration ?? 'UNVERIFIED';
+    if (corroboration === 'CORROBORATED' && !hasIndependentAiReview(finding)) {
+        return 'Finder high confidence, not independently verified';
+    }
+
+    if (corroboration === 'UNVERIFIED' && !hasIndependentAiReview(finding)) {
+        return 'Finder-only AI review';
+    }
+
+    return getCorroborationDisplayLabel(corroboration);
+}
+
 function buildHowToReadTable(): string[] {
     return [
         '## How To Read This Report',
@@ -438,10 +487,12 @@ function buildHowToReadTable(): string[] {
         '| --- | --- | --- |',
         '| Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |',
         '| Confirmed by rule | Deterministic analysis proved the issue from code structure | Highest confidence |',
-        '| Validated by AI review | AI found the issue and a follow-up review supported it | Strong signal, but not rule-proven |',
+        '| Validated by AI review | AI found the issue and verifier or skeptic review also supported it | Strong signal, but not rule-proven |',
+        '| Finder-only AI review | The finder reported the issue, but verifier and skeptic were not triggered or were unavailable | Treat as model-backed evidence, not independent validation |',
+        '| Finder high confidence, not independently verified | The finder score is high, but no verifier or skeptic pass is present in the audit trail | Useful triage signal; validate important fixes against the code |',
         '| Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |',
         '| Needs manual review | Evidence is weak, incomplete, or low-confidence | Do not treat as confirmed yet |',
-        '| AI signal | Qualitative band from the model review trail: High, Medium, Low, or Unknown | Use with the evidence label; raw percentages are audit detail only |',
+        '| AI signal | Qualitative band plus final raw confidence from the model review trail | Use with the evidence label; the percentage is model confidence, not proof |',
         '| Impact | How serious the damage could be if exploited | Business/security severity |',
         '| Likelihood | How likely exploitation is from the observed code | Exploitability estimate |',
         '| Risk score | Overall priority if the finding is real | Use this to prioritize fixes |',
@@ -652,7 +703,8 @@ function buildConfidencePostureLine(
     }
 
     const proven = findings.filter(finding => getCorroborationLabel(finding) === 'PROVEN').length;
-    const corroborated = findings.filter(finding => getCorroborationLabel(finding) === 'CORROBORATED').length;
+    const corroborated = findings.filter(finding => getCorroborationLabel(finding) === 'CORROBORATED' && (finding.provenance === 'deterministic' || hasIndependentAiReview(finding))).length;
+    const finderOnly = findings.filter(finding => finding.provenance !== 'deterministic' && !hasIndependentAiReview(finding) && getCorroborationLabel(finding) === 'CORROBORATED').length;
     const manualReview = findings.filter(finding => needsManualReview(finding)).length;
     const partial = findings.filter(finding => getCorroborationLabel(finding) === 'PARTIAL').length;
 
@@ -662,6 +714,9 @@ function buildConfidencePostureLine(
     }
     if (corroborated > 0) {
         parts.push(`${corroborated} cross-checked`);
+    }
+    if (finderOnly > 0) {
+        parts.push(`${finderOnly} finder-only`);
     }
     if (partial > 0) {
         parts.push(`${partial} partially validated`);
@@ -1073,10 +1128,11 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Analysis mode: ${getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'))}`);
                 lines.push(`- Confidence: ${getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'))}`);
                 if (finding.provenance !== 'deterministic') {
-                    lines.push(`- AI signal: ${getConfidenceBand(getAiConfidence(finding))}${needsManualReview(finding) ? ' (manual review recommended)' : ''}`);
+                    lines.push(`- AI signal: ${getConfidenceBand(getAiConfidence(finding))}, final ${formatPercent(getAiConfidence(finding))}${needsManualReview(finding) ? ' (manual review recommended)' : ''}`);
+                    lines.push(`- AI review path: ${getAiReviewPathLabel(finding)}`);
                     lines.push(`- AI review trace: ${formatAiPassBandSummary(finding)}`);
                 }
-                lines.push(`- Evidence: ${getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'))}`);
+                lines.push(`- Evidence: ${getEvidenceDisplayLabel(finding)}`);
                 lines.push(...buildEvidenceContractLines(finding));
                 lines.push(...buildAiReviewTrailLines(finding));
                 if (needsManualReview(finding)) {

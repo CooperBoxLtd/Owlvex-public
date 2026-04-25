@@ -261,7 +261,8 @@ describe('stability guardrails', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Analysis mode: Repo-context AI review');
         expect(written).toContain('- Analysis mix: repo_ai: 1');
-        expect(written).toContain('- Evidence: corroborated: 1');
+        expect(written).toContain('- Evidence: finder-only: 1');
+        expect(written).toContain('- Confidence posture: 1 finder-only');
         expect(written).toContain('- Analysis mode: Repo-context AI review');
     });
 });

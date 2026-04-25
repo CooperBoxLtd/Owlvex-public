@@ -147,12 +147,13 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Analysis mix: targeted_ai: 1');
         expect(written).toContain('- Evidence: corroborated: 1');
         expect(written).toContain('- Project context: inline project contract');
-        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| AI signal High \\| impact high \\| likelihood medium \\| risk 7/10 | High AI signal (Validated by AI review) |');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| AI signal High (93% final) \\| review path finder+verifier+skeptic \\| impact high \\| likelihood medium \\| risk 7/10 | High AI signal, final 93% (finder+verifier+skeptic; Validated by AI review) |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Finding risk: HIGH impact / MEDIUM likelihood / 7/10');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Confidence: AI-reviewed');
-        expect(written).toContain('- AI signal: High');
+        expect(written).toContain('- AI signal: High, final 93%');
+        expect(written).toContain('- AI review path: finder+verifier+skeptic');
         expect(written).toContain('- AI review trace: finder High | verifier High | skeptic High | final High (raw audit: finder 88%, verifier 91%, skeptic 90%, final 93%)');
         expect(written).toContain('- Evidence: Validated by AI review');
         expect(written).toContain('- Finder said: User input is concatenated into a query.');
@@ -459,8 +460,52 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Confidence posture: 1 need manual review');
         expect(written).toContain('Manual review recommended before acting.');
         expect(written).toContain('- Manual review: 1 AI finding(s) needing review');
-        expect(written).toContain('- AI signal: High (manual review recommended)');
+        expect(written).toContain('- AI signal: High, final 95% (manual review recommended)');
+        expect(written).toContain('- AI review path: finder');
+        expect(written).toContain('- Evidence: Finder-only AI review');
         expect(written).toContain('- Review note: This AI finding is not fully corroborated or has low confidence.');
+    });
+
+    it('does not call finder-only AI confidence independently validated', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('async function approveRefund(req, res, refunds) {}'));
+        const snapshot = {
+            targetLabel: 'src/probes/approval.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\approval.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                title: 'Broken function-level authorization',
+                                canonicalTitle: 'Broken function-level authorization',
+                                confidence: 0.96,
+                                resolverConfidence: 0.96,
+                                corroboration: 'CORROBORATED',
+                                scanTier: 'REPO_AI',
+                                aiReviewScores: { finder: 0.96, final: 0.96 },
+                                aiReviewNotes: {
+                                    finder: 'Only authentication is checked before a privileged approval action.',
+                                },
+                                riskScore: 9,
+                            },
+                        ],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('| Broken function-level authorization | mode Repo-context AI review \\| confidence AI-reviewed \\| evidence Finder high confidence, not independently verified \\| AI signal High (96% final) \\| review path finder \\| impact high \\| likelihood medium \\| risk 9/10 | High AI signal, final 96% (finder; Finder high confidence, not independently verified) |');
+        expect(written).toContain('- AI signal: High, final 96%');
+        expect(written).toContain('- AI review path: finder');
+        expect(written).toContain('- AI review trace: finder High | verifier Unknown | skeptic Unknown | final High (raw audit: finder 96%, verifier n/a, skeptic n/a, final 96%)');
+        expect(written).toContain('- Evidence: Finder high confidence, not independently verified');
     });
 
     it('includes scan warnings when a scan completed with recorder issues', async () => {
@@ -774,8 +819,9 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- AI findings needing manual review: 1');
         expect(written).toContain('- Manual review: 1 AI finding(s) needing review');
-        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| AI signal Low \\| impact high \\| likelihood medium \\| risk 7/10 \\| manual review recommended | Low AI signal (Validated by AI review; manual review recommended) |');
-        expect(written).toContain('- AI signal: Low (manual review recommended)');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| AI signal Low (65% final) \\| review path finder+verifier+skeptic \\| impact high \\| likelihood medium \\| risk 7/10 \\| manual review recommended | Low AI signal, final 65% (finder+verifier+skeptic; Validated by AI review; manual review recommended) |');
+        expect(written).toContain('- AI signal: Low, final 65% (manual review recommended)');
+        expect(written).toContain('- AI review path: finder+verifier+skeptic');
         expect(written).toContain('- AI review trace: finder Low | verifier Low | skeptic Low | final Low (raw audit: finder 62%, verifier 68%, skeptic 64%, final 65%)');
         expect(written).toContain('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');
     });
@@ -842,10 +888,12 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 | --- | --- | --- |
 | Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |
 | Confirmed by rule | Deterministic analysis proved the issue from code structure | Highest confidence |
-| Validated by AI review | AI found the issue and a follow-up review supported it | Strong signal, but not rule-proven |
+| Validated by AI review | AI found the issue and verifier or skeptic review also supported it | Strong signal, but not rule-proven |
+| Finder-only AI review | The finder reported the issue, but verifier and skeptic were not triggered or were unavailable | Treat as model-backed evidence, not independent validation |
+| Finder high confidence, not independently verified | The finder score is high, but no verifier or skeptic pass is present in the audit trail | Useful triage signal; validate important fixes against the code |
 | Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |
 | Needs manual review | Evidence is weak, incomplete, or low-confidence | Do not treat as confirmed yet |
-| AI signal | Qualitative band from the model review trail: High, Medium, Low, or Unknown | Use with the evidence label; raw percentages are audit detail only |
+| AI signal | Qualitative band plus final raw confidence from the model review trail | Use with the evidence label; the percentage is model confidence, not proof |
 | Impact | How serious the damage could be if exploited | Business/security severity |
 | Likelihood | How likely exploitation is from the observed code | Exploitability estimate |
 | Risk score | Overall priority if the finding is real | Use this to prioritize fixes |
