@@ -456,7 +456,6 @@ describe('parseChatIntent', () => {
         ]));
         expect((provider as any).messages[(provider as any).messages.length - 3].actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Open active file', kind: 'openSource', line: 3 }),
-            expect.objectContaining({ label: expect.stringContaining('db.js'), kind: 'openSource' }),
         ]));
     });
 

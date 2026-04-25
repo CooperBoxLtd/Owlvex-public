@@ -42,7 +42,7 @@ describe('workspaceScanner', () => {
         });
 
         const files = await collectScannableFiles(vscode.Uri.file('d:\\repo'));
-        expect(files.map(file => file.fsPath)).toEqual(['d:\\repo\\src\\app.js', 'd:\\repo\\src\\util.ts']);
+        expect(files.map(file => normalizeTestPath(file.fsPath))).toEqual(['d:/repo/src/app.js', 'd:/repo/src/util.ts']);
     });
 
     it('counts only successful scans as completed', async () => {

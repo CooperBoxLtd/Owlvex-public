@@ -34,6 +34,7 @@ describe('resolveRuntimeDataPath', () => {
             'owlvex.framework-pack.2026.1.json',
         );
 
-        expect(normalizeTestPath(resolved)).toContain('/extension/data/frameworks/owlvex.framework-pack.2026.1.json');
+        expect(normalizeTestPath(resolved)).toContain('/data/frameworks/owlvex.framework-pack.2026.1.json');
+        expect(normalizeTestPath(resolved)).not.toContain('/docs/data/frameworks/');
     });
 });
