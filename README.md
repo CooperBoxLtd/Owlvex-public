@@ -60,6 +60,14 @@ If Owlvex is being distributed through a public GitHub repository, download the 
 
 ## First Run
 
+Owlvex now opens with a first-run checklist in the chat panel when setup is incomplete. The goal is to make the first minute concrete:
+
+- confirm access with `Use Free`, `Start Trial`, or `Enter Licence`
+- confirm the current workspace/project context
+- configure an LLM provider when you want AI review and fix previews
+- run the first scan
+- create a summary report after scan results exist
+
 ### 1. Open Owlvex
 
 Use the Owlvex activity bar icon or run:
@@ -139,7 +147,7 @@ Use the Owlvex chat panel to:
 
 From findings or chat:
 
-- choose `Fix code`
+- choose `Preview fix`
 - review the generated diff
 - use `Keep fix` to apply it
 - Owlvex then rescans to verify the reviewed finding outcome
