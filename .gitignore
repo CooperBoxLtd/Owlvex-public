@@ -42,6 +42,7 @@ tmp/*.mjs
 
 # Owlvex benchmark run artifacts
 tools/owlvex-benchmark/runs/deterministic/*.json
+tools/owlvex-benchmark/runs/proof-contracts/*.json
 tools/owlvex-benchmark/runs/*.results.json
 
 # Generated Owlvex scan reports

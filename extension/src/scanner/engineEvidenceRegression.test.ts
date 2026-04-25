@@ -72,6 +72,142 @@ function runLookup(req) {
         expectedCanonicalIds: [],
     },
     {
+        name: 'unsafe JS SSRF has source-flow-sink-guard evidence',
+        language: 'javascript',
+        source: `
+async function proxy(req) {
+  return fetch(req.query.url);
+}`,
+        expectedCanonicalIds: ['owlvex.issue.ssrf.001'],
+        expectedEvidenceTypes: ['ssrf'],
+    },
+    {
+        name: 'unsafe JS weak host allowlist SSRF has source-flow-sink-guard evidence',
+        language: 'javascript',
+        source: `
+async function proxy(req) {
+  const url = new URL(req.query.url);
+  if (!url.hostname.includes('trusted.example')) throw new Error('blocked');
+  return fetch(url.toString());
+}`,
+        expectedCanonicalIds: ['owlvex.issue.ssrf.001'],
+        expectedEvidenceTypes: ['ssrf'],
+    },
+    {
+        name: 'safe JS SSRF exact host allowlist remains clean',
+        language: 'javascript',
+        source: `
+const TRUSTED_HOSTS = new Set(['trusted.example']);
+async function proxy(req) {
+  const url = new URL(req.query.url);
+  if (!TRUSTED_HOSTS.has(url.hostname)) throw new Error('blocked');
+  return fetch(url.toString());
+}`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Python SSRF has source-flow-sink-guard evidence',
+        language: 'python',
+        source: `
+import requests
+from flask import request
+
+def proxy():
+    target = request.args.get("url")
+    return requests.get(target)
+`,
+        expectedCanonicalIds: ['owlvex.issue.ssrf.001'],
+        expectedEvidenceTypes: ['ssrf'],
+    },
+    {
+        name: 'safe Python fixed outbound URL remains clean',
+        language: 'python',
+        source: `
+import requests
+
+def proxy():
+    return requests.get("https://trusted.example/status")
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Java SSRF has source-flow-sink-guard evidence',
+        language: 'java',
+        source: `
+class Proxy {
+    void proxy(HttpServletRequest request) throws Exception {
+        new URL(request.getParameter("url")).openStream();
+    }
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.ssrf.001'],
+        expectedEvidenceTypes: ['ssrf'],
+    },
+    {
+        name: 'safe Java fixed outbound URL remains clean',
+        language: 'java',
+        source: `
+class Proxy {
+    void proxy() throws Exception {
+        new URL("https://trusted.example/status").openStream();
+    }
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe C# SSRF has source-flow-sink-guard evidence',
+        language: 'csharp',
+        source: `
+class Proxy {
+    Task<string> Proxy(HttpClient client) {
+        var target = Request.Query["url"];
+        return client.GetStringAsync(target);
+    }
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.ssrf.001'],
+        expectedEvidenceTypes: ['ssrf'],
+    },
+    {
+        name: 'safe C# fixed outbound URL remains clean',
+        language: 'csharp',
+        source: `
+class Proxy {
+    Task<string> Proxy(HttpClient client) {
+        return client.GetStringAsync("https://trusted.example/status");
+    }
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Go SSRF has source-flow-sink-guard evidence',
+        language: 'go',
+        source: `
+package demo
+
+func proxy(r *http.Request) (*http.Response, error) {
+    target := r.URL.Query().Get("url")
+    return http.Get(target)
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.ssrf.001'],
+        expectedEvidenceTypes: ['ssrf'],
+    },
+    {
+        name: 'safe Go fixed outbound URL remains clean',
+        language: 'go',
+        source: `
+package demo
+
+func proxy() (*http.Response, error) {
+    return http.Get("https://trusted.example/status")
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
         name: 'unsafe Python command injection has source-flow-sink-guard evidence',
         language: 'python',
         source: `

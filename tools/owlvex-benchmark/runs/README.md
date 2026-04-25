@@ -7,6 +7,7 @@ Generated run outputs are local working artifacts and should not be committed by
 ## Layout
 
 - `deterministic/`: timestamped and latest summaries for the deterministic execution-risk gate
+- `proof-contracts/`: timestamped and latest summaries for the Engine 1.0 evidence-contract gate
 - `ai-evals/`: timestamped and latest summaries for the AI-only evaluation lane
 - model-specific result files can also live here when imported or generated from model runs
 
@@ -32,6 +33,15 @@ These artifacts are useful for:
 - spotting regressions between commits
 - building release confidence history
 - comparing per-suite summaries without rerunning the full tool
+
+## Proof-Contract Artifacts
+
+`npm run benchmark:proof-contracts` writes:
+
+- `tools/owlvex-benchmark/runs/proof-contracts/latest.json`
+- `tools/owlvex-benchmark/runs/proof-contracts/<timestamp>.json`
+
+Use these artifacts when debugging Engine 1.0 evidence-contract regressions. They record whether each covered case produced the expected canonical ID, evidence type, source, sink, guard state, verdict, and rationale.
 
 ## AI Eval Artifacts
 

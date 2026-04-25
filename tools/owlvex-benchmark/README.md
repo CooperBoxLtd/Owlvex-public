@@ -55,6 +55,8 @@ tools/owlvex-benchmark/
 
 ## Architecture
 
+The benchmark tool now includes an Engine 1.0 proof-contract gate under `engine/proof-contracts/`. This suite checks that covered scanner findings expose the evidence shape the product should trust: source, sink, guard state, verdict, rationale, and safe-companion suppression.
+
 Three deterministic reasoning axes, each following the same 5-layer pipeline:
 
 | Layer | GR (execution-risk) | SQ (SQL) | AC (access-control) |
@@ -96,6 +98,11 @@ npm run benchmark:deterministic    # from extension/
 npm run benchmark:status
 ```
 
+**Engine 1.0 proof-contract gate:**
+```bash
+npm run benchmark:proof-contracts
+```
+
 **Fresh checkout release check:**
 ```bash
 npm run release:check
@@ -122,6 +129,8 @@ npm run benchmark:sm002            # debug mode conditional rule
 
 All `benchmark:*` scripts are defined in `extension/package.json`.
 The combined `release:check` script is also defined there and runs fresh backend tests, extension tests, and the deterministic benchmark before reporting current checkout health.
+
+The proof-contract gate currently covers SSRF across JavaScript, Python, Java, C#, and Go, plus representative path traversal, command injection, SQL injection, and client-controlled query-filter cases. It is intentionally narrower than the aggregate deterministic gate: it exists to protect Engine 1.0 evidence semantics, not to replace the axis benchmarks.
 
 ---
 

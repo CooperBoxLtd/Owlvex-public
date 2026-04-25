@@ -1098,6 +1098,46 @@ function buildCommandInjectionEvidenceContract(params: {
     };
 }
 
+function buildSsrfEvidenceContract(params: {
+    source: string;
+    languageLabel: string;
+    destinationExpression: string;
+    destinationMatchIndex: number;
+    sinkExpression: string;
+    sinkMatchIndex: number;
+    guardLabel?: string;
+    guardReason?: string;
+}): EvidenceContract {
+    return {
+        issueType: 'ssrf',
+        source: {
+            kind: 'source',
+            label: `${params.languageLabel} request-controlled outbound destination`,
+            expression: params.destinationExpression,
+            line: lineOfOffset(params.source, params.destinationMatchIndex),
+        },
+        flow: [{
+            kind: 'assignment',
+            label: `${params.languageLabel} outbound destination reaches network request`,
+            expression: params.destinationExpression,
+            line: lineOfOffset(params.source, params.destinationMatchIndex),
+        }],
+        sink: {
+            kind: 'sink',
+            label: `${params.languageLabel} outbound network sink`,
+            expression: params.sinkExpression,
+            line: lineOfOffset(params.source, params.sinkMatchIndex),
+        },
+        guard: {
+            status: 'missing',
+            label: params.guardLabel ?? 'Trusted destination allowlist',
+            reason: params.guardReason ?? 'No recognized exact host allowlist, named integration map, protocol validation, or internal-address guard is visible before the outbound request.',
+        },
+        verdict: 'confirmed',
+        rationale: 'Request-controlled outbound destination reaches a network request sink without a recognized trusted-destination guard.',
+    };
+}
+
 function collectSanitizedVariables(source: string): Set<string> {
     const sanitized = new Set<string>();
     const pattern = new RegExp(SANITIZER_ASSIGN_PATTERN.source, SANITIZER_ASSIGN_PATTERN.flags);
@@ -1713,6 +1753,7 @@ function scanSsrfSinks(source: string): InternalFinding[] {
 
         const weakHostMatch = body.match(WEAK_HOST_ALLOWLIST_RE);
         if (weakHostMatch && urlAssignments.has(weakHostMatch[1]) && /\bfetch\s*\(\s*[A-Za-z_$][A-Za-z0-9_$]*\.toString\s*\(\s*\)\s*\)/.test(body)) {
+            const sinkOffset = match.index + (body.search(/\bfetch\s*\(/) >= 0 ? body.search(/\bfetch\s*\(/) : 0);
             found.push({
                 matchIndex: match.index,
                 severity: 'HIGH',
@@ -1729,6 +1770,16 @@ function scanSsrfSinks(source: string): InternalFinding[] {
                 framework: 'OWASP',
                 likelihood: 'HIGH',
                 likelihoodReasons: ['A request-derived outbound destination is guarded only by a substring hostname check.'],
+                evidenceContract: buildSsrfEvidenceContract({
+                    source,
+                    languageLabel: 'JavaScript/TypeScript',
+                    destinationExpression: urlAssignments.get(weakHostMatch[1]) ?? weakHostMatch[1],
+                    destinationMatchIndex: match.index,
+                    sinkExpression: lineExpressionAt(source, sinkOffset),
+                    sinkMatchIndex: sinkOffset,
+                    guardLabel: 'Exact trusted-host allowlist',
+                    guardReason: 'The visible guard uses substring matching rather than an exact trusted-host allowlist, so attacker-controlled lookalike hosts can pass the check.',
+                }),
             });
             continue;
         }
@@ -1755,6 +1806,14 @@ function scanSsrfSinks(source: string): InternalFinding[] {
                 framework: 'OWASP',
                 likelihood: 'HIGH',
                 likelihoodReasons: ['A request-derived URL reaches an outbound fetch sink without a visible allowlist guard.'],
+                evidenceContract: buildSsrfEvidenceContract({
+                    source,
+                    languageLabel: 'JavaScript/TypeScript',
+                    destinationExpression: directFetchMatch[1],
+                    destinationMatchIndex: match.index + directFetchMatch.index,
+                    sinkExpression: lineExpressionAt(source, match.index + directFetchMatch.index),
+                    sinkMatchIndex: match.index + directFetchMatch.index,
+                }),
             });
         }
     }
@@ -2364,12 +2423,15 @@ function scanPythonPathTraversalSinks(source: string): InternalFinding[] {
 
 function scanPythonSsrfSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
-    const taintedVars = new Set<string>();
+    const taintedVars = new Map<string, { sourceExpression: string; matchIndex: number }>();
     let match: RegExpExecArray | null;
 
     const taintPattern = new RegExp(PYTHON_REQUEST_ASSIGN_RE.source, PYTHON_REQUEST_ASSIGN_RE.flags);
     while ((match = taintPattern.exec(source)) !== null) {
-        taintedVars.add(match[1]);
+        taintedVars.set(match[1], {
+            sourceExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const directPattern = new RegExp(PYTHON_REQUESTS_DIRECT_RE.source, PYTHON_REQUESTS_DIRECT_RE.flags);
@@ -2389,12 +2451,21 @@ function scanPythonSsrfSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Python URL reaches an outbound requests sink without a visible allowlist guard.'],
+            evidenceContract: buildSsrfEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                destinationExpression: lineExpressionAt(source, match.index),
+                destinationMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
     const varPattern = new RegExp(PYTHON_REQUESTS_VAR_RE.source, PYTHON_REQUESTS_VAR_RE.flags);
     while ((match = varPattern.exec(source)) !== null) {
-        if (!taintedVars.has(match[1])) { continue; }
+        const taintedVar = taintedVars.get(match[1]);
+        if (!taintedVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2410,6 +2481,14 @@ function scanPythonSsrfSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Python URL variable reaches an outbound requests sink without a visible allowlist guard.'],
+            evidenceContract: buildSsrfEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                destinationExpression: taintedVar.sourceExpression,
+                destinationMatchIndex: taintedVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2654,13 +2733,16 @@ function scanJavaPathTraversalSinks(source: string): InternalFinding[] {
 
 function scanJavaSsrfSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
-    const taintedVars = new Set<string>();
-    const urlVars = new Map<string, string>();
+    const taintedVars = new Map<string, { sourceExpression: string; matchIndex: number }>();
+    const urlVars = new Map<string, { sourceExpression: string; sourceMatchIndex: number; constructionExpression: string; matchIndex: number }>();
     let match: RegExpExecArray | null;
 
     const taintPattern = new RegExp(JAVA_URL_ASSIGN_RE.source, JAVA_URL_ASSIGN_RE.flags);
     while ((match = taintPattern.exec(source)) !== null) {
-        taintedVars.add(match[1]);
+        taintedVars.set(match[1], {
+            sourceExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const directPattern = new RegExp(JAVA_URL_DIRECT_SSRF_RE.source, JAVA_URL_DIRECT_SSRF_RE.flags);
@@ -2680,18 +2762,33 @@ function scanJavaSsrfSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Java URL reaches an outbound network sink without a visible allowlist guard.'],
+            evidenceContract: buildSsrfEvidenceContract({
+                source,
+                languageLabel: 'Java',
+                destinationExpression: lineExpressionAt(source, match.index),
+                destinationMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
     const urlObjectPattern = new RegExp(JAVA_URL_OBJECT_ASSIGN_RE.source, JAVA_URL_OBJECT_ASSIGN_RE.flags);
     while ((match = urlObjectPattern.exec(source)) !== null) {
-        if (!taintedVars.has(match[2])) { continue; }
-        urlVars.set(match[1], match[2]);
+        const taintedVar = taintedVars.get(match[2]);
+        if (!taintedVar) { continue; }
+        urlVars.set(match[1], {
+            sourceExpression: taintedVar.sourceExpression,
+            sourceMatchIndex: taintedVar.matchIndex,
+            constructionExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const openStreamPattern = new RegExp(JAVA_URL_OPEN_STREAM_RE.source, JAVA_URL_OPEN_STREAM_RE.flags);
     while ((match = openStreamPattern.exec(source)) !== null) {
-        if (!urlVars.has(match[1])) { continue; }
+        const urlVar = urlVars.get(match[1]);
+        if (!urlVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2707,6 +2804,14 @@ function scanJavaSsrfSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Java URL object reaches an outbound network sink without a visible allowlist guard.'],
+            evidenceContract: buildSsrfEvidenceContract({
+                source,
+                languageLabel: 'Java',
+                destinationExpression: urlVar.sourceExpression,
+                destinationMatchIndex: urlVar.sourceMatchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -3030,12 +3135,15 @@ function scanCsharpPathTraversalSinks(source: string): InternalFinding[] {
 
 function scanCsharpSsrfSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
-    const taintedVars = new Set<string>();
+    const taintedVars = new Map<string, { sourceExpression: string; matchIndex: number }>();
     let match: RegExpExecArray | null;
 
     const taintPattern = new RegExp(CSHARP_REQUEST_ASSIGN_RE.source, CSHARP_REQUEST_ASSIGN_RE.flags);
     while ((match = taintPattern.exec(source)) !== null) {
-        taintedVars.add(match[1]);
+        taintedVars.set(match[1], {
+            sourceExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const directPattern = new RegExp(CSHARP_HTTP_DIRECT_RE.source, CSHARP_HTTP_DIRECT_RE.flags);
@@ -3059,12 +3167,21 @@ function scanCsharpSsrfSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived C# URL reaches an outbound HttpClient sink without a visible allowlist guard.'],
+            evidenceContract: buildSsrfEvidenceContract({
+                source,
+                languageLabel: 'C#',
+                destinationExpression: lineExpressionAt(source, match.index),
+                destinationMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
     const varPattern = new RegExp(CSHARP_HTTP_VAR_RE.source, CSHARP_HTTP_VAR_RE.flags);
     while ((match = varPattern.exec(source)) !== null) {
-        if (!taintedVars.has(match[1])) { continue; }
+        const taintedVar = taintedVars.get(match[1]);
+        if (!taintedVar) { continue; }
         const varName = match[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         if (new RegExp(`\\b(?:allowlistedHosts|trustedHosts)\\.(?:Contains|contains)\\s*\\(\\s*${varName}\\s*\\)`).test(source)
             || new RegExp(`\\b(?:isAllowedOutboundUrl|isSafeOutboundUrl|validateOutboundUrl)\\s*\\(\\s*${varName}\\s*\\)`, 'i').test(source)) {
@@ -3085,6 +3202,14 @@ function scanCsharpSsrfSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived C# URL variable reaches an outbound HttpClient sink without a visible allowlist guard.'],
+            evidenceContract: buildSsrfEvidenceContract({
+                source,
+                languageLabel: 'C#',
+                destinationExpression: taintedVar.sourceExpression,
+                destinationMatchIndex: taintedVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -3300,12 +3425,15 @@ function scanGoPathTraversalSinks(source: string): InternalFinding[] {
 
 function scanGoSsrfSinks(source: string): InternalFinding[] {
     const found: InternalFinding[] = [];
-    const taintedVars = new Set<string>();
+    const taintedVars = new Map<string, { sourceExpression: string; matchIndex: number }>();
     let match: RegExpExecArray | null;
 
     const taintPattern = new RegExp(GO_REQUEST_ASSIGN_RE.source, GO_REQUEST_ASSIGN_RE.flags);
     while ((match = taintPattern.exec(source)) !== null) {
-        taintedVars.add(match[1]);
+        taintedVars.set(match[1], {
+            sourceExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const directPattern = new RegExp(GO_HTTP_DIRECT_RE.source, GO_HTTP_DIRECT_RE.flags);
@@ -3325,12 +3453,21 @@ function scanGoSsrfSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Go URL reaches an outbound HTTP sink without a visible allowlist guard.'],
+            evidenceContract: buildSsrfEvidenceContract({
+                source,
+                languageLabel: 'Go',
+                destinationExpression: lineExpressionAt(source, match.index),
+                destinationMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
     const varPattern = new RegExp(GO_HTTP_VAR_RE.source, GO_HTTP_VAR_RE.flags);
     while ((match = varPattern.exec(source)) !== null) {
-        if (!taintedVars.has(match[1])) { continue; }
+        const taintedVar = taintedVars.get(match[1]);
+        if (!taintedVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -3346,6 +3483,14 @@ function scanGoSsrfSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Go URL variable reaches an outbound HTTP sink without a visible allowlist guard.'],
+            evidenceContract: buildSsrfEvidenceContract({
+                source,
+                languageLabel: 'Go',
+                destinationExpression: taintedVar.sourceExpression,
+                destinationMatchIndex: taintedVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 

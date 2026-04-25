@@ -1,0 +1,102 @@
+[
+  {
+    "name": "unsafe JS SSRF direct fetch",
+    "language": "javascript",
+    "source": "async function proxy(req) {\n  return fetch(req.query.url);\n}",
+    "expectedCanonicalIds": ["owlvex.issue.ssrf.001"],
+    "expectedEvidenceTypes": ["ssrf"]
+  },
+  {
+    "name": "unsafe JS SSRF weak host substring allowlist",
+    "language": "javascript",
+    "source": "async function proxy(req) {\n  const url = new URL(req.query.url);\n  if (!url.hostname.includes('trusted.example')) throw new Error('blocked');\n  return fetch(url.toString());\n}",
+    "expectedCanonicalIds": ["owlvex.issue.ssrf.001"],
+    "expectedEvidenceTypes": ["ssrf"]
+  },
+  {
+    "name": "safe JS SSRF exact host allowlist",
+    "language": "javascript",
+    "source": "const TRUSTED_HOSTS = new Set(['trusted.example']);\nasync function proxy(req) {\n  const url = new URL(req.query.url);\n  if (!TRUSTED_HOSTS.has(url.hostname)) throw new Error('blocked');\n  return fetch(url.toString());\n}",
+    "expectedCanonicalIds": []
+  },
+  {
+    "name": "unsafe Python SSRF request-controlled destination",
+    "language": "python",
+    "source": "import requests\nfrom flask import request\n\ndef proxy():\n    target = request.args.get(\"url\")\n    return requests.get(target)\n",
+    "expectedCanonicalIds": ["owlvex.issue.ssrf.001"],
+    "expectedEvidenceTypes": ["ssrf"]
+  },
+  {
+    "name": "safe Python SSRF fixed destination",
+    "language": "python",
+    "source": "import requests\n\ndef proxy():\n    return requests.get(\"https://trusted.example/status\")\n",
+    "expectedCanonicalIds": []
+  },
+  {
+    "name": "unsafe Java SSRF request-controlled URL",
+    "language": "java",
+    "source": "class Proxy {\n    void proxy(HttpServletRequest request) throws Exception {\n        new URL(request.getParameter(\"url\")).openStream();\n    }\n}\n",
+    "expectedCanonicalIds": ["owlvex.issue.ssrf.001"],
+    "expectedEvidenceTypes": ["ssrf"]
+  },
+  {
+    "name": "safe Java SSRF fixed destination",
+    "language": "java",
+    "source": "class Proxy {\n    void proxy() throws Exception {\n        new URL(\"https://trusted.example/status\").openStream();\n    }\n}\n",
+    "expectedCanonicalIds": []
+  },
+  {
+    "name": "unsafe C# SSRF request-controlled destination",
+    "language": "csharp",
+    "source": "class Proxy {\n    Task<string> Proxy(HttpClient client) {\n        var target = Request.Query[\"url\"];\n        return client.GetStringAsync(target);\n    }\n}\n",
+    "expectedCanonicalIds": ["owlvex.issue.ssrf.001"],
+    "expectedEvidenceTypes": ["ssrf"]
+  },
+  {
+    "name": "safe C# SSRF fixed destination",
+    "language": "csharp",
+    "source": "class Proxy {\n    Task<string> Proxy(HttpClient client) {\n        return client.GetStringAsync(\"https://trusted.example/status\");\n    }\n}\n",
+    "expectedCanonicalIds": []
+  },
+  {
+    "name": "unsafe Go SSRF request-controlled destination",
+    "language": "go",
+    "source": "package demo\n\nfunc proxy(r *http.Request) (*http.Response, error) {\n    target := r.URL.Query().Get(\"url\")\n    return http.Get(target)\n}\n",
+    "expectedCanonicalIds": ["owlvex.issue.ssrf.001"],
+    "expectedEvidenceTypes": ["ssrf"]
+  },
+  {
+    "name": "safe Go SSRF fixed destination",
+    "language": "go",
+    "source": "package demo\n\nfunc proxy() (*http.Response, error) {\n    return http.Get(\"https://trusted.example/status\")\n}\n",
+    "expectedCanonicalIds": []
+  },
+  {
+    "name": "unsafe JS path traversal proof contract",
+    "language": "javascript",
+    "source": "const path = require('path');\nconst fs = require('fs');\nfunction exportReport(req, res) {\n  const filePath = path.join('/srv/app/exports', req.query.file);\n  const report = fs.readFileSync(filePath, 'utf8');\n  res.type('text/plain').send(report);\n}",
+    "expectedCanonicalIds": ["owlvex.issue.path_traversal.001"],
+    "expectedEvidenceTypes": ["path-traversal"]
+  },
+  {
+    "name": "unsafe JS command injection proof contract",
+    "language": "javascript",
+    "source": "const { exec } = require('child_process');\nfunction runLookup(req) {\n  const host = req.query.host;\n  return exec(`nslookup ${host}`);\n}",
+    "expectedCanonicalIds": ["owlvex.issue.command_injection.001"],
+    "expectedEvidenceTypes": ["command-injection"]
+  },
+  {
+    "name": "unsafe JS SQL injection proof contract",
+    "language": "javascript",
+    "source": "async function findUser(req, db) {\n  const email = req.query.email;\n  return db.query(`SELECT * FROM users WHERE email = '${email}'`);\n}",
+    "expectedCanonicalIds": ["owlvex.issue.sql_injection.001"],
+    "expectedEvidenceTypes": ["sql-injection"]
+  },
+  {
+    "name": "unsafe JS client-controlled query filter proof contract",
+    "language": "javascript",
+    "source": "function matchesFilter(user, filter) {\n  return Object.entries(filter).every(([key, value]) => user[key] === value);\n}\nrouter.post('/users/search-unsafe', requireAdmin, (req, res) => {\n  const filter = req.body && typeof req.body.filter === 'object' && req.body.filter !== null ? req.body.filter : {};\n  const results = fakeUsers.filter(user => matchesFilter(user, filter));\n  res.json({ count: results.length, results });\n});",
+    "expectedCanonicalIds": ["owlvex.issue.nosql_injection.001"],
+    "expectedEvidenceTypes": ["client-controlled-query-filter"]
+  }
+]

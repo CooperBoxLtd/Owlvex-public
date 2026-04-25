@@ -14,6 +14,7 @@ Each entry should answer:
 | Benchmark | Type | Source | Status | Supports Claim |
 | --- | --- | --- | --- | --- |
 | Deterministic engine gate | proof | `tools/owlvex-benchmark/` | live | Owlvex deterministic axes are benchmark-backed for covered suites |
+| Engine proof-contract gate | proof | `tools/owlvex-benchmark/engine/proof-contracts/` | live | Engine 1.0 findings expose benchmarked source, sink, guard, verdict, and safe-companion behavior for covered cases |
 | Demo stabilization benchmark | proof/product | `tools/demo/benchmark.expectations.json` | live | Unsafe/safe demo fixtures remain aligned with the trusted surface |
 | Demo-app stabilization benchmark | proof/product | `tools/demo-app/benchmark.expectations.json` | live | Repo-style benchmark behavior stays aligned with the trusted surface |
 | Demo AI benchmark | AI/product | `tools/demo/ai-benchmark.expectations.json` | live | AI lane can be scored on unsafe recall, safe quietness, family match, and lane fit |
