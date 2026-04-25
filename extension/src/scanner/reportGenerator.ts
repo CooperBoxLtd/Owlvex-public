@@ -209,6 +209,10 @@ function hasProviderRateLimitWarning(warnings: Array<{ file: string; warning: st
     return warnings.some(item => /\b429\b|rate limit|too many requests/i.test(item.warning));
 }
 
+function getProviderComparisonNotes(results: ReportEntry[]): string[] {
+    return [...new Set(results.flatMap(item => item.result.providerComparisonNotes ?? []))];
+}
+
 function usesAiForFindings(result: ScanResult): boolean {
     return result.findings.some(finding => finding.provenance === 'ai');
 }
@@ -720,6 +724,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             warning,
         })),
     );
+    const providerComparisonNotes = getProviderComparisonNotes(snapshot.results);
     const packCoverageSummary = buildKnowledgeSourcesSummary(snapshot.results);
     const projectContextSummary = [...new Set(
         snapshot.results
@@ -869,6 +874,15 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(...(await buildSummaryFindingLines(root, manualReviewItems)));
         }
 
+        if (providerComparisonNotes.length) {
+            lines.push('## Provider Comparison Notes');
+            lines.push('');
+            for (const note of providerComparisonNotes) {
+                lines.push(`- ${note}`);
+            }
+            lines.push('');
+        }
+
         if (warnings.length || snapshot.errors.length || hasProviderRateLimitWarning(warnings)) {
             lines.push('## Scan Notes');
             lines.push('');
@@ -934,6 +948,14 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         '',
     ];
 
+    if (providerComparisonNotes.length) {
+        lines.push('## Provider Comparison Notes', '');
+        for (const note of providerComparisonNotes) {
+            lines.push(`- ${note}`);
+        }
+        lines.push('');
+    }
+
     lines.push('## Findings By File', '');
 
     if (findingsByFile.length) {
@@ -944,6 +966,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Findings: ${item.result.findings.length}`);
             const fileAiUsage = getAiUsageSummary(item.result);
             lines.push(`- AI usage: ${fileAiUsage.requestCount} request(s), ${fileAiUsage.totalTokens} token(s)`);
+            if (item.result.providerComparisonNotes?.length) {
+                lines.push(`- Provider comparison: ${item.result.providerComparisonNotes.join(' | ')}`);
+            }
             if (item.result.findings.length) {
                 const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];
                 lines.push(`- Fix first: ${topFinding.canonicalTitle || topFinding.title} (${topFinding.riskScore ?? 'n/a'}/10 risk)`);

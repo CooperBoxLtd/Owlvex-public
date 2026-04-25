@@ -94,6 +94,7 @@ export interface ScanResult {
     model: string;
     provider: string;
     warnings: string[];
+    providerComparisonNotes?: string[];
     aiUsage?: {
         requestCount: number;
         totalTokens: number;

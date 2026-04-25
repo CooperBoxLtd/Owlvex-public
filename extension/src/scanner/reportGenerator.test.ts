@@ -348,6 +348,57 @@ describe('reportGenerator', () => {
         expect(written).toContain('- clean.js: model timeout');
     });
 
+    it('renders provider comparison notes in full reports', async () => {
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo\\src'), {
+            targetLabel: 'src/example.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\example.js'),
+                    result: buildResult({
+                        providerComparisonNotes: [
+                            'Provider disagreement: gpt / model-a previously reported 0 findings for example.js; anthropic / model-b now reports 1. Treat clean scans as provider/model-scoped evidence.',
+                        ],
+                    }),
+                },
+            ],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('## Provider Comparison Notes');
+        expect(written).toContain('- Provider disagreement: gpt / model-a previously reported 0 findings for example.js; anthropic / model-b now reports 1. Treat clean scans as provider/model-scoped evidence.');
+        expect(written).toContain('- Provider comparison: Provider disagreement: gpt / model-a previously reported 0 findings for example.js; anthropic / model-b now reports 1. Treat clean scans as provider/model-scoped evidence.');
+    });
+
+    it('renders provider comparison notes in summary reports', async () => {
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo\\src'), {
+            targetLabel: 'src/example.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\example.js'),
+                    result: buildResult({
+                        providerComparisonNotes: [
+                            'Provider-scoped clean result: anthropic / model-b reports 0 findings for example.js, while gpt / model-a previously reported 2. Consider a second-provider review before calling the file clean.',
+                        ],
+                    }),
+                },
+            ],
+        }, { variant: 'summary' });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('## Provider Comparison Notes');
+        expect(written).toContain('- Provider-scoped clean result: anthropic / model-b reports 0 findings for example.js, while gpt / model-a previously reported 2. Consider a second-provider review before calling the file clean.');
+    });
+
     it('marks unverified high-confidence AI findings as needing manual review', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         const snapshot = {

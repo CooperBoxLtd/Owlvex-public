@@ -30,6 +30,7 @@ const reportStore = new Map<string, StoredReportRecord>();
 const SCAN_STORE_KEY = `${PROFILE.storagePrefix}.scanStore`;
 const REPORT_STORE_KEY = `${PROFILE.storagePrefix}.reportStore`;
 const LAST_REPORT_SNAPSHOT_KEY = `${PROFILE.storagePrefix}.lastReportSnapshot`;
+const RECENT_SCAN_SNAPSHOTS_KEY = `${PROFILE.storagePrefix}.recentScanSnapshots`;
 const ISSUE_PACK_ID = 'owlvex.issue-pack.v1';
 const ISSUE_MAPPING_PACK_ID = 'owlvex.issue-mapping-pack.v1';
 const REMEDIATION_PACK_ID = 'owlvex.remediation-pack.v1';
@@ -80,6 +81,13 @@ interface ReportCommandResult {
         errors: string[];
         results: Array<{ uri: vscode.Uri; result: ScanResult }>;
     };
+}
+
+interface RecentScanSnapshot {
+    provider: string;
+    model: string;
+    findingCount: number;
+    score: number;
 }
 
 interface ReportCommandOptions {
@@ -1549,6 +1557,59 @@ export function activate(context: vscode.ExtensionContext) {
         };
     };
 
+    const normalizeScanHistoryPath = (uri: vscode.Uri): string => path.normalize(uri.fsPath).toLowerCase();
+
+    const loadRecentScanSnapshots = (): Record<string, RecentScanSnapshot> => {
+        const raw = context.workspaceState.get<Record<string, RecentScanSnapshot>>(RECENT_SCAN_SNAPSHOTS_KEY);
+        return raw && typeof raw === 'object' ? raw : {};
+    };
+
+    const persistRecentScanSnapshots = async (snapshots: Record<string, RecentScanSnapshot>) => {
+        await context.workspaceState.update(RECENT_SCAN_SNAPSHOTS_KEY, snapshots);
+    };
+
+    const annotateProviderComparisonNotes = async (
+        results: Array<{ uri: vscode.Uri; result: ScanResult }>,
+    ): Promise<Array<{ uri: vscode.Uri; result: ScanResult }>> => {
+        const snapshots = loadRecentScanSnapshots();
+        const annotated = results.map(item => {
+            const key = normalizeScanHistoryPath(item.uri);
+            const previous = snapshots[key];
+            const current: RecentScanSnapshot = {
+                provider: item.result.provider || 'unknown provider',
+                model: item.result.model || 'unknown model',
+                findingCount: item.result.findings.length,
+                score: item.result.score,
+            };
+            const providerChanged = Boolean(previous)
+                && (previous!.provider !== current.provider || previous!.model !== current.model);
+            const label = vscode.workspace.asRelativePath(item.uri, false);
+            const notes: string[] = [];
+
+            if (previous && providerChanged && previous.findingCount === 0 && current.findingCount > 0) {
+                notes.push(`Provider disagreement: ${previous.provider} / ${previous.model} previously reported 0 findings for ${label}; ${current.provider} / ${current.model} now reports ${current.findingCount}. Treat clean scans as provider/model-scoped evidence.`);
+            } else if (previous && providerChanged && previous.findingCount > 0 && current.findingCount === 0) {
+                notes.push(`Provider-scoped clean result: ${current.provider} / ${current.model} reports 0 findings for ${label}, while ${previous.provider} / ${previous.model} previously reported ${previous.findingCount}. Consider a second-provider review before calling the file clean.`);
+            } else if (!previous && current.findingCount === 0) {
+                notes.push(`Clean result scope: ${current.provider} / ${current.model} reported 0 findings for ${label}; this is not proof of absence across other models or deeper review.`);
+            }
+
+            snapshots[key] = current;
+            return {
+                ...item,
+                result: {
+                    ...item.result,
+                    providerComparisonNotes: notes.length
+                        ? [...(item.result.providerComparisonNotes ?? []), ...notes]
+                        : item.result.providerComparisonNotes,
+                },
+            };
+        });
+
+        await persistRecentScanSnapshots(snapshots);
+        return annotated;
+    };
+
     const createAndOpenReport = async (snapshot: ReportSnapshot, reportVariant: ReportVariant = 'full') => {
         const safeSnapshot = normalizeReportSnapshot(snapshot);
         const reportUri = await generateReportFromSnapshot(safeSnapshot.outputRoot, safeSnapshot, { variant: reportVariant });
@@ -2199,7 +2260,11 @@ export function activate(context: vscode.ExtensionContext) {
             sidebar.clear();
 
             try {
-                const result = applyRulePackContext(await scanEngine.scanDocument(editor.document));
+                const [annotated] = await annotateProviderComparisonNotes([{
+                    uri: editor.document.uri,
+                    result: applyRulePackContext(await scanEngine.scanDocument(editor.document)),
+                }]);
+                const result = annotated.result;
                 storeScanResult(result.scanId, result, vscode.workspace.asRelativePath(editor.document.uri, false));
                 await persistScans();
                 await persistLastReportSnapshot({
@@ -2276,7 +2341,9 @@ export function activate(context: vscode.ExtensionContext) {
                     diagnostics,
                     skipConfirmation: true,
                 });
-                const enrichedResults = await finalizeMultiFileResults(summary.results, `Selected files: ${fileUris.length} file(s)`);
+                const enrichedResults = await annotateProviderComparisonNotes(
+                    await finalizeMultiFileResults(summary.results, `Selected files: ${fileUris.length} file(s)`),
+                );
                 const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
                 for (const item of enrichedResults) {
                     storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -2373,7 +2440,9 @@ export function activate(context: vscode.ExtensionContext) {
                     diagnostics,
                     skipConfirmation: true,
                 });
-                const enrichedResults = await finalizeMultiFileResults(summary.results, `Open editors: ${fileUris.length} file(s)`);
+                const enrichedResults = await annotateProviderComparisonNotes(
+                    await finalizeMultiFileResults(summary.results, `Open editors: ${fileUris.length} file(s)`),
+                );
                 const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
                 for (const item of enrichedResults) {
                     storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -2448,7 +2517,11 @@ export function activate(context: vscode.ExtensionContext) {
 
             statusBar.showScanning();
             try {
-                const result = applyRulePackContext(await scanEngine.scanDocument(doc));
+                const [annotated] = await annotateProviderComparisonNotes([{
+                    uri: doc.uri,
+                    result: applyRulePackContext(await scanEngine.scanDocument(doc)),
+                }]);
+                const result = annotated.result;
                 storeScanResult(result.scanId, result, vscode.workspace.asRelativePath(doc.uri, false));
                 await persistScans();
                 await persistLastReportSnapshot({
@@ -2928,9 +3001,11 @@ export function activate(context: vscode.ExtensionContext) {
                 diagnostics,
                 skipConfirmation: true,
             });
-            summary.results = await finalizeMultiFileResults(
-                summary.results,
-                `Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`,
+            summary.results = await annotateProviderComparisonNotes(
+                await finalizeMultiFileResults(
+                    summary.results,
+                    `Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`,
+                ),
             );
 
             for (const item of summary.results) {
@@ -3044,7 +3119,11 @@ export function activate(context: vscode.ExtensionContext) {
                     diagnostics.clear(document.uri);
                     sidebar.clear();
 
-                    const result = applyRulePackContext(await scanEngine.scanDocument(document));
+                    const [annotated] = await annotateProviderComparisonNotes([{
+                        uri: document.uri,
+                        result: applyRulePackContext(await scanEngine.scanDocument(document)),
+                    }]);
+                    const result = annotated.result;
                     storeScanResult(result.scanId, result, vscode.workspace.asRelativePath(document.uri, false));
                     await persistScans();
                     diagnostics.applyFindings(document, result.findings);
@@ -3079,7 +3158,9 @@ export function activate(context: vscode.ExtensionContext) {
                         diagnostics,
                         skipConfirmation: true,
                     });
-                    summary.results = await finalizeMultiFileResults(summary.results, `Report selected files: ${fileUris.length} file(s)`);
+                    summary.results = await annotateProviderComparisonNotes(
+                        await finalizeMultiFileResults(summary.results, `Report selected files: ${fileUris.length} file(s)`),
+                    );
 
                     for (const item of summary.results) {
                         storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -3129,7 +3210,9 @@ export function activate(context: vscode.ExtensionContext) {
                         diagnostics,
                         skipConfirmation: true,
                     });
-                    summary.results = await finalizeMultiFileResults(summary.results, `Report open editors: ${fileUris.length} file(s)`);
+                    summary.results = await annotateProviderComparisonNotes(
+                        await finalizeMultiFileResults(summary.results, `Report open editors: ${fileUris.length} file(s)`),
+                    );
 
                     for (const item of summary.results) {
                         storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
@@ -3173,9 +3256,11 @@ export function activate(context: vscode.ExtensionContext) {
                     diagnostics,
                     skipConfirmation: true,
                 });
-                summary.results = await finalizeMultiFileResults(
-                    summary.results,
-                    `Report folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`,
+                summary.results = await annotateProviderComparisonNotes(
+                    await finalizeMultiFileResults(
+                        summary.results,
+                        `Report folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`,
+                    ),
                 );
 
                 for (const item of summary.results) {
