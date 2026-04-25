@@ -4,5 +4,6 @@
     "version":  "0.1.16",
     "releaseTag":  "v0.1.16",
     "asset":  "owlvex-prod.vsix",
-    "sha256File":  "downloads/owlvex-prod.vsix.sha256"
+    "sha256File":  "downloads/owlvex-prod.vsix.sha256",
+    "repositoryAsset":  "releases/owlvex-0.1.16.vsix"
 }
