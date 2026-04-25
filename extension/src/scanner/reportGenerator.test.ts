@@ -121,6 +121,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- AI requests: 3');
         expect(written).toContain('- Total AI tokens: 62');
         expect(written).toContain('- Estimated cost: not yet available');
+        expect(written).not.toContain('Provider rate limit note:');
         expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
         expect(written).toContain('- Knowledge sources: Fresh packs (1)');
         expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
@@ -302,6 +303,7 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Scan warnings: 1');
         expect(written).toContain('- Coverage: Partial AI coverage in this scan');
+        expect(written).toContain('- Provider rate limit note: this scan saw a 429/rate-limit signal. If it repeats, configure `owlvex.providerThrottleOverrides` for the affected provider.');
         expect(written).toContain('- AI findings needing manual review: 0');
         expect(written).toContain('- This scan did not produce active findings. Coverage and provider status are listed below.');
         expect(written).toContain('### degraded-clean.js');

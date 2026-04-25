@@ -5,6 +5,7 @@ import { describeRulePackRuntime, getRulePackModeLabel } from '../packs/packRunt
 import { ScanResult } from './scanEngine';
 import { FolderScanSummary } from './workspaceScanner';
 import { formatFrameworkSummary } from '../frameworks/catalog';
+import { PROFILE } from '../profile';
 
 export interface ReportEntry {
     uri: vscode.Uri;
@@ -159,6 +160,10 @@ function hasPartialAiCoverage(result: ScanResult): boolean {
     return (result.warnings ?? []).some(warning =>
         /deterministic-only|AI coverage intentionally paused|AI provider unavailable|\b429\b|rate limit/i.test(warning),
     );
+}
+
+function hasProviderRateLimitWarning(warnings: Array<{ file: string; warning: string }>): boolean {
+    return warnings.some(item => /\b429\b|rate limit|too many requests/i.test(item.warning));
 }
 
 function usesAiForFindings(result: ScanResult): boolean {
@@ -734,6 +739,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- AI requests: ${aggregateAiUsage.requestCount}`,
         `- Total AI tokens: ${aggregateAiUsage.totalTokens}`,
         `- Estimated cost: not yet available`,
+        ...(hasProviderRateLimitWarning(warnings)
+            ? [`- Provider rate limit note: this scan saw a 429/rate-limit signal. If it repeats, configure \`${PROFILE.configSection}.providerThrottleOverrides\` for the affected provider.`]
+            : []),
         '',
         '## Coverage And Context',
         '',
