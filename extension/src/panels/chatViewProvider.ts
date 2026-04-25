@@ -4593,21 +4593,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     .rail-button {
       cursor: pointer;
     }
-    .llm-menu,
-    .report-menu {
+    .llm-menu {
       position: relative;
     }
-    .llm-menu summary,
-    .report-menu summary {
+    .llm-menu summary {
       list-style: none;
       cursor: pointer;
     }
-    .llm-menu summary::-webkit-details-marker,
-    .report-menu summary::-webkit-details-marker {
+    .llm-menu summary::-webkit-details-marker {
       display: none;
     }
-    .llm-menu-panel,
-    .report-menu-panel {
+    .llm-menu-panel {
       position: absolute;
       left: 0;
       bottom: calc(100% + 8px);
@@ -4620,9 +4616,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       padding: 10px;
       display: grid;
       gap: 8px;
-    }
-    .report-menu-panel {
-      width: 220px;
     }
     .llm-menu-panel .meta {
       margin-top: 0;
@@ -4749,13 +4742,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <option value="scanFolder" selected>Workspace</option>
         </select>
         <button class="rail-button" id="runScanBottom" type="button">Scan</button>
-        <details class="report-menu" id="reportMenu">
-          <summary class="rail-button">Create Report</summary>
-          <div class="report-menu-panel">
-            <button class="rail-button" data-action="scanSummaryReport">Summary Report</button>
-            <button class="rail-button" data-action="scanFullReport">Full Evidence Report</button>
-          </div>
-        </details>
+        <select id="reportTypeBottom" class="rail-select" aria-label="Report type">
+          <option value="scanSummaryReport" selected>Summary report</option>
+          <option value="scanFullReport">Full evidence report</option>
+        </select>
+        <button class="rail-button" id="createReportBottom" type="button">Create Report</button>
       </div>
       <div class="composer-hint">Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line.</div>
       <textarea id="prompt" placeholder="Ask Owlvex about this repo, a vulnerability, or what to scan next."></textarea>
@@ -4781,6 +4772,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const modeHintEl = document.getElementById('modeHint');
     const scanScopeBottomEl = document.getElementById('scanScopeBottom');
     const runScanBottomEl = document.getElementById('runScanBottom');
+    const reportTypeBottomEl = document.getElementById('reportTypeBottom');
+    const createReportBottomEl = document.getElementById('createReportBottom');
     const providerEl = document.getElementById('provider');
     const modelEl = document.getElementById('model');
     const settingsPanelEl = document.getElementById('settingsPanel');
@@ -4950,6 +4943,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
     runScanBottomEl.addEventListener('click', () => {
       vscode.postMessage({ type: 'chat:action', action: scanScopeBottomEl.value });
+    });
+    createReportBottomEl.addEventListener('click', () => {
+      vscode.postMessage({ type: 'chat:action', action: reportTypeBottomEl.value });
     });
     promptEl.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
