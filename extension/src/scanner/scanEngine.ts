@@ -64,6 +64,12 @@ export interface EvidenceContract {
     guard?: EvidenceGuard;
     verdict: 'confirmed' | 'suspected' | 'guarded' | 'inconclusive';
     rationale: string;
+    proofStatus?: 'static_proven' | 'ai_plausible' | 'counter_evidence_found' | 'unproven_extra';
+    attackerAction?: string;
+    requiredGuard?: string[];
+    counterEvidence?: string[];
+    responsibilityLayer?: 'route-policy' | 'auth-middleware' | 'repository' | 'audit' | 'parser' | 'unknown';
+    proofChecks?: EvidenceProofCheck[];
 }
 
 export interface EvidencePoint {
@@ -79,6 +85,12 @@ export interface EvidenceGuard {
     expression?: string;
     line?: number;
     reason: string;
+}
+
+export interface EvidenceProofCheck {
+    check: string;
+    status: 'pass' | 'fail' | 'unknown';
+    evidence?: string;
 }
 
 export interface ScanResult {
@@ -463,6 +475,41 @@ function normalizeEvidenceGuard(value: any): EvidenceGuard | undefined {
     };
 }
 
+function normalizeEvidenceStringList(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        .map(item => item.trim());
+}
+
+function normalizeEvidenceProofCheck(value: unknown): EvidenceProofCheck | undefined {
+    if (!value || typeof value !== 'object') {
+        return undefined;
+    }
+
+    const raw = value as any;
+    const check = typeof raw.check === 'string' && raw.check.trim()
+        ? raw.check.trim()
+        : '';
+    const status = String(raw.status ?? '').trim();
+    if (!check || !['pass', 'fail', 'unknown'].includes(status)) {
+        return undefined;
+    }
+
+    const evidence = typeof raw.evidence === 'string' && raw.evidence.trim()
+        ? raw.evidence.trim()
+        : undefined;
+
+    return {
+        check,
+        status: status as EvidenceProofCheck['status'],
+        evidence,
+    };
+}
+
 function normalizeEvidenceContract(value: any): EvidenceContract | undefined {
     if (!value || typeof value !== 'object') {
         return undefined;
@@ -487,6 +534,26 @@ function normalizeEvidenceContract(value: any): EvidenceContract | undefined {
     const source = normalizeEvidencePoint(value.source, 'source');
     const sink = normalizeEvidencePoint(value.sink, 'sink');
     const guard = normalizeEvidenceGuard(value.guard);
+    const proofStatusValue = String(value.proof_status ?? value.proofStatus ?? '').trim();
+    const proofStatus = ['static_proven', 'ai_plausible', 'counter_evidence_found', 'unproven_extra'].includes(proofStatusValue)
+        ? proofStatusValue as EvidenceContract['proofStatus']
+        : undefined;
+    const attackerAction = typeof value.attacker_action === 'string' && value.attacker_action.trim()
+        ? value.attacker_action.trim()
+        : typeof value.attackerAction === 'string' && value.attackerAction.trim()
+            ? value.attackerAction.trim()
+            : undefined;
+    const requiredGuard = normalizeEvidenceStringList(value.required_guard ?? value.requiredGuard);
+    const counterEvidence = normalizeEvidenceStringList(value.counter_evidence ?? value.counterEvidence);
+    const responsibilityLayerValue = String(value.responsibility_layer ?? value.responsibilityLayer ?? '').trim();
+    const responsibilityLayer = ['route-policy', 'auth-middleware', 'repository', 'audit', 'parser', 'unknown'].includes(responsibilityLayerValue)
+        ? responsibilityLayerValue as EvidenceContract['responsibilityLayer']
+        : undefined;
+    const proofChecks = Array.isArray(value.proof_checks ?? value.proofChecks)
+        ? (value.proof_checks ?? value.proofChecks)
+            .map((item: unknown) => normalizeEvidenceProofCheck(item))
+            .filter((item: EvidenceProofCheck | undefined): item is EvidenceProofCheck => Boolean(item))
+        : [];
 
     if (!source && flow.length === 0 && !sink) {
         return undefined;
@@ -500,6 +567,12 @@ function normalizeEvidenceContract(value: any): EvidenceContract | undefined {
         guard,
         verdict: verdict as EvidenceContract['verdict'],
         rationale,
+        proofStatus,
+        attackerAction,
+        requiredGuard,
+        counterEvidence,
+        responsibilityLayer,
+        proofChecks,
     };
 }
 

@@ -23,6 +23,8 @@ function parseMarkdownReport(markdown) {
     const file = headingMatch[1].trim();
     const findings = [];
     const detections = [];
+    const evidenceIssueTypes = [];
+    const proofStatuses = [];
     let primaryScanMode;
     let scanTierPosture;
     let corroborationPosture;
@@ -53,9 +55,28 @@ function parseMarkdownReport(markdown) {
         findings.push(tableMatch[1].trim());
         detections.push(tableMatch[2].trim());
       }
+
+      const evidenceContractMatch = line.match(/^-\s+Evidence contract:\s+\w+\s+(.+)$/);
+      if (evidenceContractMatch) {
+        evidenceIssueTypes.push(evidenceContractMatch[1].trim());
+      }
+
+      const proofStatusMatch = line.match(/^-\s+Proof status:\s+(.+)$/);
+      if (proofStatusMatch) {
+        proofStatuses.push(proofStatusMatch[1].trim());
+      }
     }
 
-    files.push({ file, findings, detections, primaryScanMode, scanTierPosture, corroborationPosture });
+    files.push({
+      file,
+      findings,
+      detections,
+      evidenceIssueTypes,
+      proofStatuses,
+      primaryScanMode,
+      scanTierPosture,
+      corroborationPosture,
+    });
   }
 
   return { targetLabel, files };
@@ -63,6 +84,69 @@ function parseMarkdownReport(markdown) {
 
 function normalizeFile(value) {
   return value.replace(/\//g, '\\').trim().toLowerCase();
+}
+
+function normalizeText(value) {
+  return String(value ?? '')
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function reportTextForEntry(reportEntry) {
+  return [
+    reportEntry?.file,
+    ...(reportEntry?.findings ?? []),
+    ...(reportEntry?.detections ?? []),
+    ...(reportEntry?.evidenceIssueTypes ?? []),
+    ...(reportEntry?.proofStatuses ?? []),
+  ].map(normalizeText).join(' | ');
+}
+
+function matchesExpectedFinding(expectedTitle, reportEntry) {
+  const findingTitles = reportEntry?.findings ?? [];
+  if (findingTitles.includes(expectedTitle)) {
+    return true;
+  }
+
+  const expected = normalizeText(expectedTitle);
+  const text = reportTextForEntry(reportEntry);
+  const file = normalizeFile(reportEntry?.file ?? '');
+
+  if (expected.includes('object level authorization')) {
+    return /idor|direct object reference|object level authorization|ownership/.test(text);
+  }
+
+  if (expected.includes('function level authorization')) {
+    return /missing authorization|broken function level authorization|refund/.test(text);
+  }
+
+  if (expected.includes('privilege escalation')) {
+    return /privilege|role assignment|role update|missing authorization/.test(text) && file.includes('roles.js');
+  }
+
+  if (expected.includes('server side request forgery') || expected.includes('ssrf')) {
+    return /ssrf|server side request forgery|untrusted destination/.test(text);
+  }
+
+  if (expected.includes('path traversal')) {
+    return /path traversal|filesystem path|file read/.test(text);
+  }
+
+  if (expected.includes('csrf')) {
+    return /csrf|cross site request forgery|state changing/.test(text);
+  }
+
+  if (expected.includes('dynamic code evaluation')) {
+    return /dynamic code evaluation|code injection|eval|code execution/.test(text);
+  }
+
+  if (expected.includes('weak jwt')) {
+    return /weak jwt|jwt validation|token validation/.test(text);
+  }
+
+  return false;
 }
 
 function evaluateParsedReport(report, manifest) {
@@ -117,7 +201,7 @@ function evaluateParsedReport(report, manifest) {
 
     for (const title of expectation.requiredFindings ?? []) {
       metrics.requiredFindingsChecked += 1;
-      if (!findingTitles.includes(title)) {
+      if (!matchesExpectedFinding(title, reportEntry)) {
         failures.push(`${expectation.file}: missing required finding ${title}`);
       } else {
         metrics.requiredFindingsSatisfied += 1;

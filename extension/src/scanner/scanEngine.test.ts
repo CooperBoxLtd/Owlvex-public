@@ -319,6 +319,16 @@ describe('ScanEngine._parseAIResponse', () => {
                     },
                     verdict: 'confirmed',
                     rationale: 'Client input controls query structure before the sink.',
+                    proof_status: 'ai_plausible',
+                    attacker_action: 'Send a crafted filter object in the request body.',
+                    required_guard: ['Server-side field allowlist', 'Operator allowlist'],
+                    counter_evidence: ['No schema validation found nearby'],
+                    responsibility_layer: 'route-policy',
+                    proof_checks: [{
+                        check: 'source reaches sink',
+                        status: 'pass',
+                        evidence: 'filter is passed to users.find',
+                    }],
                 },
             }],
         };
@@ -344,6 +354,16 @@ describe('ScanEngine._parseAIResponse', () => {
                 status: 'missing',
                 label: 'Server-side allowlist',
             },
+            proofStatus: 'ai_plausible',
+            attackerAction: 'Send a crafted filter object in the request body.',
+            requiredGuard: ['Server-side field allowlist', 'Operator allowlist'],
+            counterEvidence: ['No schema validation found nearby'],
+            responsibilityLayer: 'route-policy',
+            proofChecks: [{
+                check: 'source reaches sink',
+                status: 'pass',
+                evidence: 'filter is passed to users.find',
+            }],
         });
     });
 

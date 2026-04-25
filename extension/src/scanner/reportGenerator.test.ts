@@ -52,6 +52,44 @@ describe('reportGenerator', () => {
                     likelihood: 'MEDIUM',
                     likelihoodReasons: ['Dynamic SQL uses user-controlled input directly.'],
                     riskScore: 7,
+                    evidenceContract: {
+                        issueType: 'sql-injection',
+                        verdict: 'confirmed',
+                        source: {
+                            kind: 'source',
+                            label: 'User-controlled username',
+                            expression: 'username',
+                            line: 2,
+                        },
+                        flow: [{
+                            kind: 'assignment',
+                            label: 'SQL string built from username',
+                            expression: "const query = `SELECT * FROM users WHERE username = '${username}'`",
+                            line: 2,
+                        }],
+                        sink: {
+                            kind: 'sink',
+                            label: 'SQL execution',
+                            expression: 'db.query(query)',
+                            line: 3,
+                        },
+                        guard: {
+                            status: 'missing',
+                            label: 'Parameter binding',
+                            reason: 'No parameter binding is visible.',
+                        },
+                        rationale: 'User-controlled input reaches a SQL execution sink through string construction.',
+                        proofStatus: 'ai_plausible',
+                        attackerAction: 'Send a crafted username that changes SQL semantics.',
+                        requiredGuard: ['Parameterized query'],
+                        counterEvidence: ['No placeholder binding found'],
+                        responsibilityLayer: 'route-policy',
+                        proofChecks: [{
+                            check: 'source reaches sink',
+                            status: 'pass',
+                            evidence: 'query is passed to db.query',
+                        }],
+                    },
                     mappings: {
                         cwe: ['CWE-89'],
                         owasp: ['A03:2021'],
@@ -661,6 +699,41 @@ describe('reportGenerator', () => {
         expect(written).not.toContain('- AI pass scores:');
     });
 
+    it('keeps helper-layer extras out of Fix First', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('function audit() {}'));
+        const finding = {
+            ...buildResult().findings[0],
+            id: 'helper-extra-1',
+            title: 'Missing audit trail for authorization decision',
+            canonicalTitle: 'Missing audit trail for authorization decision',
+            evidenceContract: undefined,
+            provenance: 'ai' as const,
+            confidenceTier: 'PLAUSIBLE' as const,
+            corroboration: 'CORROBORATED' as const,
+        };
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo\\src'), {
+            targetLabel: 'src/middleware/auth.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src'),
+            errors: [],
+            results: [{
+                uri: vscode.Uri.file('d:\\repo\\src\\middleware\\auth.js'),
+                result: buildResult({
+                    findings: [finding],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+            }],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Start with: no proof-promoted findings; review Possible Extra Findings before acting.');
+        expect(written).toContain('## Possible Extra Findings');
+        expect(written).toContain('- `middleware/auth.js`: Missing audit trail for authorization decision (helper-layer extra).');
+        expect(written).toContain('- Fix first: no proof-promoted finding in this file');
+        expect(written).not.toContain('- `middleware/auth.js` (7.0/10): Missing audit trail for authorization decision.');
+    });
+
     it('normalizes string-based stride and matched signals without crashing', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('console.log("ok");'));
@@ -876,11 +949,12 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 - Highest file risk: 9.0/10
 - Clean files: 0/1
 - Confidence posture: 1 cross-checked
-- Engine evidence: Structured contracts: 0/1 | confirmed: 0 | missing guards: 0 | deterministic gaps: 0 | AI without contract: 1
+- Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
+- Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
 
 ## Fix First
 
-- \`src/tokens.js\` (9.0/10): Unsanitized SQL query construction. Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs, constrain dynamic query parts to allow-lists, and verify that attacker-controlled input can no longer change query semantics.
+- \`src/tokens.js\` (9.0/10): Unsanitized SQL query construction. Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs, constrain dynamic query parts to allow-lists, and verify that attacker-controlled input can no longer change query semantics. Proof: AI plausible with source/sink/guard evidence.
 
 ## How To Read This Report
 
@@ -907,7 +981,8 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 - Static findings: 0
 - AI findings needing manual review: 0
 - Confidence posture: 1 cross-checked
-- Engine evidence: Structured contracts: 0/1 | confirmed: 0 | missing guards: 0 | deterministic gaps: 0 | AI without contract: 1
+- Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
+- Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
 
 ## AI Usage
 

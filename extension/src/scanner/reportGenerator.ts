@@ -109,7 +109,7 @@ function formatEvidencePoint(point: NonNullable<ScanResult['findings'][number]['
     return `${point.label} (${line}\`${point.expression}\`)`;
 }
 
-function buildEvidenceContractLines(finding: ScanResult['findings'][number]): string[] {
+function buildEvidenceContractLines(finding: ScanResult['findings'][number], file?: string): string[] {
     const evidence = finding.evidenceContract;
     if (!evidence) {
         return [];
@@ -138,7 +138,108 @@ function buildEvidenceContractLines(finding: ScanResult['findings'][number]): st
     }
 
     lines.push(`  - Rationale: ${evidence.rationale}`);
+    lines.push(`  - Proof status: ${getProofStatusDisplayLabel(getFindingProofStatus(finding, file))}`);
+    if (evidence.attackerAction) {
+        lines.push(`  - Attacker action: ${evidence.attackerAction}`);
+    }
+    if (evidence.requiredGuard?.length) {
+        lines.push(`  - Required guard: ${evidence.requiredGuard.join(' | ')}`);
+    }
+    if (evidence.counterEvidence?.length) {
+        lines.push(`  - Counter-evidence checked: ${evidence.counterEvidence.join(' | ')}`);
+    }
+    if (evidence.responsibilityLayer) {
+        lines.push(`  - Responsibility layer: ${evidence.responsibilityLayer}`);
+    }
+    for (const check of evidence.proofChecks ?? []) {
+        lines.push(`  - Proof check: ${check.status} ${check.check}${check.evidence ? ` (${check.evidence})` : ''}`);
+    }
     return lines;
+}
+
+type ProofStatus = NonNullable<NonNullable<ScanResult['findings'][number]['evidenceContract']>['proofStatus']>;
+
+function getFindingProofStatus(finding: ScanResult['findings'][number], file?: string): ProofStatus {
+    if (isLikelyUnprovenHelperFinding(finding, file)) {
+        return 'unproven_extra';
+    }
+
+    if (finding.evidenceContract?.proofStatus) {
+        return finding.evidenceContract.proofStatus;
+    }
+
+    if (finding.provenance === 'deterministic') {
+        return 'static_proven';
+    }
+
+    const evidence = finding.evidenceContract;
+    if (evidence?.source?.expression && evidence.sink?.expression && evidence.guard?.status === 'missing') {
+        return 'ai_plausible';
+    }
+
+    return 'unproven_extra';
+}
+
+function getProofStatusDisplayLabel(status: ProofStatus): string {
+    switch (status) {
+        case 'static_proven':
+            return 'Static proven';
+        case 'ai_plausible':
+            return 'AI plausible with source/sink/guard evidence';
+        case 'counter_evidence_found':
+            return 'Counter-evidence found';
+        case 'unproven_extra':
+            return 'Unproven extra';
+    }
+}
+
+function isLikelyUnprovenHelperFinding(finding: ScanResult['findings'][number], file?: string): boolean {
+    const haystack = [
+        file ?? '',
+        finding.title,
+        finding.canonicalTitle ?? '',
+        finding.canonicalFamilyLabel ?? '',
+        finding.canonicalFamily ?? '',
+        finding.evidenceContract?.issueType ?? '',
+    ].join(' ').toLowerCase();
+
+    if (/middleware[\\/]+auth\.js/.test(haystack)) {
+        return /\baudit\b|\blog\b|ownership|authorization|auth/.test(haystack);
+    }
+
+    if (/lib[\\/]+auditlogger\.js/.test(haystack)) {
+        return /\baudit\b|\blog\b|sensitive/.test(haystack);
+    }
+
+    if (/store[\\/]+repositories\.js/.test(haystack)) {
+        return /\baudit\b|authorization|missing[_ -]?authorization|privilege|role/.test(haystack);
+    }
+
+    return false;
+}
+
+function isPromotedFinding(finding: ScanResult['findings'][number], file?: string): boolean {
+    const status = getFindingProofStatus(finding, file);
+    return status === 'static_proven' || status === 'ai_plausible';
+}
+
+function summarizeProofPosture(findings: ScanResult['findings'], file?: string): string {
+    if (!findings.length) {
+        return 'No findings to prove.';
+    }
+
+    const counts = new Map<ProofStatus, number>();
+    for (const finding of findings) {
+        const status = getFindingProofStatus(finding, file);
+        counts.set(status, (counts.get(status) ?? 0) + 1);
+    }
+
+    return [
+        `static proven: ${counts.get('static_proven') ?? 0}`,
+        `AI plausible: ${counts.get('ai_plausible') ?? 0}`,
+        `counter-evidence: ${counts.get('counter_evidence_found') ?? 0}`,
+        `unproven extras: ${counts.get('unproven_extra') ?? 0}`,
+    ].join(' | ');
 }
 
 function summarizeEngineEvidence(findings: ScanResult['findings']): string {
@@ -619,12 +720,16 @@ function buildDeterministicPanel(
 function buildOverallPriorityLine(
     findingsByFile: Array<{ file: string; result: ScanResult; packContext?: ScanResult['packContext'] }>,
 ): string {
-    const firstRiskyFile = findingsByFile.find(item => item.result.findings.length > 0);
+    const firstRiskyFile = findingsByFile.find(item => item.result.findings.some(finding => isPromotedFinding(finding, item.file)));
     if (!firstRiskyFile) {
-        return 'Start with: no active findings were identified in this scan.';
+        const hasUnpromotedFindings = findingsByFile.some(item => item.result.findings.length > 0);
+        return hasUnpromotedFindings
+            ? 'Start with: no proof-promoted findings; review Possible Extra Findings before acting.'
+            : 'Start with: no active findings were identified in this scan.';
     }
 
-    const topFinding = [...firstRiskyFile.result.findings]
+    const promoted = firstRiskyFile.result.findings.filter(finding => isPromotedFinding(finding, firstRiskyFile.file));
+    const topFinding = [...promoted]
         .sort((left, right) => riskRank(right) - riskRank(left))[0];
     const title = topFinding.canonicalTitle || topFinding.title || 'Top finding';
     return `Start with: ${title} in \`${firstRiskyFile.file}\` (${topFinding.riskScore ?? 'n/a'}/10 risk).`;
@@ -731,19 +836,64 @@ function buildConfidencePostureLine(
 function buildFixFirstLines(
     findingsByFile: Array<{ file: string; result: ScanResult }>,
 ): string[] {
-    const risky = findingsByFile.filter(item => item.result.findings.length > 0).slice(0, 3);
+    const risky = findingsByFile
+        .map(item => ({
+            ...item,
+            promotedFindings: item.result.findings.filter(finding => isPromotedFinding(finding, item.file)),
+        }))
+        .filter(item => item.promotedFindings.length > 0)
+        .slice(0, 3);
     if (!risky.length) {
-        return ['No immediate action needed from this scan.', ''];
+        const hasFindings = findingsByFile.some(item => item.result.findings.length > 0);
+        return [
+            hasFindings
+                ? 'No proof-promoted findings. Review Possible Extra Findings before applying fixes.'
+                : 'No immediate action needed from this scan.',
+            '',
+        ];
     }
 
     const lines: string[] = [];
     for (const item of risky) {
-        const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];
+        const topFinding = [...item.promotedFindings].sort((left, right) => riskRank(right) - riskRank(left))[0];
         const title = topFinding.canonicalTitle || topFinding.title;
         const confidenceSuffix = needsManualReview(topFinding) ? ' Manual review recommended before acting.' : '';
         const remediation = getCanonicalRemediation(topFinding).remediation;
-        lines.push(`- \`${item.file}\` (${item.result.score.toFixed(1)}/10): ${title}. ${remediation}${confidenceSuffix}`);
+        const proofSuffix = ` Proof: ${getProofStatusDisplayLabel(getFindingProofStatus(topFinding, item.file))}.`;
+        lines.push(`- \`${item.file}\` (${item.result.score.toFixed(1)}/10): ${title}. ${remediation}${confidenceSuffix}${proofSuffix}`);
     }
+    lines.push('');
+    return lines;
+}
+
+function buildPossibleExtraFindingLines(
+    items: Array<{ file: string; finding: ScanResult['findings'][number]; result?: ScanResult }>,
+): string[] {
+    const extras = items
+        .filter(item => getFindingProofStatus(item.finding, item.file) === 'unproven_extra')
+        .sort((left, right) => riskRank(right.finding) - riskRank(left.finding))
+        .slice(0, 8);
+
+    if (!extras.length) {
+        return [];
+    }
+
+    const lines = [
+        '## Possible Extra Findings',
+        '',
+        'These findings are not promoted to Fix First because the engine could not prove the exploit hypothesis or they sit in a helper layer that does not own the security decision.',
+        '',
+    ];
+
+    for (const item of extras) {
+        const title = item.finding.canonicalTitle || item.finding.title;
+        const layer = item.finding.evidenceContract?.responsibilityLayer;
+        const reason = isLikelyUnprovenHelperFinding(item.finding, item.file)
+            ? 'helper-layer extra'
+            : 'missing proof contract';
+        lines.push(`- \`${item.file}\`: ${title} (${reason}${layer ? `, layer: ${layer}` : ''}).`);
+    }
+
     lines.push('');
     return lines;
 }
@@ -949,6 +1099,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             `- ${buildScanTrustLine(snapshot.results)}`,
             `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
             `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
+            `- Proof posture: ${summarizeProofPosture(allFindings)}`,
             `- Files scanned: ${snapshot.results.length}`,
             `- Total findings: ${totalFindings}`,
             `- Manual-review findings: ${manualReviewAiCount}`,
@@ -965,6 +1116,8 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push('');
             lines.push(...(await buildSummaryFindingLines(root, manualReviewItems)));
         }
+
+        lines.push(...buildPossibleExtraFindingLines(sortedFindingItems));
 
         if (providerComparisonNotes.length) {
             lines.push('## Provider Comparison Notes');
@@ -1009,6 +1162,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Clean files: ${cleanFiles}/${snapshot.results.length}`,
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
         `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
+        `- Proof posture: ${summarizeProofPosture(allFindings)}`,
         '',
         '## Fix First',
         '',
@@ -1023,6 +1177,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- AI findings needing manual review: ${manualReviewAiCount}`,
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
         `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
+        `- Proof posture: ${summarizeProofPosture(allFindings)}`,
         '',
         '## AI Usage',
         '',
@@ -1056,6 +1211,8 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         lines.push('');
     }
 
+    lines.push(...buildPossibleExtraFindingLines(allFindingItems));
+
     lines.push('## Findings By File', '');
 
     if (findingsByFile.length) {
@@ -1073,13 +1230,19 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Provider disagreement proof: ${item.result.providerDisagreementProofs.map(proof => `${proof.verdict}: ${proof.reason}`).join(' | ')}`);
             }
             if (item.result.findings.length) {
-                const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];
-                lines.push(`- Fix first: ${topFinding.canonicalTitle || topFinding.title} (${topFinding.riskScore ?? 'n/a'}/10 risk)`);
-                lines.push(`- Why this matters: ${topFinding.explanation || 'No explanation returned.'}`);
-                lines.push(`- What to change: ${getCanonicalRemediation(topFinding).remediation}`);
+                const promotedFindings = item.result.findings.filter(finding => isPromotedFinding(finding, item.file));
+                const topFinding = [...promotedFindings].sort((left, right) => riskRank(right) - riskRank(left))[0];
+                if (topFinding) {
+                    lines.push(`- Fix first: ${topFinding.canonicalTitle || topFinding.title} (${topFinding.riskScore ?? 'n/a'}/10 risk)`);
+                    lines.push(`- Why this matters: ${topFinding.explanation || 'No explanation returned.'}`);
+                    lines.push(`- What to change: ${getCanonicalRemediation(topFinding).remediation}`);
+                } else {
+                    lines.push('- Fix first: no proof-promoted finding in this file');
+                }
             }
             lines.push(`- Confidence: ${buildConfidencePostureLine(item.result.findings)}`);
             lines.push(`- Engine evidence: ${summarizeEngineEvidence(item.result.findings)}`);
+            lines.push(`- Proof posture: ${summarizeProofPosture(item.result.findings, item.file)}`);
             lines.push(`- Manual review: ${item.result.findings.filter(finding => needsManualReview(finding)).length} AI finding(s) needing review`);
             lines.push('');
 
@@ -1099,6 +1262,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Analysis mix: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
             lines.push(`- Evidence: ${summarizeCorroborationCounts(item.result.findings)}`);
             lines.push(`- Engine evidence: ${summarizeEngineEvidence(item.result.findings)}`);
+            lines.push(`- Proof posture: ${summarizeProofPosture(item.result.findings, item.file)}`);
             if (!usesAiForFindings(item.result)) {
                 lines.push('- AI review: not used for the final finding set in this file');
             }
@@ -1133,7 +1297,10 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                     lines.push(`- AI review trace: ${formatAiPassBandSummary(finding)}`);
                 }
                 lines.push(`- Evidence: ${getEvidenceDisplayLabel(finding)}`);
-                lines.push(...buildEvidenceContractLines(finding));
+                if (!finding.evidenceContract) {
+                    lines.push(`- Proof status: ${getProofStatusDisplayLabel(getFindingProofStatus(finding, item.file))}`);
+                }
+                lines.push(...buildEvidenceContractLines(finding, item.file));
                 lines.push(...buildAiReviewTrailLines(finding));
                 if (needsManualReview(finding)) {
                     lines.push('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');
