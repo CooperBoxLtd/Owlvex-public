@@ -1,176 +1,241 @@
 # Owlvex
 
-Owlvex is a Visual Studio Code extension for early security review in the editor.
+Prototype VS Code extension for security scanning, AI-assisted review, and fix preview workflows.
 
-It scans code using deterministic local checks and optional AI-assisted review, then helps developers inspect findings and preview fixes before applying them.
+## Prototype Status
 
-## Download
+Owlvex is not a finished commercial product yet.
 
-Download the current prototype build:
+Current expectations:
 
-- [owlvex-0.1.4.vsix](releases/owlvex-0.1.4.vsix)
+- use it as a prototype / evaluation build
+- expect rough edges and ongoing UI or backend changes
+- verify important findings manually before acting on them
+- expect some model-specific variation in scan quality, latency, and coverage
 
-SHA256:
+## What It Does
 
-```text
-525ED5362A3AB5402083125793A6A2236027C699FD803B5303DAEF7E801524C0
-```
+Owlvex combines:
 
-## Install
+- deterministic local checks
+- AI-assisted targeted review
+- repo-context reasoning for some workflows
+- report generation
+- report comparison
+- fix preview and verification flows
 
-### Install from VS Code
+Supported provider paths include:
 
-1. Download [owlvex-0.1.4.vsix](releases/owlvex-0.1.4.vsix).
-2. Open Visual Studio Code.
-3. Open the command palette:
-   - Windows/Linux: `Ctrl+Shift+P`
-   - macOS: `Cmd+Shift+P`
-4. Run `Extensions: Install from VSIX...`.
-5. Select the downloaded `owlvex-0.1.4.vsix` file.
-6. Reload VS Code if prompted.
+- Azure AI Foundry
+- OpenAI
+- Anthropic
+- Gemini
+- Groq
+- Mistral
+- Ollama
+- custom OpenAI-compatible endpoints
 
-After installation, Owlvex appears in the VS Code activity bar and its commands are available from the command palette.
+## Model Guidance
 
-### Install from terminal
+Best results so far have come from:
 
-You can also install from a terminal:
+- GPT-5.4
+- GPT-5.4 Mini
 
-```powershell
-code --install-extension .\releases\owlvex-0.1.4.vsix
-```
+If you are evaluating Owlvex for the first time, start with one of those models before comparing other providers or smaller models.
 
-If you downloaded the file to another folder, run the command from that folder or pass the full path to the `.vsix` file.
+## Installation
 
-## First use
+### Download From GitHub
 
-1. Open the project you want to scan in VS Code.
-2. Open the command palette.
-3. Run `Owlvex: Register Free Or Trial Access`.
-4. Run `Owlvex: Setup AI Connection` if you want AI-assisted review.
-5. Run one of the scan commands:
-   - `Owlvex: Scan Current File`
-   - `Owlvex: Scan Selected Files`
-   - `Owlvex: Scan Open Editors`
-   - `Owlvex: Scan Workspace`
-   - `Owlvex: Create Report`
+If Owlvex is being distributed through a public GitHub repository, download the latest production `.vsix` from that repository's `Releases` page.
 
-AI setup is optional. Local deterministic checks can still run without an AI provider, but AI-backed explanations, broader review, and fix assistance require a configured provider.
+### Install From VSIX
 
-## Common commands
+1. Open VS Code.
+2. Open the Extensions view.
+3. Open the Extensions `...` menu.
+4. Choose `Install from VSIX...`.
+5. Select the production Owlvex VSIX.
 
-| Command | Use |
-| --- | --- |
-| `Owlvex: Scan Current File` | Scan the active editor file. |
-| `Owlvex: Scan Selected Files` | Scan files selected in the VS Code explorer. |
-| `Owlvex: Scan Workspace` | Scan the current workspace. |
-| `Owlvex: Create Report` | Generate a markdown scan report. |
-| `Owlvex: Open AI Chat` | Ask questions about the current project or findings. |
-| `Owlvex: Review Fix` | Generate a fix preview for a finding. |
-| `Owlvex: Apply Fix Preview` | Apply a reviewed fix preview. |
-| `Owlvex: Select Project Root` | Set the project boundary used for workspace scans and repo context. |
-| `Owlvex: Open Project Context` | Open or edit project context used to ground AI review. |
-| `Owlvex: Switch AI Model` | Change the configured AI model. |
+## First Run
 
-## Recommended workflow
+### 1. Open Owlvex
 
-1. Select the project root with `Owlvex: Select Project Root`.
-2. Scan a small scope first, such as the current file or selected files.
-3. Review the findings and generated report.
-4. Use `Owlvex: Review Fix` to preview any proposed fix before applying it.
-5. Re-scan after changing code to confirm the result.
-6. Use workspace scans when the smaller flow is behaving as expected.
+Use the Owlvex activity bar icon or run:
 
-For larger repositories, start with selected files or open editors. AI-backed workspace scans can be slower depending on provider limits and throttling.
+- `Owlvex: Open AI Chat`
 
-## Support and feedback
+### 2. Choose Access
 
-Owlvex is an early prototype, so support is focused on making the product usable and learning where it fails.
+Owlvex supports:
 
-Contact support by opening a GitHub issue:
+- `Use Free`
+- `Start Trial`
+- `Enter Licence Key`
 
-- [Open an Owlvex support issue](https://github.com/CooperBoxLtd/Owlvex-public/issues/new)
+Free and trial onboarding are email-based.
 
-You can also contact support by email:
+### 3. Configure Your LLM
 
-- info@cooperbox.co.uk
+Run:
 
-Use GitHub Issues for:
+- `Owlvex: Setup AI Connection`
 
-- installation problems
-- extension activation errors
-- scan failures
-- incorrect findings
-- missed findings
-- confusing reports
-- fix previews that look unsafe or incomplete
-- AI provider setup problems
+For Azure AI Foundry you need:
 
-When opening an issue, include:
+- endpoint
+- deployment name
+- API key
 
-- your operating system
-- VS Code version
-- Owlvex version
-- whether the issue happens with deterministic scanning, AI scanning, or both
-- the command you ran
-- any visible error message
-- whether you are using OpenAI, Azure AI Foundry, Anthropic, Mistral, Gemini, Groq, Ollama, or a custom endpoint
+For other providers, enter the provider-specific model and key details when prompted.
 
-Do not paste secrets, API keys, proprietary source code, or customer data into public issues. If a code sample is needed, reduce it to a small safe reproduction first.
+### 4. Check Setup
 
-For private or sensitive support requests, do not post details publicly. Email info@cooperbox.co.uk instead.
+Run:
 
-## AI provider setup
+- `Owlvex: Test Trial Setup`
 
-Owlvex supports several provider modes, including OpenAI, Azure AI Foundry, Anthropic, Mistral, Gemini, Groq, Ollama, and custom OpenAI-compatible endpoints.
+This validates:
 
-To configure AI:
+- backend connectivity
+- licence state
+- LLM/provider connectivity
 
-1. Run `Owlvex: Setup AI Connection`.
-2. Choose your provider.
-3. Enter the requested endpoint, model, or API key details.
-4. Run `Owlvex: Test AI Connection`.
+## Basic Usage
 
-Credentials are stored using VS Code secret storage where applicable. Do not commit API keys or provider secrets into your project.
+### Scan
 
-## What it does
+Available commands:
 
-- scans the current file, selected files, open editors, or workspace
-- creates security reports
-- supports OWASP, STRIDE, MITRE, CWE, and clean-code review modes
-- supports optional AI providers using your own configured credentials
-- supports project context for more grounded AI review
-- lets you review generated fixes before applying them
+- `Owlvex: Scan Current File`
+- `Owlvex: Scan Selected Files`
+- `Owlvex: Scan Open Editors`
+- `Owlvex: Scan Workspace`
 
-## Updating Owlvex
+### Create A Report
 
-To update from a newer `.vsix` file, download the new release and install it the same way:
+Run:
 
-```powershell
-code --install-extension .\releases\owlvex-0.1.4.vsix --force
-```
+- `Owlvex: Create Report`
 
-Then reload VS Code if prompted.
+### Compare Reports
 
-## Uninstall
+Run:
 
-1. Open the Extensions view in VS Code.
-2. Search for `Owlvex`.
-3. Select the extension.
-4. Click `Uninstall`.
-5. Reload VS Code if prompted.
+- `Owlvex: Compare Reports`
 
-## Prototype status
+### AI Chat
 
-Owlvex is currently a prototype build. Findings should be reviewed before they are trusted or committed.
+Use the Owlvex chat panel to:
 
-We are especially looking for feedback on:
+- ask follow-up questions
+- discuss findings
+- switch providers and models
+- trigger scans
+- open fix previews
 
-- missed findings
-- false positives
-- slow or throttled AI scans
-- confusing report output
-- fix previews that should be safer or clearer
+### Fix Preview
 
-## Source
+From findings or chat:
 
-The source repository is private during early development. This public repository is only for the downloadable VS Code extension package and usage notes.
+- choose `Fix code`
+- review the generated diff
+- use `Keep fix` to apply it
+- Owlvex then rescans to verify the reviewed finding outcome
+
+## Known Limitations
+
+### Product / Platform
+
+- this is still a prototype
+- some flows are still optimized for evaluation rather than polished customer UX
+- report comparison depends on stored scan metadata and can fail on older reports created before comparison-safe IDs were stored
+
+### AI / Model Behavior
+
+- results can vary materially by provider and model
+- slower or more expensive models can change scan time a lot
+- some scans may reduce AI coverage after throttling or rate-limit pressure
+- verifier / skeptic coverage can be truncated when corroboration budgets are exceeded
+
+### Azure AI Foundry
+
+- the current Azure AI Foundry path is built around Azure OpenAI-style deployment endpoints
+- deployment names are user/environment specific and must exist in Azure before use
+- Anthropic / Claude partner-model support is not fully productized through the same Foundry path yet
+
+### Findings / Reports
+
+- some findings may be correct but mislabeled
+- some AI findings may still need manual review
+- deterministic and AI-backed findings do not have the same trust posture
+- report wording and comparison UX are still evolving
+
+## Trust Boundary
+
+Owlvex is intended to keep:
+
+- deterministic scanning local
+- editor-side findings and fix preview logic local
+- backend traffic focused on licence, usage, scan metadata, and comparison metadata
+
+## Troubleshooting
+
+### The provider/model switch does not seem to stick
+
+Check for workspace-level VS Code settings overriding:
+
+- `owlvex.provider`
+- `owlvex.foundry.model`
+- provider-specific model settings
+
+Workspace settings override global settings.
+
+### Azure AI Foundry connection fails
+
+Check:
+
+- endpoint URL
+- deployment name
+- API key
+- whether the deployment actually exists in Azure
+
+### Scan comparison fails
+
+Possible reasons:
+
+- one of the selected reports is too old and does not contain usable stored scan IDs
+- backend/control-plane availability issue
+- licence does not allow comparison
+
+### Scans are slow
+
+Common causes:
+
+- model latency
+- throttling or retry behavior
+- repo-context AI passes
+- large candidate sets causing extra corroboration work
+
+## Recommended Evaluation Workflow
+
+1. Install the VSIX.
+2. Open Owlvex.
+3. Choose `Use Free`, `Start Trial`, or `Enter Licence Key`.
+4. Configure the LLM connection.
+5. Run `Owlvex: Test Trial Setup`.
+6. Scan a small demo file first.
+7. Create a report.
+8. Try a second scan and compare reports.
+9. Open one finding and test the `Fix code` preview flow.
+
+## Feedback
+
+If a result looks wrong, collect:
+
+- the report file
+- provider and model used
+- whether scan warnings mention throttling or partial AI coverage
+- the file or repo scope scanned
+- the exact action that failed
