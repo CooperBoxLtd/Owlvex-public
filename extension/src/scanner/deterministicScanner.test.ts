@@ -1324,6 +1324,23 @@ function downloadFile(req, res) {
         expect(findings[0].canonicalId).toBe('owlvex.issue.path_traversal.001');
         expect(findings[0].confidence).toBe(1);
         expect(findings[0].likelihood).toBe('HIGH');
+        expect(findings[0].evidenceContract).toMatchObject({
+            issueType: 'path-traversal',
+            verdict: 'confirmed',
+            source: {
+                expression: 'req.query.file',
+            },
+            sink: {
+                expression: 'res.sendFile(fullPath)',
+            },
+            guard: {
+                status: 'missing',
+            },
+        });
+        expect(findings[0].evidenceContract?.flow[0]).toMatchObject({
+            kind: 'path-construction',
+            expression: "const fullPath = path.join('/var/app/uploads', req.query.file)",
+        });
     });
 
     it('detects direct path.resolve() call inside a filesystem sink', () => {
@@ -1336,6 +1353,9 @@ function readFile(req) {
         const findings = scanner.scan(source, 'javascript');
         expect(findings).toHaveLength(1);
         expect(findings[0].ruleCode).toBe('PT-001');
+        expect(findings[0].evidenceContract?.source?.expression).toBe('req.params.name');
+        expect(findings[0].evidenceContract?.flow[0].label).toBe('Path constructed inline');
+        expect(findings[0].evidenceContract?.sink?.expression).toBe("fs.readFileSync(path.resolve('/srv/docs', req.params.name), 'utf8')");
     });
 
     it('does not flag identifier-map selection before path.join()', () => {

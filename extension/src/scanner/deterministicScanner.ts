@@ -18,7 +18,7 @@
  */
 
 import * as crypto from 'crypto';
-import type { Finding } from './scanEngine';
+import type { EvidenceContract, Finding } from './scanEngine';
 
 const SUPPORTED_LANGUAGES = new Set([
     'javascript', 'javascriptreact', 'typescript', 'typescriptreact',
@@ -912,6 +912,7 @@ interface InternalFinding {
     framework: string;
     likelihood?: 'LOW' | 'MEDIUM' | 'HIGH';
     likelihoodReasons?: string[];
+    evidenceContract?: EvidenceContract;
 }
 
 const REQUEST_SIGNAL_RE =
@@ -960,6 +961,11 @@ function lineOfOffset(source: string, offset: number): number {
         }
     }
     return line;
+}
+
+function expressionLine(source: string, expression: string, startOffset = 0): number | undefined {
+    const index = source.indexOf(expression, Math.max(0, startOffset));
+    return index >= 0 ? lineOfOffset(source, index) : undefined;
 }
 
 function collectSanitizedVariables(source: string): Set<string> {
@@ -1261,7 +1267,12 @@ function scanPathTraversalSinks(source: string): InternalFinding[] {
 
     const found: InternalFinding[] = [];
     const taintedVars = collectRequestDerivedVariables(source);
-    const vulnerablePathVars = new Set<string>();
+    const vulnerablePathVars = new Map<string, {
+        variable: string;
+        constructionExpression: string;
+        sourceExpression: string;
+        matchIndex: number;
+    }>();
     const assignPattern =
         /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*path\.(?:join|resolve)\s*\(/g;
 
@@ -1273,8 +1284,14 @@ function scanPathTraversalSinks(source: string): InternalFinding[] {
         const args = splitTopLevelArgs(extractArgsAfterParen(source, openParen));
         if (args.length < 2) { continue; }
 
-        if (args.slice(1).some(arg => isRequestDerivedExpression(arg, taintedVars))) {
-            vulnerablePathVars.add(match[1]);
+        const sourceExpression = args.slice(1).find(arg => isRequestDerivedExpression(arg, taintedVars));
+        if (sourceExpression) {
+            vulnerablePathVars.set(match[1], {
+                variable: match[1],
+                constructionExpression: source.slice(match.index, source.indexOf('\n', match.index) >= 0 ? source.indexOf('\n', match.index) : source.length).trim().replace(/;$/, ''),
+                sourceExpression: sourceExpression.trim(),
+                matchIndex: match.index,
+            });
         }
     }
 
@@ -1287,14 +1304,17 @@ function scanPathTraversalSinks(source: string): InternalFinding[] {
         if (!args.length) { continue; }
 
         const firstArg = args[0].trim();
-        const taintedPathVarUse = vulnerablePathVars.has(firstArg);
+        const taintedPathVar = vulnerablePathVars.get(firstArg);
+        const taintedPathVarUse = Boolean(taintedPathVar);
         let directPathCall = false;
+        let directSourceExpression: string | undefined;
 
         if (/\bpath\.(?:join|resolve)\s*\(/.test(firstArg)) {
             const nestedOpenParen = firstArg.indexOf('(');
             if (nestedOpenParen >= 0) {
                 const nestedArgs = splitTopLevelArgs(extractArgsAfterParen(firstArg, nestedOpenParen));
-                directPathCall = nestedArgs.slice(1).some(arg => isRequestDerivedExpression(arg, taintedVars));
+                directSourceExpression = nestedArgs.slice(1).find(arg => isRequestDerivedExpression(arg, taintedVars))?.trim();
+                directPathCall = Boolean(directSourceExpression);
             }
         }
 
@@ -1319,6 +1339,43 @@ function scanPathTraversalSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived file path reaches a filesystem sink without a visible boundary check.'],
+            evidenceContract: {
+                issueType: 'path-traversal',
+                source: {
+                    kind: 'source',
+                    label: 'Request-controlled path segment',
+                    expression: taintedPathVar?.sourceExpression ?? directSourceExpression ?? firstArg,
+                    line: expressionLine(source, taintedPathVar?.sourceExpression ?? directSourceExpression ?? firstArg),
+                },
+                flow: [
+                    taintedPathVar
+                        ? {
+                            kind: 'path-construction',
+                            label: `Path constructed in ${taintedPathVar.variable}`,
+                            expression: taintedPathVar.constructionExpression,
+                            line: lineOfOffset(source, taintedPathVar.matchIndex),
+                        }
+                        : {
+                            kind: 'path-construction',
+                            label: 'Path constructed inline',
+                            expression: firstArg,
+                            line: expressionLine(source, firstArg, match.index),
+                        },
+                ],
+                sink: {
+                    kind: 'sink',
+                    label: 'Filesystem read or file-serving sink',
+                    expression: source.slice(match.index, source.indexOf('\n', match.index) >= 0 ? source.indexOf('\n', match.index) : source.length).trim().replace(/;$/, ''),
+                    line: lineOfOffset(source, match.index),
+                },
+                guard: {
+                    status: 'missing',
+                    label: 'Base-directory containment guard',
+                    reason: 'No recognized allowlist, basename check, path.relative containment check, or equivalent guard is visible between path construction and the filesystem sink.',
+                },
+                verdict: 'confirmed',
+                rationale: 'Request-controlled input contributes to a constructed filesystem path that reaches a filesystem sink without a recognized containment guard.',
+            },
         });
     }
 
@@ -2872,6 +2929,7 @@ export class DeterministicScanner {
             canonicalId: f.canonicalId,
             likelihood: f.likelihood,
             likelihoodReasons: f.likelihoodReasons,
+            evidenceContract: f.evidenceContract,
         }));
     }
 }

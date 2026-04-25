@@ -53,6 +53,32 @@ export interface Finding {
     likelihood?: 'LOW' | 'MEDIUM' | 'HIGH';
     likelihoodReasons?: string[];
     riskScore?: number;
+    evidenceContract?: EvidenceContract;
+}
+
+export interface EvidenceContract {
+    issueType: string;
+    source?: EvidencePoint;
+    flow: EvidencePoint[];
+    sink?: EvidencePoint;
+    guard?: EvidenceGuard;
+    verdict: 'confirmed' | 'suspected' | 'guarded' | 'inconclusive';
+    rationale: string;
+}
+
+export interface EvidencePoint {
+    kind: 'source' | 'assignment' | 'path-construction' | 'sink' | 'guard';
+    label: string;
+    expression: string;
+    line?: number;
+}
+
+export interface EvidenceGuard {
+    status: 'present' | 'missing' | 'unknown';
+    label: string;
+    expression?: string;
+    line?: number;
+    reason: string;
 }
 
 export interface ScanResult {

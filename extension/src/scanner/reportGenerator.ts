@@ -104,6 +104,43 @@ function getFindingSignals(finding: ScanResult['findings'][number]): string[] {
     return normalizeList(finding.matchedSignals);
 }
 
+function formatEvidencePoint(point: NonNullable<ScanResult['findings'][number]['evidenceContract']>['flow'][number]): string {
+    const line = point.line ? `L${point.line}: ` : '';
+    return `${point.label} (${line}\`${point.expression}\`)`;
+}
+
+function buildEvidenceContractLines(finding: ScanResult['findings'][number]): string[] {
+    const evidence = finding.evidenceContract;
+    if (!evidence) {
+        return [];
+    }
+
+    const lines = [
+        `- Evidence contract: ${evidence.verdict} ${evidence.issueType}`,
+    ];
+
+    if (evidence.source) {
+        lines.push(`  - Source: ${formatEvidencePoint(evidence.source)}`);
+    }
+
+    for (const flow of evidence.flow) {
+        lines.push(`  - Flow: ${formatEvidencePoint(flow)}`);
+    }
+
+    if (evidence.sink) {
+        lines.push(`  - Sink: ${formatEvidencePoint(evidence.sink)}`);
+    }
+
+    if (evidence.guard) {
+        const expression = evidence.guard.expression ? ` (\`${evidence.guard.expression}\`)` : '';
+        const line = evidence.guard.line ? ` at L${evidence.guard.line}` : '';
+        lines.push(`  - Guard: ${evidence.guard.status} ${evidence.guard.label}${line}${expression}. ${evidence.guard.reason}`);
+    }
+
+    lines.push(`  - Rationale: ${evidence.rationale}`);
+    return lines;
+}
+
 function getFindingLikelihood(finding: ScanResult['findings'][number]): string {
     return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
 }
@@ -965,6 +1002,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                     lines.push(`- AI review trace: ${formatAiPassBandSummary(finding)}`);
                 }
                 lines.push(`- Evidence: ${getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'))}`);
+                lines.push(...buildEvidenceContractLines(finding));
                 lines.push(...buildAiReviewTrailLines(finding));
                 if (needsManualReview(finding)) {
                     lines.push('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');

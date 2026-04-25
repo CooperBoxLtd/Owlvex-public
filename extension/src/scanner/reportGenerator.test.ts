@@ -214,6 +214,102 @@ describe('reportGenerator', () => {
         expect(written).not.toContain('## Findings By File');
     });
 
+    it('renders evidence contracts for deterministic findings', async () => {
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(
+            Buffer.from([
+                'function downloadFile(req, res) {',
+                "  const fullPath = path.join('/var/app/uploads', req.query.file);",
+                '  res.sendFile(fullPath);',
+                '}',
+            ].join('\n'))
+        );
+
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        const result = buildResult({
+            score: 9,
+            model: 'static',
+            provider: 'local',
+            aiUsage: { requestCount: 0, totalTokens: 0 },
+            findings: [
+                {
+                    id: 'finding-pt-1',
+                    line: 3,
+                    lineEnd: 3,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'PT-001',
+                    title: 'Path Traversal',
+                    explanation: 'A request-derived filesystem path reaches a file-serving sink.',
+                    threat: 'Attackers may read files outside the allowed export directory.',
+                    fix: 'Resolve paths against a fixed base directory and reject escapes.',
+                    confidence: 1,
+                    provenance: 'deterministic',
+                    scanTier: 'STATIC',
+                    confidenceTier: 'PROVEN',
+                    corroboration: 'PROVEN',
+                    canonicalId: 'owlvex.issue.path_traversal.001',
+                    canonicalTitle: 'Path Traversal',
+                    canonicalFamily: 'family.access_control_authorization',
+                    canonicalFamilyLabel: 'Access Control & Authorization',
+                    likelihood: 'HIGH',
+                    likelihoodReasons: ['A request-derived file path reaches a filesystem sink without a visible boundary check.'],
+                    riskScore: 9,
+                    evidenceContract: {
+                        issueType: 'path-traversal',
+                        verdict: 'confirmed',
+                        source: {
+                            kind: 'source',
+                            label: 'Request-controlled path segment',
+                            expression: 'req.query.file',
+                            line: 2,
+                        },
+                        flow: [
+                            {
+                                kind: 'path-construction',
+                                label: 'Path constructed in fullPath',
+                                expression: "const fullPath = path.join('/var/app/uploads', req.query.file)",
+                                line: 2,
+                            },
+                        ],
+                        sink: {
+                            kind: 'sink',
+                            label: 'Filesystem read or file-serving sink',
+                            expression: 'res.sendFile(fullPath)',
+                            line: 3,
+                        },
+                        guard: {
+                            status: 'missing',
+                            label: 'Base-directory containment guard',
+                            reason: 'No recognized allowlist or containment check is visible.',
+                        },
+                        rationale: 'Request-controlled input contributes to a constructed filesystem path that reaches a filesystem sink without a recognized containment guard.',
+                    },
+                },
+            ],
+            metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+        });
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo\\src'), {
+            targetLabel: 'src/download.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\download.js'),
+                    result,
+                },
+            ],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Evidence contract: confirmed path-traversal');
+        expect(written).toContain('- Source: Request-controlled path segment (L2: `req.query.file`)');
+        expect(written).toContain("- Flow: Path constructed in fullPath (L2: `const fullPath = path.join('/var/app/uploads', req.query.file)`)");
+        expect(written).toContain('- Sink: Filesystem read or file-serving sink (L3: `res.sendFile(fullPath)`)');
+        expect(written).toContain('- Guard: missing Base-directory containment guard. No recognized allowlist or containment check is visible.');
+        expect(written).toContain('- Rationale: Request-controlled input contributes to a constructed filesystem path');
+    });
+
     it('handles snapshots with no findings and includes scan errors', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         const snapshot = {
