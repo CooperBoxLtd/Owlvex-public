@@ -37,6 +37,26 @@ function getEvidenceConfidenceLabel(finding: StatusFinding | undefined): string 
     return 'Evidence: Needs manual review';
 }
 
+function summarizeEngineEvidence(findings: StatusFinding[]): string {
+    if (!findings.length) {
+        return 'Engine evidence: No findings to prove.';
+    }
+
+    const withContracts = findings.filter(finding => finding.evidenceContract);
+    const confirmed = withContracts.filter(finding => finding.evidenceContract?.verdict === 'confirmed');
+    const missingGuards = withContracts.filter(finding => finding.evidenceContract?.guard?.status === 'missing');
+    const deterministicWithoutContract = findings.filter(finding => finding.provenance === 'deterministic' && !finding.evidenceContract);
+    const aiWithoutContract = findings.filter(finding => finding.provenance !== 'deterministic' && !finding.evidenceContract);
+
+    return [
+        `Engine evidence: Structured contracts: ${withContracts.length}/${findings.length}`,
+        `confirmed: ${confirmed.length}`,
+        `missing guards: ${missingGuards.length}`,
+        `deterministic gaps: ${deterministicWithoutContract.length}`,
+        `AI without contract: ${aiWithoutContract.length}`,
+    ].join(' | ');
+}
+
 export class StatusBar {
     private readonly item: vscode.StatusBarItem;
     private licenceInfo: LicenceInfo | null = null;
@@ -80,6 +100,7 @@ export class StatusBar {
             `Findings: ${result.findings.length}`,
             `Model: ${result.model}`,
             `Intelligence: ${packLabel}`,
+            summarizeEngineEvidence(result.findings),
             topRiskFinding
                 ? `Fix first: ${topRiskFinding.title} | ${topRiskFinding.severity}/${String(topRiskFinding.likelihood ?? 'MEDIUM').toUpperCase()} | ${topRiskFinding.riskScore ?? 'n/a'}/10${evidenceLabel ? ` | ${evidenceLabel}` : ''}${aiConfidenceLabel ? ` | AI signal ${aiConfidenceLabel} audit trace` : ''}`
                 : '',

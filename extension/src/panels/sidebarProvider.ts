@@ -125,6 +125,26 @@ function summarizeScanTierCounts(findings: Finding[]): string {
     return parts.length ? parts.join(' | ') : 'none';
 }
 
+function summarizeEngineEvidence(findings: Finding[]): string {
+    if (!findings.length) {
+        return 'No findings to prove.';
+    }
+
+    const withContracts = findings.filter(finding => finding.evidenceContract);
+    const confirmed = withContracts.filter(finding => finding.evidenceContract?.verdict === 'confirmed');
+    const missingGuards = withContracts.filter(finding => finding.evidenceContract?.guard?.status === 'missing');
+    const deterministicWithoutContract = findings.filter(finding => finding.provenance === 'deterministic' && !finding.evidenceContract);
+    const aiWithoutContract = findings.filter(finding => finding.provenance !== 'deterministic' && !finding.evidenceContract);
+
+    return [
+        `Structured contracts: ${withContracts.length}/${findings.length}`,
+        `confirmed: ${confirmed.length}`,
+        `missing guards: ${missingGuards.length}`,
+        `deterministic gaps: ${deterministicWithoutContract.length}`,
+        `AI without contract: ${aiWithoutContract.length}`,
+    ].join(' | ');
+}
+
 function getPrimaryScanTierLabel(findings: Finding[]): string {
     const order: Array<'REPO_AI' | 'TARGETED_AI' | 'STATIC'> = ['REPO_AI', 'TARGETED_AI', 'STATIC'];
     for (const label of order) {
@@ -192,6 +212,7 @@ export class SidebarProvider implements vscode.TreeDataProvider<FindingItem> {
                         `Analysis mode: ${getScanTierDisplayLabel(getPrimaryScanTierLabel(this.lastResult.findings))}`,
                         `Analysis mix: ${summarizeScanTierCounts(this.lastResult.findings)}`,
                         `Evidence: ${summarizeCorroborationCounts(this.lastResult.findings)}`,
+                        `Engine evidence: ${summarizeEngineEvidence(this.lastResult.findings)}`,
                         `Project context: ${this.lastResult.projectContextSummary && this.lastResult.projectContextSummary !== 'none' ? this.lastResult.projectContextSummary : 'none'}`,
                         topRiskFinding
                             ? `Start with: ${topRiskFinding.title} | ${topRiskFinding.severity}/${getFindingLikelihood(topRiskFinding)} | ${topRiskFinding.riskScore ?? 'n/a'}/10`
@@ -319,6 +340,27 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
     ];
 
     const aiConfidence = getAiConfidenceLabel(finding);
+    if (finding.evidenceContract) {
+        const evidence = finding.evidenceContract;
+        details.push({
+            label: `Evidence contract: ${evidence.verdict} ${evidence.issueType}`,
+            tooltip: evidence.rationale,
+        });
+        if (evidence.guard) {
+            details.push({
+                label: `Guard: ${evidence.guard.status} ${evidence.guard.label}`,
+                tooltip: evidence.guard.reason,
+            });
+        }
+    }
+
+    if (!finding.evidenceContract && finding.provenance !== 'deterministic') {
+        details.push({
+            label: 'Engine evidence: AI-only, no structured contract',
+            tooltip: 'This finding has AI evidence but no source/sink/guard contract yet. Treat it as manual-review evidence.',
+        });
+    }
+
     if (aiConfidence) {
         details.push({
             label: `AI signal audit trace: ${aiConfidence}`,

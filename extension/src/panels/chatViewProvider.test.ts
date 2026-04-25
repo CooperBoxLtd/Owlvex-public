@@ -839,6 +839,7 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Analysis mode: Targeted AI review');
         expect(finalMessage.content).toContain('Analysis mix: targeted_ai: 1');
+        expect(finalMessage.content).toContain('Engine evidence: Structured contracts: 0/1 | confirmed: 0 | missing guards: 0 | deterministic gaps: 0 | AI without contract: 1');
         expect(finalMessage.content).toContain('Project context: inline project contract');
         expect(finalMessage.content).toContain('Top issue: SQL Injection | via Targeted AI review');
         expect(finalMessage.content).toContain('Next step: use Preview fix to open a side-by-side remediation diff.');

@@ -55,7 +55,7 @@ tools/owlvex-benchmark/
 
 ## Architecture
 
-The benchmark tool now includes an Engine 1.0 proof-contract gate under `engine/proof-contracts/`. This suite checks that covered scanner findings expose the evidence shape the product should trust: source, sink, guard state, verdict, rationale, and safe-companion suppression.
+The benchmark tool now includes an Engine 1.0 proof-contract gate under `engine/proof-contracts/`. This suite checks that covered scanner findings expose the evidence shape the product should trust: source, sink, guard state, verdict, rationale, and safe-companion suppression. The gate includes unsafe and safe companion cases for SSRF, path traversal, command execution, SQL injection, client-controlled query filters, and deterministic fallback families so direction metrics can show both recall and quietness.
 
 Three deterministic reasoning axes, each following the same 5-layer pipeline:
 

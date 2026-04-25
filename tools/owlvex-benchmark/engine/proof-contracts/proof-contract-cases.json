@@ -79,11 +79,23 @@
     "expectedEvidenceTypes": ["path-traversal"]
   },
   {
+    "name": "safe JS path traversal identifier map",
+    "language": "javascript",
+    "source": "const path = require('path');\nconst SAFE_FILES = { invoice: 'invoice.txt' };\nfunction exportReport(req, res) {\n  const selected = SAFE_FILES[req.query.file];\n  if (!selected) return res.status(404).end();\n  const filePath = path.join('/srv/app/exports', selected);\n  res.sendFile(filePath);\n}",
+    "expectedCanonicalIds": []
+  },
+  {
     "name": "unsafe JS command injection proof contract",
     "language": "javascript",
     "source": "const { exec } = require('child_process');\nfunction runLookup(req) {\n  const host = req.query.host;\n  return exec(`nslookup ${host}`);\n}",
     "expectedCanonicalIds": ["owlvex.issue.command_injection.001"],
     "expectedEvidenceTypes": ["command-injection"]
+  },
+  {
+    "name": "safe JS command execution without shell semantics",
+    "language": "javascript",
+    "source": "const { spawn } = require('child_process');\nfunction runLookup(req) {\n  return spawn(`nslookup ${req.query.host}`);\n}",
+    "expectedCanonicalIds": []
   },
   {
     "name": "unsafe JS SQL injection proof contract",
@@ -93,11 +105,36 @@
     "expectedEvidenceTypes": ["sql-injection"]
   },
   {
+    "name": "safe JS SQL parameterized query",
+    "language": "javascript",
+    "source": "async function findUser(req, db) {\n  const email = req.query.email;\n  return db.query('SELECT * FROM users WHERE email = $1', [email]);\n}",
+    "expectedCanonicalIds": []
+  },
+  {
+    "name": "unsafe Python SQL request-controlled query",
+    "language": "python",
+    "source": "def load_user(cursor, request):\n    user_id = request.args.get(\"id\")\n    query = f\"SELECT * FROM users WHERE id = '{user_id}'\"\n    return cursor.execute(query)\n",
+    "expectedCanonicalIds": ["owlvex.issue.sql_injection.001"],
+    "expectedEvidenceTypes": ["sql-injection"]
+  },
+  {
+    "name": "safe Python SQL parameterized query",
+    "language": "python",
+    "source": "def load_user(cursor, request):\n    user_id = request.args.get(\"id\")\n    return cursor.execute(\"SELECT * FROM users WHERE id = %s\", [user_id])\n",
+    "expectedCanonicalIds": []
+  },
+  {
     "name": "unsafe JS client-controlled query filter proof contract",
     "language": "javascript",
     "source": "function matchesFilter(user, filter) {\n  return Object.entries(filter).every(([key, value]) => user[key] === value);\n}\nrouter.post('/users/search-unsafe', requireAdmin, (req, res) => {\n  const filter = req.body && typeof req.body.filter === 'object' && req.body.filter !== null ? req.body.filter : {};\n  const results = fakeUsers.filter(user => matchesFilter(user, filter));\n  res.json({ count: results.length, results });\n});",
     "expectedCanonicalIds": ["owlvex.issue.nosql_injection.001"],
     "expectedEvidenceTypes": ["client-controlled-query-filter"]
+  },
+  {
+    "name": "safe JS client-controlled query server-built filter",
+    "language": "javascript",
+    "source": "router.post('/users/search-safe', requireAdmin, (req, res) => {\n  const filter = {};\n  if (typeof req.body.email === 'string') filter.email = req.body.email;\n  if (typeof req.body.role === 'string' && ['user', 'admin'].includes(req.body.role)) filter.role = req.body.role;\n  const results = fakeUsers.filter(user => matchesFilter(user, filter));\n  res.json({ count: results.length, results });\n});",
+    "expectedCanonicalIds": []
   },
   {
     "name": "unsafe JS IDOR fallback proof contract",

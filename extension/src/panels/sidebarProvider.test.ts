@@ -65,6 +65,19 @@ describe('SidebarProvider', () => {
                 likelihood: 'HIGH',
                 likelihoodReasons: ['User-controlled path reaches a filesystem boundary directly.'],
                 riskScore: 8,
+                evidenceContract: {
+                    issueType: 'path-traversal',
+                    verdict: 'confirmed',
+                    source: { kind: 'source', label: 'Request-controlled path segment', expression: 'req.query.file', line: 12 },
+                    flow: [{ kind: 'path-construction', label: 'Path constructed in filePath', expression: 'path.join(base, req.query.file)', line: 12 }],
+                    sink: { kind: 'sink', label: 'Filesystem read sink', expression: 'fs.readFileSync(filePath)', line: 13 },
+                    guard: {
+                        status: 'missing',
+                        label: 'Base-directory containment guard',
+                        reason: 'No recognized containment check is visible.',
+                    },
+                    rationale: 'Request-controlled input reaches a filesystem sink without a recognized containment guard.',
+                },
             }],
             positives: [],
             metrics: { critical: 0, high: 1, medium: 0, low: 0 },
@@ -86,6 +99,7 @@ describe('SidebarProvider', () => {
         expect(String(roots[0].tooltip)).toContain('Analysis mode: Static proof');
         expect(String(roots[0].tooltip)).toContain('Analysis mix: static: 1');
         expect(String(roots[0].tooltip)).toContain('Evidence: proven: 1');
+        expect(String(roots[0].tooltip)).toContain('Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0');
         expect(String(roots[0].tooltip)).toContain('Project context: inline project contract');
         expect(String(roots[0].tooltip)).toContain('Start with: Path traversal | HIGH/HIGH | 8/10');
         const severityNode = roots.find(item => item.kind === 'severity');
@@ -105,6 +119,8 @@ describe('SidebarProvider', () => {
             'Analysis mode: Static proof',
             'Confidence: Proven',
             'Evidence: Proven',
+            'Evidence contract: confirmed path-traversal',
+            'Guard: missing Base-directory containment guard',
             'Why likely: User-controlled path reaches a filesystem boundary directly.',
             'Recommended fix: Resolve user paths against a fixed base directory.',
             'Suggested steps: Map user choices to identifiers. | Verify the resolved path stays under the storage root.',
@@ -165,7 +181,9 @@ describe('SidebarProvider', () => {
         expect(detailNodes.map(node => node.label)).toContain('Analysis mode: Targeted AI review');
         expect(detailNodes.map(node => node.label)).toContain('Confidence: Plausible');
         expect(detailNodes.map(node => node.label)).toContain('Evidence: Cross-checked');
+        expect(detailNodes.map(node => node.label)).toContain('Engine evidence: AI-only, no structured contract');
         expect(String(provider.getChildren()[0].tooltip)).toContain('Evidence: corroborated: 1');
+        expect(String(provider.getChildren()[0].tooltip)).toContain('Engine evidence: Structured contracts: 0/1 | confirmed: 0 | missing guards: 0 | deterministic gaps: 0 | AI without contract: 1');
     });
 
     it('surfaces partial coverage posture when warnings indicate degraded AI coverage', () => {
@@ -188,6 +206,7 @@ describe('SidebarProvider', () => {
         expect(String(roots[0].tooltip)).toContain('Coverage: partial AI coverage or deterministic-only fallback');
         expect(String(roots[0].tooltip)).toContain('Analysis mix: none');
         expect(String(roots[0].tooltip)).toContain('Evidence: none');
+        expect(String(roots[0].tooltip)).toContain('Engine evidence: No findings to prove.');
     });
 
     it('summarizes mixed corroboration states in the score tooltip', () => {

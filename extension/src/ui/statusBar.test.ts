@@ -34,6 +34,7 @@ describe('StatusBar', () => {
 
         const item = (vscode.window.createStatusBarItem as jest.Mock).mock.results[0].value;
         expect(item.tooltip).toContain('File risk score: 6.7/10');
+        expect(item.tooltip).toContain('Engine evidence: Structured contracts: 0/1 | confirmed: 0 | missing guards: 0 | deterministic gaps: 0 | AI without contract: 1');
         expect(item.tooltip).toContain('Fix first: SQL Injection | HIGH/HIGH | 9/10 | Evidence: Needs manual review | AI signal 93% audit trace');
     });
 
@@ -60,10 +61,24 @@ describe('StatusBar', () => {
                 riskScore: 9,
                 confidenceTier: 'PROVEN',
                 corroboration: 'PROVEN',
+                evidenceContract: {
+                    issueType: 'path-traversal',
+                    verdict: 'confirmed',
+                    source: { kind: 'source', label: 'Request-controlled path segment', expression: 'req.query.file', line: 7 },
+                    flow: [{ kind: 'path-construction', label: 'Path construction', expression: 'path.join(base, req.query.file)', line: 7 }],
+                    sink: { kind: 'sink', label: 'Filesystem sink', expression: 'fs.readFileSync(filePath)', line: 8 },
+                    guard: {
+                        status: 'missing',
+                        label: 'Base-directory containment guard',
+                        reason: 'No recognized containment check is visible.',
+                    },
+                    rationale: 'Request-controlled input reaches a filesystem sink.',
+                },
             }],
         } as any);
 
         const item = (vscode.window.createStatusBarItem as jest.Mock).mock.results[0].value;
+        expect(item.tooltip).toContain('Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0');
         expect(item.tooltip).toContain('Fix first: Path Traversal | HIGH/HIGH | 9/10 | Evidence: Static proof');
         expect(item.tooltip).not.toContain('100%');
     });

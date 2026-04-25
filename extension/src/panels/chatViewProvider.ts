@@ -631,6 +631,26 @@ function buildCleanScanScopeNote(result: ScanResult): string {
     return `Clean result scope: no findings were reported by ${buildProviderModelLabel(result)} for this scan; treat that as provider/model evidence, not a guarantee that no vulnerability exists.`;
 }
 
+function summarizeEngineEvidence(findings: Finding[]): string {
+    if (!findings.length) {
+        return 'Engine evidence: No findings to prove.';
+    }
+
+    const withContracts = findings.filter(finding => finding.evidenceContract);
+    const confirmed = withContracts.filter(finding => finding.evidenceContract?.verdict === 'confirmed');
+    const missingGuards = withContracts.filter(finding => finding.evidenceContract?.guard?.status === 'missing');
+    const deterministicWithoutContract = findings.filter(finding => finding.provenance === 'deterministic' && !finding.evidenceContract);
+    const aiWithoutContract = findings.filter(finding => finding.provenance !== 'deterministic' && !finding.evidenceContract);
+
+    return [
+        `Engine evidence: Structured contracts: ${withContracts.length}/${findings.length}`,
+        `confirmed: ${confirmed.length}`,
+        `missing guards: ${missingGuards.length}`,
+        `deterministic gaps: ${deterministicWithoutContract.length}`,
+        `AI without contract: ${aiWithoutContract.length}`,
+    ].join(' | ');
+}
+
 function formatProviderDisagreementProof(proof: ProviderDisagreementProof): string {
     const parts = [
         proof.reason,
@@ -666,6 +686,7 @@ function buildScanSummaryLines(result: ScanResult): string[] {
         `Findings: ${result.findings.length}`,
         `Analysis mode: ${getScanTierDisplayLabel(getPrimaryScanTierLabel(result.findings))}`,
         `Analysis mix: ${summarizeScanTierCounts(result.findings)}`,
+        summarizeEngineEvidence(result.findings),
         `Project context: ${result.projectContextSummary && result.projectContextSummary !== 'none' ? result.projectContextSummary : 'none'}`,
         topRiskFinding
             ? `Top issue: ${topRiskFinding.title} | via ${getScanTierDisplayLabel(getScanTierLabel(topRiskFinding))} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
@@ -714,6 +735,7 @@ function buildMultiFileScanResponse(
         `Files scanned: ${completed}`,
         `Total findings: ${findings.length}`,
         `Average file risk score: ${averageScore.toFixed(1)}/10`,
+        summarizeEngineEvidence(findings),
         issueFamilies,
         ...buildGroundedRemediationHighlights(findings).map((line, index) => `Remediation ${index + 1}: ${line}`),
         topActionable ? `Next step: Preview fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
@@ -3602,6 +3624,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             `Selected-files scan completed.`,
                             `Files scanned: ${result.completed}`,
                             `Total findings: ${result.totalFindings}`,
+                            summarizeEngineEvidence(result.results.flatMap((item: any) => item.result.findings)),
                             summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),
@@ -3650,6 +3673,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             `Open-editors scan completed.`,
                             `Files scanned: ${result.completed}`,
                             `Total findings: ${result.totalFindings}`,
+                            summarizeEngineEvidence(result.results.flatMap((item: any) => item.result.findings)),
                             summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),
@@ -3698,6 +3722,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             `Folder scan completed.`,
                             `Files scanned: ${result.completed}`,
                             `Total findings: ${result.totalFindings}`,
+                            summarizeEngineEvidence(result.results.flatMap((item: any) => item.result.findings)),
                             summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),
@@ -3756,6 +3781,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             `Vulnerability scan completed for ${result.summary.completed} file(s).`,
                             `Total findings: ${result.summary.totalFindings}`,
                             `Average file risk score: ${result.averageScore.toFixed(1)}/10`,
+                            summarizeEngineEvidence(result.summary.results.flatMap((item: any) => item.result.findings)),
                             summarizeIssueFamilies(result.summary.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.summary.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),

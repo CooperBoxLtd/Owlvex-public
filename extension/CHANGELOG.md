@@ -7,6 +7,8 @@
 - add family-specific deterministic evidence contracts for remaining covered rule families
 - add benchmark direction metrics for pass rate, unsafe recall, safe quietness, evidence-shape completeness, and fixture growth
 - surface Engine evidence contract coverage, missing guards, and AI-only gaps in generated reports
+- surface Engine evidence posture in scan chat summaries, sidebar details, and the status bar tooltip
+- expand proof-contract benchmarks with safe companions for path traversal, command execution, SQL, and client-controlled query filters
 
 ## 0.1.17
 
