@@ -116,8 +116,11 @@ interface ChatState {
     providers: Array<{ id: string; name: string }>;
     providerStatus: string;
     providerHint: string;
+    providerConfigured: boolean;
     backendStatus: string;
     licenceStatus: string;
+    hasLicence: boolean;
+    hasStoredLicenceKey: boolean;
     messages: ChatMessage[];
     editorSummary: string;
     frameworksLabel: string;
@@ -125,6 +128,7 @@ interface ChatState {
     projectContextSummary: string;
     workspaceSummary: string;
     lastScanTarget: string;
+    hasLastScan: boolean;
     conversationStatus: string;
     hasRestorableChat: boolean;
     restorableMessageCount: number;
@@ -394,7 +398,7 @@ function buildFindingFallback(
         lines.push(
             hasPendingFixPreview
                 ? 'A fix preview is already open for review. The file is still unchanged until you choose Keep fix or Discard fix.'
-                : 'Next step: choose Fix code to open a side-by-side remediation diff.'
+                : 'Next step: choose Preview fix to open a side-by-side remediation diff.'
         );
     }
 
@@ -434,7 +438,7 @@ function buildToolUsageGuidance(): string {
         '- Full evidence report is for deeper review: all findings by file, confidence posture, AI pass details, mappings, remediation, coverage, warnings, and scan errors.',
         '- Confidence labels matter: Confirmed by static rule is strongest; AI-reviewed is supported by review; Partially validated and Needs manual review should be checked before acting.',
         '- Fix First is the recommended starting point, not a guarantee that lower-ranked findings are unimportant.',
-        '- Fix code opens a side-by-side preview. Code is not changed until the user keeps the fix.',
+        '- Preview fix opens a side-by-side remediation diff. Code is not changed until the user keeps the fix.',
         '- Compare reports should be used after rescanning; Owlvex orders reports by generation time so Before is the earlier report and After is the later report.',
         '- Provider throttle guidance appears only when a scan sees a 429 or rate-limit warning.',
         '- When users ask how to use Owlvex, give the next concrete click/action and explain which report or scan scope fits their goal.',
@@ -501,7 +505,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                             'Fix flow:',
                             '',
                             '1. Start from a finding or Fix First item.',
-                            '2. Choose Fix code.',
+                            '2. Choose Preview fix.',
                             '3. Owlvex opens a side-by-side preview.',
                             '4. Review the change.',
                             '5. Choose Keep fix only if the preview is right. Otherwise choose Discard fix.',
@@ -536,7 +540,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                                     '2. Pick a scan scope and press Scan.',
                                     '3. Create a Summary report for what to fix first.',
                                     '4. Use Full evidence report when you need detailed validation.',
-                                    '5. Use Fix code to preview a change before keeping it.',
+                                    '5. Use Preview fix to review a change before keeping it.',
                                 ];
 
     const reportActions: ChatMessageAction[] = [
@@ -681,7 +685,7 @@ function buildMultiFileScanResponse(
         `Average file risk score: ${averageScore.toFixed(1)}/10`,
         issueFamilies,
         ...buildGroundedRemediationHighlights(findings).map((line, index) => `Remediation ${index + 1}: ${line}`),
-        topActionable ? `Next step: Fix code opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
+        topActionable ? `Next step: Preview fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
         reportPath ? `Report: ${reportPath}` : '',
         warnings ? `Scan warnings: ${warnings}` : 'No scan warnings were reported.',
         errors.length ? `Scan errors: ${errors.length}` : 'No scan errors were reported.',
@@ -1240,7 +1244,7 @@ function severityRank(severity: string): number {
 function buildReviewFixAction(finding: Finding, targetPath?: string): ChatMessageAction {
     return {
         id: `generate-fix-preview-${finding.id ?? finding.line}`,
-        label: 'Fix code',
+        label: 'Preview fix',
         kind: 'generateFixPreview',
         finding,
         path: targetPath,
@@ -1254,7 +1258,7 @@ function buildBatchReviewFixAction(items: ActionableFindingTarget[]): ChatMessag
 
     return {
         id: 'generate-batch-fix-preview',
-        label: 'Fix scan broadly',
+        label: 'Preview fixes',
         kind: 'generateBatchFixPreview',
         findings: items,
     };
@@ -1657,7 +1661,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             });
             this.messages.push({
                 role: 'user',
-                content: `Fix code: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
+                content: `Preview fix: ${finding.canonicalTitle || finding.title} at line ${finding.line}`,
             });
             this.messages.push({
                 role: 'assistant',
@@ -2797,6 +2801,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             getProviderSetupHint(provider.id),
             `Backend: ${vscode.workspace.getConfiguration(PROFILE.configSection).get<string>('apiUrl', PROFILE.defaultApiUrl) || PROFILE.defaultApiUrl}`,
             'Licence: checking...',
+            false,
+            false,
         ));
         void this.pushResolvedState();
     }
@@ -3954,7 +3960,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             response: [
                 `File scan completed for ${relativePath}.`,
                 ...buildScanSummaryLines(result.result),
-                this.latestActionableFinding ? 'Next step: use Fix code to open a side-by-side remediation diff.' : '',
+                this.latestActionableFinding ? 'Next step: use Preview fix to open a side-by-side remediation diff.' : '',
             ].join('\n'),
             kind: 'scan',
             actions,
@@ -3968,6 +3974,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         providerHint: string,
         backendStatus: string,
         licenceStatus: string,
+        providerConfigured = false,
+        hasLicence = false,
+        hasStoredLicenceKey = false,
     ): ChatState {
         const editorContext = this.buildEditorContext();
         const provider = this.registry.getActive();
@@ -3981,8 +3990,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             providers,
             providerStatus,
             providerHint,
+            providerConfigured,
             backendStatus,
             licenceStatus,
+            hasLicence,
+            hasStoredLicenceKey,
             messages: this.messages,
             editorSummary: editorContext.summary,
             frameworksLabel: formatFrameworkSummary(this.getFrameworks()),
@@ -3990,6 +4002,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             projectContextSummary,
             workspaceSummary: this.getWorkspaceSummary(),
             lastScanTarget: this.storage.get<string>(LAST_SCAN_TARGET_KEY, 'No scan run yet'),
+            hasLastScan: this.storage.get<string>(LAST_SCAN_TARGET_KEY, 'No scan run yet') !== 'No scan run yet',
             conversationStatus: buildConversationStatus({
                 pendingFixPreview: this.pendingFixPreview,
                 latestActionableFinding: this.latestActionableFinding,
@@ -4048,7 +4061,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 : [{ id: provider.id, name: provider.name }, ...configuredProviders];
             return [...new Map(all.map(item => [item.id, item])).values()];
         })();
-        this.postState(this.buildState(models, visibleProviders, providerStatus, providerHint, backendStatus, licenceStatus));
+        this.postState(this.buildState(
+            models,
+            visibleProviders,
+            providerStatus,
+            providerHint,
+            backendStatus,
+            licenceStatus,
+            activeProviderConfigured,
+            Boolean(cachedLicence),
+            Boolean(licenceKey),
+        ));
     }
 
     private async getModelsForProvider(provider: ReturnType<ProviderRegistry['getActive']>): Promise<string[]> {
@@ -4730,6 +4753,60 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       border: 1px solid var(--vscode-widget-border);
       box-shadow: 0 1px 5px color-mix(in srgb, var(--vscode-editorWidget-background) 14%, transparent);
     }
+    .empty-state {
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 12px;
+      padding: 14px;
+      background: var(--vscode-editorWidget-background);
+      display: grid;
+      gap: 12px;
+    }
+    .empty-title {
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .empty-copy {
+      font-size: 12px;
+      line-height: 1.45;
+      opacity: 0.86;
+    }
+    .setup-list {
+      display: grid;
+      gap: 7px;
+    }
+    .setup-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+    }
+    .setup-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--vscode-charts-orange);
+      flex: 0 0 auto;
+    }
+    .setup-row.ready .setup-dot {
+      background: var(--vscode-testing-iconPassed);
+    }
+    .empty-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .empty-actions button {
+      border: 1px solid var(--vscode-button-border, var(--vscode-widget-border));
+      border-radius: 999px;
+      padding: 7px 10px;
+      font-size: 11px;
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    .empty-actions button.primary-action {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
     .composer {
       border-top: 1px solid var(--vscode-sideBarSectionHeader-border);
       padding: 12px;
@@ -4878,6 +4955,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <div class="meta" id="projectContext">Project context: loading...</div>
           <div class="quick-actions">
             <button class="chip" data-action="showOnboarding">Onboarding</button>
+            <button class="chip" data-auth-action data-action="useFree">Use Free</button>
+            <button class="chip" data-auth-action data-action="startTrial">Start Trial</button>
             <button class="chip" data-action="selectProjectRoot">Project Root</button>
             <button class="chip" data-action="testAI">Test Connection</button>
             <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
@@ -4885,8 +4964,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               <summary class="chip">More</summary>
               <div class="more-actions-panel">
                 <button class="chip" data-action="enterLicence">Enter Licence</button>
-                <button class="chip" data-action="useFree">Use Free</button>
-                <button class="chip" data-action="startTrial">Start Trial</button>
                 <button class="chip" data-action="viewPlans">View Plans</button>
                 <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
                 <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
@@ -4977,7 +5054,78 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const dismissHistoryEl = document.getElementById('dismissHistory');
     const newChatTopEl = document.getElementById('newChatTop');
     const llmButtonEl = document.getElementById('llmButton');
+    const reportButtonEl = document.getElementById('reportButton');
     let historyVisible = false;
+
+    function postAction(action) {
+      vscode.postMessage({ type: 'chat:action', action });
+    }
+
+    function appendEmptyState(state) {
+      const card = document.createElement('div');
+      card.className = 'empty-state';
+
+      const title = document.createElement('div');
+      title.className = 'empty-title';
+      title.textContent = 'Start in 60 seconds';
+      card.appendChild(title);
+
+      const copy = document.createElement('div');
+      copy.className = 'empty-copy';
+      copy.textContent = state.hasLicence
+        ? 'Run a first scan, then use the summary report or fix preview from the scan result.'
+        : 'Connect access first, then scan the current file or workspace. LLM setup unlocks AI review and fix previews.';
+      card.appendChild(copy);
+
+      const list = document.createElement('div');
+      list.className = 'setup-list';
+      const rows = [
+        ['Access', state.hasLicence ? state.licenceStatus : state.hasStoredLicenceKey ? 'Key stored, validation pending' : 'Choose Free, Trial, or enter a licence', state.hasLicence],
+        ['Project', state.workspaceSummary || 'No workspace folder open', Boolean(state.workspaceSummary && state.workspaceSummary !== 'No workspace folder open')],
+        ['LLM', state.providerConfigured ? state.provider + ' configured' : 'Configure when you want AI review', state.providerConfigured],
+        ['First scan', state.hasLastScan ? state.lastScanTarget : 'Not run yet', state.hasLastScan],
+      ];
+      for (const row of rows) {
+        const item = document.createElement('div');
+        item.className = 'setup-row' + (row[2] ? ' ready' : '');
+        const dot = document.createElement('span');
+        dot.className = 'setup-dot';
+        const text = document.createElement('span');
+        text.textContent = row[0] + ': ' + row[1];
+        item.appendChild(dot);
+        item.appendChild(text);
+        list.appendChild(item);
+      }
+      card.appendChild(list);
+
+      const actions = document.createElement('div');
+      actions.className = 'empty-actions';
+      const addAction = (label, action, primary) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = label;
+        if (primary) button.className = 'primary-action';
+        button.addEventListener('click', () => postAction(action));
+        actions.appendChild(button);
+      };
+
+      if (!state.hasLicence) {
+        addAction('Use Free', 'useFree', true);
+        addAction('Start Trial', 'startTrial', false);
+        addAction('Enter Licence', 'enterLicence', false);
+      } else if (!state.hasLastScan) {
+        addAction(state.workingScope === 'scanFile' ? 'Scan Current File' : 'Scan Workspace', state.workingScope || 'scanFolder', true);
+      } else {
+        addAction('Summary Report', 'scanSummaryReport', true);
+      }
+      if (!state.providerConfigured) {
+        addAction('Configure LLM', 'setupAI', false);
+      }
+      addAction('Onboarding Check', 'showOnboarding', false);
+
+      card.appendChild(actions);
+      messagesEl.appendChild(card);
+    }
 
     function render(state) {
       const providerLine = 'Provider: ' + state.provider + ' | Model: ' + state.model;
@@ -4989,16 +5137,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       backendStatusEl.textContent = state.backendStatus || 'Backend: unknown';
       licenceStatusEl.textContent = state.licenceStatus || 'Licence: unknown';
       providerHintEl.textContent = state.providerHint || '';
-      llmButtonEl.textContent = state.provider + ' · ' + state.model;
+      llmButtonEl.textContent = state.providerConfigured
+        ? state.provider + ' · ' + state.model
+        : 'Configure LLM';
+      if (reportButtonEl) {
+        reportButtonEl.textContent = state.hasLastScan ? 'Report' : 'Report after scan';
+        reportButtonEl.title = state.hasLastScan ? 'Create a report' : 'Run a scan first, or choose a report action to scan and report.';
+      }
       modeBadgeEl.textContent = 'Mode: ' + (state.activeModeLabel || 'General');
       modeHintEl.textContent = state.activeModeHint || '';
       conversationHeaderEl.textContent = state.conversationStatus || 'Conversation. Ask follow-up questions, open a fix preview, or keep working from the latest finding.';
       if (scanScopeBottomEl && state.workingScope) {
         scanScopeBottomEl.value = state.workingScope;
       }
-      if (settingsPanelEl && !state.providers.length) {
+      if (settingsPanelEl && (!state.hasLicence || !state.providerConfigured) && !state.messages.length) {
         settingsPanelEl.hidden = false;
       }
+      document.querySelectorAll('[data-auth-action]').forEach((button) => {
+        button.hidden = Boolean(state.hasLicence);
+      });
       if (historyStripEl) {
         const shouldShow = Boolean(state.hasRestorableChat) && historyVisible;
         historyStripEl.hidden = !shouldShow;
@@ -5042,6 +5199,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       modelEl.disabled = !state.providers.length;
 
       messagesEl.innerHTML = '';
+      if (!state.messages.length) {
+        appendEmptyState(state);
+        messagesEl.scrollTop = 0;
+        return;
+      }
       for (const [index, message] of state.messages.entries()) {
         const div = document.createElement('div');
         div.className = 'msg ' + message.role;
@@ -5129,7 +5291,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     });
     document.querySelectorAll('[data-action]').forEach((button) => {
       button.addEventListener('click', () => {
-        vscode.postMessage({ type: 'chat:action', action: button.getAttribute('data-action') });
+        postAction(button.getAttribute('data-action'));
         if (reportMenuEl && button.closest('#reportMenu')) {
           reportMenuEl.open = false;
         }

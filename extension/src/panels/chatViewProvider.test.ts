@@ -780,7 +780,7 @@ describe('parseChatIntent', () => {
         expect(request.userMessage).toContain('Latest report context: none');
     });
 
-    it('adds a Fix code action to scan-backed file results', async () => {
+    it('adds a Preview fix action to scan-backed file results', async () => {
         const provider = new ChatViewProvider({
             getActive: () => ({
                 id: 'test-provider',
@@ -838,14 +838,14 @@ describe('parseChatIntent', () => {
         expect(finalMessage.content).toContain('Analysis mix: targeted_ai: 1');
         expect(finalMessage.content).toContain('Project context: inline project contract');
         expect(finalMessage.content).toContain('Top issue: SQL Injection | via Targeted AI review');
-        expect(finalMessage.content).toContain('Next step: use Fix code to open a side-by-side remediation diff.');
+        expect(finalMessage.content).toContain('Next step: use Preview fix to open a side-by-side remediation diff.');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: 'd:\\repo\\src\\userRepo.js' }),
+            expect.objectContaining({ label: 'Preview fix', kind: 'generateFixPreview', path: 'd:\\repo\\src\\userRepo.js' }),
             expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
         ]));
     });
 
-    it('keeps a single scan-level Fix code action for the latest scan results', async () => {
+    it('keeps a single scan-level Preview fix action for the latest scan results', async () => {
         const provider = new ChatViewProvider({
             getActive: () => ({
                 id: 'test-provider',
@@ -940,7 +940,7 @@ describe('parseChatIntent', () => {
         const state = (provider as any).buildState([], [], '', '', '', '');
         expect(state.activeModeLabel).toBe('Scan');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix scan broadly', kind: 'generateBatchFixPreview' }),
+            expect.objectContaining({ label: 'Preview fixes', kind: 'generateBatchFixPreview' }),
         ]));
     });
 
@@ -1158,7 +1158,7 @@ describe('parseChatIntent', () => {
         expect(finalMessage.content).toContain('falling back to grounded local context');
         expect(finalMessage.content).toContain('How it can be abused: An attacker can craft a malicious payload');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+            expect.objectContaining({ label: 'Preview fix', kind: 'generateFixPreview', path: targetUri.fsPath }),
         ]));
     });
 
@@ -1204,11 +1204,11 @@ describe('parseChatIntent', () => {
         expect(finalMessage.content).toContain('What is wrong: The handler fetches a user-controlled destination.');
         expect(finalMessage.content).not.toContain('Request failed: temporary upstream failure');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+            expect.objectContaining({ label: 'Preview fix', kind: 'generateFixPreview', path: targetUri.fsPath }),
         ]));
     });
 
-    it('keeps Fix code available after an explanation follow-up for the active finding', async () => {
+    it('keeps Preview fix available after an explanation follow-up for the active finding', async () => {
         const complete = jest.fn().mockResolvedValue({
             content: 'This issue lets user input control the redirect destination without validation.',
         });
@@ -1250,7 +1250,7 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('redirect destination');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+            expect.objectContaining({ label: 'Preview fix', kind: 'generateFixPreview', path: targetUri.fsPath }),
         ]));
     });
 
@@ -1528,7 +1528,7 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Fix preview failed');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+            expect.objectContaining({ label: 'Preview fix', kind: 'generateFixPreview', path: targetUri.fsPath }),
         ]));
         expect((provider as any).latestActionableTargetPath).toBe(targetUri.fsPath);
         expect((provider as any).pendingFixPreview).toBeUndefined();
@@ -1681,7 +1681,7 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('rewrote too much of the file');
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
-            expect.objectContaining({ label: 'Fix code', kind: 'generateFixPreview', path: targetUri.fsPath }),
+            expect.objectContaining({ label: 'Preview fix', kind: 'generateFixPreview', path: targetUri.fsPath }),
         ]));
         expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
             'vscode.diff',
@@ -2308,7 +2308,7 @@ describe('parseChatIntent', () => {
             kind: 'scan',
             actions: [{
                 id: 'review-fix-redirect',
-                label: 'Fix code',
+                label: 'Preview fix',
                 kind: 'generateFixPreview',
                 path: targetUri.fsPath,
                 finding: {
@@ -3021,6 +3021,29 @@ describe('parseChatIntent', () => {
             expect.objectContaining({ label: 'Start Trial', kind: 'quickAction', quickAction: 'startTrial' }),
             expect.objectContaining({ label: 'Enter Licence', kind: 'quickAction', quickAction: 'enterLicence' }),
         ]));
+    });
+
+    it('renders first-run onboarding actions in the empty chat surface', () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        const html = (provider as any).buildHtml();
+
+        expect(html).toContain('Start in 60 seconds');
+        expect(html).toContain('data-action="useFree"');
+        expect(html).toContain('data-action="startTrial"');
+        expect(html).toContain('Report after scan');
+        expect(html).toContain('Configure LLM');
     });
 
     it('shows an onboarding checklist with next actions based on live setup state', async () => {
