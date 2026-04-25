@@ -4770,22 +4770,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     .rail-button {
       cursor: pointer;
     }
-    .llm-menu {
+    .llm-menu,
+    .report-menu {
       position: relative;
     }
-    .llm-menu summary {
+    .llm-menu summary,
+    .report-menu summary {
       list-style: none;
       cursor: pointer;
     }
-    .llm-menu summary::-webkit-details-marker {
+    .llm-menu summary::-webkit-details-marker,
+    .report-menu summary::-webkit-details-marker {
       display: none;
     }
-    .llm-menu-panel {
+    .llm-menu-panel,
+    .report-menu-panel {
       position: absolute;
       left: 0;
       bottom: calc(100% + 8px);
       z-index: 20;
-      width: 260px;
       border: 1px solid var(--vscode-widget-border);
       border-radius: 12px;
       background: var(--vscode-editorWidget-background);
@@ -4794,8 +4797,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       display: grid;
       gap: 8px;
     }
+    .llm-menu-panel {
+      width: 260px;
+    }
+    .report-menu-panel {
+      width: 190px;
+    }
     .llm-menu-panel .meta {
       margin-top: 0;
+    }
+    .report-option {
+      width: 100%;
+      text-align: left;
     }
     .composer-hint {
       font-size: 11px;
@@ -4919,11 +4932,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <option value="scanFolder" selected>Workspace</option>
         </select>
         <button class="rail-button" id="runScanBottom" type="button">Scan</button>
-        <select id="reportTypeBottom" class="rail-select" aria-label="Report type">
-          <option value="scanSummaryReport" selected>Summary report</option>
-          <option value="scanFullReport">Full evidence report</option>
-        </select>
-        <button class="rail-button" id="createReportBottom" type="button">Create Report</button>
+        <details class="report-menu" id="reportMenu">
+          <summary class="rail-button" id="reportButton">Report</summary>
+          <div class="report-menu-panel">
+            <button class="rail-button report-option" data-action="scanSummaryReport" type="button">Summary report</button>
+            <button class="rail-button report-option" data-action="scanFullReport" type="button">Full evidence report</button>
+          </div>
+        </details>
       </div>
       <div class="composer-hint">Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line.</div>
       <textarea id="prompt" placeholder="Ask Owlvex about this repo, a vulnerability, or what to scan next."></textarea>
@@ -4949,8 +4964,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const modeHintEl = document.getElementById('modeHint');
     const scanScopeBottomEl = document.getElementById('scanScopeBottom');
     const runScanBottomEl = document.getElementById('runScanBottom');
-    const reportTypeBottomEl = document.getElementById('reportTypeBottom');
-    const createReportBottomEl = document.getElementById('createReportBottom');
+    const reportMenuEl = document.getElementById('reportMenu');
     const providerEl = document.getElementById('provider');
     const modelEl = document.getElementById('model');
     const settingsPanelEl = document.getElementById('settingsPanel');
@@ -5116,13 +5130,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     document.querySelectorAll('[data-action]').forEach((button) => {
       button.addEventListener('click', () => {
         vscode.postMessage({ type: 'chat:action', action: button.getAttribute('data-action') });
+        if (reportMenuEl && button.closest('#reportMenu')) {
+          reportMenuEl.open = false;
+        }
       });
     });
     runScanBottomEl.addEventListener('click', () => {
       vscode.postMessage({ type: 'chat:action', action: scanScopeBottomEl.value });
-    });
-    createReportBottomEl.addEventListener('click', () => {
-      vscode.postMessage({ type: 'chat:action', action: reportTypeBottomEl.value });
     });
     promptEl.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
