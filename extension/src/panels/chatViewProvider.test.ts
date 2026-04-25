@@ -2502,6 +2502,69 @@ describe('parseChatIntent', () => {
         expect((provider as any).buildProviderComparisonNotes([{ uri, result: laterResult }])[0]).toContain('Provider disagreement: azure-foundry / owlvex-gpt54 previously reported 0 findings');
     });
 
+    it('surfaces persisted provider disagreement proof verdicts in chat summaries', () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        const uri = vscode.Uri.file('d:\\repo\\src\\target.js');
+        const result = {
+            score: 9,
+            findings: [{
+                id: 'finding-filter',
+                line: 7,
+                lineEnd: 8,
+                severity: 'HIGH',
+                framework: 'OWASP',
+                ruleCode: 'NQ-001',
+                title: 'NoSQL Injection Through Untrusted Query Object',
+                explanation: 'Client filter reaches sink.',
+                threat: 'Data exposure.',
+                fix: 'Build filter server-side.',
+                confidence: 1,
+                provenance: 'deterministic',
+                likelihood: 'HIGH',
+                riskScore: 9,
+            }],
+            positives: [],
+            metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+            durationMs: 10,
+            model: 'claude-opus-4-6',
+            provider: 'anthropic',
+            warnings: [],
+            summary: 'Finding detected.',
+            providerComparisonNotes: [
+                'Provider disagreement: azure-foundry / owlvex-gpt54 previously reported 0 findings for src/target.js; anthropic / claude-opus-4-6 now reports 1.',
+            ],
+            providerDisagreementProofs: [
+                {
+                    verdict: 'PROVEN_BY_SINK',
+                    reason: 'Deterministic evidence confirms source-to-sink flow with no recognized guard.',
+                    issueType: 'client-controlled-query-filter',
+                    source: 'req.body.filter',
+                    sink: 'matchesFilter(user, filter)',
+                    guard: 'Server-side field/operator allowlist',
+                },
+            ],
+        };
+
+        const notes = (provider as any).buildProviderComparisonNotes([{ uri, result }]);
+
+        expect(notes).toEqual([
+            'Provider disagreement: azure-foundry / owlvex-gpt54 previously reported 0 findings for src/target.js; anthropic / claude-opus-4-6 now reports 1.',
+            'Proof pass: PROVEN_BY_SINK - Deterministic evidence confirms source-to-sink flow with no recognized guard. | issue client-controlled-query-filter | source `req.body.filter` | sink `matchesFilter(user, filter)` | guard Server-side field/operator allowlist',
+        ]);
+    });
+
     it('records a fix benchmark result automatically for matching benchmark files after verification', async () => {
         const complete = jest.fn().mockResolvedValue({
             content: '```javascript\nconst query = db.query(\"SELECT * FROM users WHERE id = ?\", [req.query.id]);\n```',

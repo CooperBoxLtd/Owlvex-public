@@ -7,7 +7,7 @@ import { formatFrameworkSummary } from '../frameworks/catalog';
 import { getGroundedCheatSheetLabelsForIssueIds, resolveRemediationForFinding } from '../frameworks/remediationResolver';
 import { getGroundedFrameworkLabels } from '../frameworks/frameworkGrounding';
 import type { StoredScanRecord } from '../scanner/calibrationReview';
-import type { Finding, ScanResult } from '../scanner/scanEngine';
+import type { Finding, ProviderDisagreementProof, ScanResult } from '../scanner/scanEngine';
 import { PROFILE } from '../profile';
 import { getProjectContextSummaryFromConfig, getProjectRootSummaryFromConfig, loadProjectContextInfo, resolveProjectRootInfo } from '../projectContext';
 import { createPreviewDocumentUri } from './previewDocumentProvider';
@@ -627,6 +627,17 @@ function buildProviderModelLabel(result: ScanResult): string {
 
 function buildCleanScanScopeNote(result: ScanResult): string {
     return `Clean result scope: no findings were reported by ${buildProviderModelLabel(result)} for this scan; treat that as provider/model evidence, not a guarantee that no vulnerability exists.`;
+}
+
+function formatProviderDisagreementProof(proof: ProviderDisagreementProof): string {
+    const parts = [
+        proof.reason,
+        proof.issueType ? `issue ${proof.issueType}` : '',
+        proof.source ? `source \`${proof.source}\`` : '',
+        proof.sink ? `sink \`${proof.sink}\`` : '',
+        proof.guard ? `guard ${proof.guard}` : '',
+    ].filter(Boolean).join(' | ');
+    return `Proof pass: ${proof.verdict}${parts ? ` - ${parts}` : ''}`;
 }
 
 export function buildGroundedRemediationHighlights(findings: Finding[], maxFindings = 2): string[] {
@@ -3803,6 +3814,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const providerChanged = Boolean(previous)
                 && (previous!.provider !== current.provider || previous!.model !== current.model);
             const label = vscode.workspace.asRelativePath(item.uri, false);
+
+            if ((item.result.providerComparisonNotes?.length ?? 0) || (item.result.providerDisagreementProofs?.length ?? 0)) {
+                notes.push(...(item.result.providerComparisonNotes ?? []));
+                notes.push(...(item.result.providerDisagreementProofs ?? []).map(formatProviderDisagreementProof));
+                this.recentScanSnapshotsByPath.set(key, current);
+                continue;
+            }
 
             if (previous && providerChanged && previous.findingCount === 0 && current.findingCount > 0) {
                 notes.push(`Provider disagreement: ${previous.provider} / ${previous.model} previously reported 0 findings for ${label}; ${current.provider} / ${current.model} now reports ${current.findingCount}. Treat clean scans as provider/model-scoped evidence.`);
