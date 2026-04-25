@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.1.21
+
+- make report confidence wording explicit for AI-backed findings
+- show final raw AI confidence in report tables and finding details
+- show the AI review path (`finder`, `finder+verifier`, or `finder+verifier+skeptic`)
+- reserve `Validated by AI review` for findings with verifier or skeptic support
+- label finder-only high-confidence findings as not independently verified
+
+## 0.1.20
+
+- continue fix workflows when post-fix verification still finds unresolved issues
+- make remaining or newly surfaced findings the next active fix target after verification
+- add clearer post-fix continuation wording and next-fix actions
+
+## 0.1.18
+
+- add Engine 1.0 proof-contract evidence for SSRF across JavaScript, Python, Java, C#, and Go
+- add a proof-contract benchmark gate for source, sink, guard, verdict, rationale, and safe companion behavior
+- add family-specific deterministic evidence contracts for remaining covered rule families
+- add benchmark direction metrics for pass rate, unsafe recall, safe quietness, evidence-shape completeness, and fixture growth
+- surface Engine evidence contract coverage, missing guards, and AI-only gaps in generated reports
+- surface Engine evidence posture in scan chat summaries, sidebar details, and the status bar tooltip
+- expand proof-contract benchmarks with safe companions for path traversal, command execution, SQL, and client-controlled query filters
+
 ## 0.1.17
 
 - save kept fix previews before verification rescans so the next scan reads the persisted code

@@ -1,9 +1,9 @@
 ﻿{
     "name":  "owlvex",
     "displayName":  "Owlvex",
-    "version":  "0.1.17",
-    "releaseTag":  "v0.1.17",
+    "version":  "0.1.22",
+    "releaseTag":  "v0.1.22",
     "asset":  "owlvex-prod.vsix",
     "sha256File":  "downloads/owlvex-prod.vsix.sha256",
-    "repositoryAsset":  "releases/owlvex-0.1.17.vsix"
+    "repositoryAsset":  "releases/owlvex-0.1.22.vsix"
 }

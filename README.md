@@ -180,6 +180,19 @@ From findings or chat:
 - deterministic and AI-backed findings do not have the same trust posture
 - report wording and comparison UX are still evolving
 
+### Reading Confidence
+
+Owlvex separates risk from evidence confidence.
+
+- `Confirmed by rule` means deterministic code evidence proved the issue.
+- `Validated by AI review` means an AI finder result was also supported by verifier or skeptic review.
+- `Finder-only AI review` means the finder reported the issue, but verifier and skeptic were not triggered or were unavailable.
+- `Finder high confidence, not independently verified` means the raw AI score is high, but it is still finder-only.
+- `AI signal High (96% final)` is model confidence, not proof.
+- `review path finder`, `finder+verifier`, or `finder+verifier+skeptic` shows which AI passes actually ran.
+
+For important changes, validate AI-backed findings against the code before relying on them.
+
 ## Trust Boundary
 
 Owlvex is intended to keep:
