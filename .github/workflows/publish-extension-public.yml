@@ -32,8 +32,8 @@ jobs:
         run: npm ci
         working-directory: extension
 
-      - name: Package production VSIX
-        run: npm run package:prod
+      - name: Run release regression gate
+        run: npm run test:release
         working-directory: extension
 
       - name: Derive release metadata
