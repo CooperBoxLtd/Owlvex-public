@@ -101,7 +101,7 @@ interface LocalActionResult {
     actions?: ChatMessageAction[];
 }
 
-type ChatActionKind = 'scanFile' | 'scanSelectedFiles' | 'scanOpenEditors' | 'scanFolder' | 'scanReport' | 'reviewRiskCalibration';
+type ChatActionKind = 'scanFile' | 'scanSelectedFiles' | 'scanOpenEditors' | 'scanFolder' | 'scanReport' | 'scanSummaryReport' | 'scanFullReport' | 'reviewRiskCalibration';
 
 interface ChatLocalIntent {
     action: ChatActionKind;
@@ -2849,7 +2849,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private async handleQuickAction(action: string): Promise<void> {
         if (!action) return;
 
-        if (action === 'scanFile' || action === 'scanSelectedFiles' || action === 'scanOpenEditors' || action === 'scanFolder' || action === 'scanReport' || action === 'reviewRiskCalibration') {
+        const isScanAction = action === 'scanFile'
+            || action === 'scanSelectedFiles'
+            || action === 'scanOpenEditors'
+            || action === 'scanFolder'
+            || action === 'scanReport'
+            || action === 'scanSummaryReport'
+            || action === 'scanFullReport';
+
+        if (isScanAction || action === 'reviewRiskCalibration') {
             this.currentMode = 'scan';
         } else {
             this.currentMode = 'general';
@@ -3264,7 +3272,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.messages.push({
             role: 'system',
             content: `Running ${action}...`,
-            kind: action === 'scanFile' || action === 'scanSelectedFiles' || action === 'scanOpenEditors' || action === 'scanFolder' || action === 'scanReport'
+            kind: isScanAction
                 ? 'scan'
                 : 'advisory',
         });
@@ -3449,8 +3457,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ]
                         : undefined,
                 };
-            } else if (action === 'scanReport') {
-                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanWorkspaceReport);
+            } else if (action === 'scanReport' || action === 'scanSummaryReport' || action === 'scanFullReport') {
+                const result = await vscode.commands.executeCommand<any>(
+                    PROFILE.commands.scanWorkspaceReport,
+                    action === 'scanSummaryReport'
+                        ? { reportVariant: 'summary' }
+                        : action === 'scanFullReport'
+                            ? { reportVariant: 'full' }
+                            : undefined,
+                );
                 if (result?.status === 'cancelled') {
                     this.messages.pop();
                     void this.persistState();
@@ -3477,7 +3492,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             result.summary.results.some((item: any) => (item.result.warnings ?? []).length)
                                 ? `Scan warnings: ${result.summary.results.reduce((total: number, item: any) => total + (item.result.warnings ?? []).length, 0)}`
                                 : 'No scan warnings were reported.',
-                            `Report: ${vscode.workspace.asRelativePath(result.reportUri, false)}`,
+                            `${result.reportVariant === 'summary' ? 'Summary report' : 'Full evidence report'}: ${vscode.workspace.asRelativePath(result.reportUri, false)}`,
                         ].join('\n')
                         : result?.status === 'failed'
                             ? [
@@ -3507,7 +3522,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
-                kind: action === 'scanFile' || action === 'scanSelectedFiles' || action === 'scanOpenEditors' || action === 'scanFolder' || action === 'scanReport' ? 'scan' : 'advisory',
+                kind: isScanAction ? 'scan' : 'advisory',
                 content: `Action failed: ${error.message}`,
             };
         }
@@ -4578,17 +4593,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     .rail-button {
       cursor: pointer;
     }
-    .llm-menu {
+    .llm-menu,
+    .report-menu {
       position: relative;
     }
-    .llm-menu summary {
+    .llm-menu summary,
+    .report-menu summary {
       list-style: none;
       cursor: pointer;
     }
-    .llm-menu summary::-webkit-details-marker {
+    .llm-menu summary::-webkit-details-marker,
+    .report-menu summary::-webkit-details-marker {
       display: none;
     }
-    .llm-menu-panel {
+    .llm-menu-panel,
+    .report-menu-panel {
       position: absolute;
       left: 0;
       bottom: calc(100% + 8px);
@@ -4601,6 +4620,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       padding: 10px;
       display: grid;
       gap: 8px;
+    }
+    .report-menu-panel {
+      width: 220px;
     }
     .llm-menu-panel .meta {
       margin-top: 0;
@@ -4727,7 +4749,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <option value="scanFolder" selected>Workspace</option>
         </select>
         <button class="rail-button" id="runScanBottom" type="button">Scan</button>
-        <button class="rail-button" data-action="scanReport">Create Report</button>
+        <details class="report-menu" id="reportMenu">
+          <summary class="rail-button">Create Report</summary>
+          <div class="report-menu-panel">
+            <button class="rail-button" data-action="scanSummaryReport">Summary Report</button>
+            <button class="rail-button" data-action="scanFullReport">Full Evidence Report</button>
+          </div>
+        </details>
       </div>
       <div class="composer-hint">Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line.</div>
       <textarea id="prompt" placeholder="Ask Owlvex about this repo, a vulnerability, or what to scan next."></textarea>

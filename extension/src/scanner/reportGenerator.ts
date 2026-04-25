@@ -19,6 +19,12 @@ export interface ReportSnapshot {
     results: ReportEntry[];
 }
 
+export type ReportVariant = 'summary' | 'full';
+
+export interface ReportGenerationOptions {
+    variant?: ReportVariant;
+}
+
 function formatTimestamp(date: Date): string {
     const pad = (value: number) => String(value).padStart(2, '0');
     return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}`;
@@ -583,6 +589,50 @@ function buildFixFirstLines(
     return lines;
 }
 
+function getFindingStatusLabel(finding: ScanResult['findings'][number]): string {
+    if (finding.provenance === 'deterministic') return 'Confirmed by static rule';
+    if (needsManualReview(finding)) return 'Needs manual review';
+    if (finding.corroboration === 'CORROBORATED') return 'AI-reviewed';
+    if (finding.corroboration === 'PARTIAL') return 'Partially validated';
+    return 'AI candidate';
+}
+
+async function buildSummaryFindingLines(
+    root: vscode.Uri,
+    items: Array<{ file: string; finding: ScanResult['findings'][number]; result: ScanResult }>,
+): Promise<string[]> {
+    if (!items.length) {
+        return [
+            'No active findings were returned by this scan.',
+            '',
+        ];
+    }
+
+    const lines: string[] = [];
+    for (const item of items.slice(0, 5)) {
+        const remediation = getCanonicalRemediation(item.finding);
+        const snippet = await readCodeSnippet(root, item.file, item.finding.line, item.finding.lineEnd);
+        lines.push(`### ${item.finding.canonicalTitle || item.finding.title}`);
+        lines.push('');
+        lines.push(`- File: \`${item.file}\` at L${item.finding.line}${item.finding.lineEnd !== item.finding.line ? `-${item.finding.lineEnd}` : ''}`);
+        lines.push(`- Status: ${getFindingStatusLabel(item.finding)}`);
+        lines.push(`- Risk: ${item.finding.severity} impact / ${getFindingLikelihood(item.finding)} likelihood / ${item.finding.riskScore ?? 'n/a'}/10`);
+        lines.push(`- Why it matters: ${item.finding.explanation || 'No explanation returned.'}`);
+        lines.push(`- What to change: ${remediation.remediation}`);
+        if (needsManualReview(item.finding)) {
+            lines.push('- Review before acting: this AI finding is not fully corroborated.');
+        }
+        if (snippet) {
+            lines.push('- Code involved:');
+            lines.push('```text');
+            lines.push(escapeCodeFence(snippet));
+            lines.push('```');
+        }
+        lines.push('');
+    }
+    return lines;
+}
+
 export async function generateWorkspaceScanReport(root: vscode.Uri, summary: FolderScanSummary): Promise<vscode.Uri> {
     return generateReportFromSnapshot(root, {
         targetLabel: root.fsPath,
@@ -592,9 +642,12 @@ export async function generateWorkspaceScanReport(root: vscode.Uri, summary: Fol
     });
 }
 
-export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: ReportSnapshot): Promise<vscode.Uri> {
+export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: ReportSnapshot, options: ReportGenerationOptions = {}): Promise<vscode.Uri> {
     const now = new Date();
-    const reportFileName = `owlvex-scan-report-${formatTimestamp(now)}.md`;
+    const variant = options.variant ?? 'full';
+    const reportFileName = variant === 'summary'
+        ? `owlvex-summary-report-${formatTimestamp(now)}.md`
+        : `owlvex-scan-report-${formatTimestamp(now)}.md`;
     const reportUri = vscode.Uri.joinPath(root, reportFileName);
     const warnings = snapshot.results.flatMap(item =>
         (item.result.warnings ?? []).map(warning => ({
@@ -704,6 +757,68 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             totalTokens: total.totalTokens + usage.totalTokens,
         };
     }, { requestCount: 0, totalTokens: 0 });
+
+    if (variant === 'summary') {
+        const sortedFindingItems = snapshot.results
+            .flatMap(item => item.result.findings.map(finding => ({
+                file: formatReportPath(root.fsPath, item.uri.fsPath),
+                finding,
+                result: item.result,
+            })))
+            .sort((left, right) => {
+                const leftManual = needsManualReview(left.finding) ? 1 : 0;
+                const rightManual = needsManualReview(right.finding) ? 1 : 0;
+                if (leftManual !== rightManual) return leftManual - rightManual;
+                return riskRank(right.finding) - riskRank(left.finding);
+            });
+        const confirmedItems = sortedFindingItems.filter(item => !needsManualReview(item.finding));
+        const manualReviewItems = sortedFindingItems.filter(item => needsManualReview(item.finding));
+        const lines: string[] = [
+            '# Owlvex Summary Report',
+            '',
+            `Generated: ${now.toISOString()}`,
+            `Target: \`${snapshot.targetLabel}\``,
+            `Report location: \`${root.fsPath}\``,
+            '',
+            'This is the developer summary view. Use the full evidence report for complete scoring, framework mappings, AI review detail, and audit context.',
+            '',
+            '## What To Fix First',
+            '',
+            `- ${buildOverallPriorityLine(findingsByFile)}`,
+            `- ${buildScanTrustLine(snapshot.results)}`,
+            `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
+            `- Files scanned: ${snapshot.results.length}`,
+            `- Total findings: ${totalFindings}`,
+            `- Manual-review findings: ${manualReviewAiCount}`,
+            '',
+            '## Confirmed Or AI-Reviewed Findings',
+            '',
+            ...(await buildSummaryFindingLines(root, confirmedItems.length ? confirmedItems : sortedFindingItems)),
+        ];
+
+        if (manualReviewItems.length) {
+            lines.push('## Needs Manual Review');
+            lines.push('');
+            lines.push('These findings may still be useful, but they were not fully corroborated by the scan.');
+            lines.push('');
+            lines.push(...(await buildSummaryFindingLines(root, manualReviewItems)));
+        }
+
+        if (warnings.length || snapshot.errors.length || hasProviderRateLimitWarning(warnings)) {
+            lines.push('## Scan Notes');
+            lines.push('');
+            lines.push(`- Coverage: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Normal for the current provider and runtime state'}`);
+            lines.push(`- Errors: ${snapshot.errors.length}`);
+            lines.push(`- Scan warnings: ${warnings.length}`);
+            if (hasProviderRateLimitWarning(warnings)) {
+                lines.push(`- Provider rate limit note: this scan saw a 429/rate-limit signal. If it repeats, configure \`${PROFILE.configSection}.providerThrottleOverrides\` for the affected provider.`);
+            }
+            lines.push('');
+        }
+
+        await vscode.workspace.fs.writeFile(reportUri, Buffer.from(lines.join('\n'), 'utf8'));
+        return reportUri;
+    }
 
     const lines: string[] = [
         '# Owlvex Vulnerability Scan Report',

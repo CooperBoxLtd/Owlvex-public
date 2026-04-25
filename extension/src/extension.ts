@@ -11,7 +11,7 @@ import { ChatViewProvider } from './panels/chatViewProvider';
 import { OWLVEX_PREVIEW_SCHEME, PreviewDocumentProvider } from './panels/previewDocumentProvider';
 import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
 import { pickScanFile, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
-import { generateReportFromSnapshot, ReportSnapshot } from './scanner/reportGenerator';
+import { generateReportFromSnapshot, ReportSnapshot, ReportVariant } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
 import { PROFILE } from './profile';
@@ -73,12 +73,17 @@ interface ReportCommandResult {
     averageScore?: number;
     providers?: string;
     models?: string;
+    reportVariant?: ReportVariant;
     summary?: {
         completed: number;
         totalFindings: number;
         errors: string[];
         results: Array<{ uri: vscode.Uri; result: ScanResult }>;
     };
+}
+
+interface ReportCommandOptions {
+    reportVariant?: ReportVariant;
 }
 
 interface StoredReportRecord {
@@ -1519,9 +1524,9 @@ export function activate(context: vscode.ExtensionContext) {
         };
     };
 
-    const createAndOpenReport = async (snapshot: ReportSnapshot) => {
+    const createAndOpenReport = async (snapshot: ReportSnapshot, reportVariant: ReportVariant = 'full') => {
         const safeSnapshot = normalizeReportSnapshot(snapshot);
-        const reportUri = await generateReportFromSnapshot(safeSnapshot.outputRoot, safeSnapshot);
+        const reportUri = await generateReportFromSnapshot(safeSnapshot.outputRoot, safeSnapshot, { variant: reportVariant });
         const reportDoc = await vscode.workspace.openTextDocument(reportUri);
         await vscode.window.showTextDocument(reportDoc, { preview: false });
 
@@ -1559,7 +1564,7 @@ export function activate(context: vscode.ExtensionContext) {
             packContext,
         });
         vscode.window.showInformationMessage(
-            `${PROFILE.displayLabel}: Report created for ${safeSnapshot.results.length} file(s) with ${totalFindings} finding(s) using ${providerNames}/${modelNames}.${warningCount ? ` ${warningCount} warning(s) were captured.` : ''}`
+            `${PROFILE.displayLabel}: ${reportVariant === 'summary' ? 'Summary report' : 'Full evidence report'} created for ${safeSnapshot.results.length} file(s) with ${totalFindings} finding(s) using ${providerNames}/${modelNames}.${warningCount ? ` ${warningCount} warning(s) were captured.` : ''}`
         );
 
         return {
@@ -1567,6 +1572,7 @@ export function activate(context: vscode.ExtensionContext) {
             averageScore,
             providers: providerNames,
             models: modelNames,
+            reportVariant,
             summary: {
                 completed: safeSnapshot.results.length,
                 totalFindings,
@@ -2941,12 +2947,32 @@ export function activate(context: vscode.ExtensionContext) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand(PROFILE.commands.scanWorkspaceReport, async (): Promise<ReportCommandResult> => {
+        vscode.commands.registerCommand(PROFILE.commands.scanWorkspaceReport, async (commandOptions?: ReportCommandOptions): Promise<ReportCommandResult> => {
             const allowed = await ensureScanAllowedForSession();
             if (!allowed) {
                 return { status: 'cancelled' };
             }
             try {
+                let reportVariant: ReportVariant | undefined = commandOptions?.reportVariant;
+                if (reportVariant !== 'summary' && reportVariant !== 'full') {
+                    const pickedReportVariant = await vscode.window.showQuickPick([
+                        {
+                            label: 'Summary Report',
+                            description: 'Developer view: what to fix first',
+                            reportVariant: 'summary' as ReportVariant,
+                        },
+                        {
+                            label: 'Full Evidence Report',
+                            description: 'Complete evidence, scoring, mappings, and AI review detail',
+                            reportVariant: 'full' as ReportVariant,
+                        },
+                    ], {
+                        placeHolder: 'Choose report type',
+                    });
+                    if (!pickedReportVariant) return { status: 'cancelled' };
+                    reportVariant = pickedReportVariant.reportVariant;
+                }
+
                 const lastSnapshot = restoreLastReportSnapshot();
                 const options: vscode.QuickPickItem[] = [];
                 if (lastSnapshot) {
@@ -2971,7 +2997,7 @@ export function activate(context: vscode.ExtensionContext) {
                     chatView.setLastScanTarget(`Report from last scan: ${lastSnapshot.targetLabel}`);
                     return {
                         status: 'completed',
-                        ...(await createAndOpenReport(lastSnapshot)),
+                        ...(await createAndOpenReport(lastSnapshot, reportVariant)),
                     };
                 }
 
@@ -3003,7 +3029,7 @@ export function activate(context: vscode.ExtensionContext) {
                     chatView.setLastScanTarget(`Report file: ${snapshot.targetLabel}`);
                     return {
                         status: 'completed',
-                        ...(await createAndOpenReport(snapshot)),
+                        ...(await createAndOpenReport(snapshot, reportVariant)),
                     };
                 }
 
@@ -3051,7 +3077,7 @@ export function activate(context: vscode.ExtensionContext) {
                     chatView.setLastScanTarget(`Report selected files: ${summary.completed} file(s)`);
                     return {
                         status: 'completed',
-                        ...(await createAndOpenReport(snapshot)),
+                        ...(await createAndOpenReport(snapshot, reportVariant)),
                     };
                 }
 
@@ -3101,7 +3127,7 @@ export function activate(context: vscode.ExtensionContext) {
                     chatView.setLastScanTarget(`Report open editors: ${summary.completed} file(s)`);
                     return {
                         status: 'completed',
-                        ...(await createAndOpenReport(snapshot)),
+                        ...(await createAndOpenReport(snapshot, reportVariant)),
                     };
                 }
 
@@ -3148,7 +3174,7 @@ export function activate(context: vscode.ExtensionContext) {
                 chatView.setLastScanTarget(`Report folder: ${snapshot.targetLabel}`);
                 return {
                     status: 'completed',
-                    ...(await createAndOpenReport(snapshot)),
+                    ...(await createAndOpenReport(snapshot, reportVariant)),
                 };
             } catch (error: any) {
                 statusBar.showError(error.message);

@@ -173,6 +173,47 @@ describe('reportGenerator', () => {
         expect(written).not.toContain('## Framework Correlation View');
     });
 
+    it('writes a summary report focused on developer action', async () => {
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(
+            Buffer.from([
+                'export async function findUser(db, username) {',
+                "  const query = `SELECT * FROM users WHERE username = '${username}'`;",
+                '  return db.query(query);',
+                '}',
+            ].join('\n'))
+        );
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+
+        const snapshot = {
+            targetLabel: 'src/probes/example.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\example.js'),
+                    result: buildResult(),
+                },
+            ],
+        };
+
+        const reportUri = await generateReportFromSnapshot(snapshot.outputRoot, snapshot, { variant: 'summary' });
+
+        expect(reportUri.fsPath).toContain('owlvex-summary-report-');
+        expect(writeFile).toHaveBeenCalledTimes(1);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('# Owlvex Summary Report');
+        expect(written).toContain('This is the developer summary view.');
+        expect(written).toContain('## What To Fix First');
+        expect(written).toContain('## Confirmed Or AI-Reviewed Findings');
+        expect(written).toContain('### Unsanitized SQL query construction');
+        expect(written).toContain('- Status: AI-reviewed');
+        expect(written).toContain('- What to change: Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs');
+        expect(written).toContain('- Code involved:');
+        expect(written).not.toContain('## AI Usage');
+        expect(written).not.toContain('## Findings By File');
+    });
+
     it('handles snapshots with no findings and includes scan errors', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         const snapshot = {
