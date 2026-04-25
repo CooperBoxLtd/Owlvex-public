@@ -17,6 +17,7 @@ import {
     getReportComparisonAnchorScanId,
     getProviderConnectionSettingKeys,
     normalizeComparisonDiff,
+    orderReportsForComparison,
     providerAllowsOptionalApiKey,
     resolveProviderApiKeyInput,
     resolveConnectedModelSelection,
@@ -124,6 +125,40 @@ describe('comparison picker helpers', () => {
 
         expect(selection?.baseline.reportId).toBe('middle');
         expect(selection?.current.reportId).toBe('current');
+    });
+
+    it('orders manually selected reports chronologically before comparison', () => {
+        const older = {
+            reportId: 'older',
+            createdAt: '2026-04-23T10:00:00.000Z',
+        } as any;
+        const newer = {
+            reportId: 'newer',
+            createdAt: '2026-04-23T12:00:00.000Z',
+        } as any;
+
+        const selection = orderReportsForComparison(newer, older);
+
+        expect(selection.baseline.reportId).toBe('older');
+        expect(selection.current.reportId).toBe('newer');
+        expect(selection.wasReordered).toBe(true);
+    });
+
+    it('keeps manually selected reports in order when already chronological', () => {
+        const older = {
+            reportId: 'older',
+            createdAt: '2026-04-23T10:00:00.000Z',
+        } as any;
+        const newer = {
+            reportId: 'newer',
+            createdAt: '2026-04-23T12:00:00.000Z',
+        } as any;
+
+        const selection = orderReportsForComparison(older, newer);
+
+        expect(selection.baseline.reportId).toBe('older');
+        expect(selection.current.reportId).toBe('newer');
+        expect(selection.wasReordered).toBe(false);
     });
 
     it('picks the first stored scan id as the report comparison anchor', () => {

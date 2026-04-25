@@ -300,6 +300,31 @@ export function selectLatestTwoReports(records: StoredReportRecord[]): {
     };
 }
 
+export function orderReportsForComparison(reportA: StoredReportRecord, reportB: StoredReportRecord): {
+    baseline: StoredReportRecord;
+    current: StoredReportRecord;
+    wasReordered: boolean;
+} {
+    const timeA = new Date(reportA.createdAt).getTime();
+    const timeB = new Date(reportB.createdAt).getTime();
+    const validA = Number.isFinite(timeA);
+    const validB = Number.isFinite(timeB);
+
+    if (validA && validB && timeA > timeB) {
+        return {
+            baseline: reportB,
+            current: reportA,
+            wasReordered: true,
+        };
+    }
+
+    return {
+        baseline: reportA,
+        current: reportB,
+        wasReordered: false,
+    };
+}
+
 function normalizeStoredScanRecord(item: { scanId: string; result: ScanResult; targetLabel?: string; scannedAt?: string }): StoredScanRecord {
     return {
         scanId: item.scanId,
@@ -1611,14 +1636,17 @@ export function activate(context: vscode.ExtensionContext) {
         reportA: StoredReportRecord,
         reportB: StoredReportRecord,
     ): Promise<void> => {
-        const scanAId = getReportComparisonAnchorScanId(reportA);
-        const scanBId = getReportComparisonAnchorScanId(reportB);
+        const orderedReports = orderReportsForComparison(reportA, reportB);
+        const baselineReport = orderedReports.baseline;
+        const currentReport = orderedReports.current;
+        const scanAId = getReportComparisonAnchorScanId(baselineReport);
+        const scanBId = getReportComparisonAnchorScanId(currentReport);
         if (!scanAId || !scanBId) {
             throw new Error('One of the selected reports does not contain stored scan IDs, so it cannot be compared yet.');
         }
 
-        const findingsA = reportA.results.flatMap(item => item.result.findings);
-        const findingsB = reportB.results.flatMap(item => item.result.findings);
+        const findingsA = baselineReport.results.flatMap(item => item.result.findings);
+        const findingsB = currentReport.results.flatMap(item => item.result.findings);
 
         const res = await fetch(`${compareApiUrl}/v1/scans/compare`, {
             method: 'POST',
@@ -1647,8 +1675,8 @@ export function activate(context: vscode.ExtensionContext) {
                     severity: f.severity,
                     title: f.title,
                 })),
-                score_a: reportA.averageScore,
-                score_b: reportB.averageScore,
+                score_a: baselineReport.averageScore,
+                score_b: currentReport.averageScore,
             }),
         });
 
@@ -1668,7 +1696,11 @@ export function activate(context: vscode.ExtensionContext) {
             {},
         );
 
-        panel.webview.html = buildComparisonHtmlV2(diff, scoreChange);
+        panel.webview.html = buildComparisonHtmlV2(diff, scoreChange, {
+            baseline: baselineReport,
+            current: currentReport,
+            wasReordered: orderedReports.wasReordered,
+        });
     };
 
     const emitExtensionUsageEvent = (eventName: UsageEventName, metadata: Record<string, unknown> = {}): void => {
@@ -3222,7 +3254,7 @@ export function activate(context: vscode.ExtensionContext) {
                 new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
             );
             const scanAChoice = await vscode.window.showQuickPick(newestFirstReports.map(buildStoredReportComparisonChoice), {
-                placeHolder: 'Select baseline report',
+                placeHolder: 'Select first report to compare. Owlvex will order reports by generation time.',
             });
             if (!scanAChoice) return;
 
@@ -3230,7 +3262,7 @@ export function activate(context: vscode.ExtensionContext) {
                 newestFirstReports
                     .filter(item => item.reportId !== scanAChoice.record.reportId)
                     .map(buildStoredReportComparisonChoice),
-                { placeHolder: 'Select current report' },
+                { placeHolder: 'Select second report to compare. Earlier becomes Before; later becomes After.' },
             );
             if (!scanBChoice) return;
 
@@ -3431,7 +3463,11 @@ export function normalizeComparisonDiff(diff: any): any {
     };
 }
 
-function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
+function buildComparisonHtmlV2(
+    diff: any,
+    scoreChange: string,
+    reports?: { baseline: StoredReportRecord; current: StoredReportRecord; wasReordered: boolean },
+): string {
     const normalizedDiff = normalizeComparisonDiff(diff);
     const severityWeight = (severity: string) => {
         switch (severity) {
@@ -3525,6 +3561,17 @@ function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
     if (!narrativeParts.length) {
         narrativeParts.push('No major canonical issue movement was detected between these two scans.');
     }
+    const numericScoreChange = Number(scoreChange);
+    const scoreChangeClass = numericScoreChange > 0 ? 'negative' : numericScoreChange < 0 ? 'positive' : '';
+    const baselineLabel = reports
+        ? `${reports.baseline.targetLabel || reports.baseline.reportFileName} (${formatStoredScanTimestamp(reports.baseline.createdAt)})`
+        : 'Baseline report';
+    const currentLabel = reports
+        ? `${reports.current.targetLabel || reports.current.reportFileName} (${formatStoredScanTimestamp(reports.current.createdAt)})`
+        : 'Current report';
+    const orderNotice = reports?.wasReordered
+        ? '<div class="notice">Reports were selected out of chronological order. Owlvex compared the earlier report as Before and the later report as After.</div>'
+        : '';
 
     return `<!DOCTYPE html><html><head><meta charset="UTF-8">
 <style>
@@ -3550,6 +3597,10 @@ function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
   .card ul { margin: 0; padding-left: 18px; }
   .card li { margin: 8px 0; }
   .legend { opacity: 0.75; font-size: 12px; margin-top: 8px; }
+  .timeline { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0 20px; }
+  .timeline-item { background: var(--vscode-editor-inactiveSelectionBackground); border-radius: 6px; padding: 10px 12px; }
+  .timeline-label { font-size: 11px; text-transform: uppercase; opacity: 0.7; margin-bottom: 4px; }
+  .notice { border: 1px solid var(--vscode-editorWarning-foreground); color: var(--vscode-editorWarning-foreground); border-radius: 6px; padding: 10px 12px; margin: 12px 0; }
   table { width: 100%; border-collapse: collapse; margin-top: 16px; }
   th { text-align: left; padding: 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 12px; opacity: 0.7; }
   td { padding: 8px; border-bottom: 1px solid var(--vscode-panel-border); font-size: 13px; vertical-align: top; }
@@ -3559,13 +3610,18 @@ function buildComparisonHtmlV2(diff: any, scoreChange: string): string {
 </style></head><body>
 <h1>Report Comparison</h1>
   <div class="lede">A canonical before/after view of how security changed between the two reports.</div>
+${orderNotice}
+<div class="timeline">
+  <div class="timeline-item"><div class="timeline-label">Before</div><div>${baselineLabel}</div></div>
+  <div class="timeline-item"><div class="timeline-label">After</div><div>${currentLabel}</div></div>
+</div>
 <div class="hero">
   <div class="eyebrow">Security Posture</div>
   <div class="headline ${weightedAfter <= weightedBefore ? 'positive' : 'negative'}">${weightedAfter <= weightedBefore ? `Improved by ${weightedImprovement}%` : `Regressed by ${Math.abs(weightedImprovement)}%`}</div>
   <div class="support">Weighted exposure moved from ${weightedBefore} to ${weightedAfter}. ${normalizedDiff.resolved_findings ?? 0} findings were resolved and ${normalizedDiff.new_findings ?? 0} new findings were introduced.</div>
 </div>
 <div class="summary">
-  <div class="stat"><div class="value ${Number(scoreChange) >= 0 ? 'positive' : 'negative'}">${scoreChange}</div><div class="label">Score Change</div></div>
+  <div class="stat"><div class="value ${scoreChangeClass}">${scoreChange}</div><div class="label">Risk Score Change</div></div>
   <div class="stat"><div class="value negative">${normalizedDiff.new_findings ?? 0}</div><div class="label">New Findings</div></div>
   <div class="stat"><div class="value positive">${normalizedDiff.resolved_findings ?? 0}</div><div class="label">Resolved</div></div>
   <div class="stat"><div class="value ${weightedAfter <= weightedBefore ? 'positive' : 'negative'}">${weightedImprovement}%</div><div class="label">Weighted Improvement</div></div>
