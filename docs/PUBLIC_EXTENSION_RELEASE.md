@@ -24,6 +24,7 @@ Public GitHub distribution should happen through a separate public repository th
 - `CHANGELOG.md`
 - `downloads/owlvex-prod.vsix.sha256`
 - `latest.json`
+- `releases/owlvex-<version>.vsix` for users browsing the repository file tree
 - GitHub Releases containing `owlvex-prod.vsix`
 
 The production extension artifact is still built in the private repo, then published outward.
@@ -46,6 +47,8 @@ That workflow:
    - the packaged `owlvex-prod.vsix`
 5. syncs the public README/metadata files into the public repo
 6. publishes the `.vsix` and checksum as a GitHub release in the public repo
+
+If publishing manually, also copy the production VSIX into `releases/owlvex-<version>.vsix` and set `latest.json.repositoryAsset` to that path. GitHub Releases remain the canonical download surface, but the checked-in `releases/` folder prevents the public repo code view from looking stale.
 
 ## Required GitHub Secrets
 
@@ -84,6 +87,8 @@ CHANGELOG.md
 latest.json
 downloads/
   owlvex-prod.vsix.sha256
+releases/
+  owlvex-<version>.vsix
 ```
 
 ## Prototype Positioning

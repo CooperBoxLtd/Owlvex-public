@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.16
+
+- add a first-run chat empty state focused on the first 60 seconds of use
+- surface setup readiness for access, project/workspace, LLM configuration, and first scan
+- promote `Use Free` and `Start Trial` into visible onboarding actions
+- make the LLM rail button say `Configure LLM` until a provider is ready
+- label report creation as `Report after scan` before a scan exists
+- rename fix actions from `Fix code` / `Fix scan broadly` to `Preview fix` / `Preview fixes` so users know fixes open reviewable diffs before files change
+- package and publish production build `0.1.16`
+
 ## 0.1.4
 
 - remove the remaining actionable-finding truncation so broad workspace fixes use the full fixable set instead of the top three results
