@@ -4,7 +4,7 @@
 
 - add Engine 1.0 proof-contract evidence for SSRF across JavaScript, Python, Java, C#, and Go
 - add a proof-contract benchmark gate for source, sink, guard, verdict, rationale, and safe companion behavior
-- add deterministic evidence fallback contracts for remaining covered rule families
+- add family-specific deterministic evidence contracts for remaining covered rule families
 - add benchmark direction metrics for pass rate, unsafe recall, safe quietness, evidence-shape completeness, and fixture growth
 
 ## 0.1.17

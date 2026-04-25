@@ -51,7 +51,7 @@ function evaluateCase(scanner, testCase) {
     return Boolean(
       contract &&
       contract.verdict === 'confirmed' &&
-      ['missing', 'unknown'].includes(contract.guard?.status) &&
+      contract.guard?.status === 'missing' &&
       contract.source?.expression &&
       contract.sink?.expression &&
       contract.rationale,

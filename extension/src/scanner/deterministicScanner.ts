@@ -1149,28 +1149,114 @@ function evidenceIssueType(finding: InternalFinding): string {
     return finding.ruleCode.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 }
 
+const RULE_EVIDENCE_METADATA: Record<string, {
+    sourceLabel: string;
+    sinkLabel: string;
+    guardLabel: string;
+    guardReason: string;
+}> = {
+    'AC-001': {
+        sourceLabel: 'Caller-controlled resource identifier',
+        sinkLabel: 'Resource lookup without ownership scope',
+        guardLabel: 'Object-level authorization or ownership constraint',
+        guardReason: 'No recognized ownership scope or explicit authorization check is visible for the resource lookup.',
+    },
+    'AC-T001': {
+        sourceLabel: 'Tenant scope parameter',
+        sinkLabel: 'Data query missing tenant constraint',
+        guardLabel: 'Tenant constraint at the data-access layer',
+        guardReason: 'No recognized tenant, organization, workspace, account, or company constraint is visible in the query.',
+    },
+    'DP-001': {
+        sourceLabel: 'Sensitive field in log arguments',
+        sinkLabel: 'Logging sink',
+        guardLabel: 'Redaction or masking before logging',
+        guardReason: 'No recognized redaction or masking guard is visible before the sensitive value reaches the log call.',
+    },
+    'SM-001': {
+        sourceLabel: 'Cookie value set by server response',
+        sinkLabel: 'Cookie-setting sink',
+        guardLabel: 'httpOnly cookie flag',
+        guardReason: 'No recognized `httpOnly: true` cookie option is visible at the cookie-setting call site.',
+    },
+    'SM-002': {
+        sourceLabel: 'Debug activation call',
+        sinkLabel: 'Runtime debug-mode switch',
+        guardLabel: 'Production environment guard',
+        guardReason: 'No recognized production guard encloses the debug activation call.',
+    },
+    'OR-001': {
+        sourceLabel: 'Request-controlled redirect target',
+        sinkLabel: 'Redirect sink',
+        guardLabel: 'Trusted redirect allowlist or local route map',
+        guardReason: 'No recognized local redirect mapping or trusted redirect allowlist is visible before the redirect.',
+    },
+    'JW-001': {
+        sourceLabel: 'Unverified JWT token or decode helper',
+        sinkLabel: 'JWT decode/parse-without-verification sink',
+        guardLabel: 'JWT signature verification',
+        guardReason: 'No recognized signature verification step is visible before JWT claims are trusted.',
+    },
+    'SE-001': {
+        sourceLabel: 'Literal secret value in source',
+        sinkLabel: 'Static secret assignment',
+        guardLabel: 'Runtime secret source',
+        guardReason: 'No environment, managed configuration, or secret-store lookup is visible for this reusable secret.',
+    },
+    'SE-002': {
+        sourceLabel: 'Request-controlled token',
+        sinkLabel: 'Literal token comparison',
+        guardLabel: 'Per-session or managed token source',
+        guardReason: 'No recognized per-session state, runtime configuration, or managed secret source is visible for the expected token.',
+    },
+    'CO-001': {
+        sourceLabel: 'Wildcard browser origin policy',
+        sinkLabel: 'CORS response policy',
+        guardLabel: 'Explicit trusted origin policy',
+        guardReason: 'No explicit trusted origin mapping is visible while credentialed CORS is enabled.',
+    },
+    'CS-001': {
+        sourceLabel: 'Browser-authenticated state-changing request',
+        sinkLabel: 'State mutation sink',
+        guardLabel: 'Anti-CSRF token validation',
+        guardReason: 'No recognized anti-CSRF token validation is visible before the state-changing operation.',
+    },
+    'DS-001': {
+        sourceLabel: 'Request-controlled serialized payload',
+        sinkLabel: 'Executable deserialization sink',
+        guardLabel: 'Data-only parser or trusted payload boundary',
+        guardReason: 'No recognized trusted payload boundary or data-only parser is visible before deserialization.',
+    },
+};
+
 function buildDeterministicEvidenceFallback(source: string, finding: InternalFinding): EvidenceContract {
     const expression = lineExpressionAt(source, finding.matchIndex);
+    const metadata = RULE_EVIDENCE_METADATA[finding.ruleCode] ?? {
+        sourceLabel: 'Matched deterministic code evidence',
+        sinkLabel: 'Security-sensitive construct matched by deterministic rule',
+        guardLabel: 'Rule-specific guard evidence',
+        guardReason: 'This deterministic rule confirmed a vulnerable code shape, but the family-specific source/sink/guard contract has not yet been specialized.',
+    };
 
     return {
         issueType: evidenceIssueType(finding),
         source: {
             kind: 'source',
-            label: 'Matched deterministic code evidence',
+            label: metadata.sourceLabel,
             expression,
             line: lineOfOffset(source, finding.matchIndex),
         },
         flow: [],
         sink: {
             kind: 'sink',
-            label: 'Security-sensitive construct matched by deterministic rule',
+            label: metadata.sinkLabel,
             expression,
             line: lineOfOffset(source, finding.matchIndex),
         },
         guard: {
-            status: 'unknown',
-            label: 'Rule-specific guard evidence',
-            reason: 'This deterministic rule confirmed a vulnerable code shape, but the family-specific source/sink/guard contract has not yet been specialized.',
+            status: 'missing',
+            label: metadata.guardLabel,
+            reason: metadata.guardReason,
         },
         verdict: 'confirmed',
         rationale: `Deterministic rule ${finding.ruleCode} matched code evidence for ${finding.title}.`,
