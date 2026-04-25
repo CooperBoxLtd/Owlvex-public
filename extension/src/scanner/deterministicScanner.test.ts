@@ -1382,6 +1382,79 @@ function downloadFile(req, res) {
     });
 });
 
+describe('DeterministicScanner client-controlled filter rule', () => {
+    it('detects req.body.filter flowing into a generic user filter predicate', () => {
+        const source = `
+function matchesFilter(user, filter) {
+  return Object.entries(filter).every(([key, value]) => user[key] === value);
+}
+
+router.post('/users/search-unsafe', requireAdmin, (req, res) => {
+  const filter = req.body && typeof req.body.filter === 'object' && req.body.filter !== null ? req.body.filter : {};
+  const results = fakeUsers.filter(user => matchesFilter(user, filter));
+  res.json({ count: results.length, results });
+});`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'NQ-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].canonicalId).toBe('owlvex.issue.nosql_injection.001');
+        expect(findings[0].title).toBe('NoSQL Injection Through Untrusted Query Object');
+        expect(findings[0].likelihood).toBe('HIGH');
+        expect(findings[0].evidenceContract).toMatchObject({
+            issueType: 'client-controlled-query-filter',
+            verdict: 'confirmed',
+            source: {
+                expression: 'req.body.filter',
+            },
+            sink: {
+                expression: 'matchesFilter(user, filter))',
+            },
+            guard: {
+                status: 'missing',
+            },
+        });
+        expect(findings[0].evidenceContract?.flow[0]).toMatchObject({
+            kind: 'assignment',
+            expression: "const filter = req.body && typeof req.body.filter === 'object' && req.body.filter !== null ? req.body.filter : {}",
+        });
+    });
+
+    it('detects a client filter variable passed to a Mongo-style find()', () => {
+        const source = `
+router.post('/users/search', async (req, res) => {
+  const userFilter = req.body.filter;
+  const users = await db.collection('users').find(userFilter).toArray();
+  res.json(users);
+});`;
+        const findings = scanner.scan(source, 'typescript').filter(f => f.ruleCode === 'NQ-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].evidenceContract?.source?.expression).toBe('req.body.filter');
+        expect(findings[0].evidenceContract?.sink?.expression).toBe(".find(userFilter).toArray()");
+    });
+
+    it('detects req.body passed directly into a Mongo-style find()', () => {
+        const source = `
+router.post('/users/search', async (req, res) => {
+  const users = await db.collection('users').find(req.body).toArray();
+  res.json(users);
+});`;
+        const findings = scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'NQ-001');
+        expect(findings).toHaveLength(1);
+        expect(findings[0].evidenceContract?.source?.expression).toBe('req.body');
+    });
+
+    it('does not flag a server-built allowlisted filter', () => {
+        const source = `
+router.post('/users/search-safe', requireAdmin, (req, res) => {
+  const filter = {};
+  if (typeof req.body.email === 'string') filter.email = req.body.email;
+  if (typeof req.body.role === 'string' && ['user', 'admin'].includes(req.body.role)) filter.role = req.body.role;
+  const results = fakeUsers.filter(user => matchesFilter(user, filter));
+  res.json({ count: results.length, results });
+});`;
+        expect(scanner.scan(source, 'javascript').filter(f => f.ruleCode === 'NQ-001')).toHaveLength(0);
+    });
+});
+
 describe('DeterministicScanner SSRF rule', () => {
     it('detects direct fetch() to a request-derived URL without a visible guard', () => {
         const source = `

@@ -68,6 +68,8 @@ const CONCAT_ASSIGN_PATTERN =
 // Narrow request-derived assignment signal used by the path-traversal rule.
 const REQUEST_ASSIGN_PATTERN =
     /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*(?:req|request)\.(?:query|params|body)\.[A-Za-z_$][A-Za-z0-9_$]*/g;
+const CLIENT_FILTER_ASSIGN_PATTERN =
+    /(?:const|let|var)\s+([A-Za-z_$][A-Za-z0-9_$]*)\s*=\s*((?:req|request)\.(?:body|query)\.(?:filter|query|criteria|search)|(?:req|request)\.body)\b/gi;
 
 // HTML sanitizer assignment: const cleaned = escapeHtml(username)
 const SANITIZER_ASSIGN_PATTERN =
@@ -925,6 +927,12 @@ const HIGH_SENSITIVITY_LOG_FIELD_RE =
     /\b(?:password|accessToken|refreshToken|privateKey|secretKey|apiSecret)\b/i;
 const REQUEST_MEMBER_RE =
     /\b(?:req|request)\.(?:query|params|body)\.[A-Za-z_$][A-Za-z0-9_$]*\b/;
+const CLIENT_FILTER_DIRECT_RE =
+    /\b(?:req|request)\.(?:body|query)\.(?:filter|query|criteria|search)\b|\b(?:req|request)\.body\b/;
+const NOSQL_FILTER_SINK_RE =
+    /\.(?:find|findOne|findOneAndUpdate|countDocuments|deleteMany|deleteOne|updateMany|updateOne)\s*\(/g;
+const PREDICATE_FILTER_SINK_RE =
+    /\bmatchesFilter\s*\(\s*[^,]+,\s*([A-Za-z_$][A-Za-z0-9_$]*|(?:req|request)\.(?:body|query)\.(?:filter|query|criteria|search)|(?:req|request)\.body)\s*\)/g;
 const FILESYSTEM_SINK_START_RE =
     /\b(?:res\.sendFile|(?:fs\.)?(?:readFile|readFileSync|createReadStream))\s*\(/g;
 const DIRECT_FETCH_RE =
@@ -990,6 +998,33 @@ function collectRequestDerivedVariables(source: string): Set<string> {
     }
 
     return tainted;
+}
+
+function collectClientControlledFilterVariables(source: string): Map<string, {
+    sourceExpression: string;
+    assignmentExpression: string;
+    matchIndex: number;
+}> {
+    const filters = new Map<string, {
+        sourceExpression: string;
+        assignmentExpression: string;
+        matchIndex: number;
+    }>();
+    const pattern = new RegExp(CLIENT_FILTER_ASSIGN_PATTERN.source, CLIENT_FILTER_ASSIGN_PATTERN.flags);
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(source)) !== null) {
+        if (!/(?:filter|query|criteria|search)/i.test(match[1])) { continue; }
+        const assignmentExpression = source.slice(match.index, source.indexOf('\n', match.index) >= 0 ? source.indexOf('\n', match.index) : source.length).trim().replace(/;$/, '');
+        const preferredSource = assignmentExpression.match(/\b(?:req|request)\.(?:body|query)\.(?:filter|query|criteria|search)\b/)?.[0] ?? match[2];
+        filters.set(match[1], {
+            sourceExpression: preferredSource,
+            assignmentExpression,
+            matchIndex: match.index,
+        });
+    }
+
+    return filters;
 }
 
 function isRequestDerivedExpression(expression: string, taintedVars: Set<string>): boolean {
@@ -1255,6 +1290,114 @@ function scanSqlSinks(source: string): InternalFinding[] {
             'query helper',
             match[1],
         ));
+    }
+
+    return found;
+}
+
+function makeClientControlledFilterFinding(
+    source: string,
+    matchIndex: number,
+    sinkExpression: string,
+    filterExpression: string,
+    filterVars: Map<string, { sourceExpression: string; assignmentExpression: string; matchIndex: number }>,
+): InternalFinding {
+    const filterVar = filterVars.get(filterExpression.trim());
+    const sourceExpression = filterVar?.sourceExpression ?? filterExpression.trim();
+    const flow = filterVar
+        ? [{
+            kind: 'assignment' as const,
+            label: `Client filter assigned to ${filterExpression.trim()}`,
+            expression: filterVar.assignmentExpression,
+            line: lineOfOffset(source, filterVar.matchIndex),
+        }]
+        : [];
+
+    return {
+        matchIndex,
+        severity: 'HIGH',
+        ruleCode: 'NQ-001',
+        title: 'NoSQL Injection Through Untrusted Query Object',
+        explanation:
+            'A client-controlled filter object is passed into a data lookup or generic filter predicate. ' +
+            'Because the client controls the query structure, operators or unexpected fields can change the search semantics.',
+        threat:
+            'An attacker can broaden searches, bypass intended constraints, or query records they should not be able to select ' +
+            'by submitting operator-shaped objects or unexpected filter fields.',
+        fix:
+            'Build the query/filter object on the server from an allowlist of approved fields and values. ' +
+            'Reject raw client-controlled filter objects and avoid passing `req.body`, `req.body.filter`, or equivalent objects directly into query APIs.',
+        canonicalId: 'owlvex.issue.nosql_injection.001',
+        framework: 'OWASP',
+        likelihood: 'HIGH',
+        likelihoodReasons: ['A client-controlled filter object reaches a query/filter sink without a server-side allowlist.'],
+        evidenceContract: {
+            issueType: 'client-controlled-query-filter',
+            source: {
+                kind: 'source',
+                label: 'Client-controlled filter object',
+                expression: sourceExpression,
+                line: expressionLine(source, sourceExpression),
+            },
+            flow,
+            sink: {
+                kind: 'sink',
+                label: 'Query/filter sink',
+                expression: sinkExpression,
+                line: lineOfOffset(source, matchIndex),
+            },
+            guard: {
+                status: 'missing',
+                label: 'Server-side field/operator allowlist',
+                reason: 'No recognized server-built allowlist or schema validation separates trusted query structure from untrusted values before the filter reaches the sink.',
+            },
+            verdict: 'confirmed',
+            rationale: 'Client-controlled input controls a filter object that reaches a query/filter sink without a recognized allowlist guard.',
+        },
+    };
+}
+
+function scanClientControlledFilterSinks(source: string): InternalFinding[] {
+    const filterVars = collectClientControlledFilterVariables(source);
+    const hasDirectFilter = CLIENT_FILTER_DIRECT_RE.test(source);
+
+    if (!filterVars.size && !hasDirectFilter) {
+        return [];
+    }
+
+    const found: InternalFinding[] = [];
+    const seen = new Set<string>();
+    let match: RegExpExecArray | null;
+
+    const querySinkPattern = new RegExp(NOSQL_FILTER_SINK_RE.source, NOSQL_FILTER_SINK_RE.flags);
+    while ((match = querySinkPattern.exec(source)) !== null) {
+        const openParen = source.indexOf('(', match.index);
+        if (openParen < 0) { continue; }
+
+        const args = splitTopLevelArgs(extractArgsAfterParen(source, openParen));
+        if (!args.length) { continue; }
+
+        const firstArg = args[0].trim();
+        if (!isClientControlledFilterExpression(firstArg, filterVars)) { continue; }
+
+        const sinkExpression = source.slice(match.index, source.indexOf('\n', match.index) >= 0 ? source.indexOf('\n', match.index) : source.length).trim().replace(/;$/, '');
+        const key = `${match.index}:${firstArg}`;
+        if (seen.has(key)) { continue; }
+        seen.add(key);
+        found.push(makeClientControlledFilterFinding(source, match.index, sinkExpression, firstArg, filterVars));
+    }
+
+    const predicatePattern = new RegExp(PREDICATE_FILTER_SINK_RE.source, PREDICATE_FILTER_SINK_RE.flags);
+    while ((match = predicatePattern.exec(source)) !== null) {
+        if (/\bfunction\s*$/.test(source.slice(Math.max(0, match.index - 20), match.index))) { continue; }
+        const filterExpression = match[1].trim();
+        if (!isClientControlledFilterExpression(filterExpression, filterVars)) { continue; }
+
+        const sinkExpression = source.slice(match.index, source.indexOf('\n', match.index) >= 0 ? source.indexOf('\n', match.index) : source.length).trim().replace(/;$/, '');
+        const key = `${match.index}:${filterExpression}`;
+        if (seen.has(key)) { continue; }
+        seen.add(key);
+        found.push(makeClientControlledFilterFinding(source, match.index, sinkExpression, filterExpression, filterVars));
     }
 
     return found;
@@ -2867,6 +3010,7 @@ export class DeterministicScanner {
             ? [
                 ...scanShellSinks(source),
                 ...scanSqlSinks(source),
+                ...scanClientControlledFilterSinks(source),
                 ...scanPathTraversalSinks(source),
                 ...scanSsrfSinks(source),
                 ...scanOpenRedirectSinks(source),
@@ -2932,4 +3076,12 @@ export class DeterministicScanner {
             evidenceContract: f.evidenceContract,
         }));
     }
+}
+
+function isClientControlledFilterExpression(
+    expression: string,
+    filterVars: Map<string, { sourceExpression: string; assignmentExpression: string; matchIndex: number }>,
+): boolean {
+    const trimmed = expression.trim();
+    return CLIENT_FILTER_DIRECT_RE.test(trimmed) || filterVars.has(trimmed);
 }
