@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.17
+
+- save kept fix previews before verification rescans so the next scan reads the persisted code
+- label broad fix requests as findings across files instead of miscounting findings as files
+- make clean scan and post-fix verification messages provider/model-scoped
+- capture provider disagreement when a later model finds issues after another model reported a clean file
+- replace pseudo-precise report confidence headlines with qualitative AI signal bands and evidence confidence
+
 ## 0.1.16
 
 - add a first-run chat empty state focused on the first 60 seconds of use

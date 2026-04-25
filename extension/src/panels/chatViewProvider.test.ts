@@ -2038,6 +2038,7 @@ describe('parseChatIntent', () => {
             },
         ] as any);
 
+        expect((provider as any).messages[0].content).toBe('Preview fixes for the latest scan (2 finding(s) across 2 file(s))');
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Fix preview ready for 2 files.');
         expect(complete).toHaveBeenCalledTimes(2);
@@ -2375,10 +2376,12 @@ describe('parseChatIntent', () => {
                 isEmpty: true,
             },
         };
+        const saveDocument = jest.fn().mockResolvedValue(true);
         (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (input: any) => {
             return {
                 uri: targetUri,
                 getText: () => originalText,
+                save: saveDocument,
             };
         });
         (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
@@ -2432,16 +2435,71 @@ describe('parseChatIntent', () => {
                 text: 'const safe = true;',
             }),
         ]));
+        expect(saveDocument).toHaveBeenCalled();
         expect(vscode.window.showTextDocument).toHaveBeenCalledWith(expect.objectContaining({ uri: targetUri }), { preview: false });
         expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(3, PROFILE.commands.scanFile, expect.objectContaining({ fsPath: 'd:\\repo\\src\\target.js' }));
         expect((provider as any).messages[(provider as any).messages.length - 2].content).toContain('Kept the reviewed fix');
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Verification complete: the reviewed finding is no longer present');
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain('Clean result scope: no findings were reported by test-provider / owlvex-test-model');
         expect((provider as any).messages[(provider as any).messages.length - 1].actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
             expect.objectContaining({ label: 'Scan current file', kind: 'quickAction', quickAction: 'scanFile' }),
             expect.objectContaining({ label: 'Scan workspace', kind: 'quickAction', quickAction: 'scanFolder' }),
         ]));
         expect((provider as any).pendingFixPreview).toBeUndefined();
+    });
+
+    it('captures provider disagreement when a later provider finds issues after a clean scan', () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        const uri = vscode.Uri.file('d:\\repo\\src\\target.js');
+        const cleanResult = {
+            score: 0,
+            findings: [],
+            positives: [],
+            metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+            durationMs: 10,
+            model: 'owlvex-gpt54',
+            provider: 'azure-foundry',
+            warnings: [],
+            summary: 'No findings detected.',
+        };
+        const laterResult = {
+            ...cleanResult,
+            score: 9,
+            model: 'claude-opus-4-6',
+            provider: 'anthropic',
+            findings: [{
+                id: 'finding-auth',
+                line: 12,
+                lineEnd: 12,
+                severity: 'HIGH',
+                framework: 'OWASP',
+                ruleCode: 'A01-AUTH',
+                title: 'Missing authentication',
+                explanation: 'Route lacks auth.',
+                threat: 'Data exposure.',
+                fix: 'Require auth.',
+                confidence: 0.9,
+                provenance: 'ai',
+                likelihood: 'HIGH',
+                riskScore: 9,
+            }],
+        };
+
+        expect((provider as any).buildProviderComparisonNotes([{ uri, result: cleanResult }])[0]).toContain('reported 0 findings');
+        expect((provider as any).buildProviderComparisonNotes([{ uri, result: laterResult }])[0]).toContain('Provider disagreement: azure-foundry / owlvex-gpt54 previously reported 0 findings');
     });
 
     it('records a fix benchmark result automatically for matching benchmark files after verification', async () => {

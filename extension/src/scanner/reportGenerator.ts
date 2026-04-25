@@ -192,7 +192,7 @@ function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     ];
 
     if (finding.provenance !== 'deterministic') {
-        parts.push(formatAiPassScoreSummary(finding));
+        parts.push(`AI signal ${getConfidenceBand(getAiConfidence(finding))}`);
     }
 
     parts.push(
@@ -212,14 +212,41 @@ function formatPercent(value: number | undefined): string {
     return `${Math.round(value * 100)}%`;
 }
 
-function formatAiPassScoreSummary(finding: ScanResult['findings'][number]): string {
+function getConfidenceBand(value: number | undefined): string {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return 'Unknown';
+    }
+    if (value >= 0.85) {
+        return 'High';
+    }
+    if (value >= 0.7) {
+        return 'Medium';
+    }
+    return 'Low';
+}
+
+function formatAiPassBandSummary(finding: ScanResult['findings'][number]): string {
     const scores = finding.aiReviewScores;
-    return [
-        `finder ${formatPercent(scores?.finder ?? finding.resolverConfidence ?? finding.confidence)}`,
-        `verifier ${formatPercent(scores?.verifier)}`,
-        `skeptic ${formatPercent(scores?.skeptic)}`,
-        `final ${formatPercent(scores?.final ?? getAiConfidence(finding))}`,
+    const finder = scores?.finder ?? finding.resolverConfidence ?? finding.confidence;
+    const final = scores?.final ?? getAiConfidence(finding);
+    const bands = [
+        `finder ${getConfidenceBand(finder)}`,
+        `verifier ${getConfidenceBand(scores?.verifier)}`,
+        `skeptic ${getConfidenceBand(scores?.skeptic)}`,
+        `final ${getConfidenceBand(final)}`,
     ].join(' | ');
+    return `${bands} (raw audit: finder ${formatPercent(finder)}, verifier ${formatPercent(scores?.verifier)}, skeptic ${formatPercent(scores?.skeptic)}, final ${formatPercent(final)})`;
+}
+
+function formatEvidenceConfidence(finding: ScanResult['findings'][number]): string {
+    if (finding.provenance === 'deterministic') {
+        return `Confirmed by rule \`${finding.ruleCode || 'n/a'}\``;
+    }
+
+    const confidence = getConfidenceBand(getAiConfidence(finding));
+    const evidence = getCorroborationDisplayLabel(finding.corroboration ?? 'UNVERIFIED');
+    const manual = needsManualReview(finding) ? '; manual review recommended' : '';
+    return `${confidence} AI signal (${evidence}${manual})`;
 }
 
 function buildAiReviewTrailLines(finding: ScanResult['findings'][number]): string[] {
@@ -333,15 +360,16 @@ function buildHowToReadTable(): string[] {
         '',
         '| Report field | What it means | How to use it |',
         '| --- | --- | --- |',
-        '| Confidence | How sure Owlvex is that the issue is real | Use this as the trust level for the finding |',
+        '| Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |',
         '| Confirmed by rule | Deterministic analysis proved the issue from code structure | Highest confidence |',
         '| Validated by AI review | AI found the issue and a follow-up review supported it | Strong signal, but not rule-proven |',
         '| Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |',
         '| Needs manual review | Evidence is weak, incomplete, or low-confidence | Do not treat as confirmed yet |',
+        '| AI signal | Qualitative band from the model review trail: High, Medium, Low, or Unknown | Use with the evidence label; raw percentages are audit detail only |',
         '| Impact | How serious the damage could be if exploited | Business/security severity |',
         '| Likelihood | How likely exploitation is from the observed code | Exploitability estimate |',
         '| Risk score | Overall priority if the finding is real | Use this to prioritize fixes |',
-        '| Detection confidence | Confidence in the detection itself | Separate from risk score |',
+        '| Evidence confidence | Rule proof or qualitative AI signal for the detection | Separate from risk score |',
         '',
     ];
 }
@@ -910,11 +938,11 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
             lines.push(`- Knowledge sources: ${buildKnowledgeSourceDetail(item.packContext)}`);
             lines.push('');
-            lines.push('| Finding | What drives the score | Detection confidence |');
+            lines.push('| Finding | What drives the score | Evidence confidence |');
             lines.push('| --- | --- | --- |');
             for (const finding of item.result.findings.slice().sort((left, right) => riskRank(right) - riskRank(left))) {
                 lines.push(
-                    `| ${escapeMarkdown(finding.canonicalTitle || finding.title)} | ${escapeMarkdown(summarizeFindingRow(finding))} | ${finding.provenance === 'deterministic' ? `Confirmed by rule \`${finding.ruleCode || 'n/a'}\`` : `${Math.round((finding.resolverConfidence ?? finding.confidence) * 100)}%`} |`,
+                    `| ${escapeMarkdown(finding.canonicalTitle || finding.title)} | ${escapeMarkdown(summarizeFindingRow(finding))} | ${escapeMarkdown(formatEvidenceConfidence(finding))} |`,
                 );
             }
             lines.push('');
@@ -933,8 +961,8 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Analysis mode: ${getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'))}`);
                 lines.push(`- Confidence: ${getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'))}`);
                 if (finding.provenance !== 'deterministic') {
-                    lines.push(`- AI pass scores: ${formatAiPassScoreSummary(finding)}`);
-                    lines.push(`- Detection confidence: ${formatPercent(getAiConfidence(finding))}${needsManualReview(finding) ? ' (manual review recommended)' : ''}`);
+                    lines.push(`- AI signal: ${getConfidenceBand(getAiConfidence(finding))}${needsManualReview(finding) ? ' (manual review recommended)' : ''}`);
+                    lines.push(`- AI review trace: ${formatAiPassBandSummary(finding)}`);
                 }
                 lines.push(`- Evidence: ${getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'))}`);
                 lines.push(...buildAiReviewTrailLines(finding));

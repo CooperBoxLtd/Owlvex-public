@@ -14,6 +14,7 @@ Unlike `tools/demo/`, which is a fixture-level corpus made of isolated files, th
 - Vulnerable and safe SQL query construction
 - Vulnerable and safe JWT/session validation
 - Vulnerable and safe credential logging
+- Small filming-focused route with obvious unsafe/safe examples
 - Shared auth, tenant, CSRF, and URL-policy helpers
 
 ## Route Map
@@ -35,6 +36,29 @@ Unlike `tools/demo/`, which is a fixture-level corpus made of isolated files, th
 - `GET /auth/session-safe` - JWT verified with HMAC and claim checks
 - `POST /logs/login-unsafe` - password written into logs
 - `POST /logs/login-safe` - password redacted before logging
+- `POST /filming/users/search-unsafe` - client-controlled object used as a user filter
+- `POST /filming/users/search-safe` - server-built filter from approved fields
+- `GET /filming/exports/unsafe?file=...` - caller-controlled file path used for export reads
+- `GET /filming/exports/safe?file=...` - export path resolved and constrained to a fixed directory
+
+## Filming Shortcut
+
+For a short product demo, scan only:
+
+- `src/routes/filming.js`
+
+That file intentionally keeps the examples compact:
+
+- unsafe NoSQL-style filtering next to a server-built safe filter
+- unsafe path-based export read next to a resolved boundary check
+
+Suggested recording flow:
+
+1. Open `src/routes/filming.js`.
+2. Run `Owlvex: Scan Current File`.
+3. Show the scan-backed finding summary.
+4. Click `Preview fix` to show that Owlvex opens a reviewable diff instead of silently editing code.
+5. Create a `Summary report` to show the short triage output.
 
 ## Important Note
 
@@ -70,6 +94,8 @@ Unsafe routes that should be flagged:
 - `/search/users-unsafe`
 - `/auth/session-unsafe`
 - `/logs/login-unsafe`
+- `/filming/users/search-unsafe`
+- `/filming/exports/unsafe`
 
 Safe companion routes that should stay clean:
 
@@ -82,3 +108,5 @@ Safe companion routes that should stay clean:
 - `/search/users-safe`
 - `/auth/session-safe`
 - `/logs/login-safe`
+- `/filming/users/search-safe`
+- `/filming/exports/safe`

@@ -46,3 +46,4 @@ tools/owlvex-benchmark/runs/*.results.json
 
 # Generated Owlvex scan reports
 **/owlvex-scan-report-*.md
+**/owlvex-summary-report-*.md

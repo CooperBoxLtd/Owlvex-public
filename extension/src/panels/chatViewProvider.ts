@@ -17,6 +17,13 @@ type ChatRole = 'user' | 'assistant' | 'system';
 type MessageKind = 'advisory' | 'scan';
 type ConversationMode = 'scan' | 'repo' | 'fix' | 'general';
 
+interface RecentScanSnapshot {
+    provider: string;
+    model: string;
+    findingCount: number;
+    score: number;
+}
+
 interface ChatMessage {
     role: ChatRole;
     content: string;
@@ -601,7 +608,7 @@ function findTopFindingInCalibrationRecords(records?: StoredScanRecord[]): Findi
 
 function buildScoreBreakdown(result: ScanResult): string {
     if (!result.findings.length) {
-        return 'No findings remain, so the file risk score is 0.0.';
+        return `No findings were reported by ${buildProviderModelLabel(result)}, so the file risk score for this scan is 0.0. This is provider/model-scoped, not proof of absence across other models or deeper review.`;
     }
 
     const parts = result.findings
@@ -610,6 +617,16 @@ function buildScoreBreakdown(result: ScanResult): string {
         .map(finding => `${finding.title} (${finding.riskScore ?? 'n/a'}/10)`);
 
     return `File risk score follows the highest remaining finding risk. Current ranking: ${parts.join(', ')}.`;
+}
+
+function buildProviderModelLabel(result: ScanResult): string {
+    const provider = result.provider || 'the active provider';
+    const model = result.model || 'the active model';
+    return `${provider} / ${model}`;
+}
+
+function buildCleanScanScopeNote(result: ScanResult): string {
+    return `Clean result scope: no findings were reported by ${buildProviderModelLabel(result)} for this scan; treat that as provider/model evidence, not a guarantee that no vulnerability exists.`;
 }
 
 export function buildGroundedRemediationHighlights(findings: Finding[], maxFindings = 2): string[] {
@@ -645,11 +662,12 @@ function buildScanSummaryLines(result: ScanResult): string[] {
         ...(remediationHighlights.length
             ? remediationHighlights.map((line, index) => `Remediation ${index + 1}: ${line}`)
             : []),
+        !result.findings.length ? buildCleanScanScopeNote(result) : '',
         (result.warnings ?? []).length
             ? `Warnings: ${(result.warnings ?? []).join(' | ')}`
             : 'No scan warnings were reported.',
         `Summary: ${result.summary || 'No summary returned.'}`,
-    ];
+    ].filter(Boolean);
 }
 
 function buildProviderFailureMessage(error: unknown): string {
@@ -1462,6 +1480,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private latestActionableTargetPath?: string;
     private latestActionableItems: ActionableFindingTarget[] = [];
     private lastSelectedScopePaths: string[] = [];
+    private readonly recentScanSnapshotsByPath = new Map<string, RecentScanSnapshot>();
     private currentMode: ConversationMode = 'general';
 
     constructor(
@@ -1777,9 +1796,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         await this.show();
         if (!options.reuseCurrentTurn) {
+            const targetFileCount = new Set(validItems.map(item => normalizeReviewedPath(item.targetPath!))).size;
             this.messages.push({
                 role: 'user',
-                content: `Fix the latest workspace scan broadly (${validItems.length} file(s))`,
+                content: `Preview fixes for the latest scan (${validItems.length} finding(s) across ${targetFileCount} file(s))`,
             });
             this.messages.push({
                 role: 'assistant',
@@ -1982,6 +2002,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return;
             }
 
+            for (const change of changes) {
+                const updatedDocument = await vscode.workspace.openTextDocument(vscode.Uri.file(change.targetPath));
+                const saved = await this.saveAppliedFixDocument(updatedDocument);
+                if (!saved) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: `Owlvex applied the combined fix preview, but could not save ${vscode.workspace.asRelativePath(vscode.Uri.file(change.targetPath), false)}. Save the file, then rescan.`,
+                        kind: 'advisory',
+                    });
+                    this.pendingFixPreview = undefined;
+                    void this.persistState();
+                    this.refresh();
+                    return;
+                }
+            }
+
             this.messages.push({
                 role: 'assistant',
                 content: `Kept the reviewed fix across ${changes.length} files. The reviewed code was written into each file from the combined diff.`,
@@ -2058,6 +2094,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         const updatedDocument = await vscode.workspace.openTextDocument(targetUri);
+        const saved = await this.saveAppliedFixDocument(updatedDocument);
+        if (!saved) {
+            this.messages.push({
+                role: 'assistant',
+                content: `Owlvex applied the fix preview, but could not save ${vscode.workspace.asRelativePath(targetUri, false)}. Save the file, then rescan.`,
+                kind: 'advisory',
+            });
+            this.pendingFixPreview = undefined;
+            void this.persistState();
+            this.refresh();
+            return;
+        }
         await vscode.window.showTextDocument(updatedDocument, { preview: false });
         const originalFinding = this.pendingFixPreview.finding;
         this.messages.push({
@@ -2111,9 +2159,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     this.isSameFindingFamily(candidate, originalFinding)
                 );
                 if (!matchingFinding) {
+                    const providerComparisonNotes = this.buildProviderComparisonNotes([{ uri: targetUri, result: rescanned }]);
                     this.messages.push({
                         role: 'assistant',
-                        content: `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                        content: [
+                            `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}.`,
+                            `Verification provider/model: ${buildProviderModelLabel(rescanned)}.`,
+                            `Remaining findings reported by this verification scan: ${rescanned.findings.length}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                            !rescanned.findings.length ? buildCleanScanScopeNote(rescanned) : '',
+                            ...providerComparisonNotes,
+                        ].filter(Boolean).join('\n'),
                         kind: 'advisory',
                         actions: buildPostFixVerificationActions({
                             rescanned,
@@ -2217,6 +2272,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.refresh();
     }
 
+    private async saveAppliedFixDocument(document: vscode.TextDocument): Promise<boolean> {
+        const save = (document as vscode.TextDocument & { save?: () => Thenable<boolean> | Promise<boolean> }).save;
+        if (typeof save !== 'function') {
+            return true;
+        }
+        return Boolean(await save.call(document));
+    }
+
     private async verifyAppliedFixChange(options: {
         targetUri: vscode.Uri;
         originalFinding: Finding;
@@ -2260,9 +2323,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.isSameFindingFamily(candidate, originalFinding)
             );
             if (!matchingFinding) {
+                const providerComparisonNotes = this.buildProviderComparisonNotes([{ uri: targetUri, result: rescanned }]);
                 this.messages.push({
                     role: 'assistant',
-                    content: `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                    content: [
+                        `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}.`,
+                        `Verification provider/model: ${buildProviderModelLabel(rescanned)}.`,
+                        `Remaining findings reported by this verification scan: ${rescanned.findings.length}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                        !rescanned.findings.length ? buildCleanScanScopeNote(rescanned) : '',
+                        ...providerComparisonNotes,
+                    ].filter(Boolean).join('\n'),
                     kind: 'advisory',
                     actions: buildPostFixVerificationActions({
                         rescanned,
@@ -3484,6 +3554,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ? [
                             `Scan completed for the selected file.`,
                             ...buildScanSummaryLines(result.result),
+                            ...this.buildProviderComparisonNotes([{ uri: result.uri, result: result.result }]),
                         ].join('\n')
                         : 'File scan did not complete.',
                     actions: result?.status === 'completed' && result?.result && result?.uri
@@ -3521,6 +3592,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                            ...this.buildProviderComparisonNotes(result.results ?? []),
                             result.errors.length
                                 ? `Scan errors: ${result.errors.length}`
                                 : 'No scan errors were reported.',
@@ -3568,6 +3640,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                            ...this.buildProviderComparisonNotes(result.results ?? []),
                             result.errors.length
                                 ? `Scan errors: ${result.errors.length}`
                                 : 'No scan errors were reported.',
@@ -3615,6 +3688,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                            ...this.buildProviderComparisonNotes(result.results ?? []),
                             result.results.some((item: any) => (item.result.warnings ?? []).length)
                                 ? `Scan warnings: ${result.results.reduce((total: number, item: any) => total + (item.result.warnings ?? []).length, 0)}`
                                 : 'No scan warnings were reported.',
@@ -3672,6 +3746,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             summarizeIssueFamilies(result.summary.results.flatMap((item: any) => item.result.findings)),
                             ...buildGroundedRemediationHighlights(result.summary.results.flatMap((item: any) => item.result.findings))
                                 .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                            ...this.buildProviderComparisonNotes(result.summary.results ?? []),
                             result.summary.results.some((item: any) => (item.result.warnings ?? []).length)
                                 ? `Scan warnings: ${result.summary.results.reduce((total: number, item: any) => total + (item.result.warnings ?? []).length, 0)}`
                                 : 'No scan warnings were reported.',
@@ -3712,6 +3787,35 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         void this.persistState();
         this.refresh();
+    }
+
+    private buildProviderComparisonNotes(results: Array<{ uri: vscode.Uri; result: ScanResult }>): string[] {
+        const notes: string[] = [];
+        for (const item of results) {
+            const key = normalizeReviewedPath(item.uri.fsPath);
+            const previous = this.recentScanSnapshotsByPath.get(key);
+            const current: RecentScanSnapshot = {
+                provider: item.result.provider || 'unknown provider',
+                model: item.result.model || 'unknown model',
+                findingCount: item.result.findings.length,
+                score: item.result.score,
+            };
+            const providerChanged = Boolean(previous)
+                && (previous!.provider !== current.provider || previous!.model !== current.model);
+            const label = vscode.workspace.asRelativePath(item.uri, false);
+
+            if (previous && providerChanged && previous.findingCount === 0 && current.findingCount > 0) {
+                notes.push(`Provider disagreement: ${previous.provider} / ${previous.model} previously reported 0 findings for ${label}; ${current.provider} / ${current.model} now reports ${current.findingCount}. Treat clean scans as provider/model-scoped evidence.`);
+            } else if (previous && providerChanged && previous.findingCount > 0 && current.findingCount === 0) {
+                notes.push(`Provider-scoped clean result: ${current.provider} / ${current.model} reports 0 findings for ${label}, while ${previous.provider} / ${previous.model} previously reported ${previous.findingCount}. Consider a second-provider review before calling the file clean.`);
+            } else if (!previous && current.findingCount === 0) {
+                notes.push(`Clean result scope: ${current.provider} / ${current.model} reported 0 findings for ${label}; this is not proof of absence across other models or deeper review.`);
+            }
+
+            this.recentScanSnapshotsByPath.set(key, current);
+        }
+
+        return notes.slice(0, 3);
     }
 
     private async persistState(): Promise<void> {

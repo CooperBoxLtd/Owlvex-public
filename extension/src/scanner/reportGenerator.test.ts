@@ -130,7 +130,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- `example.js` (7.0/10): Unsanitized SQL query construction.');
         expect(written).toContain('## How To Read This Report');
         expect(written).toContain('| Report field | What it means | How to use it |');
-        expect(written).toContain('| Confidence | How sure Owlvex is that the issue is real | Use this as the trust level for the finding |');
+        expect(written).toContain('| Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
@@ -147,13 +147,13 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Analysis mix: targeted_ai: 1');
         expect(written).toContain('- Evidence: corroborated: 1');
         expect(written).toContain('- Project context: inline project contract');
-        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| finder 88% \\| verifier 91% \\| skeptic 90% \\| final 93% \\| impact high \\| likelihood medium \\| risk 7/10 | 93% |');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| AI signal High \\| impact high \\| likelihood medium \\| risk 7/10 | High AI signal (Validated by AI review) |');
         expect(written).toContain('- Location: `example.js` at L3-4');
         expect(written).toContain('- Finding risk: HIGH impact / MEDIUM likelihood / 7/10');
         expect(written).toContain('- Analysis mode: Targeted AI review');
         expect(written).toContain('- Confidence: AI-reviewed');
-        expect(written).toContain('- AI pass scores: finder 88% | verifier 91% | skeptic 90% | final 93%');
-        expect(written).toContain('- Detection confidence: 93%');
+        expect(written).toContain('- AI signal: High');
+        expect(written).toContain('- AI review trace: finder High | verifier High | skeptic High | final High (raw audit: finder 88%, verifier 91%, skeptic 90%, final 93%)');
         expect(written).toContain('- Evidence: Validated by AI review');
         expect(written).toContain('- Finder said: User input is concatenated into a query.');
         expect(written).toContain('- Verifier said: The code builds SQL text directly from user-controlled input.');
@@ -291,7 +291,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Confidence posture: 1 need manual review');
         expect(written).toContain('Manual review recommended before acting.');
         expect(written).toContain('- Manual review: 1 AI finding(s) needing review');
-        expect(written).toContain('- Detection confidence: 95% (manual review recommended)');
+        expect(written).toContain('- AI signal: High (manual review recommended)');
         expect(written).toContain('- Review note: This AI finding is not fully corroborated or has low confidence.');
     });
 
@@ -606,9 +606,9 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- AI findings needing manual review: 1');
         expect(written).toContain('- Manual review: 1 AI finding(s) needing review');
-        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| finder 62% \\| verifier 68% \\| skeptic 64% \\| final 65% \\| impact high \\| likelihood medium \\| risk 7/10 \\| manual review recommended | 65% |');
-        expect(written).toContain('- AI pass scores: finder 62% | verifier 68% | skeptic 64% | final 65%');
-        expect(written).toContain('- Detection confidence: 65% (manual review recommended)');
+        expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| AI signal Low \\| impact high \\| likelihood medium \\| risk 7/10 \\| manual review recommended | Low AI signal (Validated by AI review; manual review recommended) |');
+        expect(written).toContain('- AI signal: Low (manual review recommended)');
+        expect(written).toContain('- AI review trace: finder Low | verifier Low | skeptic Low | final Low (raw audit: finder 62%, verifier 68%, skeptic 64%, final 65%)');
         expect(written).toContain('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');
     });
 
@@ -671,15 +671,16 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 
 | Report field | What it means | How to use it |
 | --- | --- | --- |
-| Confidence | How sure Owlvex is that the issue is real | Use this as the trust level for the finding |
+| Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |
 | Confirmed by rule | Deterministic analysis proved the issue from code structure | Highest confidence |
 | Validated by AI review | AI found the issue and a follow-up review supported it | Strong signal, but not rule-proven |
 | Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |
 | Needs manual review | Evidence is weak, incomplete, or low-confidence | Do not treat as confirmed yet |
+| AI signal | Qualitative band from the model review trail: High, Medium, Low, or Unknown | Use with the evidence label; raw percentages are audit detail only |
 | Impact | How serious the damage could be if exploited | Business/security severity |
 | Likelihood | How likely exploitation is from the observed code | Exploitability estimate |
 | Risk score | Overall priority if the finding is real | Use this to prioritize fixes |
-| Detection confidence | Confidence in the detection itself | Separate from risk score |
+| Evidence confidence | Rule proof or qualitative AI signal for the detection | Separate from risk score |
 
 ## Scan Facts
 

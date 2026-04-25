@@ -9,6 +9,7 @@ const uploadRoutes = require('./routes/uploads');
 const searchRoutes = require('./routes/search');
 const authRoutes = require('./routes/auth');
 const logRoutes = require('./routes/logs');
+const filmingRoutes = require('./routes/filming');
 
 const app = express();
 
@@ -27,6 +28,7 @@ app.use('/uploads', uploadRoutes);
 app.use('/search', searchRoutes);
 app.use('/auth', authRoutes);
 app.use('/logs', logRoutes);
+app.use('/filming', filmingRoutes);
 
 app.post('/browser/profile-safe', requireCsrf, (req, res) => {
   res.json({
