@@ -2,7 +2,7 @@
   "name": "owlvex",
   "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "publisher": "owlvex",
   "repository": {
     "type": "git",
@@ -263,7 +263,7 @@
         "owlvex.providerThrottleOverrides": {
           "type": "object",
           "default": {},
-          "markdownDescription": "Advanced per-provider throttling overrides. Keys are provider ids such as `azure-foundry`, `openai`, `anthropic`, `gemini`, `groq`, `mistral`, `custom`, or `default`. Each value can override `maxConcurrent`, `minSpacingMs`, `baseBackoffMs`, `maxBackoffMs`, and `retryAttempts`. Example: `{ \"azure-foundry\": { \"maxConcurrent\": 1, \"minSpacingMs\": 7000, \"retryAttempts\": 2 }, \"openai\": { \"maxConcurrent\": 1 } }`."
+          "markdownDescription": "Advanced per-provider throttling overrides. Azure AI Foundry is paced by default because captured reports showed real 429s; other providers run loose unless you add an override. Keys are provider ids such as `azure-foundry`, `openai`, `anthropic`, `gemini`, `groq`, `mistral`, `custom`, or `default`. Each value can override `maxConcurrent`, `minSpacingMs`, `baseBackoffMs`, `maxBackoffMs`, and `retryAttempts`. Example: `{ \"azure-foundry\": { \"maxConcurrent\": 1, \"minSpacingMs\": 7000, \"retryAttempts\": 2 }, \"openai\": { \"maxConcurrent\": 1 } }`."
         }
       }
     },

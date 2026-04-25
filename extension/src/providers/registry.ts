@@ -59,21 +59,16 @@ const PROVIDER_THROTTLE_PROFILES: Record<string, ProviderThrottleProfile | undef
         maxBackoffMs: 60000,
         retryAttempts: 2,
     },
-    // Anthropic has not shown 429s in captured scan reports. Do not assume
-    // proactive throttling here; keep overrides available if field data shows
-    // rate limits for a specific account/model.
+    // Do not proactively throttle hosted providers unless field data shows
+    // they need it. Azure Foundry is the only default-paced provider because
+    // captured reports showed real 429s there. Other providers stay loose by
+    // default and can be throttled through user overrides when needed.
     anthropic: undefined,
-    openai: DEFAULT_PROVIDER_THROTTLE_PROFILE,
-    mistral: DEFAULT_PROVIDER_THROTTLE_PROFILE,
-    gemini: DEFAULT_PROVIDER_THROTTLE_PROFILE,
-    groq: {
-        maxConcurrent: 3,
-        minSpacingMs: 100,
-        baseBackoffMs: 1500,
-        maxBackoffMs: 15000,
-        retryAttempts: 2,
-    },
-    custom: DEFAULT_PROVIDER_THROTTLE_PROFILE,
+    openai: undefined,
+    mistral: undefined,
+    gemini: undefined,
+    groq: undefined,
+    custom: undefined,
 };
 
 function sanitizePositiveInteger(value: unknown): number | undefined {

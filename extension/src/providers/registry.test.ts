@@ -422,11 +422,11 @@ describe('ProviderRegistry', () => {
             expect(fetchMock).toHaveBeenCalledTimes(2);
         });
 
-        it('does not proactively throttle Anthropic by default without field evidence of 429s', async () => {
+        it('does not proactively throttle non-Foundry providers by default without field evidence of 429s', async () => {
             jest.useFakeTimers();
             secretGetMock.mockImplementation(async (key: string) => {
-                if (key === 'owlvex.anthropic.apiKey') {
-                    return 'test-anthropic-key';
+                if (key === 'owlvex.openai.apiKey') {
+                    return 'test-openai-key';
                 }
                 return undefined;
             });
@@ -434,13 +434,13 @@ describe('ProviderRegistry', () => {
                 .mockResolvedValue({
                     ok: true,
                     json: async () => ({
-                        content: [{ text: 'ok' }],
-                        usage: { input_tokens: 5, output_tokens: 2 },
+                        choices: [{ message: { content: 'ok' } }],
+                        usage: { total_tokens: 10 },
                     }),
                 });
             (global.fetch as jest.Mock) = fetchMock;
 
-            const provider = registry.getProvider('anthropic')!;
+            const provider = registry.getProvider('openai')!;
             const first = provider.complete({
                 systemPrompt: 'system',
                 userMessage: 'first',
@@ -461,9 +461,46 @@ describe('ProviderRegistry', () => {
     });
 
     describe('shared provider throttling', () => {
-        it('retries generic OpenAI-compatible rate limits before surfacing failure', async () => {
+        it('does not retry loose OpenAI rate limits without a throttle override', async () => {
+            configState.provider = 'openai';
+            secretGetMock.mockImplementation(async (key: string) => {
+                if (key === 'owlvex.openai.apiKey') {
+                    return 'test-openai-key';
+                }
+                return undefined;
+            });
+            const fetchMock = jest.fn()
+                .mockResolvedValueOnce({
+                    ok: false,
+                    status: 429,
+                    headers: { get: () => null },
+                    text: async () => 'Too Many Requests',
+                });
+            (global.fetch as jest.Mock) = fetchMock;
+
+            const provider = registry.getProvider('openai')!;
+
+            await expect(provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'ping',
+                model: provider.selectedModel,
+                temperature: 0,
+            })).rejects.toThrow(/429|Too Many Requests/);
+            expect(fetchMock).toHaveBeenCalledTimes(1);
+        });
+
+        it('retries generic OpenAI-compatible rate limits when a throttle override is configured', async () => {
             jest.useFakeTimers();
             configState.provider = 'openai';
+            configState['providerThrottleOverrides'] = {
+                openai: {
+                    maxConcurrent: 2,
+                    minSpacingMs: 250,
+                    baseBackoffMs: 2000,
+                    maxBackoffMs: 30000,
+                    retryAttempts: 2,
+                },
+            };
             secretGetMock.mockImplementation(async (key: string) => {
                 if (key === 'owlvex.openai.apiKey') {
                     return 'test-openai-key';
