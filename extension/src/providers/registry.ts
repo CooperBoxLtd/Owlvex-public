@@ -59,13 +59,10 @@ const PROVIDER_THROTTLE_PROFILES: Record<string, ProviderThrottleProfile | undef
         maxBackoffMs: 60000,
         retryAttempts: 2,
     },
-    anthropic: {
-        maxConcurrent: 2,
-        minSpacingMs: 500,
-        baseBackoffMs: 3000,
-        maxBackoffMs: 30000,
-        retryAttempts: 2,
-    },
+    // Anthropic has not shown 429s in captured scan reports. Do not assume
+    // proactive throttling here; keep overrides available if field data shows
+    // rate limits for a specific account/model.
+    anthropic: undefined,
     openai: DEFAULT_PROVIDER_THROTTLE_PROFILE,
     mistral: DEFAULT_PROVIDER_THROTTLE_PROFILE,
     gemini: DEFAULT_PROVIDER_THROTTLE_PROFILE,

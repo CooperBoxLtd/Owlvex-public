@@ -578,13 +578,6 @@ export function buildProviderThrottleOverrideSnippet(providerId: string): string
             maxBackoffMs: 60000,
             retryAttempts: 2,
         },
-        anthropic: {
-            maxConcurrent: 2,
-            minSpacingMs: 500,
-            baseBackoffMs: 3000,
-            maxBackoffMs: 30000,
-            retryAttempts: 2,
-        },
         openai: {
             maxConcurrent: 2,
             minSpacingMs: 250,

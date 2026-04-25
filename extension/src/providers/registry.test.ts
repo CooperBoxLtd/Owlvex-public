@@ -408,6 +408,43 @@ describe('ProviderRegistry', () => {
             expect(result.content).toBe('ok');
             expect(fetchMock).toHaveBeenCalledTimes(2);
         });
+
+        it('does not proactively throttle Anthropic by default without field evidence of 429s', async () => {
+            jest.useFakeTimers();
+            secretGetMock.mockImplementation(async (key: string) => {
+                if (key === 'owlvex.anthropic.apiKey') {
+                    return 'test-anthropic-key';
+                }
+                return undefined;
+            });
+            const fetchMock = jest.fn()
+                .mockResolvedValue({
+                    ok: true,
+                    json: async () => ({
+                        content: [{ text: 'ok' }],
+                        usage: { input_tokens: 5, output_tokens: 2 },
+                    }),
+                });
+            (global.fetch as jest.Mock) = fetchMock;
+
+            const provider = registry.getProvider('anthropic')!;
+            const first = provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'first',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+            const second = provider.complete({
+                systemPrompt: 'system',
+                userMessage: 'second',
+                model: provider.selectedModel,
+                temperature: 0,
+            });
+
+            await jest.advanceTimersByTimeAsync(0);
+            await Promise.all([first, second]);
+            expect(fetchMock).toHaveBeenCalledTimes(2);
+        });
     });
 
     describe('shared provider throttling', () => {

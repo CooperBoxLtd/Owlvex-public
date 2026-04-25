@@ -461,8 +461,8 @@ describe('provider throttling command helper', () => {
         expect(clipboardWriteTextMock).toHaveBeenCalledWith(JSON.stringify({
             anthropic: {
                 maxConcurrent: 2,
-                minSpacingMs: 500,
-                baseBackoffMs: 3000,
+                minSpacingMs: 250,
+                baseBackoffMs: 2000,
                 maxBackoffMs: 30000,
                 retryAttempts: 2,
             },
