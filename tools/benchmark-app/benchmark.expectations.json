@@ -1,0 +1,79 @@
+{
+  "name": "benchmark-app",
+  "expectations": [
+    {
+      "file": "src\\routes\\documents.js",
+      "requiredFindings": [
+        "Missing object-level authorization"
+      ],
+      "forbiddenFindings": [
+        "Broken Access Control in getDocumentForTenant"
+      ]
+    },
+    {
+      "file": "src\\routes\\refunds.js",
+      "requiredFindings": [
+        "Broken function-level authorization"
+      ],
+      "requiredDetectionIncludes": [
+        "AI signal",
+        "finder"
+      ]
+    },
+    {
+      "file": "src\\routes\\roles.js",
+      "requiredFindings": [
+        "Privilege escalation via unvalidated role or permission assignment"
+      ],
+      "requiredDetectionIncludes": [
+        "AI signal",
+        "finder"
+      ]
+    },
+    {
+      "file": "src\\routes\\integrations.js",
+      "requiredFindings": [
+        "Server-side request forgery (SSRF) through untrusted destination"
+      ],
+      "forbiddenFindings": [
+        "Potential incomplete validation in proxy-safe"
+      ]
+    },
+    {
+      "file": "src\\routes\\reports.js",
+      "requiredFindings": [
+        "Path Traversal"
+      ]
+    },
+    {
+      "file": "src\\routes\\profile.js",
+      "requiredFindings": [
+        "Missing CSRF protection on state-changing request"
+      ]
+    },
+    {
+      "file": "src\\routes\\imports.js",
+      "requiredFindings": [
+        "Dynamic code evaluation of untrusted input"
+      ]
+    },
+    {
+      "file": "src\\lib\\tokens.js",
+      "requiredFindings": [
+        "Weak JWT validation"
+      ]
+    },
+    {
+      "file": "src\\server.js",
+      "expectedState": "clean"
+    },
+    {
+      "file": "src\\policies\\accessPolicy.js",
+      "expectedState": "clean"
+    },
+    {
+      "file": "src\\policies\\workflowPolicy.js",
+      "expectedState": "clean"
+    }
+  ]
+}

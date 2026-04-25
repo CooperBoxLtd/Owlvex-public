@@ -133,9 +133,25 @@ The stabilization phase is driven by two benchmark layers:
    Single-file fixture corpus with explicit safe and unsafe pairs.
 
 2. `tools/demo-app/`
-   Small intentionally vulnerable repo-context app with helpers, middleware, safe companions, and route-level context.
+   Legacy intentionally vulnerable repo-context app with helpers, middleware, safe companions, and route-level context.
 
 Every stabilization change must preserve or improve outcomes against those assets.
+
+The next repo-context benchmark layer is `tools/benchmark-app/`. It exists to replace the older demo app as the realistic application benchmark:
+
+- `tools/demo/` remains the isolated fixture suite
+- `tools/demo-app/` remains a legacy transition baseline
+- `tools/benchmark-app/` is the realistic app for context-sensitive authorization, workflow, helper, and safe-companion reasoning
+
+Until `tools/benchmark-app/` has enough repeated report evidence, treat it as draft benchmark coverage rather than a product claim.
+
+Draft benchmark-app evaluation command:
+
+```bash
+cd extension
+npm run benchmark:generate-reports
+npm run benchmark:stabilization:benchmark-app
+```
 
 The working benchmark command for this phase is:
 

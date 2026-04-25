@@ -203,8 +203,8 @@ const profile = process.argv[2];
 const explicitReportPath = process.argv[3];
 const jsonMode = process.argv.includes('--json');
 
-if (!profile || !['demo', 'demo-app'].includes(profile)) {
-  console.error('Usage: node tools/evaluate-stabilization-report.mjs <demo|demo-app> [report-path] [--json]');
+if (!profile || !['demo', 'demo-app', 'benchmark-app'].includes(profile)) {
+  console.error('Usage: node tools/evaluate-stabilization-report.mjs <demo|demo-app|benchmark-app> [report-path] [--json]');
   process.exit(1);
 }
 

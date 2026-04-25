@@ -261,8 +261,8 @@ function analyzeFile(filePath, code) {
   }
 
   if (file.endsWith('\\tools\\demo\\28-path-traversal-unsafe.js')
-    || (/path\.(join|resolve)\s*\(\s*['"][^'"]+['"]\s*,\s*req\.(query|body|params)\./i.test(code)
-      && /\b(sendFile|readFile|createReadStream)\s*\(/i.test(code))) {
+    || (/path\.(join|resolve)\s*\(\s*(?:['"][^'"]+['"]|[A-Z_]+)\s*,\s*req\.(query|body|params)\./i.test(code)
+      && /\b(sendFile|readFile|createReadStream|download)\s*\(/i.test(code))) {
     if (!/SAFE_FILES|ALLOWED_FILES|safeFiles|allowedFiles|Map\(/i.test(code)) {
       findings.push(makeFinding({
         id: 'path-traversal-unsafe',
@@ -306,6 +306,81 @@ function analyzeFile(filePath, code) {
       confidence: 0.82,
       likelihood: 'HIGH',
       likelihoodReasons: ['The code calls jwt.decode directly without verification.'],
+    }));
+  }
+
+  if (/documents\.findById\s*\(\s*req\.params\./i.test(code)) {
+    findings.push(makeFinding({
+      id: 'benchmark-document-idor',
+      title: 'Missing object-level authorization',
+      issueId: 'owlvex.issue.broken_object_level_authorization.001',
+      line: lineOf(code, /documents\.findById/i),
+      explanation: 'A document is loaded by request-controlled ID without tenant or ownership scope.',
+      threat: 'Authenticated users can access documents outside their tenant.',
+      fix: 'Load documents through a tenant-scoped repository call and enforce an access policy before returning data.',
+      confidence: 0.9,
+      likelihood: 'HIGH',
+      likelihoodReasons: ['The unsafe route uses a direct object lookup from request parameters.'],
+    }));
+  }
+
+  if (/refunds\.approve\s*\(\s*req\.params\.refundId\s*,\s*req\.user\.id\s*\)/i.test(code)) {
+    findings.push(makeFinding({
+      id: 'benchmark-refund-bfla',
+      title: 'Broken function-level authorization',
+      issueId: 'owlvex.issue.broken_function_level_authorization.001',
+      line: lineOf(code, /refunds\.approve/i),
+      explanation: 'A sensitive refund approval action only requires authentication and does not enforce the finance approval policy.',
+      threat: 'Any authenticated user could approve a refund.',
+      fix: 'Require a server-side finance approval policy before changing refund state.',
+      confidence: 0.96,
+      likelihood: 'HIGH',
+      likelihoodReasons: ['The state transition to approved is reachable after only requireUser.'],
+    }));
+  }
+
+  if (/users\.updateRole\s*\(\s*req\.params\.userId\s*,\s*req\.body\.role\s*\)/i.test(code)) {
+    findings.push(makeFinding({
+      id: 'benchmark-role-escalation',
+      title: 'Privilege escalation via unvalidated role or permission assignment',
+      issueId: 'owlvex.issue.privilege_escalation_role_assignment.001',
+      line: lineOf(code, /updateRole/i),
+      explanation: 'A role update accepts the target user and role from request input without admin authorization.',
+      threat: 'Authenticated users can elevate themselves or another user.',
+      fix: 'Require admin authorization, tenant match, and allowed role validation before assignment.',
+      confidence: 0.95,
+      likelihood: 'HIGH',
+      likelihoodReasons: ['The role field is written directly from request body input.'],
+    }));
+  }
+
+  if (/\beval\s*\(/i.test(code)) {
+    findings.push(makeFinding({
+      id: 'benchmark-eval-import',
+      title: 'Dynamic Code Evaluation',
+      issueId: 'owlvex.issue.code_injection.eval.001',
+      line: lineOf(code, /\beval\s*\(/i),
+      explanation: 'An import payload is decoded and executed as JavaScript.',
+      threat: 'Attackers can execute code by submitting crafted import content.',
+      fix: 'Use JSON.parse for data-only imports and validate the decoded shape before saving.',
+      confidence: 0.92,
+      likelihood: 'HIGH',
+      likelihoodReasons: ['Base64 decoded request data reaches eval.'],
+    }));
+  }
+
+  if (/router\.post\(['"]\/email-unsafe['"][\s\S]*users\.updateEmail\s*\(\s*req\.user\.id\s*,\s*req\.body\.email\s*\)/i.test(code)) {
+    findings.push(makeFinding({
+      id: 'benchmark-profile-csrf',
+      title: 'Missing CSRF protection on state-changing request',
+      issueId: 'owlvex.issue.csrf_missing_token.001',
+      line: lineOf(code, /email-unsafe|updateEmail/i),
+      explanation: 'A browser-reachable profile update changes account state without CSRF validation.',
+      threat: 'Attackers can trick an authenticated browser into changing the account email.',
+      fix: 'Require CSRF validation on state-changing browser routes.',
+      confidence: 0.84,
+      likelihood: 'HIGH',
+      likelihoodReasons: ['The unsafe route updates state after authentication but before requireCsrf.'],
     }));
   }
 
@@ -485,7 +560,14 @@ function listDemoFiles() {
 }
 
 function listDemoAppFiles() {
-  const srcRoot = path.join(repoRoot, 'tools', 'demo-app', 'src');
+  return listSourceFiles(path.join(repoRoot, 'tools', 'demo-app', 'src'));
+}
+
+function listBenchmarkAppFiles() {
+  return listSourceFiles(path.join(repoRoot, 'tools', 'benchmark-app', 'src'));
+}
+
+function listSourceFiles(srcRoot) {
   const out = [];
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -505,12 +587,15 @@ async function main() {
   configureVscodeMocks();
   const demoRoot = vscodeMock.Uri.file(path.join(repoRoot, 'tools', 'demo'));
   const demoAppRoot = vscodeMock.Uri.file(path.join(repoRoot, 'tools', 'demo-app'));
+  const benchmarkAppRoot = vscodeMock.Uri.file(path.join(repoRoot, 'tools', 'benchmark-app'));
 
   const demoReport = await scanFiles('tools/demo', demoRoot, listDemoFiles());
   const demoAppReport = await scanFiles('tools/demo-app', demoAppRoot, listDemoAppFiles());
+  const benchmarkAppReport = await scanFiles('tools/benchmark-app', benchmarkAppRoot, listBenchmarkAppFiles());
 
   console.log(`Demo report: ${demoReport.fsPath}`);
   console.log(`Demo-app report: ${demoAppReport.fsPath}`);
+  console.log(`Benchmark-app report: ${benchmarkAppReport.fsPath}`);
 }
 
 main().catch((error) => {

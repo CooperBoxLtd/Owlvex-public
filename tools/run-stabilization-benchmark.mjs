@@ -16,10 +16,12 @@ function countExpectationRows(filePath) {
 
 const demoExpectationCount = countExpectationRows(path.join(repoRoot, 'tools', 'demo', 'EXPECTATIONS.md'));
 const demoAppExpectationCount = countExpectationRows(path.join(repoRoot, 'tools', 'demo-app', 'EXPECTATIONS.md'));
+const benchmarkAppExpectationCount = countExpectationRows(path.join(repoRoot, 'tools', 'benchmark-app', 'EXPECTATIONS.md'));
 
 console.log('Owlvex stabilization benchmark');
 console.log(`- demo expectations: ${demoExpectationCount}`);
 console.log(`- demo-app expectations: ${demoAppExpectationCount}`);
+console.log(`- benchmark-app expectations: ${benchmarkAppExpectationCount}`);
 
 const result = spawnSync(
   process.platform === 'win32' ? 'npm.cmd' : 'npm',
