@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.18
+
+- add Engine 1.0 proof-contract evidence for SSRF across JavaScript, Python, Java, C#, and Go
+- add a proof-contract benchmark gate for source, sink, guard, verdict, rationale, and safe companion behavior
+- add benchmark direction metrics for pass rate, unsafe recall, safe quietness, evidence-shape completeness, and fixture growth
+
 ## 0.1.17
 
 - save kept fix previews before verification rescans so the next scan reads the persisted code
