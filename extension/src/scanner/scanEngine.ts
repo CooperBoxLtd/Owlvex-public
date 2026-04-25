@@ -2181,6 +2181,29 @@ ${JSON.stringify(fileBlocks, null, 2)}`;
     }
 
     private _resolveCanonicalFinding(finding: Finding): Finding {
+        const findingEvidenceText = [
+            finding.explanation,
+            finding.threat,
+            finding.fix,
+            finding.ruleCode,
+            ...(finding.matchedSignals ?? []),
+        ].join('\n').toLowerCase();
+        const shouldRemapCookieFinding =
+            finding.canonicalId === 'owlvex.issue.insecure_cookie.001'
+            && !/\b(res\.cookie|set-cookie|httponly|samesite|secure flag|cookie flags)\b/i.test(findingEvidenceText)
+            && /\b(x-user-id|x-tenant-id|x-role|req\.headers|client-controlled.*header|role header|identity header|attachsession)\b/i.test(findingEvidenceText);
+
+        if (shouldRemapCookieFinding) {
+            finding = {
+                ...finding,
+                canonicalId: undefined,
+                canonicalTitle: undefined,
+                canonicalCategory: undefined,
+                canonicalFamily: undefined,
+                canonicalFamilyLabel: undefined,
+            };
+        }
+
         if (finding.canonicalId) {
             const canonicalIssue = getCanonicalIssueById(finding.canonicalId);
             if (canonicalIssue) {

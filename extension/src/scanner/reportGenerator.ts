@@ -113,6 +113,12 @@ function isLowConfidenceAiFinding(finding: ScanResult['findings'][number]): bool
     return finding.provenance !== 'deterministic' && getAiConfidence(finding) < 0.75;
 }
 
+function needsManualReview(finding: ScanResult['findings'][number]): boolean {
+    const corroboration = getCorroborationLabel(finding);
+    return finding.provenance !== 'deterministic'
+        && (isLowConfidenceAiFinding(finding) || corroboration === 'UNVERIFIED' || corroboration === 'PARTIAL');
+}
+
 function getCanonicalRemediation(finding: ScanResult['findings'][number]): {
     remediation: string;
     recommendedActions: string[];
@@ -167,7 +173,7 @@ function summarizeFindingRow(finding: ScanResult['findings'][number]): string {
     const scanTier = getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'));
     const confidence = getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'));
     const corroboration = getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'));
-    const reviewFlag = isLowConfidenceAiFinding(finding) ? ' | manual review recommended' : '';
+    const reviewFlag = needsManualReview(finding) ? ' | manual review recommended' : '';
     const parts = [
         `mode ${scanTier}`,
         `confidence ${confidence}`,
@@ -532,7 +538,7 @@ function buildConfidencePostureLine(
 
     const proven = findings.filter(finding => getCorroborationLabel(finding) === 'PROVEN').length;
     const corroborated = findings.filter(finding => getCorroborationLabel(finding) === 'CORROBORATED').length;
-    const manualReview = findings.filter(finding => isLowConfidenceAiFinding(finding) || getCorroborationLabel(finding) === 'UNVERIFIED').length;
+    const manualReview = findings.filter(finding => needsManualReview(finding)).length;
     const partial = findings.filter(finding => getCorroborationLabel(finding) === 'PARTIAL').length;
 
     const parts: string[] = [];
@@ -564,8 +570,9 @@ function buildFixFirstLines(
     for (const item of risky) {
         const topFinding = [...item.result.findings].sort((left, right) => riskRank(right) - riskRank(left))[0];
         const title = topFinding.canonicalTitle || topFinding.title;
-        const confidenceSuffix = isLowConfidenceAiFinding(topFinding) ? ' Manual review recommended.' : '';
-        lines.push(`- \`${item.file}\` (${item.result.score.toFixed(1)}/10): ${title}. ${topFinding.fix}${confidenceSuffix}`);
+        const confidenceSuffix = needsManualReview(topFinding) ? ' Manual review recommended before acting.' : '';
+        const remediation = getCanonicalRemediation(topFinding).remediation;
+        lines.push(`- \`${item.file}\` (${item.result.score.toFixed(1)}/10): ${title}. ${remediation}${confidenceSuffix}`);
     }
     lines.push('');
     return lines;
@@ -683,7 +690,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         ? Math.max(...findingsByFile.map(item => item.result.score))
         : 0;
     const cleanFiles = snapshot.results.filter(item => item.result.findings.length === 0).length;
-    const lowConfidenceAiCount = allFindingItems.filter(item => isLowConfidenceAiFinding(item.finding)).length;
+    const manualReviewAiCount = allFindingItems.filter(item => needsManualReview(item.finding)).length;
     const allFindings = snapshot.results.flatMap(item => item.result.findings);
     const aggregateAiUsage = snapshot.results.reduce((total, item) => {
         const usage = getAiUsageSummary(item.result);
@@ -718,7 +725,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Files with findings: ${snapshot.results.filter(item => item.result.findings.length > 0).length}`,
         `- Total findings: ${totalFindings}`,
         `- Static findings: ${deterministicItems.length}`,
-        `- AI findings needing manual review: ${lowConfidenceAiCount}`,
+        `- AI findings needing manual review: ${manualReviewAiCount}`,
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
         '',
         '## AI Usage',
@@ -756,7 +763,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- What to change: ${getCanonicalRemediation(topFinding).remediation}`);
             }
             lines.push(`- Confidence: ${buildConfidencePostureLine(item.result.findings)}`);
-            lines.push(`- Manual review: ${item.result.findings.filter(finding => isLowConfidenceAiFinding(finding)).length} low-confidence AI finding(s)`);
+            lines.push(`- Manual review: ${item.result.findings.filter(finding => needsManualReview(finding)).length} AI finding(s) needing review`);
             lines.push('');
 
             if (!item.result.findings.length) {
@@ -804,12 +811,12 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Confidence: ${getConfidenceDisplayLabel(finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE'))}`);
                 if (finding.provenance !== 'deterministic') {
                     lines.push(`- AI pass scores: ${formatAiPassScoreSummary(finding)}`);
-                    lines.push(`- Detection confidence: ${formatPercent(getAiConfidence(finding))}${isLowConfidenceAiFinding(finding) ? ' (manual review recommended)' : ''}`);
+                    lines.push(`- Detection confidence: ${formatPercent(getAiConfidence(finding))}${needsManualReview(finding) ? ' (manual review recommended)' : ''}`);
                 }
                 lines.push(`- Evidence: ${getCorroborationDisplayLabel(finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'))}`);
                 lines.push(...buildAiReviewTrailLines(finding));
-                if (isLowConfidenceAiFinding(finding)) {
-                    lines.push('- Review note: This AI finding has a low confidence score. Verify the classification, title, and remediation against the code before acting on it.');
+                if (needsManualReview(finding)) {
+                    lines.push('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');
                 }
                 lines.push(`- Why it matters: ${finding.explanation || 'No explanation returned.'}`);
                 lines.push(`- What to change: ${remediation.remediation}`);

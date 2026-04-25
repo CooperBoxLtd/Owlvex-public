@@ -735,6 +735,45 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.summary).toBe('1 finding(s) detected, led by 1 medium-severity issue(s). File risk score is driven by the highest remaining finding risk: medium impact x high likelihood = 7/10. Issue families: Identity & Auth Failures.');
     });
 
+    it('remaps AI cookie misclassification when evidence is client-controlled identity headers', () => {
+        const licenceMgr = {
+            getKey: jest.fn(),
+            validate: jest.fn(),
+        } as any;
+        const registry = {
+            getActive: jest.fn(),
+        } as any;
+        const engine = new ScanEngine(licenceMgr, registry);
+
+        const parsed = (engine as any)._parseAIResponse(JSON.stringify({
+            score: 10,
+            summary: 'Header identity is trusted.',
+            findings: [
+                {
+                    id: 'ai-auth-header',
+                    line: 1,
+                    line_end: 8,
+                    severity: 'CRITICAL',
+                    framework: 'OWASP',
+                    rule_code: 'A07',
+                    title: 'Missing Secure, HttpOnly, or SameSite flags on session cookie',
+                    explanation: "attachSession reads req.headers['x-user-id'], req.headers['x-tenant-id'], and req.headers['x-role'] directly into req.session.",
+                    threat: 'An attacker can set X-Role: admin and impersonate another user.',
+                    fix: 'Derive identity from a verified JWT or signed session.',
+                    confidence: 0.97,
+                    issue_id: 'owlvex.issue.insecure_cookie.001',
+                    matched_signals: ['req.headers', 'x-user-id', 'x-role'],
+                },
+            ],
+            positives: [],
+            metrics: { critical: 1, high: 0, medium: 0, low: 0 },
+        }));
+
+        expect(parsed.findings[0].canonicalId).toBe('owlvex.issue.client_controlled_identity_headers.001');
+        expect(parsed.findings[0].canonicalTitle).toBe('Client-controlled identity or role headers trusted as authentication');
+        expect(parsed.findings[0].canonicalFamilyLabel).toBe('Identity & Auth Failures');
+    });
+
     it('promotes open redirect into deterministic coverage when the sink is structurally proven', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),

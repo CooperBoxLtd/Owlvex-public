@@ -138,7 +138,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Why this matters: User input is concatenated into a query.');
         expect(written).toContain('- What to change: Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs');
         expect(written).toContain('- Confidence: 1 cross-checked');
-        expect(written).toContain('- Manual review: 0 low-confidence AI finding(s)');
+        expect(written).toContain('- Manual review: 0 AI finding(s) needing review');
         expect(written).toContain('- Knowledge sources: Fresh Packs | owlvex.issue-pack.v1, owlvex.issue-mapping-pack.v1 | fetched 2026-04-14T10:00:00.000Z');
         expect(written).toContain('- Coverage: Normal for this file');
         expect(written).toContain('#### Technical Details');
@@ -208,6 +208,49 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Summary: No findings detected.');
         expect(written).toContain('## Scan Errors');
         expect(written).toContain('- clean.js: model timeout');
+    });
+
+    it('marks unverified high-confidence AI findings as needing manual review', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        const snapshot = {
+            targetLabel: 'src/probes/ssrf.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\ssrf.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                id: 'finding-ssrf',
+                                title: 'Server-side request forgery',
+                                explanation: 'User supplied URL reaches fetch without validation.',
+                                fix: 'Validate outbound URLs against an allow-list.',
+                                confidence: 0.95,
+                                resolverConfidence: 0.95,
+                                corroboration: 'UNVERIFIED',
+                                aiReviewScores: { finder: 0.95, final: 0.95 },
+                                aiReviewNotes: { finder: 'User supplied URL reaches fetch without validation.' },
+                                canonicalId: 'owlvex.issue.ssrf.001',
+                                canonicalTitle: 'Server-side request forgery (SSRF) through untrusted destination',
+                                riskScore: 9,
+                            },
+                        ],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- AI findings needing manual review: 1');
+        expect(written).toContain('- Confidence posture: 1 need manual review');
+        expect(written).toContain('Manual review recommended before acting.');
+        expect(written).toContain('- Manual review: 1 AI finding(s) needing review');
+        expect(written).toContain('- Detection confidence: 95% (manual review recommended)');
+        expect(written).toContain('- Review note: This AI finding is not fully corroborated or has low confidence.');
     });
 
     it('includes scan warnings when a scan completed with recorder issues', async () => {
@@ -319,7 +362,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Analysis mix: static: 1 | targeted_ai: 2');
         expect(written).toContain('- Evidence: proven: 1 | partial: 1 | unverified: 1');
         expect(written).toContain('### mixed.js');
-        expect(written).toContain('- Confidence: 1 verified | 1 partially validated | 1 need manual review');
+        expect(written).toContain('- Confidence: 1 verified | 1 partially validated | 2 need manual review');
     });
 
     it('states when AI review was not used for the final finding set in a static-proof file', async () => {
@@ -519,11 +562,11 @@ describe('reportGenerator', () => {
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- AI findings needing manual review: 1');
-        expect(written).toContain('- Manual review: 1 low-confidence AI finding(s)');
+        expect(written).toContain('- Manual review: 1 AI finding(s) needing review');
         expect(written).toContain('| Unsanitized SQL query construction | mode Targeted AI review \\| confidence AI-reviewed \\| evidence Validated by AI review \\| finder 62% \\| verifier 68% \\| skeptic 64% \\| final 65% \\| impact high \\| likelihood medium \\| risk 7/10 \\| manual review recommended | 65% |');
         expect(written).toContain('- AI pass scores: finder 62% | verifier 68% | skeptic 64% | final 65%');
         expect(written).toContain('- Detection confidence: 65% (manual review recommended)');
-        expect(written).toContain('- Review note: This AI finding has a low confidence score. Verify the classification, title, and remediation against the code before acting on it.');
+        expect(written).toContain('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');
     });
 
     it('keeps a stable report headline posture for repo-ai findings', async () => {
@@ -579,7 +622,7 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 
 ## Fix First
 
-- \`src/tokens.js\` (9.0/10): Unsanitized SQL query construction. Use parameterized queries.
+- \`src/tokens.js\` (9.0/10): Unsanitized SQL query construction. Keep untrusted values out of SQL text with parameter binding or ORM-safe APIs, constrain dynamic query parts to allow-lists, and verify that attacker-controlled input can no longer change query semantics.
 
 ## How To Read This Report
 
