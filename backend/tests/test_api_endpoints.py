@@ -551,6 +551,49 @@ async def test_admin_rotate_licence_issues_new_key(client):
 
 
 @pytest.mark.asyncio
+async def test_development_admin_rotate_clears_trial_expiry(client):
+    registration = await client.post(
+        "/v1/licences/register",
+        json={"email": "rotate-dev-trial@example.com", "plan": "trial"},
+    )
+    verification_code = registration.json()["verification_code"]
+    verified = await client.post(
+        "/v1/licences/verify-email",
+        json={"email": "rotate-dev-trial@example.com", "code": verification_code},
+    )
+    assert verified.status_code == 201
+    assert verified.json()["expires_at"] is not None
+
+    development_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        resend_api_key="",
+        environment="development",
+    )
+    with patch("app.routers.admin.get_settings", return_value=development_settings):
+        response = await client.post(
+            "/v1/admin/licence/rotate",
+            headers={"X-Admin-Key": "test-admin-key"},
+            json={"email": "rotate-dev-trial@example.com", "plan": "trial"},
+        )
+
+    assert response.status_code == 200
+
+    customer = await client.get(
+        "/v1/admin/customer",
+        headers={"X-Admin-Key": "test-admin-key"},
+        params={"email": "rotate-dev-trial@example.com"},
+    )
+    assert customer.status_code == 200
+    active_trial = next(
+        licence for licence in customer.json()["licences"]
+        if licence["plan"] == "trial" and licence["is_active"]
+    )
+    assert active_trial["expires_at"] is None
+
+
+@pytest.mark.asyncio
 async def test_admin_app_route_serves_console(client):
     response = await client.get("/v1/admin/app")
     assert response.status_code == 200
@@ -1101,6 +1144,35 @@ async def test_verify_email_registration_issues_licence(client):
     assert data["plan"] == "trial"
     assert data["team_name"] == "Verify User's Workspace"
     assert data["expires_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_development_trial_registration_has_no_expiry(client):
+    development_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        resend_api_key="",
+        environment="development",
+    )
+
+    with patch("app.routers.licences.get_settings", return_value=development_settings):
+        registration = await client.post(
+            "/v1/licences/register",
+            json={"email": "dev-trial-user@example.com", "plan": "trial", "name": "Dev Trial User"},
+        )
+        assert registration.status_code == 201
+        verification_code = registration.json()["verification_code"]
+
+        response = await client.post(
+            "/v1/licences/verify-email",
+            json={"email": "dev-trial-user@example.com", "code": verification_code},
+        )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["plan"] == "trial"
+    assert data["expires_at"] is None
 
 
 @pytest.mark.asyncio

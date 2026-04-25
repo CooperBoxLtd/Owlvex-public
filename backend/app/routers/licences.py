@@ -429,6 +429,7 @@ async def verify_email_registration(
     body: VerifyRegistrationRequest,
     db: AsyncSession = Depends(get_db),
 ):
+    current_settings = get_settings()
     normalized_email = _normalize_email(str(body.email))
     result = await db.execute(select(Customer).where(Customer.email == normalized_email))
     customer = result.scalar_one_or_none()
@@ -458,7 +459,7 @@ async def verify_email_registration(
     key_hash = hash_licence_key(raw_key)
     team_name = _default_team_name_for_registration(customer.email, customer.company, customer.name)
     expires_dt = None
-    if plan == "trial":
+    if plan == "trial" and current_settings.environment != "development":
         expires_dt = now.replace(microsecond=0) + timedelta(days=7)
 
     customer.email_verified_at = now
@@ -498,7 +499,6 @@ async def verify_email_registration(
     await db.commit()
     await db.refresh(licence)
 
-    current_settings = get_settings()
     if current_settings.resend_api_key:
         try:
             send_licence_issued_email(

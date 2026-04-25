@@ -1312,6 +1312,7 @@ async def rotate_licence(
             licence.is_active = False
 
     raw_key = generate_licence_key()
+    current_settings = get_settings()
     rotated = Licence(
         customer_id=customer.id,
         licence_key_hash=hash_licence_key(raw_key),
@@ -1322,7 +1323,11 @@ async def rotate_licence(
         seats_used=source_licence.seats_used,
         features=source_licence.features,
         industry_packs=source_licence.industry_packs,
-        expires_at=source_licence.expires_at,
+        expires_at=(
+            None
+            if source_licence.plan == "trial" and current_settings.environment == "development"
+            else source_licence.expires_at
+        ),
         is_active=True,
         stripe_customer_id=source_licence.stripe_customer_id,
         stripe_subscription_id=source_licence.stripe_subscription_id,
