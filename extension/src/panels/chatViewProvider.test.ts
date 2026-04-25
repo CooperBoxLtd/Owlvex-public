@@ -2453,6 +2453,107 @@ describe('parseChatIntent', () => {
         expect((provider as any).pendingFixPreview).toBeUndefined();
     });
 
+    it('warns when the target finding is gone but other high-risk findings remain', async () => {
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\token.go');
+        const originalText = 'func ParseToken() { ParseUnverified(token) }';
+        const patchedText = 'func ParseToken() { jwt.Parse(token, keyFunc) }';
+        const saveDocument = jest.fn().mockResolvedValue(true);
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({
+            uri: targetUri,
+            getText: () => originalText,
+            save: saveDocument,
+        });
+        (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
+        (vscode.window.showTextDocument as jest.Mock).mockResolvedValue({ revealRange: jest.fn() });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 9,
+                        findings: [{
+                            id: 'hardcoded-secret',
+                            line: 8,
+                            lineEnd: 8,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            ruleCode: 'SE-001',
+                            title: 'Hardcoded secret in source code',
+                            canonicalId: 'owlvex.issue.hardcoded_secret.001',
+                            canonicalTitle: 'Hardcoded secret in source code',
+                            explanation: 'A signing key is embedded in source.',
+                            threat: 'Attackers who read the code can forge tokens.',
+                            fix: 'Load the signing key from managed configuration or secret storage.',
+                            confidence: 1,
+                            provenance: 'deterministic',
+                            likelihood: 'HIGH',
+                            riskScore: 9,
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: '1 finding detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).pendingFixPreview = {
+            targetPath: targetUri.fsPath,
+            originalText,
+            patchedText,
+            title: 'Weak JWT validation',
+            reviewedPaths: [targetUri.fsPath],
+            finding: {
+                id: 'weak-jwt',
+                line: 1,
+                lineEnd: 1,
+                severity: 'HIGH',
+                framework: 'OWASP',
+                ruleCode: 'JW-001',
+                title: 'Weak JWT validation',
+                canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+                explanation: 'JWT is parsed without signature verification.',
+                threat: 'Attackers can forge claims.',
+                fix: 'Verify signature and claims.',
+                confidence: 1,
+                provenance: 'deterministic',
+                likelihood: 'HIGH',
+                riskScore: 9,
+            },
+        };
+
+        await provider.applyPendingFixPreview();
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Verification complete: the reviewed finding is no longer present');
+        expect(finalMessage.content).toContain('File is not clean yet. Next remaining issue: Hardcoded secret in source code (9/10 risk) at line 8.');
+        expect(finalMessage.content).toContain('What to change next: Load the signing key from managed configuration or secret storage.');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Preview next fix', kind: 'generateFixPreview' }),
+            expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
+        ]));
+    });
+
     it('captures provider disagreement when a later provider finds issues after a clean scan', () => {
         const provider = new ChatViewProvider({
             getActive: () => ({

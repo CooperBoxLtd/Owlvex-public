@@ -1366,6 +1366,7 @@ function buildPostFixVerificationActions(options: {
     targetPath: string;
     originalFinding: Finding;
     matchingFinding?: Finding;
+    nextFinding?: Finding;
 }): ChatMessageAction[] {
     const actions: ChatMessageAction[] = [
         buildQuickActionAction('post-fix-scan-file', 'Scan current file', 'scanFile'),
@@ -1387,7 +1388,42 @@ function buildPostFixVerificationActions(options: {
         });
     }
 
+    if (options.nextFinding) {
+        actions.unshift({
+            ...buildReviewFixAction(options.nextFinding, options.targetPath),
+            id: 'post-fix-preview-next-finding',
+            label: 'Preview next fix',
+        });
+    }
+
     return actions;
+}
+
+function getTopRemainingFinding(rescanned: ScanResult): Finding | undefined {
+    return rescanned.findings
+        .slice()
+        .sort((left, right) => riskRank(right) - riskRank(left))[0];
+}
+
+function buildTargetRemovedVerificationMessage(targetUri: vscode.Uri, rescanned: ScanResult): string {
+    const remainingFinding = getTopRemainingFinding(rescanned);
+    const fileLabel = vscode.workspace.asRelativePath(targetUri, false);
+    const lines = [
+        `Verification complete: the reviewed finding is no longer present in ${fileLabel}.`,
+        `Verification provider/model: ${buildProviderModelLabel(rescanned)}.`,
+        `Remaining findings reported by this verification scan: ${rescanned.findings.length}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+    ];
+
+    if (remainingFinding) {
+        lines.push(
+            `File is not clean yet. Next remaining issue: ${remainingFinding.canonicalTitle || remainingFinding.title} (${remainingFinding.riskScore ?? 'n/a'}/10 risk) at line ${remainingFinding.line}.`,
+            `What to change next: ${remainingFinding.fix || resolveRemediationForFinding(remainingFinding).remediation}`,
+        );
+    } else {
+        lines.push(buildCleanScanScopeNote(rescanned));
+    }
+
+    return lines.filter(Boolean).join('\n');
 }
 
 function hasMeaningfulPreviewChange(originalText: string, patchedText: string): boolean {
@@ -1743,6 +1779,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     'Do not refactor, rename, reorder, or rewrite unrelated parts of the file.',
                     'Prefer a narrow patch around the vulnerable lines unless a surrounding guard is strictly required.',
                     'Follow the grounded canonical remediation contract in the user context, including safe pattern, validation intent, and avoid guidance when relevant.',
+                    'Do not introduce placeholder secrets, hardcoded keys, hardcoded tokens, disabled validation, or TODO security stubs as a fix.',
+                    'If a key, secret, allowlist, issuer, or audience is required, read it from configuration or an existing trusted helper and fail closed when it is missing.',
                 ].join('\n'),
                 userMessage: [
                     `Generate a fix preview for this finding in the current file.`,
@@ -1884,6 +1922,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         'Do not refactor, rename, reorder, or rewrite unrelated parts of the file.',
                         'Keep the patch constrained to the reviewed findings and the minimum supporting validation or guard logic.',
                         'Follow the grounded canonical remediation contract in the user context, including safe pattern, validation intent, and avoid guidance when relevant.',
+                        'Do not introduce placeholder secrets, hardcoded keys, hardcoded tokens, disabled validation, or TODO security stubs as a fix.',
+                        'If a key, secret, allowlist, issuer, or audience is required, read it from configuration or an existing trusted helper and fail closed when it is missing.',
                     ].join('\n'),
                     userMessage: [
                         'Generate a fix preview for all of these findings in the current file.',
@@ -2198,10 +2238,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     this.messages.push({
                         role: 'assistant',
                         content: [
-                            `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}.`,
-                            `Verification provider/model: ${buildProviderModelLabel(rescanned)}.`,
-                            `Remaining findings reported by this verification scan: ${rescanned.findings.length}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
-                            !rescanned.findings.length ? buildCleanScanScopeNote(rescanned) : '',
+                            buildTargetRemovedVerificationMessage(targetUri, rescanned),
                             ...providerComparisonNotes,
                         ].filter(Boolean).join('\n'),
                         kind: 'advisory',
@@ -2209,6 +2246,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                             rescanned,
                             targetPath: targetUri.fsPath,
                             originalFinding,
+                            nextFinding: getTopRemainingFinding(rescanned),
                         }),
                     });
                     this.emitUsageTelemetry('fix_verification_completed', {
@@ -2362,10 +2400,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.messages.push({
                     role: 'assistant',
                     content: [
-                        `Verification complete: the reviewed finding is no longer present in ${vscode.workspace.asRelativePath(targetUri, false)}.`,
-                        `Verification provider/model: ${buildProviderModelLabel(rescanned)}.`,
-                        `Remaining findings reported by this verification scan: ${rescanned.findings.length}. File risk is now ${rescanned.score.toFixed(1)}/10.`,
-                        !rescanned.findings.length ? buildCleanScanScopeNote(rescanned) : '',
+                        buildTargetRemovedVerificationMessage(targetUri, rescanned),
                         ...providerComparisonNotes,
                     ].filter(Boolean).join('\n'),
                     kind: 'advisory',
@@ -2373,6 +2408,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         rescanned,
                         targetPath: targetUri.fsPath,
                         originalFinding,
+                        nextFinding: getTopRemainingFinding(rescanned),
                     }),
                 });
                 this.emitUsageTelemetry('fix_verification_completed', {
