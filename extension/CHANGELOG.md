@@ -6,6 +6,7 @@
 - add a proof-contract benchmark gate for source, sink, guard, verdict, rationale, and safe companion behavior
 - add family-specific deterministic evidence contracts for remaining covered rule families
 - add benchmark direction metrics for pass rate, unsafe recall, safe quietness, evidence-shape completeness, and fixture growth
+- surface Engine evidence contract coverage, missing guards, and AI-only gaps in generated reports
 
 ## 0.1.17
 

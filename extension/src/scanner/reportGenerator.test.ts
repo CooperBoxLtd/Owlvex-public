@@ -302,6 +302,7 @@ describe('reportGenerator', () => {
         });
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0');
         expect(written).toContain('- Evidence contract: confirmed path-traversal');
         expect(written).toContain('- Source: Request-controlled path segment (L2: `req.query.file`)');
         expect(written).toContain("- Flow: Path constructed in fullPath (L2: `const fullPath = path.join('/var/app/uploads', req.query.file)`)");
@@ -333,6 +334,7 @@ describe('reportGenerator', () => {
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('- Confidence posture: No findings to validate.');
+        expect(written).toContain('- Engine evidence: No findings to prove.');
         expect(written).toContain('- Start with: no active findings were identified in this scan.');
         expect(written).toContain('- Highest file risk: 0.0/10');
         expect(written).toContain('- Clean files: 1/1');
@@ -828,6 +830,7 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 - Highest file risk: 9.0/10
 - Clean files: 0/1
 - Confidence posture: 1 cross-checked
+- Engine evidence: Structured contracts: 0/1 | confirmed: 0 | missing guards: 0 | deterministic gaps: 0 | AI without contract: 1
 
 ## Fix First
 
@@ -856,6 +859,7 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 - Static findings: 0
 - AI findings needing manual review: 0
 - Confidence posture: 1 cross-checked
+- Engine evidence: Structured contracts: 0/1 | confirmed: 0 | missing guards: 0 | deterministic gaps: 0 | AI without contract: 1
 
 ## AI Usage
 

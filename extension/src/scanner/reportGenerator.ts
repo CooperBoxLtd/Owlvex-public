@@ -141,6 +141,26 @@ function buildEvidenceContractLines(finding: ScanResult['findings'][number]): st
     return lines;
 }
 
+function summarizeEngineEvidence(findings: ScanResult['findings']): string {
+    if (!findings.length) {
+        return 'No findings to prove.';
+    }
+
+    const withContracts = findings.filter(finding => finding.evidenceContract);
+    const confirmed = withContracts.filter(finding => finding.evidenceContract?.verdict === 'confirmed');
+    const missingGuards = withContracts.filter(finding => finding.evidenceContract?.guard?.status === 'missing');
+    const deterministicWithoutContract = findings.filter(finding => finding.provenance === 'deterministic' && !finding.evidenceContract);
+    const aiWithoutContract = findings.filter(finding => finding.provenance !== 'deterministic' && !finding.evidenceContract);
+
+    return [
+        `Structured contracts: ${withContracts.length}/${findings.length}`,
+        `confirmed: ${confirmed.length}`,
+        `missing guards: ${missingGuards.length}`,
+        `deterministic gaps: ${deterministicWithoutContract.length}`,
+        `AI without contract: ${aiWithoutContract.length}`,
+    ].join(' | ');
+}
+
 function getFindingLikelihood(finding: ScanResult['findings'][number]): string {
     return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
 }
@@ -873,6 +893,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             `- ${buildOverallPriorityLine(findingsByFile)}`,
             `- ${buildScanTrustLine(snapshot.results)}`,
             `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
+            `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
             `- Files scanned: ${snapshot.results.length}`,
             `- Total findings: ${totalFindings}`,
             `- Manual-review findings: ${manualReviewAiCount}`,
@@ -932,6 +953,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Highest file risk: ${highestFileRisk.toFixed(1)}/10`,
         `- Clean files: ${cleanFiles}/${snapshot.results.length}`,
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
+        `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
         '',
         '## Fix First',
         '',
@@ -945,6 +967,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Static findings: ${deterministicItems.length}`,
         `- AI findings needing manual review: ${manualReviewAiCount}`,
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
+        `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
         '',
         '## AI Usage',
         '',
@@ -1001,6 +1024,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- What to change: ${getCanonicalRemediation(topFinding).remediation}`);
             }
             lines.push(`- Confidence: ${buildConfidencePostureLine(item.result.findings)}`);
+            lines.push(`- Engine evidence: ${summarizeEngineEvidence(item.result.findings)}`);
             lines.push(`- Manual review: ${item.result.findings.filter(finding => needsManualReview(finding)).length} AI finding(s) needing review`);
             lines.push('');
 
@@ -1019,6 +1043,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Analysis mode: ${item.result.findings.length ? getScanTierDisplayLabel(getPrimaryScanTierLabel(item.result.findings)) : 'none'}`);
             lines.push(`- Analysis mix: ${item.result.findings.length ? summarizeScanTierCounts(item.result.findings) : 'No findings to classify'}`);
             lines.push(`- Evidence: ${summarizeCorroborationCounts(item.result.findings)}`);
+            lines.push(`- Engine evidence: ${summarizeEngineEvidence(item.result.findings)}`);
             if (!usesAiForFindings(item.result)) {
                 lines.push('- AI review: not used for the final finding set in this file');
             }
