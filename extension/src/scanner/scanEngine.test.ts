@@ -10,6 +10,10 @@ class TestableScanEngine extends ScanEngine {
     public parse(raw: string) {
         return (this as any)._parseAIResponse(raw);
     }
+
+    public parseBatch(raw: string, contexts: any[]) {
+        return (this as any)._parseBatchAIResponse(raw, contexts);
+    }
 }
 
 // Minimal mocks — scanDocument is not called in these tests, only _parseAIResponse.
@@ -281,6 +285,140 @@ describe('ScanEngine._parseAIResponse', () => {
             'User input reaches a query sink.',
             'No validation is visible nearby.',
         ]);
+    });
+
+    it('parses valid AI evidence contracts', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                evidence_contract: {
+                    issue_type: 'client-controlled-query-filter',
+                    source: {
+                        kind: 'source',
+                        label: 'Client-controlled filter object',
+                        expression: 'req.body.filter',
+                        line: 7,
+                    },
+                    flow: [{
+                        kind: 'assignment',
+                        label: 'Client filter assigned to filter',
+                        expression: 'const filter = req.body.filter',
+                        line: 7,
+                    }],
+                    sink: {
+                        kind: 'sink',
+                        label: 'Query/filter sink',
+                        expression: 'users.find(filter)',
+                        line: 8,
+                    },
+                    guard: {
+                        status: 'missing',
+                        label: 'Server-side allowlist',
+                        reason: 'No server-built field allowlist is visible.',
+                    },
+                    verdict: 'confirmed',
+                    rationale: 'Client input controls query structure before the sink.',
+                },
+            }],
+        };
+
+        const result = engine.parse(JSON.stringify(payload));
+
+        expect(result.findings[0].evidenceContract).toMatchObject({
+            issueType: 'client-controlled-query-filter',
+            verdict: 'confirmed',
+            source: {
+                expression: 'req.body.filter',
+                line: 7,
+            },
+            flow: [{
+                kind: 'assignment',
+                expression: 'const filter = req.body.filter',
+            }],
+            sink: {
+                expression: 'users.find(filter)',
+                line: 8,
+            },
+            guard: {
+                status: 'missing',
+                label: 'Server-side allowlist',
+            },
+        });
+    });
+
+    it('drops malformed AI evidence contracts', () => {
+        const payload = {
+            ...validPayload,
+            findings: [{
+                ...validPayload.findings[0],
+                evidence_contract: {
+                    issue_type: 'client-controlled-query-filter',
+                    source: { kind: 'source', label: 'missing expression' },
+                    verdict: 'maybe',
+                    rationale: '',
+                },
+            }],
+        };
+
+        const result = engine.parse(JSON.stringify(payload));
+        expect(result.findings[0].evidenceContract).toBeUndefined();
+    });
+
+    it('parses evidence contracts from batch AI responses', () => {
+        const result = engine.parseBatch(JSON.stringify({
+            files: [{
+                file_id: 'file-1',
+                summary: 'One finding.',
+                positives: [],
+                findings: [{
+                    id: 'batch-finding',
+                    line: 3,
+                    line_end: 3,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    rule_code: 'PT-001',
+                    title: 'Path Traversal',
+                    explanation: 'Request path reaches file read.',
+                    threat: 'File disclosure.',
+                    fix: 'Resolve and bound the path.',
+                    confidence: 0.8,
+                    issue_id: 'owlvex.issue.path_traversal.001',
+                    evidenceContract: {
+                        issueType: 'path-traversal',
+                        source: {
+                            kind: 'source',
+                            label: 'Request file parameter',
+                            expression: 'req.query.file',
+                        },
+                        flow: [],
+                        sink: {
+                            kind: 'sink',
+                            label: 'Filesystem read',
+                            expression: 'fs.readFileSync(filePath)',
+                        },
+                        guard: {
+                            status: 'missing',
+                            label: 'Containment check',
+                            reason: 'No containment check is visible.',
+                        },
+                        verdict: 'suspected',
+                        rationale: 'Request input appears to control a filesystem path.',
+                    },
+                }],
+            }],
+        }), [{ fileId: 'file-1' }]);
+
+        expect(result.get('file-1')?.findings[0].evidenceContract).toMatchObject({
+            issueType: 'path-traversal',
+            verdict: 'suspected',
+            source: {
+                expression: 'req.query.file',
+            },
+            sink: {
+                expression: 'fs.readFileSync(filePath)',
+            },
+        });
     });
 
     it('accepts camelCase plainLanguageFix from the model as well', () => {
