@@ -114,6 +114,12 @@ function extractRetryAfterMsFromWarnings(warnings: string[] = []): number | unde
     return undefined;
 }
 
+function isDeterministicOnlyCleanResult(result: ScanResult): boolean {
+    return /\(deterministic-only\)/i.test(result.model)
+        && result.findings.length === 0
+        && (result.warnings ?? []).some(warning => /deterministic-only|AI provider unavailable|AI response unusable|backend unavailable/i.test(warning));
+}
+
 async function sleep(ms: number): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -371,9 +377,32 @@ async function scanUris(options: {
                         : [await options.scanEngine.scanDocument(documents[0])];
 
                     for (let batchIndex = 0; batchIndex < batchResults.length; batchIndex += 1) {
-                        const batchResult = batchResults[batchIndex];
+                        let batchResult = batchResults[batchIndex];
                         const batchUri = batchUris[batchIndex];
                         const batchDoc = documents[batchIndex];
+
+                        if (shouldBatch && isDeterministicOnlyCleanResult(batchResult)) {
+                            try {
+                                const retryResult = await options.scanEngine.scanDocument(batchDoc);
+                                if (!/\(deterministic-only\)/i.test(retryResult.model) || retryResult.findings.length > 0) {
+                                    batchResult = {
+                                        ...retryResult,
+                                        warnings: [
+                                            ...retryResult.warnings,
+                                            'Batch AI retry: single-file AI scan replaced a clean deterministic-only batch result.',
+                                        ],
+                                    };
+                                }
+                            } catch (retryError: any) {
+                                batchResult = {
+                                    ...batchResult,
+                                    warnings: [
+                                        ...batchResult.warnings,
+                                        `Batch AI retry failed: ${retryError.message}`,
+                                    ],
+                                };
+                            }
+                        }
 
                         if ((batchResult.warnings ?? []).some(warning => /\b429\b|rate limit/i.test(warning))) {
                             consecutiveRateLimitHits += 1;

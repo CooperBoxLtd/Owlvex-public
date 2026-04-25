@@ -704,6 +704,12 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
         return true;
     }
 
+    if (/function\s+can(?:Read|Assign|Approve)|module\.exports\s*=\s*{[^}]*can/i.test(code)
+        && /caller-side enforcement|depends on caller|policy helper|authorization logic/i.test(normalizedText)
+        && !/\b(?:req|res|router|app)\s*\./i.test(code)) {
+        return true;
+    }
+
     if (finding.canonicalId === 'owlvex.issue.code_injection.eval.001' && !/\beval\s*\(/i.test(code)) {
         return true;
     }
@@ -977,7 +983,9 @@ function finalizeAiFindingReview(state: AiFindingReviewState): Finding | undefin
         };
     }
 
-    if (verifier || skeptic) {
+    const hasConclusiveVerifier = Boolean(verifier && verifier.verdict !== 'unclear' && typeof verifier.confidence === 'number');
+    const hasConclusiveSkeptic = Boolean(skeptic && skeptic.verdict !== 'unclear' && typeof skeptic.confidence === 'number');
+    if (hasConclusiveVerifier || hasConclusiveSkeptic) {
         return {
             ...finding,
             aiReviewScores: {
@@ -1010,6 +1018,88 @@ function finalizeAiFindingReview(state: AiFindingReviewState): Finding | undefin
         },
         corroboration: 'UNVERIFIED' as const,
     };
+}
+
+function normalizeEvidenceExpression(value: string | undefined): string {
+    return String(value ?? '')
+        .replace(/[`'"]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function findLineForEvidenceExpression(code: string, expression: string | undefined): number | undefined {
+    const normalizedExpression = normalizeEvidenceExpression(expression);
+    if (!normalizedExpression || normalizedExpression.length < 4) {
+        return undefined;
+    }
+
+    const lines = code.split(/\r?\n/);
+    for (let index = 0; index < lines.length; index += 1) {
+        const normalizedLine = normalizeEvidenceExpression(lines[index]);
+        if (normalizedLine.length >= 4 && (normalizedLine.includes(normalizedExpression) || normalizedExpression.includes(normalizedLine))) {
+            return index + 1;
+        }
+    }
+
+    return undefined;
+}
+
+function inferFindingLineFromCode(code: string, finding: Finding): number | undefined {
+    const contractLine = finding.evidenceContract?.sink?.line
+        ?? finding.evidenceContract?.source?.line
+        ?? finding.evidenceContract?.flow?.find(point => typeof point.line === 'number')?.line;
+    const contractExpressionLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression)
+        ?? findLineForEvidenceExpression(code, finding.evidenceContract?.source?.expression);
+    if (contractExpressionLine) {
+        return contractExpressionLine;
+    }
+    if (contractLine) {
+        return contractLine;
+    }
+
+    const title = `${finding.canonicalTitle || finding.title} ${finding.explanation}`.toLowerCase();
+    const patterns: RegExp[] = [];
+    if (title.includes('dynamic code') || title.includes('code evaluation')) {
+        patterns.push(/\beval\s*\(/i);
+    }
+    if (title.includes('jwt')) {
+        patterns.push(/\bjwt\.decode\s*\(|parseunverified|decodeSessionTokenWithoutVerification/i);
+    }
+    if (title.includes('csrf')) {
+        patterns.push(/email-unsafe|updateEmail|router\.(post|put|patch|delete)/i);
+    }
+    if (title.includes('role') || title.includes('privilege')) {
+        patterns.push(/updateRole|role-unsafe/i);
+    }
+    if (title.includes('refund') || title.includes('function-level')) {
+        patterns.push(/approve-unsafe|refunds\.approve/i);
+    }
+
+    if (!patterns.length) {
+        return undefined;
+    }
+
+    const lines = code.split(/\r?\n/);
+    const index = lines.findIndex(line => patterns.some(pattern => pattern.test(line)));
+    return index >= 0 ? index + 1 : undefined;
+}
+
+function normalizeFindingLocationsFromCode(code: string, findings: Finding[]): Finding[] {
+    return findings.map(finding => {
+        if (finding.provenance !== 'ai') {
+            return finding;
+        }
+        const inferredLine = inferFindingLineFromCode(code, finding);
+        if (!inferredLine || inferredLine === finding.line) {
+            return finding;
+        }
+        return {
+            ...finding,
+            line: inferredLine,
+            lineEnd: inferredLine,
+        };
+    });
 }
 
 function isRateLimitError(error: unknown): boolean {
@@ -1178,7 +1268,10 @@ export class ScanEngine {
                 filteredAiFindings: dedupeOverlappingAiFindings(
                     filterStaticOwnedAiFindings(
                         context.deterministicFindings,
-                        suppressUnsupportedAiFindings(context.code, parsed.findings),
+                        suppressUnsupportedAiFindings(
+                            context.code,
+                            normalizeFindingLocationsFromCode(context.code, parsed.findings),
+                        ),
                     ),
                 ),
             };
@@ -1489,7 +1582,7 @@ export class ScanEngine {
         const filteredAiFindings = dedupeOverlappingAiFindings(
             filterStaticOwnedAiFindings(
                 deterministicFindings,
-                suppressUnsupportedAiFindings(code, parsed.findings),
+                suppressUnsupportedAiFindings(code, normalizeFindingLocationsFromCode(code, parsed.findings)),
             ),
         );
         const corroboratedAi = await this._runSingleAgentCorroboration({

@@ -805,6 +805,77 @@ describe('ScanEngine.scanDocument caching', () => {
         expect(result.score).toBe(9);
     });
 
+    it('suppresses static-owned AI duplicates after anchoring the AI finding to code evidence', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 9,
+                    summary: 'Weak JWT validation detected.',
+                    findings: [
+                        {
+                            id: 'ai-jwt-duplicate',
+                            line: 1,
+                            line_end: 1,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A07-JWT',
+                            title: 'Weak JWT validation',
+                            explanation: 'The helper decodes a JWT without verifying the signature.',
+                            threat: 'Attackers can forge token claims.',
+                            fix: 'Verify the JWT signature and claims before trusting it.',
+                            confidence: 0.92,
+                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
+                            evidence_contract: {
+                                sink: { line: 4, expression: 'jwt.decode(token)' },
+                            },
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\tokens.js',
+            getText: () => `const jwt = require('jsonwebtoken');
+
+function decodeSessionTokenWithoutVerification(token) {
+    return jwt.decode(token);
+}
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.weak_jwt_validation.001');
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+    });
+
     it('recalculates the final score from merged severity metrics instead of trusting the model score', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
@@ -1616,6 +1687,77 @@ if (process.env.NODE_ENV !== 'production') {
         expect(result.findings).toHaveLength(0);
         expect(result.score).toBe(0);
         expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('suppresses AI-only caller-side enforcement claims against pure policy helpers', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 7.5,
+                    summary: 'Potential authorization issue detected.',
+                    findings: [
+                        {
+                            id: 'ai-policy-helper',
+                            line: 1,
+                            line_end: 8,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-AUTHZ',
+                            title: 'Authorization logic depends on caller-side enforcement',
+                            explanation: 'This policy helper depends on callers to use it correctly.',
+                            threat: 'Callers might forget to enforce the policy.',
+                            fix: 'Ensure route handlers call the policy helper.',
+                            confidence: 0.83,
+                            issue_id: 'owlvex.issue.broken_function_level_authorization.001',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\policies\\accessPolicy.js',
+            getText: () => `function canReadDocument(user, document) {
+    return Boolean(user && document && user.tenantId === document.tenantId);
+}
+
+function canAssignRole(actor, targetRole) {
+    return actor.role === 'admin' && targetRole !== 'owner';
+}
+
+module.exports = { canReadDocument, canAssignRole };
+`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(provider.complete).toHaveBeenCalledTimes(1);
     });
 
     it('suppresses AI-only SSRF findings when an outbound URL allowlist check gates fetch', async () => {
@@ -2960,6 +3102,87 @@ class Demo {
         });
     });
 
+    it('keeps unclear verifier and skeptic placeholders out of finder-only confidence evidence', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const complete = jest.fn()
+            .mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 6.4,
+                    summary: 'Potential eval injection detected.',
+                    findings: [
+                        {
+                            id: 'ai-eval-missing-review',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'CRITICAL',
+                            framework: 'OWASP',
+                            rule_code: 'A03-EVAL',
+                            title: 'Dynamic Code Evaluation',
+                            explanation: 'User-controlled input is executed through eval().',
+                            threat: 'Attackers can execute arbitrary code in the application context.',
+                            fix: 'Do not pass untrusted input to eval; replace it with a safe parser or allow-list.',
+                            confidence: 0.95,
+                            issue_id: 'owlvex.issue.code_injection.eval.001',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            })
+            .mockResolvedValueOnce({
+                content: JSON.stringify({ reviews: [] }),
+                tokenCount: 10,
+            })
+            .mockResolvedValueOnce({
+                content: JSON.stringify({ reviews: [] }),
+                tokenCount: 10,
+            });
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete,
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\eval.js',
+            getText: () => `function runExpression(req, res) {
+    return eval(req.query.expression);
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(complete).toHaveBeenCalledTimes(3);
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].corroboration).toBe('UNVERIFIED');
+        expect(result.findings[0].aiReviewScores).toEqual({
+            finder: 0.95,
+            final: 0.95,
+        });
+        expect(result.findings[0].aiReviewNotes).toEqual({
+            finder: 'User-controlled input is executed through eval().',
+        });
+    });
+
     it('suppresses AI findings rejected by the verifier pass', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
@@ -3129,14 +3352,14 @@ function f() { return true; }`,
                             id: 'ai-eval-partial',
                             line: 2,
                             line_end: 2,
-                            severity: 'HIGH',
+                            severity: 'CRITICAL',
                             framework: 'OWASP',
                             rule_code: 'A03-EVAL',
                             title: 'Dynamic Code Evaluation',
                             explanation: 'User-controlled input is executed through eval().',
                             threat: 'Attackers can execute arbitrary code in the application context.',
                             fix: 'Do not pass untrusted input to eval; replace it with a safe parser or allow-list.',
-                            confidence: 0.88,
+                            confidence: 0.95,
                             issue_id: 'owlvex.issue.code_injection.eval.001',
                         },
                     ],
@@ -3180,7 +3403,11 @@ function f() { return true; }`,
 
         setTimeoutSpy.mockRestore();
         expect(result.findings).toHaveLength(1);
-        expect(result.findings[0].corroboration).toBe('PARTIAL');
+        expect(result.findings[0].corroboration).toBe('UNVERIFIED');
+        expect(result.findings[0].aiReviewScores).toEqual({
+            finder: 0.95,
+            final: 0.95,
+        });
         expect(result.warnings.join('\n')).toContain('AI corroboration partial: verifier pass unavailable');
         expect(result.warnings.join('\n')).toContain('AI corroboration partial: skeptic pass skipped after verifier rate-limit pressure.');
         expect(complete).toHaveBeenCalledTimes(5);

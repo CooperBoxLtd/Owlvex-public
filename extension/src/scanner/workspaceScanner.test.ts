@@ -309,6 +309,74 @@ describe('workspaceScanner', () => {
         setTimeoutSpy.mockRestore();
     });
 
+    it('retries clean deterministic-only batch results with a single-file AI scan', async () => {
+        (vscode.window.showInformationMessage as jest.Mock).mockResolvedValue('Scan Selected Files');
+        (vscode.workspace.getConfiguration as jest.Mock).mockImplementation((section?: string) => ({
+            get: (key: string, fallback?: any) => {
+                if (section === 'owlvex' && key === 'provider') return 'openai';
+                if (section === 'owlvex' && key === 'openai.model') return 'gpt-4o';
+                return fallback;
+            },
+        }));
+
+        const scanEngine = {
+            scanDocumentsBatch: jest.fn().mockResolvedValue([
+                {
+                    scanId: 'batch-clean-static-only',
+                    score: 0,
+                    summary: 'No deterministic findings.',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'gpt-4o (deterministic-only)',
+                    provider: 'openai',
+                    warnings: ['AI provider unavailable in batch scan.'],
+                },
+                {
+                    scanId: 'batch-ai-second',
+                    score: 8,
+                    summary: 'batched second',
+                    findings: [{ line: 2 }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    durationMs: 10,
+                    model: 'gpt-4o',
+                    provider: 'openai',
+                    warnings: [],
+                },
+            ]),
+            scanDocument: jest.fn().mockResolvedValue({
+                scanId: 'retry-ai-first',
+                score: 9,
+                summary: 'single-file retry found issue',
+                findings: [{ line: 1 }],
+                positives: [],
+                metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                durationMs: 12,
+                model: 'gpt-4o',
+                provider: 'openai',
+                warnings: [],
+            }),
+        };
+        const diagnostics = { applyFindings: jest.fn() };
+
+        const summary = await scanSelectedFiles({
+            files: [vscode.Uri.file('d:\\repo\\src\\one.js'), vscode.Uri.file('d:\\repo\\src\\two.js')],
+            scanEngine: scanEngine as any,
+            diagnostics,
+        });
+
+        expect(summary.status).toBe('completed');
+        expect(scanEngine.scanDocumentsBatch).toHaveBeenCalledTimes(1);
+        expect(scanEngine.scanDocument).toHaveBeenCalledTimes(1);
+        expect(normalizeTestPath((scanEngine.scanDocument as jest.Mock).mock.calls[0][0].fileName)).toBe('d:/repo/src/one.js');
+        expect(summary.results[0].result.scanId).toBe('retry-ai-first');
+        expect(summary.results[0].result.warnings).toContain('Batch AI retry: single-file AI scan replaced a clean deterministic-only batch result.');
+        expect(summary.totalFindings).toBe(2);
+        expect(diagnostics.applyFindings).toHaveBeenNthCalledWith(1, expect.anything(), [{ line: 1 }]);
+    });
+
     it('batches up to three files per AI pass and preserves result order', async () => {
         (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
             if (currentPath.endsWith('repo')) {
