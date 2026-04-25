@@ -99,6 +99,8 @@ The public README should continue to state clearly that:
 - results can vary by provider/model
 - important findings still require human verification
 - some limitations are known and documented
+- AI confidence is not proof; finder-only AI findings must be described as finder-only or not independently verified
+- `Validated by AI review` should only describe findings with verifier or skeptic support
 
 ## Bottom Line
 

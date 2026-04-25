@@ -111,6 +111,14 @@ Current direction: the AI lane is being hardened around single-model, multi-pass
 - disagreement reduces confidence instead of being flattened away
 - degraded scans must say so explicitly
 
+Report confidence language must keep detection evidence separate from risk:
+
+- `Confirmed by rule` means deterministic code evidence proved the issue
+- `Validated by AI review` is reserved for AI findings that have verifier or skeptic support
+- finder-only AI findings show the raw final model confidence, for example `AI signal High (96% final)`, but are labelled `Finder-only AI review` or `Finder high confidence, not independently verified`
+- `review path finder`, `finder+verifier`, or `finder+verifier+skeptic` explains which AI passes actually ran
+- a high AI percentage is model confidence, not proof
+
 ---
 
 ## Project layout

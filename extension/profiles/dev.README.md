@@ -27,6 +27,16 @@ Internal Owlvex development build.
    - report file when relevant
    - scan warnings or throttling notes
 
+## Report Confidence Checks
+
+When validating reports, check that AI evidence language does not overstate the result:
+
+- finder-only findings must not be described as `Validated by AI review`
+- finder-only findings should show `review path finder`
+- raw confidence should be visible as `AI signal <band> (<percent> final)`
+- `Validated by AI review` should only appear when verifier or skeptic evidence exists
+- high AI confidence is model confidence, not deterministic proof
+
 ## Reminder
 
 If you need customer-facing install/use/limitations guidance, use the production package documentation instead.

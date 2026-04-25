@@ -328,6 +328,15 @@ The skeptic verdict is required:
 
 Reports and UI must not display ambiguous naked values such as `skeptic 95%` without the verdict. They should show `Skeptic: clear, 95%` or `Skeptic: contradicted, 95%`.
 
+Current report wording requirements:
+
+- report tables must show both AI signal band and final raw confidence, for example `AI signal High (96% final)`
+- report tables must show the review route, for example `review path finder` or `review path finder+verifier+skeptic`
+- finder-only findings must read as `Finder-only AI review` or `Finder high confidence, not independently verified`
+- `Validated by AI review` must be reserved for findings with verifier or skeptic support
+- `cross-checked` summary posture must not be used for finder-only findings
+- high AI confidence must be described as model confidence, not proof
+
 ### Required Pass Outcome Data
 
 Reports currently show only surviving findings. That is not enough to measure whether verifier and skeptic are saving cost or improving quality.

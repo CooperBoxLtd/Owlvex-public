@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.21
+
+- make report confidence wording explicit for AI-backed findings
+- show final raw AI confidence in report tables and finding details
+- show the AI review path (`finder`, `finder+verifier`, or `finder+verifier+skeptic`)
+- reserve `Validated by AI review` for findings with verifier or skeptic support
+- label finder-only high-confidence findings as not independently verified
+
+## 0.1.20
+
+- continue fix workflows when post-fix verification still finds unresolved issues
+- make remaining or newly surfaced findings the next active fix target after verification
+- add clearer post-fix continuation wording and next-fix actions
+
 ## 0.1.18
 
 - add Engine 1.0 proof-contract evidence for SSRF across JavaScript, Python, Java, C#, and Go
