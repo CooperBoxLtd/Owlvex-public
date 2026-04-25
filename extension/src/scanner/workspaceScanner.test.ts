@@ -4,6 +4,8 @@ import { collectScannableFiles, getActiveScannableEditorUri, pickScanFiles, reso
 
 jest.mock('fs/promises');
 
+const normalizeTestPath = (value: string) => value.replace(/\\/g, '/');
+
 describe('workspaceScanner', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -368,20 +370,20 @@ describe('workspaceScanner', () => {
 
         expect(summary.status).toBe('completed');
         expect(scanEngine.scanDocumentsBatch).toHaveBeenCalledTimes(1);
-        expect(scanEngine.scanDocumentsBatch).toHaveBeenCalledWith([
-            expect.objectContaining({ fileName: 'd:\\repo\\first.js' }),
-            expect.objectContaining({ fileName: 'd:\\repo\\second.js' }),
-            expect.objectContaining({ fileName: 'd:\\repo\\third.js' }),
+        const batchFileNames = (scanEngine.scanDocumentsBatch as jest.Mock).mock.calls[0][0]
+            .map((item: { fileName: string }) => normalizeTestPath(item.fileName));
+        expect(batchFileNames).toEqual([
+            'd:/repo/first.js',
+            'd:/repo/second.js',
+            'd:/repo/third.js',
         ]);
         expect(scanEngine.scanDocument).toHaveBeenCalledTimes(1);
-        expect(scanEngine.scanDocument).toHaveBeenCalledWith(
-            expect.objectContaining({ fileName: 'd:\\repo\\fourth.js' }),
-        );
-        expect(summary.results.map(entry => entry.uri.fsPath)).toEqual([
-            'd:\\repo\\first.js',
-            'd:\\repo\\second.js',
-            'd:\\repo\\third.js',
-            'd:\\repo\\fourth.js',
+        expect(normalizeTestPath((scanEngine.scanDocument as jest.Mock).mock.calls[0][0].fileName)).toBe('d:/repo/fourth.js');
+        expect(summary.results.map(entry => normalizeTestPath(entry.uri.fsPath))).toEqual([
+            'd:/repo/first.js',
+            'd:/repo/second.js',
+            'd:/repo/third.js',
+            'd:/repo/fourth.js',
         ]);
         expect(diagnostics.applyFindings).toHaveBeenCalledTimes(4);
         setTimeoutSpy.mockRestore();

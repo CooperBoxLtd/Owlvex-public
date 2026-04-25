@@ -571,7 +571,7 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 
 ## Summary
 
-- Start with: Unsanitized SQL query construction in \`src\\tokens.js\` (9/10 risk).
+- Start with: Unsanitized SQL query construction in \`src/tokens.js\` (9/10 risk).
 - This scan established: 1 strengthened with repo context.
 - Highest file risk: 9.0/10
 - Clean files: 0/1
@@ -579,7 +579,7 @@ Report location: \`d:\\repo\\tools\\demo-app\`
 
 ## Fix First
 
-- \`src\\tokens.js\` (9.0/10): Unsanitized SQL query construction. Use parameterized queries.
+- \`src/tokens.js\` (9.0/10): Unsanitized SQL query construction. Use parameterized queries.
 
 ## How To Read This Report
 

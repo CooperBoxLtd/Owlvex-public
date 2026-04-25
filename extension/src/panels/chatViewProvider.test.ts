@@ -396,7 +396,7 @@ describe('parseChatIntent', () => {
             name: 'repo',
         }];
         (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
-            if (String(uri.fsPath).endsWith('src\\db.js')) {
+            if (String(uri.fsPath).replace(/\\/g, '/').endsWith('src/db.js')) {
                 return Buffer.from('export const db = { query() {} };');
             }
             throw new Error('not found');

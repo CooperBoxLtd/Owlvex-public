@@ -31,6 +31,18 @@ function escapeCodeFence(value: string): string {
     return value.replace(/```/g, '``\\`');
 }
 
+function looksLikeWindowsPath(value: string): boolean {
+    return /^[a-zA-Z]:[\\/]/.test(value);
+}
+
+function formatReportPath(rootPath: string, filePath: string): string {
+    const relative = looksLikeWindowsPath(rootPath) || looksLikeWindowsPath(filePath)
+        ? path.win32.relative(rootPath, filePath)
+        : path.relative(rootPath, filePath);
+
+    return (relative || path.basename(filePath)).replace(/\\/g, '/');
+}
+
 function normalizeFrameworkCodes(frameworks?: string[]): Set<string> {
     return new Set((frameworks ?? []).map(value => String(value).trim().toUpperCase()).filter(Boolean));
 }
@@ -574,7 +586,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
     const reportUri = vscode.Uri.joinPath(root, reportFileName);
     const warnings = snapshot.results.flatMap(item =>
         (item.result.warnings ?? []).map(warning => ({
-            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
+            file: formatReportPath(root.fsPath, item.uri.fsPath),
             warning,
         })),
     );
@@ -604,7 +616,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
 
     const findingsByFramework = snapshot.results
         .flatMap(item => item.result.findings.map(finding => ({
-            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
+            file: formatReportPath(root.fsPath, item.uri.fsPath),
             finding,
             packContext: item.result.packContext,
         })))
@@ -616,7 +628,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
 
     const findingsByFamily = snapshot.results
         .flatMap(item => item.result.findings.map(finding => ({
-            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
+            file: formatReportPath(root.fsPath, item.uri.fsPath),
             finding,
             packContext: item.result.packContext,
         })))
@@ -628,7 +640,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
 
     const findingsByCanonicalIssue = snapshot.results
         .flatMap(item => item.result.findings.map(finding => ({
-            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
+            file: formatReportPath(root.fsPath, item.uri.fsPath),
             finding,
             packContext: item.result.packContext,
         })))
@@ -640,7 +652,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
 
     const findingsByFile = snapshot.results
         .map(item => ({
-            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
+            file: formatReportPath(root.fsPath, item.uri.fsPath),
             result: item.result,
             packContext: item.result.packContext,
         }))
@@ -651,7 +663,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
 
     const allFindingItems = snapshot.results.flatMap(item =>
         item.result.findings.map(finding => ({
-            file: path.relative(root.fsPath, item.uri.fsPath) || path.basename(item.uri.fsPath),
+            file: formatReportPath(root.fsPath, item.uri.fsPath),
             finding,
             packContext: item.result.packContext,
         })),

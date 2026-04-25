@@ -6,13 +6,14 @@ jest.mock('node:fs', () => ({
 
 describe('resolveRuntimeDataPath', () => {
     const fs = jest.requireMock('node:fs') as { existsSync: jest.Mock };
+    const normalizeTestPath = (value: string) => value.replace(/\\/g, '/');
 
     beforeEach(() => {
         jest.clearAllMocks();
     });
 
     it('prefers packaged extension data assets when available', () => {
-        fs.existsSync.mockImplementation((candidate: string) => candidate.includes('\\data\\frameworks\\'));
+        fs.existsSync.mockImplementation((candidate: string) => normalizeTestPath(candidate).includes('/data/frameworks/'));
 
         const resolved = resolveRuntimeDataPath(
             'c:\\Users\\CristianBogdan\\.vscode\\extensions\\owlvex\\out\\frameworks',
@@ -20,8 +21,8 @@ describe('resolveRuntimeDataPath', () => {
             'owlvex.framework-pack.2026.1.json',
         );
 
-        expect(resolved).toContain('\\data\\frameworks\\owlvex.framework-pack.2026.1.json');
-        expect(resolved).not.toContain('\\docs\\data\\frameworks\\');
+        expect(normalizeTestPath(resolved)).toContain('/data/frameworks/owlvex.framework-pack.2026.1.json');
+        expect(normalizeTestPath(resolved)).not.toContain('/docs/data/frameworks/');
     });
 
     it('returns the packaged data candidate when neither path exists', () => {
@@ -33,6 +34,6 @@ describe('resolveRuntimeDataPath', () => {
             'owlvex.framework-pack.2026.1.json',
         );
 
-        expect(resolved).toContain('\\extension\\data\\frameworks\\owlvex.framework-pack.2026.1.json');
+        expect(normalizeTestPath(resolved)).toContain('/extension/data/frameworks/owlvex.framework-pack.2026.1.json');
     });
 });
