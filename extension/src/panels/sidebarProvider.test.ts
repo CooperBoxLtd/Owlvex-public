@@ -120,7 +120,7 @@ describe('SidebarProvider', () => {
         expect(fixPreviewNode?.command?.arguments?.[0]).toMatchObject({ id: 'finding-1', title: 'Path traversal' });
     });
 
-    it('shows AI confidence for AI findings', () => {
+    it('shows qualitative evidence posture for AI findings with raw score as audit trace', () => {
         const provider = new SidebarProvider();
         provider.refresh({
             scanId: 'scan-2',
@@ -156,10 +156,12 @@ describe('SidebarProvider', () => {
 
         const severityNode = provider.getChildren().find(item => item.kind === 'severity');
         const findingNode = provider.getChildren(severityNode)[0];
-        expect(String(findingNode.tooltip)).toContain('[AI 91%] Dynamic SQL is built from user input.');
+        expect(String(findingNode.tooltip)).toContain('[AI-reviewed] Dynamic SQL is built from user input.');
+        expect(String(findingNode.tooltip)).toContain('AI signal 91% retained as audit trace.');
 
         const detailNodes = provider.getChildren(findingNode);
-        expect(detailNodes.map(node => node.label)).toContain('AI confidence: 91%');
+        expect(detailNodes.map(node => node.label)).toContain('AI signal audit trace: 91%');
+        expect(String(detailNodes.find(node => node.label === 'AI signal audit trace: 91%')?.tooltip)).toContain('Use the confidence and evidence labels above for decision-making.');
         expect(detailNodes.map(node => node.label)).toContain('Analysis mode: Targeted AI review');
         expect(detailNodes.map(node => node.label)).toContain('Confidence: Plausible');
         expect(detailNodes.map(node => node.label)).toContain('Evidence: Cross-checked');

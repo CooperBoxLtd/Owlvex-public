@@ -17,6 +17,25 @@ function getAiConfidenceLabel(finding: Finding): string | undefined {
     return `${Math.round((finding.resolverConfidence ?? finding.confidence ?? 0) * 100)}%`;
 }
 
+function getEvidencePostureLabel(finding: Finding): string {
+    const confidenceTier = getConfidenceTierLabel(finding);
+    const corroboration = getCorroborationLabel(finding);
+
+    if (confidenceTier === 'PROVEN' || corroboration === 'PROVEN') {
+        return 'Static proof';
+    }
+
+    if (corroboration === 'CORROBORATED') {
+        return 'AI-reviewed';
+    }
+
+    if (corroboration === 'PARTIAL') {
+        return 'Partially validated';
+    }
+
+    return 'Needs manual review';
+}
+
 function getConfidenceTierLabel(finding: Finding): string {
     return finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE');
 }
@@ -302,8 +321,8 @@ function buildFindingDetails(finding: Finding): Array<{ label: string; tooltip: 
     const aiConfidence = getAiConfidenceLabel(finding);
     if (aiConfidence) {
         details.push({
-            label: `AI confidence: ${aiConfidence}`,
-            tooltip: `AI-reported confidence for this finding: ${aiConfidence}`,
+            label: `AI signal audit trace: ${aiConfidence}`,
+            tooltip: `Raw AI-reported score retained for audit trace only. Use the confidence and evidence labels above for decision-making.`,
         });
     }
 
@@ -405,7 +424,7 @@ class FindingItem extends vscode.TreeItem {
             // Tooltip: include provenance context
             this.tooltip = isDeterministic
                 ? `[Static proof] ${finding.explanation}`
-                : `[AI ${getAiConfidenceLabel(finding) ?? 'n/a'}] ${finding.explanation}`;
+                : `[${getEvidencePostureLabel(finding)}] ${finding.explanation}${getAiConfidenceLabel(finding) ? ` AI signal ${getAiConfidenceLabel(finding)} retained as audit trace.` : ''}`;
             // Navigate to line on click
             this.command = {
                 command: PROFILE.commands.revealLine,
