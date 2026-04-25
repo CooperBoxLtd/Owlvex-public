@@ -443,7 +443,8 @@ function buildToolUsageGuidance(): string {
         '- Use the report type dropdown to choose Summary report or Full evidence report, then press Create Report.',
         '- Summary report is the default developer view: what to fix first, confirmed or AI-reviewed issues, manual-review items, and short code evidence.',
         '- Full evidence report is for deeper review: all findings by file, confidence posture, AI pass details, mappings, remediation, coverage, warnings, and scan errors.',
-        '- Confidence labels matter: Confirmed by static rule is strongest; AI-reviewed is supported by review; Partially validated and Needs manual review should be checked before acting.',
+        '- Evidence labels matter: Static proof is strongest; AI-reviewed is supported by review; Partially validated and Needs manual review should be checked before acting.',
+        '- Raw AI percentages are audit trace only. They should not be treated as proof by themselves.',
         '- Fix First is the recommended starting point, not a guarantee that lower-ranked findings are unimportant.',
         '- Preview fix opens a side-by-side remediation diff. Code is not changed until the user keeps the fix.',
         '- Compare reports should be used after rescanning; Owlvex orders reports by generation time so Before is the earlier report and After is the later report.',
@@ -500,10 +501,11 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                     ? [
                         'How to read confidence:',
                         '',
-                        'Confirmed by static rule: strongest signal. Deterministic code structure matched a rule.',
+                        'Static proof: strongest signal. Deterministic code structure matched a rule and evidence contract.',
                         'AI-reviewed: AI found the issue and review supported it.',
                         'Partially validated: some evidence supports it, but verification is incomplete.',
                         'Needs manual review: useful candidate, but do not treat it as confirmed yet.',
+                        'AI signal percentages: audit trace only. Use the evidence label for decisions.',
                         '',
                         'Use Fix First for priority, but check manual-review findings before acting.',
                     ]
@@ -527,7 +529,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                                 'Full evidence report: use this when you need audit detail, framework mappings, AI review trail, coverage, warnings, and all findings by file.',
                                 '',
                                 'Controls: choose the report type from the dropdown beside Create Report, then press Create Report.',
-                                'Reading confidence: Confirmed by static rule is strongest; AI-reviewed is supported; Partially validated and Needs manual review should be checked before acting.',
+                                'Reading confidence: Static proof is strongest; AI-reviewed is supported; Partially validated and Needs manual review should be checked before acting. Raw AI percentages are audit trace only.',
                             ]
                             : scanFocused
                                 ? [

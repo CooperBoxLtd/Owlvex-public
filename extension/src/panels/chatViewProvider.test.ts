@@ -654,7 +654,10 @@ describe('parseChatIntent', () => {
         expect(complete).not.toHaveBeenCalled();
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('How to read confidence:');
+        expect(finalMessage.content).toContain('Static proof: strongest signal.');
         expect(finalMessage.content).toContain('Needs manual review: useful candidate');
+        expect(finalMessage.content).toContain('AI signal percentages: audit trace only.');
+        expect(finalMessage.content).not.toContain('Confirmed by static rule');
     });
 
     it('injects recent conversation context for short general follow-ups', async () => {
