@@ -565,10 +565,41 @@ describe('parseChatIntent', () => {
         const request = complete.mock.calls[0][0];
         expect(request.systemPrompt).toContain('Interaction mode: General');
         expect(request.systemPrompt).toContain('Repo grounding: off by default in General mode.');
+        expect(request.systemPrompt).toContain('Owlvex tool workflow:');
+        expect(request.systemPrompt).toContain('Summary report is the default developer view');
         expect(request.userMessage).toContain('Repo context: not injected by default in General mode.');
         expect(request.systemPrompt).toContain('Latest report: none');
         expect(request.userMessage).toContain('Latest report context: none');
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toBe('Good morning! I am ready to help.');
+    });
+
+    it('answers Owlvex report usage questions locally without requiring AI chat', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'This should not run.' });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+            validate: async () => { throw new Error('No licence manager configured.'); },
+        } as any);
+
+        await (provider as any).handleUserMessage('how do I use summary report and full evidence report?');
+
+        expect(complete).not.toHaveBeenCalled();
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Use reports as two views of the same scan.');
+        expect(finalMessage.content).toContain('Summary report: start here.');
+        expect(finalMessage.content).toContain('Full evidence report: use this when you need audit detail');
+        expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['scanSummaryReport', 'scanFullReport']);
     });
 
     it('injects recent conversation context for short general follow-ups', async () => {

@@ -417,6 +417,82 @@ function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions):
         || /\b(scan|report|finding|findings|issue|issues|result|results|score|scores|risk|risks|warning|warnings)\b.*\b(latest|last|previous|recent)\b/i.test(prompt);
 }
 
+function looksLikeToolHelpRequest(prompt: string): boolean {
+    return /\b(how|what|where|when|which|explain|help|guide|use|using)\b/i.test(prompt)
+        && /\b(owlvex|tool|scan|scanner|report|summary report|full evidence|confidence|manual review|fix first|compare reports?|create report|workspace|selected files|open editors)\b/i.test(prompt);
+}
+
+function buildToolUsageGuidance(): string {
+    return [
+        'Owlvex tool workflow:',
+        '- Use the scan scope dropdown to choose Current file, Selected files, Open editors, or Workspace, then press Scan.',
+        '- Use the report type dropdown to choose Summary report or Full evidence report, then press Create Report.',
+        '- Summary report is the default developer view: what to fix first, confirmed or AI-reviewed issues, manual-review items, and short code evidence.',
+        '- Full evidence report is for deeper review: all findings by file, confidence posture, AI pass details, mappings, remediation, coverage, warnings, and scan errors.',
+        '- Confidence labels matter: Confirmed by static rule is strongest; AI-reviewed is supported by review; Partially validated and Needs manual review should be checked before acting.',
+        '- Fix First is the recommended starting point, not a guarantee that lower-ranked findings are unimportant.',
+        '- Fix code opens a side-by-side preview. Code is not changed until the user keeps the fix.',
+        '- Compare reports should be used after rescanning; Owlvex orders reports by generation time so Before is the earlier report and After is the later report.',
+        '- Provider throttle guidance appears only when a scan sees a 429 or rate-limit warning.',
+        '- When users ask how to use Owlvex, give the next concrete click/action and explain which report or scan scope fits their goal.',
+    ].join('\n');
+}
+
+function buildToolHelpResponse(prompt: string): { content: string; actions?: ChatMessageAction[] } {
+    const reportFocused = /\b(report|summary|full evidence|confidence|manual review|fix first|compare)\b/i.test(prompt);
+    const scanFocused = /\b(scan|scanner|workspace|current file|selected files|open editors)\b/i.test(prompt);
+    const lines = reportFocused
+        ? [
+            'Use reports as two views of the same scan.',
+            '',
+            'Summary report: start here. It shows what to fix first, the strongest findings, manual-review items, and short code evidence.',
+            'Full evidence report: use this when you need audit detail, framework mappings, AI review trail, coverage, warnings, and all findings by file.',
+            '',
+            'Controls: choose the report type from the dropdown beside Create Report, then press Create Report.',
+            'Reading confidence: Confirmed by static rule is strongest; AI-reviewed is supported; Partially validated and Needs manual review should be checked before acting.',
+        ]
+        : scanFocused
+            ? [
+                'Use the scan scope dropdown first, then press Scan.',
+                '',
+                'Current file: fastest check for the active file.',
+                'Selected files: focused review of files you choose.',
+                'Open editors: checks the files you are already working in.',
+                'Workspace: broader project scan using the selected project root.',
+                '',
+                'After the scan, start with Fix First or create a Summary report for the shortest action view.',
+            ]
+            : [
+                'Owlvex workflow:',
+                '',
+                '1. Configure licence and LLM.',
+                '2. Pick a scan scope and press Scan.',
+                '3. Create a Summary report for what to fix first.',
+                '4. Use Full evidence report when you need detailed validation.',
+                '5. Use Fix code to preview a change before keeping it.',
+            ];
+
+    const actions: ChatMessageAction[] = [
+        {
+            id: 'tool-help-summary-report',
+            label: 'Create Summary',
+            kind: 'quickAction',
+            quickAction: 'scanSummaryReport',
+        },
+        {
+            id: 'tool-help-full-report',
+            label: 'Create Full Report',
+            kind: 'quickAction',
+            quickAction: 'scanFullReport',
+        },
+    ];
+
+    return {
+        content: lines.join('\n'),
+        actions: reportFocused ? actions : undefined,
+    };
+}
+
 function findTopFindingInCalibrationRecords(records?: StoredScanRecord[]): Finding | undefined {
     if (!Array.isArray(records) || !records.length) {
         return undefined;
@@ -2311,6 +2387,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     'Be concise, practical, and specific.',
                     `Interaction mode: ${getConversationModeLabel(this.currentMode)}`,
                     getConversationModeHint(this.currentMode),
+                    buildToolUsageGuidance(),
                     'These chat responses are advisory guidance unless the user explicitly triggers a scan action.',
                     'When the user asks how to fix a finding, replace vulnerable code, or explain a scan result, explain the problem in plain language first and then show the safe replacement code.',
                     'When relevant, explicitly say what the current code is doing wrong, what to stop doing, and what safe pattern should replace it.',
@@ -2437,6 +2514,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     private async tryHandleLocalAction(prompt: string): Promise<LocalActionResult> {
+        if (looksLikeToolHelpRequest(prompt)) {
+            const help = buildToolHelpResponse(prompt);
+            return {
+                handled: true,
+                response: help.content,
+                kind: 'advisory',
+                actions: help.actions,
+            };
+        }
+
         const intent = parseChatIntent(prompt);
         if (!intent) {
             return { handled: false };
