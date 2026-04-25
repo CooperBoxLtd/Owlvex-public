@@ -1022,6 +1022,44 @@ function buildPathTraversalEvidenceContract(params: {
     };
 }
 
+function buildSqlInjectionEvidenceContract(params: {
+    source: string;
+    languageLabel: string;
+    queryExpression: string;
+    queryMatchIndex: number;
+    sinkExpression: string;
+    sinkMatchIndex: number;
+}): EvidenceContract {
+    return {
+        issueType: 'sql-injection',
+        source: {
+            kind: 'source',
+            label: `${params.languageLabel} attacker-controlled SQL value or expression`,
+            expression: params.queryExpression,
+            line: lineOfOffset(params.source, params.queryMatchIndex),
+        },
+        flow: [{
+            kind: 'assignment',
+            label: `${params.languageLabel} SQL text assembled before execution`,
+            expression: params.queryExpression,
+            line: lineOfOffset(params.source, params.queryMatchIndex),
+        }],
+        sink: {
+            kind: 'sink',
+            label: `${params.languageLabel} SQL execution sink`,
+            expression: params.sinkExpression,
+            line: lineOfOffset(params.source, params.sinkMatchIndex),
+        },
+        guard: {
+            status: 'missing',
+            label: 'Parameterized query or bound-parameter guard',
+            reason: 'No recognized parameter binding, prepared statement value binding, or placeholder argument list separates untrusted values from SQL text before execution.',
+        },
+        verdict: 'confirmed',
+        rationale: 'Untrusted or dynamically assembled SQL text reaches a database execution sink without a recognized parameter-binding guard.',
+    };
+}
+
 function collectSanitizedVariables(source: string): Set<string> {
     const sanitized = new Set<string>();
     const pattern = new RegExp(SANITIZER_ASSIGN_PATTERN.source, SANITIZER_ASSIGN_PATTERN.flags);
@@ -1161,7 +1199,17 @@ function scanShellSinks(source: string): InternalFinding[] {
     return found;
 }
 
-function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: string, snippet: string): InternalFinding {
+function makeSqlFinding(source: string, matchIndex: number, contextMismatch: boolean, sinkName: string, snippet: string, queryMatchIndex = matchIndex): InternalFinding {
+    const sinkExpression = lineExpressionAt(source, matchIndex);
+    const evidenceContract = buildSqlInjectionEvidenceContract({
+        source,
+        languageLabel: 'JavaScript/TypeScript',
+        queryExpression: snippet,
+        queryMatchIndex,
+        sinkExpression,
+        sinkMatchIndex: matchIndex,
+    });
+
     if (contextMismatch) {
         return {
             matchIndex,
@@ -1190,6 +1238,7 @@ function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: 
             likelihoodReasons: [
                 'The query is injectable and the applied sanitizer is ineffective for SQL context.',
             ],
+            evidenceContract,
         };
     }
 
@@ -1218,10 +1267,11 @@ function makeSqlFinding(matchIndex: number, contextMismatch: boolean, sinkName: 
             snippet,
             'The SQL text is directly interpolated, but the source of the value is not fully visible in this file.',
         ),
+        evidenceContract,
     };
 }
 
-function makeSqlConcatFinding(matchIndex: number, sinkName: string, snippet: string): InternalFinding {
+function makeSqlConcatFinding(source: string, matchIndex: number, sinkName: string, snippet: string, queryMatchIndex = matchIndex): InternalFinding {
     return {
         matchIndex,
         severity: 'HIGH',
@@ -1247,6 +1297,14 @@ function makeSqlConcatFinding(matchIndex: number, sinkName: string, snippet: str
             snippet,
             'The SQL text is directly assembled through string concatenation, but the source of the value is not fully visible in this file.',
         ),
+        evidenceContract: buildSqlInjectionEvidenceContract({
+            source,
+            languageLabel: 'JavaScript/TypeScript',
+            queryExpression: snippet,
+            queryMatchIndex,
+            sinkExpression: lineExpressionAt(source, matchIndex),
+            sinkMatchIndex: matchIndex,
+        }),
     };
 }
 
@@ -1274,6 +1332,7 @@ function scanSqlSinks(source: string): InternalFinding[] {
     const inlinePattern = new RegExp(SQL_SINK_INLINE_PATTERN.source, SQL_SINK_INLINE_PATTERN.flags);
     while ((match = inlinePattern.exec(source)) !== null) {
         found.push(makeSqlFinding(
+            source,
             match.index,
             templateContainsHtmlSanitizer(match[2], sanitizedVars),
             match[1],
@@ -1285,6 +1344,7 @@ function scanSqlSinks(source: string): InternalFinding[] {
     const inlineConcatPattern = new RegExp(SQL_SINK_INLINE_CONCAT_PATTERN.source, SQL_SINK_INLINE_CONCAT_PATTERN.flags);
     while ((match = inlineConcatPattern.exec(source)) !== null) {
         found.push(makeSqlConcatFinding(
+            source,
             match.index,
             match[1],
             match[2],
@@ -1299,10 +1359,12 @@ function scanSqlSinks(source: string): InternalFinding[] {
             const templateVar = templateVars.get(varName);
             if (!templateVar) { continue; }
             found.push(makeSqlFinding(
+                source,
                 match.index,
                 templateVar.contextMismatch,
                 match[1],
                 templateVar.templateBody,
+                source.indexOf(varName),
             ));
             continue;
         }
@@ -1311,9 +1373,11 @@ function scanSqlSinks(source: string): InternalFinding[] {
             const concatBody = concatVars.get(varName);
             if (!concatBody) { continue; }
             found.push(makeSqlConcatFinding(
+                source,
                 match.index,
                 match[1],
                 concatBody,
+                source.indexOf(varName),
             ));
         }
     }
@@ -1322,6 +1386,7 @@ function scanSqlSinks(source: string): InternalFinding[] {
     const objectTemplatePattern = new RegExp(SQL_OBJECT_TEMPLATE_RE.source, SQL_OBJECT_TEMPLATE_RE.flags);
     while ((match = objectTemplatePattern.exec(source)) !== null) {
         found.push(makeSqlFinding(
+            source,
             match.index,
             templateContainsHtmlSanitizer(match[1], sanitizedVars),
             'query helper',
@@ -1332,6 +1397,7 @@ function scanSqlSinks(source: string): InternalFinding[] {
     const objectConcatPattern = new RegExp(SQL_OBJECT_CONCAT_RE.source, SQL_OBJECT_CONCAT_RE.flags);
     while ((match = objectConcatPattern.exec(source)) !== null) {
         found.push(makeSqlConcatFinding(
+            source,
             match.index,
             'query helper',
             match[1],
@@ -2095,18 +2161,30 @@ function scanPythonSqlSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A Python SQL execution sink uses an interpolated f-string query.'],
+            evidenceContract: buildSqlInjectionEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                queryExpression: lineExpressionAt(source, match.index),
+                queryMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
-    const fstringVars = new Set<string>();
+    const fstringVars = new Map<string, { queryExpression: string; matchIndex: number }>();
     const assignPattern = new RegExp(PYTHON_SQL_ASSIGN_FSTRING_RE.source, PYTHON_SQL_ASSIGN_FSTRING_RE.flags);
     while ((match = assignPattern.exec(source)) !== null) {
-        fstringVars.add(match[1]);
+        fstringVars.set(match[1], {
+            queryExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const sinkPattern = new RegExp(PYTHON_SQL_VAR_SINK_RE.source, PYTHON_SQL_VAR_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
-        if (!fstringVars.has(match[1])) { continue; }
+        const queryVar = fstringVars.get(match[1]);
+        if (!queryVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2122,6 +2200,14 @@ function scanPythonSqlSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A Python SQL query variable built from an f-string reaches an execution sink.'],
+            evidenceContract: buildSqlInjectionEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                queryExpression: queryVar.queryExpression,
+                queryMatchIndex: queryVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2348,18 +2434,30 @@ function scanJavaSqlSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A Java SQL sink executes concatenated query text.'],
+            evidenceContract: buildSqlInjectionEvidenceContract({
+                source,
+                languageLabel: 'Java',
+                queryExpression: lineExpressionAt(source, match.index),
+                queryMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
-    const queryVars = new Set<string>();
+    const queryVars = new Map<string, { queryExpression: string; matchIndex: number }>();
     const assignPattern = new RegExp(JAVA_SQL_ASSIGN_RE.source, JAVA_SQL_ASSIGN_RE.flags);
     while ((match = assignPattern.exec(source)) !== null) {
-        queryVars.add(match[1]);
+        queryVars.set(match[1], {
+            queryExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const sinkPattern = new RegExp(JAVA_SQL_VAR_SINK_RE.source, JAVA_SQL_VAR_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
-        if (!queryVars.has(match[1])) { continue; }
+        const queryVar = queryVars.get(match[1]);
+        if (!queryVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2375,6 +2473,14 @@ function scanJavaSqlSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A concatenated Java SQL query variable reaches an execution sink.'],
+            evidenceContract: buildSqlInjectionEvidenceContract({
+                source,
+                languageLabel: 'Java',
+                queryExpression: queryVar.queryExpression,
+                queryMatchIndex: queryVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2688,18 +2794,30 @@ function scanCsharpSqlSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A C# SQL sink executes concatenated query text.'],
+            evidenceContract: buildSqlInjectionEvidenceContract({
+                source,
+                languageLabel: 'C#',
+                queryExpression: lineExpressionAt(source, match.index),
+                queryMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
-    const queryVars = new Set<string>();
+    const queryVars = new Map<string, { queryExpression: string; matchIndex: number }>();
     const assignPattern = new RegExp(CSHARP_SQL_ASSIGN_RE.source, CSHARP_SQL_ASSIGN_RE.flags);
     while ((match = assignPattern.exec(source)) !== null) {
-        queryVars.add(match[1]);
+        queryVars.set(match[1], {
+            queryExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const sinkPattern = new RegExp(CSHARP_SQL_VAR_SINK_RE.source, CSHARP_SQL_VAR_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
-        if (!queryVars.has(match[1])) { continue; }
+        const queryVar = queryVars.get(match[1]);
+        if (!queryVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2715,6 +2833,14 @@ function scanCsharpSqlSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A concatenated C# SQL query variable reaches a SqlCommand sink.'],
+            evidenceContract: buildSqlInjectionEvidenceContract({
+                source,
+                languageLabel: 'C#',
+                queryExpression: queryVar.queryExpression,
+                queryMatchIndex: queryVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2922,18 +3048,30 @@ function scanGoSqlSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A Go SQL sink executes concatenated query text.'],
+            evidenceContract: buildSqlInjectionEvidenceContract({
+                source,
+                languageLabel: 'Go',
+                queryExpression: lineExpressionAt(source, match.index),
+                queryMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
-    const queryVars = new Set<string>();
+    const queryVars = new Map<string, { queryExpression: string; matchIndex: number }>();
     const assignPattern = new RegExp(GO_SQL_ASSIGN_RE.source, GO_SQL_ASSIGN_RE.flags);
     while ((match = assignPattern.exec(source)) !== null) {
-        queryVars.add(match[1]);
+        queryVars.set(match[1], {
+            queryExpression: lineExpressionAt(source, match.index),
+            matchIndex: match.index,
+        });
     }
 
     const sinkPattern = new RegExp(GO_SQL_VAR_SINK_RE.source, GO_SQL_VAR_SINK_RE.flags);
     while ((match = sinkPattern.exec(source)) !== null) {
-        if (!queryVars.has(match[1])) { continue; }
+        const queryVar = queryVars.get(match[1]);
+        if (!queryVar) { continue; }
         found.push({
             matchIndex: match.index,
             severity: 'HIGH',
@@ -2949,6 +3087,14 @@ function scanGoSqlSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A concatenated Go SQL query variable reaches a database sink.'],
+            evidenceContract: buildSqlInjectionEvidenceContract({
+                source,
+                languageLabel: 'Go',
+                queryExpression: queryVar.queryExpression,
+                queryMatchIndex: queryVar.matchIndex,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 

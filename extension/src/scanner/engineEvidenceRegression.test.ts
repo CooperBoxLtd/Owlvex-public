@@ -49,6 +49,137 @@ function exportReport(req, res) {
         expectedCanonicalIds: [],
     },
     {
+        name: 'unsafe JS SQL injection has source-flow-sink-guard evidence',
+        language: 'javascript',
+        source: `
+async function loadUser(req, db) {
+  const userId = req.query.id;
+  return db.query(\`SELECT * FROM users WHERE id = \${userId}\`);
+}`,
+        expectedCanonicalIds: ['owlvex.issue.sql_injection.001'],
+        expectedEvidenceTypes: ['sql-injection'],
+    },
+    {
+        name: 'safe JS parameterized SQL remains clean',
+        language: 'javascript',
+        source: `
+async function loadUser(req, db) {
+  const userId = req.query.id;
+  return db.query('SELECT * FROM users WHERE id = ?', [userId]);
+}`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Python SQL injection has source-flow-sink-guard evidence',
+        language: 'python',
+        source: `
+def load_user(request, cursor):
+    user_id = request.args.get("id")
+    query = f"SELECT * FROM users WHERE id = {user_id}"
+    return cursor.execute(query)
+`,
+        expectedCanonicalIds: ['owlvex.issue.sql_injection.001'],
+        expectedEvidenceTypes: ['sql-injection'],
+    },
+    {
+        name: 'safe Python parameterized SQL remains clean',
+        language: 'python',
+        source: `
+def load_user(request, cursor):
+    user_id = request.args.get("id")
+    return cursor.execute("SELECT * FROM users WHERE id = %s", [user_id])
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Java SQL injection has source-flow-sink-guard evidence',
+        language: 'java',
+        source: `
+class Users {
+    ResultSet loadUser(HttpServletRequest request, Statement statement) throws Exception {
+        String userId = request.getParameter("id");
+        String query = "SELECT * FROM users WHERE id = " + userId;
+        return statement.executeQuery(query);
+    }
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.sql_injection.001'],
+        expectedEvidenceTypes: ['sql-injection'],
+    },
+    {
+        name: 'safe Java prepared statement remains clean',
+        language: 'java',
+        source: `
+class Users {
+    ResultSet loadUser(HttpServletRequest request, Connection connection) throws Exception {
+        String userId = request.getParameter("id");
+        PreparedStatement statement = connection.prepareStatement("SELECT * FROM users WHERE id = ?");
+        statement.setString(1, userId);
+        return statement.executeQuery();
+    }
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe C# SQL injection has source-flow-sink-guard evidence',
+        language: 'csharp',
+        source: `
+class Users {
+    object LoadUser(SqlConnection connection) {
+        var userId = Request.Query["id"];
+        var query = "SELECT * FROM users WHERE id = " + userId;
+        return new SqlCommand(query, connection);
+    }
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.sql_injection.001'],
+        expectedEvidenceTypes: ['sql-injection'],
+    },
+    {
+        name: 'safe C# parameterized SQL remains clean',
+        language: 'csharp',
+        source: `
+class Users {
+    object LoadUser(SqlConnection connection) {
+        var userId = Request.Query["id"];
+        var command = new SqlCommand("SELECT * FROM users WHERE id = @id", connection);
+        command.Parameters.AddWithValue("@id", userId);
+        return command;
+    }
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Go SQL injection has source-flow-sink-guard evidence',
+        language: 'go',
+        source: `
+package demo
+
+func loadUser(r *http.Request, db *sql.DB) (*sql.Rows, error) {
+    id := r.URL.Query().Get("id")
+    query := "SELECT * FROM users WHERE id = " + id
+    return db.Query(query)
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.sql_injection.001'],
+        expectedEvidenceTypes: ['sql-injection'],
+    },
+    {
+        name: 'safe Go parameterized SQL remains clean',
+        language: 'go',
+        source: `
+package demo
+
+func loadUser(r *http.Request, db *sql.DB) (*sql.Rows, error) {
+    id := r.URL.Query().Get("id")
+    return db.Query("SELECT * FROM users WHERE id = ?", id)
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
         name: 'unsafe Python path traversal has source-flow-sink-guard evidence',
         language: 'python',
         source: `
