@@ -313,7 +313,7 @@
     "package:dev": "node ./scripts/package-profile.mjs dev",
     "package:all": "npm run package:dev && npm run package:prod",
     "package:verify": "node ./scripts/verify-packages.mjs",
-    "test:regression": "npm run compile && jest --runInBand --runTestsByPath src/panels/chatViewProvider.test.ts src/scanner/reportGenerator.test.ts src/scanner/engineEvidenceRegression.test.ts src/packageProfile.test.ts",
+    "test:regression": "npm run compile && jest --runInBand --runTestsByPath src/panels/chatViewProvider.test.ts src/scanner/reportGenerator.test.ts src/scanner/engineEvidenceRegression.test.ts src/ui/statusBar.test.ts src/packageProfile.test.ts",
     "test:release": "npm run test:regression && npm run package:all && npm run package:verify",
     "publish:prod": "npm run test:release && npx @vscode/vsce publish --packagePath dist/owlvex-prod.vsix",
     "publish:dev": "npm run package:dev && npx @vscode/vsce publish --packagePath dist/owlvex-dev.vsix",

@@ -4,12 +4,37 @@ import type { ScanResult } from '../scanner/scanEngine';
 import { getRulePackModeLabel } from '../packs/packRuntime';
 import { buildLicenceBadgeLabel, buildLicenceStatusSummary, LicenceInfo } from '../licence/licenceManager';
 
-function getAiConfidenceLabel(finding: ScanResult['findings'][number] | undefined): string | undefined {
+type StatusFinding = ScanResult['findings'][number];
+
+function getAiConfidenceLabel(finding: StatusFinding | undefined): string | undefined {
     if (!finding || finding.provenance !== 'ai') {
         return undefined;
     }
 
     return `${Math.round((finding.resolverConfidence ?? finding.confidence ?? 0) * 100)}%`;
+}
+
+function getEvidenceConfidenceLabel(finding: StatusFinding | undefined): string | undefined {
+    if (!finding) {
+        return undefined;
+    }
+
+    const confidenceTier = finding.confidenceTier ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'PLAUSIBLE');
+    const corroboration = finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED');
+
+    if (confidenceTier === 'PROVEN' || corroboration === 'PROVEN') {
+        return 'Evidence: Static proof';
+    }
+
+    if (corroboration === 'CORROBORATED') {
+        return 'Evidence: AI-reviewed';
+    }
+
+    if (corroboration === 'PARTIAL') {
+        return 'Evidence: Partially validated';
+    }
+
+    return 'Evidence: Needs manual review';
 }
 
 export class StatusBar {
@@ -47,6 +72,8 @@ export class StatusBar {
             .slice()
             .sort((left, right) => ((right.riskScore ?? 0) - (left.riskScore ?? 0)))[0];
         const packLabel = getRulePackModeLabel(result.packContext);
+        const evidenceLabel = getEvidenceConfidenceLabel(topRiskFinding);
+        const aiConfidenceLabel = getAiConfidenceLabel(topRiskFinding);
         this.item.text = `${icon} ${result.score.toFixed(1)}/10 | ${result.model} | ${packLabel}`;
         this.item.tooltip = [
             `File risk score: ${result.score.toFixed(1)}/10`,
@@ -54,7 +81,7 @@ export class StatusBar {
             `Model: ${result.model}`,
             `Intelligence: ${packLabel}`,
             topRiskFinding
-                ? `Fix first: ${topRiskFinding.title} | ${topRiskFinding.severity}/${String(topRiskFinding.likelihood ?? 'MEDIUM').toUpperCase()} | ${topRiskFinding.riskScore ?? 'n/a'}/10${getAiConfidenceLabel(topRiskFinding) ? ` | AI ${getAiConfidenceLabel(topRiskFinding)}` : ''}`
+                ? `Fix first: ${topRiskFinding.title} | ${topRiskFinding.severity}/${String(topRiskFinding.likelihood ?? 'MEDIUM').toUpperCase()} | ${topRiskFinding.riskScore ?? 'n/a'}/10${evidenceLabel ? ` | ${evidenceLabel}` : ''}${aiConfidenceLabel ? ` | AI signal ${aiConfidenceLabel} audit trace` : ''}`
                 : '',
         ].filter(Boolean).join(' | ');
 
