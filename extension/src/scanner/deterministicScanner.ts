@@ -1060,6 +1060,44 @@ function buildSqlInjectionEvidenceContract(params: {
     };
 }
 
+function buildCommandInjectionEvidenceContract(params: {
+    source: string;
+    languageLabel: string;
+    commandExpression: string;
+    commandMatchIndex: number;
+    sinkExpression: string;
+    sinkMatchIndex: number;
+}): EvidenceContract {
+    return {
+        issueType: 'command-injection',
+        source: {
+            kind: 'source',
+            label: `${params.languageLabel} attacker-controlled command text or argument`,
+            expression: params.commandExpression,
+            line: lineOfOffset(params.source, params.commandMatchIndex),
+        },
+        flow: [{
+            kind: 'assignment',
+            label: `${params.languageLabel} command text reaches process execution`,
+            expression: params.commandExpression,
+            line: lineOfOffset(params.source, params.commandMatchIndex),
+        }],
+        sink: {
+            kind: 'sink',
+            label: `${params.languageLabel} process execution sink`,
+            expression: params.sinkExpression,
+            line: lineOfOffset(params.source, params.sinkMatchIndex),
+        },
+        guard: {
+            status: 'missing',
+            label: 'Fixed executable and non-shell argument boundary',
+            reason: 'No recognized fixed executable with explicit non-shell arguments, shell-disabled subprocess call, or allowlisted command mapping separates untrusted input from process execution.',
+        },
+        verdict: 'confirmed',
+        rationale: 'Attacker-controlled command text or arguments reach a process execution sink without a recognized non-shell argument boundary.',
+    };
+}
+
 function collectSanitizedVariables(source: string): Set<string> {
     const sanitized = new Set<string>();
     const pattern = new RegExp(SANITIZER_ASSIGN_PATTERN.source, SANITIZER_ASSIGN_PATTERN.flags);
@@ -1167,6 +1205,14 @@ function scanShellSinks(source: string): InternalFinding[] {
                 match[2],
                 'The sink is shell-parsed and clearly injectable, but the source of the interpolated value is not fully visible.',
             ),
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'JavaScript/TypeScript',
+                commandExpression: match[2],
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -1193,6 +1239,14 @@ function scanShellSinks(source: string): InternalFinding[] {
                 match[2],
                 'The sink is shell-parsed and clearly injectable, but the source of the interpolated value is not fully visible.',
             ),
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'JavaScript/TypeScript',
+                commandExpression: match[2],
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2068,6 +2122,14 @@ function scanPythonShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A shell-executed Python command string includes request-derived or interpolated data.'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                commandExpression: lineExpressionAt(source, match.index),
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2090,6 +2152,14 @@ function scanPythonShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Python variable reaches os.system(...).'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                commandExpression: match[1],
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2111,6 +2181,14 @@ function scanPythonShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A Python subprocess call uses shell=True with a request-derived or interpolated command string.'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                commandExpression: lineExpressionAt(source, match.index),
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2134,6 +2212,14 @@ function scanPythonShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Python command variable reaches a subprocess call with shell=True.'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'Python',
+                commandExpression: match[1],
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2386,6 +2472,14 @@ function scanJavaShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Java variable reaches Runtime.exec(...).'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'Java',
+                commandExpression: match[1],
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2407,6 +2501,14 @@ function scanJavaShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A Java command string is assembled through concatenation before Runtime.exec(...).'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'Java',
+                commandExpression: lineExpressionAt(source, match.index),
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2747,6 +2849,14 @@ function scanCsharpShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived C# variable reaches Process.Start(...).'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'C#',
+                commandExpression: match[1],
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -2767,6 +2877,14 @@ function scanCsharpShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A C# command or argument string is assembled through concatenation before Process.Start(...).'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'C#',
+                commandExpression: lineExpressionAt(source, match.index),
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -3001,6 +3119,14 @@ function scanGoShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A request-derived Go variable reaches a shell-parsed exec.Command("sh", "-c", ...) sink.'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'Go',
+                commandExpression: match[1],
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 
@@ -3021,6 +3147,14 @@ function scanGoShellSinks(source: string): InternalFinding[] {
             framework: 'OWASP',
             likelihood: 'HIGH',
             likelihoodReasons: ['A Go shell command is assembled through concatenation before exec.Command("sh", "-c", ...).'],
+            evidenceContract: buildCommandInjectionEvidenceContract({
+                source,
+                languageLabel: 'Go',
+                commandExpression: lineExpressionAt(source, match.index),
+                commandMatchIndex: match.index,
+                sinkExpression: lineExpressionAt(source, match.index),
+                sinkMatchIndex: match.index,
+            }),
         });
     }
 

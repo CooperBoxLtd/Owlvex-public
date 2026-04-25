@@ -49,6 +49,141 @@ function exportReport(req, res) {
         expectedCanonicalIds: [],
     },
     {
+        name: 'unsafe JS command injection has source-flow-sink-guard evidence',
+        language: 'javascript',
+        source: `
+const { exec, execFile } = require('child_process');
+function runLookup(req) {
+  const host = req.query.host;
+  return exec(\`nslookup \${host}\`);
+}`,
+        expectedCanonicalIds: ['owlvex.issue.command_injection.001'],
+        expectedEvidenceTypes: ['command-injection'],
+    },
+    {
+        name: 'safe JS fixed executable command remains clean',
+        language: 'javascript',
+        source: `
+const { execFile } = require('child_process');
+function runLookup(req) {
+  const host = req.query.host;
+  return execFile('nslookup', [host]);
+}`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Python command injection has source-flow-sink-guard evidence',
+        language: 'python',
+        source: `
+import os
+from flask import request
+
+def run_lookup():
+    cmd = request.args.get("cmd")
+    return os.system(cmd)
+`,
+        expectedCanonicalIds: ['owlvex.issue.command_injection.001'],
+        expectedEvidenceTypes: ['command-injection'],
+    },
+    {
+        name: 'safe Python fixed executable command remains clean',
+        language: 'python',
+        source: `
+import subprocess
+from flask import request
+
+def run_lookup():
+    host = request.args.get("host")
+    return subprocess.run(["nslookup", host], shell=False)
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Java command injection has source-flow-sink-guard evidence',
+        language: 'java',
+        source: `
+class Runner {
+    void run(HttpServletRequest request) throws Exception {
+        String command = request.getParameter("cmd");
+        Runtime.getRuntime().exec(command);
+    }
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.command_injection.001'],
+        expectedEvidenceTypes: ['command-injection'],
+    },
+    {
+        name: 'safe Java fixed executable command remains clean',
+        language: 'java',
+        source: `
+class Runner {
+    void run(HttpServletRequest request) throws Exception {
+        String host = request.getParameter("host");
+        new ProcessBuilder("nslookup", host).start();
+    }
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe C# command injection has source-flow-sink-guard evidence',
+        language: 'csharp',
+        source: `
+using System.Diagnostics;
+
+class Runner {
+    void Run() {
+        var command = Request.Query["cmd"];
+        Process.Start(command);
+    }
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.command_injection.001'],
+        expectedEvidenceTypes: ['command-injection'],
+    },
+    {
+        name: 'safe C# fixed executable command remains clean',
+        language: 'csharp',
+        source: `
+using System.Diagnostics;
+
+class Runner {
+    void Run() {
+        var host = Request.Query["host"];
+        Process.Start("nslookup", host);
+    }
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
+        name: 'unsafe Go command injection has source-flow-sink-guard evidence',
+        language: 'go',
+        source: `
+package demo
+
+func runLookup(r *http.Request) *exec.Cmd {
+    cmd := r.URL.Query().Get("cmd")
+    return exec.Command("sh", "-c", cmd)
+}
+`,
+        expectedCanonicalIds: ['owlvex.issue.command_injection.001'],
+        expectedEvidenceTypes: ['command-injection'],
+    },
+    {
+        name: 'safe Go fixed executable command remains clean',
+        language: 'go',
+        source: `
+package demo
+
+func runLookup(r *http.Request) *exec.Cmd {
+    host := r.URL.Query().Get("host")
+    return exec.Command("nslookup", host)
+}
+`,
+        expectedCanonicalIds: [],
+    },
+    {
         name: 'unsafe JS SQL injection has source-flow-sink-guard evidence',
         language: 'javascript',
         source: `
