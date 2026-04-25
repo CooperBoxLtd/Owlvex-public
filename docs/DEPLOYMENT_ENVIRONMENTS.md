@@ -213,6 +213,22 @@ Not allowed:
 - shipping a feature from `dev` to `prod` without the required production environment settings to make that feature work
 - relying on undocumented environment drift as normal operating practice
 
+### Licence-System Promotion Guardrail
+
+Current dev backend behavior intentionally allows trial reissue for the same email when `ENVIRONMENT=development`.
+
+This exists only to unblock development machines where the dev extension is reinstalled, profile storage changes, or a raw trial key is lost during testing.
+
+Before any dev image is promoted to `prod`, confirm all of the following:
+
+- production App Service has `ENVIRONMENT=production`, not `development`
+- same-email trial reissue remains blocked in production
+- existing production trial activation history is not reset, bypassed, or deleted
+- `/v1/licences/register` and `/v1/licences/verify-email` are tested against the candidate with a previously activated trial email
+- the expected production result is `403` with "A trial has already been activated for this email."
+
+If any production configuration would make `current_settings.environment == "development"`, stop the promotion. That would convert the dev recovery path into a production licence bypass.
+
 ### Shared Deploy Engine
 
 The common deploy engine remains:
