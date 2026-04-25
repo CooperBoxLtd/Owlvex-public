@@ -602,6 +602,61 @@ describe('parseChatIntent', () => {
         expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['scanSummaryReport', 'scanFullReport']);
     });
 
+    it('answers first-use navigation questions with concrete next actions', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'This should not run.' });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+            validate: async () => { throw new Error('No licence manager configured.'); },
+        } as any);
+
+        await (provider as any).handleUserMessage('what should I do first?');
+
+        expect(complete).not.toHaveBeenCalled();
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Start here:');
+        expect(finalMessage.content).toContain('Best first click: Onboarding.');
+        expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['showOnboarding', 'setupAI', 'scanFolder']);
+    });
+
+    it('answers confidence and manual-review questions locally', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'This should not run.' });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+            validate: async () => { throw new Error('No licence manager configured.'); },
+        } as any);
+
+        await (provider as any).handleUserMessage('what does needs manual review mean?');
+
+        expect(complete).not.toHaveBeenCalled();
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('How to read confidence:');
+        expect(finalMessage.content).toContain('Needs manual review: useful candidate');
+    });
+
     it('injects recent conversation context for short general follow-ups', async () => {
         const complete = jest.fn()
             .mockResolvedValueOnce({ content: 'Stockton-on-Tees is in northeast England.' })

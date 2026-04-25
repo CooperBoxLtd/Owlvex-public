@@ -418,8 +418,11 @@ function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions):
 }
 
 function looksLikeToolHelpRequest(prompt: string): boolean {
-    return /\b(how|what|where|when|which|explain|help|guide|use|using)\b/i.test(prompt)
-        && /\b(owlvex|tool|scan|scanner|report|summary report|full evidence|confidence|manual review|fix first|compare reports?|create report|workspace|selected files|open editors)\b/i.test(prompt);
+    return (
+        /\b(how|what|where|when|which|explain|help|guide|use|using|start|setup|configure|onboard|next|now|stuck)\b/i.test(prompt)
+        && /\b(owlvex|tool|scan|scanner|report|summary report|full evidence|confidence|manual review|fix first|fix code|compare reports?|create report|workspace|selected files|open editors|licen[cs]e|llm|provider|model|first run|first use|install)\b/i.test(prompt)
+    )
+        || /\b(what now|what next|next step|guide me|getting started|where do i start|what should i click|what should i do first)\b/i.test(prompt);
 }
 
 function buildToolUsageGuidance(): string {
@@ -439,40 +442,104 @@ function buildToolUsageGuidance(): string {
 }
 
 function buildToolHelpResponse(prompt: string): { content: string; actions?: ChatMessageAction[] } {
+    const onboardingFocused = /\b(first run|first use|getting started|where do i start|what should i click|what should i do first|what next|what now|next step|guide me|onboard|install|stuck)\b/i.test(prompt);
+    const setupFocused = /\b(setup|configure|licen[cs]e|llm|provider|model|api key|trial|free)\b/i.test(prompt);
     const reportFocused = /\b(report|summary|full evidence|confidence|manual review|fix first|compare)\b/i.test(prompt);
     const scanFocused = /\b(scan|scanner|workspace|current file|selected files|open editors)\b/i.test(prompt);
-    const lines = reportFocused
-        ? [
-            'Use reports as two views of the same scan.',
-            '',
-            'Summary report: start here. It shows what to fix first, the strongest findings, manual-review items, and short code evidence.',
-            'Full evidence report: use this when you need audit detail, framework mappings, AI review trail, coverage, warnings, and all findings by file.',
-            '',
-            'Controls: choose the report type from the dropdown beside Create Report, then press Create Report.',
-            'Reading confidence: Confirmed by static rule is strongest; AI-reviewed is supported; Partially validated and Needs manual review should be checked before acting.',
-        ]
-        : scanFocused
-            ? [
-                'Use the scan scope dropdown first, then press Scan.',
-                '',
-                'Current file: fastest check for the active file.',
-                'Selected files: focused review of files you choose.',
-                'Open editors: checks the files you are already working in.',
-                'Workspace: broader project scan using the selected project root.',
-                '',
-                'After the scan, start with Fix First or create a Summary report for the shortest action view.',
-            ]
-            : [
-                'Owlvex workflow:',
-                '',
-                '1. Configure licence and LLM.',
-                '2. Pick a scan scope and press Scan.',
-                '3. Create a Summary report for what to fix first.',
-                '4. Use Full evidence report when you need detailed validation.',
-                '5. Use Fix code to preview a change before keeping it.',
-            ];
+    const confidenceFocused = /\b(confidence|manual review|confirmed|ai-reviewed|validated|static rule|finder|verifier|skeptic)\b/i.test(prompt);
+    const fixFocused = /\b(fix|fix code|preview|keep fix|discard|remediate)\b/i.test(prompt);
+    const compareFocused = /\b(compare|before|after|baseline|current|increase|decrease|regression)\b/i.test(prompt);
 
-    const actions: ChatMessageAction[] = [
+    const lines = onboardingFocused
+        ? [
+            'Start here:',
+            '',
+            '1. Confirm access: use Free, Start Trial, or Enter Licence.',
+            '2. Configure the LLM provider you want Owlvex to use.',
+            '3. Select the project root if this workspace has more than one app.',
+            '4. Run a Workspace scan for broad value, or Current file for the fastest signal.',
+            '5. Open the Summary report first. Use the Full evidence report only when you need audit detail.',
+            '',
+            'Best first click: Onboarding. It checks backend, licence, project root, and LLM readiness.',
+        ]
+        : setupFocused
+            ? [
+                'Setup path:',
+                '',
+                'Licence: choose Use Free, Start Trial, or Enter Licence.',
+                'LLM: choose Configure LLM, then select the provider/model and enter the required key or endpoint.',
+                'Project root: choose Project Root when Owlvex should stay inside a specific app folder.',
+                'Validation: choose Test Connection for the LLM, or Onboarding to check the full path.',
+                '',
+                'After setup, run a Current file scan for speed or Workspace scan for project-level signal.',
+            ]
+            : compareFocused
+                ? [
+                    'Use report comparison after you have at least two reports.',
+                    '',
+                    'Recommended flow:',
+                    '1. Scan and create a report before changes.',
+                    '2. Apply or preview fixes.',
+                    '3. Rescan and create a new report.',
+                    '4. Run Compare Latest Reports.',
+                    '',
+                    'Owlvex orders reports by generation time: earlier report is Before, later report is After. That prevents false increase/decrease direction if reports are selected backwards.',
+                ]
+                : confidenceFocused
+                    ? [
+                        'How to read confidence:',
+                        '',
+                        'Confirmed by static rule: strongest signal. Deterministic code structure matched a rule.',
+                        'AI-reviewed: AI found the issue and review supported it.',
+                        'Partially validated: some evidence supports it, but verification is incomplete.',
+                        'Needs manual review: useful candidate, but do not treat it as confirmed yet.',
+                        '',
+                        'Use Fix First for priority, but check manual-review findings before acting.',
+                    ]
+                    : fixFocused
+                        ? [
+                            'Fix flow:',
+                            '',
+                            '1. Start from a finding or Fix First item.',
+                            '2. Choose Fix code.',
+                            '3. Owlvex opens a side-by-side preview.',
+                            '4. Review the change.',
+                            '5. Choose Keep fix only if the preview is right. Otherwise choose Discard fix.',
+                            '',
+                            'Owlvex should not silently modify files; fixes stay in preview until you accept them.',
+                        ]
+                        : reportFocused
+                            ? [
+                                'Use reports as two views of the same scan.',
+                                '',
+                                'Summary report: start here. It shows what to fix first, the strongest findings, manual-review items, and short code evidence.',
+                                'Full evidence report: use this when you need audit detail, framework mappings, AI review trail, coverage, warnings, and all findings by file.',
+                                '',
+                                'Controls: choose the report type from the dropdown beside Create Report, then press Create Report.',
+                                'Reading confidence: Confirmed by static rule is strongest; AI-reviewed is supported; Partially validated and Needs manual review should be checked before acting.',
+                            ]
+                            : scanFocused
+                                ? [
+                                    'Use the scan scope dropdown first, then press Scan.',
+                                    '',
+                                    'Current file: fastest check for the active file.',
+                                    'Selected files: focused review of files you choose.',
+                                    'Open editors: checks the files you are already working in.',
+                                    'Workspace: broader project scan using the selected project root.',
+                                    '',
+                                    'After the scan, start with Fix First or create a Summary report for the shortest action view.',
+                                ]
+                                : [
+                                    'Owlvex workflow:',
+                                    '',
+                                    '1. Configure licence and LLM.',
+                                    '2. Pick a scan scope and press Scan.',
+                                    '3. Create a Summary report for what to fix first.',
+                                    '4. Use Full evidence report when you need detailed validation.',
+                                    '5. Use Fix code to preview a change before keeping it.',
+                                ];
+
+    const reportActions: ChatMessageAction[] = [
         {
             id: 'tool-help-summary-report',
             label: 'Create Summary',
@@ -486,10 +553,33 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
             quickAction: 'scanFullReport',
         },
     ];
+    const setupActions: ChatMessageAction[] = [
+        buildQuickActionAction('tool-help-use-free', 'Use Free', 'useFree'),
+        buildQuickActionAction('tool-help-start-trial', 'Start Trial', 'startTrial'),
+        buildQuickActionAction('tool-help-configure-llm', 'Configure LLM', 'setupAI'),
+    ];
+    const onboardingActions: ChatMessageAction[] = [
+        buildQuickActionAction('tool-help-onboarding', 'Onboarding', 'showOnboarding'),
+        buildQuickActionAction('tool-help-configure-llm', 'Configure LLM', 'setupAI'),
+        buildQuickActionAction('tool-help-scan-workspace', 'Scan Workspace', 'scanFolder'),
+    ];
+    const scanActions: ChatMessageAction[] = [
+        buildQuickActionAction('tool-help-scan-current-file', 'Scan current file', 'scanFile'),
+        buildQuickActionAction('tool-help-scan-workspace', 'Scan workspace', 'scanFolder'),
+        buildQuickActionAction('tool-help-create-summary', 'Create Summary', 'scanSummaryReport'),
+    ];
 
     return {
         content: lines.join('\n'),
-        actions: reportFocused ? actions : undefined,
+        actions: onboardingFocused
+            ? onboardingActions
+            : setupFocused
+                ? setupActions
+                : reportFocused
+                    ? reportActions
+                    : scanFocused
+                        ? scanActions
+                        : undefined,
     };
 }
 
