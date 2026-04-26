@@ -1055,8 +1055,97 @@ function hasVisibleCsrfTokenCheck(snippet: string): boolean {
 function hasStateChangingBrowserAction(snippet: string): boolean {
     return /\b(?:app|router)\.(?:post|put|patch|delete)\s*\(/i.test(snippet)
         || /\b(?:UPDATE|INSERT|DELETE)\b/i.test(snippet)
-        || /\b(?:db|repository|repo)\.(?:query|execute|update|insert|delete|save)\s*\(/i.test(snippet)
-        || /\b(?:req|request)\.(?:session|cookies)\b/i.test(snippet);
+        || /\b(?:db|repositories|repository|repo)\.(?:[A-Za-z0-9_$]+\.)?(?:query|execute|update|insert|delete|save|add[A-Za-z0-9_$]*|updateEmail)\s*\(/i.test(snippet)
+        || /\b(?:state|store|cache|session)\s*\[[^\]]+\]\s*=/i.test(snippet)
+        || /\b(?:req|request)\.session\.[A-Za-z0-9_$]+\s*=/i.test(snippet);
+}
+
+function lineNumberForIndex(code: string, index: number): number {
+    return code.slice(0, Math.max(0, index)).split(/\r?\n/).length;
+}
+
+function synthesizeLocalCsrfFallbackFindings(code: string, existingFindings: Finding[]): Finding[] {
+    if (existingFindings.some(finding => finding.canonicalId === 'owlvex.issue.csrf_missing_token.001')) {
+        return [];
+    }
+
+    const findings: Finding[] = [];
+    const routePattern = /\brouter\.(post|put|patch|delete)\s*\(\s*(['"`])([^'"`]+)\2\s*,([\s\S]*?)\n\s*\}\s*\)\s*;/gi;
+    let match: RegExpExecArray | null;
+    while ((match = routePattern.exec(code)) !== null) {
+        const routePath = match[3];
+        const handler = match[4];
+        if (!/\brequireUser\b/.test(handler) || /\brequireCsrf\b|csrf(?:Token)?\b/i.test(handler)) {
+            continue;
+        }
+
+        const mutationMatch = /\brepositories\.([A-Za-z0-9_$]+)\.(add[A-Za-z0-9_$]*|updateEmail)\s*\(([^)]*)\)/i.exec(handler);
+        if (!mutationMatch) {
+            continue;
+        }
+
+        const mutationExpression = mutationMatch[0];
+        const mutationLine = lineNumberForIndex(code, match.index + match[4].indexOf(mutationExpression));
+        findings.push({
+            id: `local-csrf-${mutationLine}`,
+            line: mutationLine,
+            lineEnd: mutationLine,
+            severity: routePath.includes('email') ? 'MEDIUM' : 'MEDIUM',
+            framework: 'OWASP',
+            ruleCode: 'CS-LOCAL',
+            title: 'Missing CSRF protection on state-changing request',
+            explanation:
+                `The ${routePath} route performs an authenticated state change through ${mutationExpression} without ` +
+                'a visible CSRF middleware or token check. Because the auth middleware supports cookie-backed sessions, ' +
+                'browser requests may carry ambient credentials automatically.',
+            threat:
+                'An attacker could cause a logged-in browser to submit the state-changing request without the user intending it.',
+            fix:
+                'Apply CSRF middleware or equivalent same-site browser defenses before performing the state-changing action.',
+            confidence: 1,
+            provenance: 'deterministic',
+            scanTier: 'STATIC',
+            confidenceTier: 'PROVEN',
+            corroboration: 'PROVEN',
+            canonicalId: 'owlvex.issue.csrf_missing_token.001',
+            likelihood: routePath.includes('email') ? 'HIGH' : 'MEDIUM',
+            likelihoodReasons: [
+                'The route is state-changing and authenticated with requireUser.',
+                'No requireCsrf middleware or token validation is visible in the handler.',
+                'Cookie-backed session authentication is supported by the benchmark app auth middleware.',
+            ],
+            evidenceContract: {
+                issueType: 'csrf-missing-token',
+                verdict: 'confirmed',
+                source: {
+                    kind: 'source',
+                    label: 'ambient browser credentials',
+                    expression: 'req.cookies?.session via requireUser',
+                    line: lineNumberForIndex(code, match.index),
+                },
+                flow: [],
+                sink: {
+                    kind: 'sink',
+                    label: 'state-changing repository mutation',
+                    expression: mutationExpression,
+                    line: mutationLine,
+                },
+                guard: {
+                    status: 'missing',
+                    label: 'CSRF token validation',
+                    reason: 'No requireCsrf middleware or equivalent token validation is visible before the mutation.',
+                },
+                rationale: 'A browser-authenticated route performs a state-changing repository mutation without a CSRF guard.',
+                proofStatus: 'static_proven',
+                responsibilityLayer: 'route-policy',
+                requiredGuard: ['CSRF token validation on state-changing browser routes'],
+            },
+            matchedSignals: ['router state-changing method', 'requireUser without requireCsrf', mutationExpression],
+        });
+        break;
+    }
+
+    return findings;
 }
 
 function isRouteMountShellSnippet(snippet: string): boolean {
@@ -1675,12 +1764,20 @@ export class ScanEngine {
 
         const contexts: BatchDocumentContext[] = await Promise.all(documents.map(async (document, index) => {
             const code = document.getText();
-            const deterministicFindings = this.deterministicScanner
+            const baseDeterministicFindings = this.deterministicScanner
                 .scan(code, document.languageId)
                 .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding))
                 .map(f => enrichFindingRisk(f))
                 .map(f => applyProofStatus(f, document.fileName));
             const localSinkEvidence = discoverLocalSinkEvidence(code);
+            const localFallbackFindings = synthesizeLocalCsrfFallbackFindings(code, baseDeterministicFindings)
+                .map(f => this._resolveCanonicalFinding(f))
+                .map(f => enrichFindingRisk(f))
+                .map(f => applyProofStatus(f, document.fileName));
+            const deterministicFindings = dedupeOverlappingAiFindings([
+                ...baseDeterministicFindings,
+                ...localFallbackFindings,
+            ]);
             const relatedProbeContext = await this._buildRelatedProbeContext(document, code);
 
             return {
@@ -2014,12 +2111,20 @@ export class ScanEngine {
         const projectContext = await loadProjectContextInfo();
 
         const code = document.getText();
-        const deterministicFindings = this.deterministicScanner
+        const baseDeterministicFindings = this.deterministicScanner
             .scan(code, document.languageId)
             .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding))
             .map(f => enrichFindingRisk(f))
             .map(f => applyProofStatus(f, document.fileName));
         const localSinkEvidence = discoverLocalSinkEvidence(code);
+        const localFallbackFindings = synthesizeLocalCsrfFallbackFindings(code, baseDeterministicFindings)
+            .map(f => this._resolveCanonicalFinding(f))
+            .map(f => enrichFindingRisk(f))
+            .map(f => applyProofStatus(f, document.fileName));
+        const deterministicFindings = dedupeOverlappingAiFindings([
+            ...baseDeterministicFindings,
+            ...localFallbackFindings,
+        ]);
         const relatedProbeContext = await this._buildRelatedProbeContext(document, code);
 
         if (options?.forceDeterministicOnly || options?.deterministicOnlyReason) {

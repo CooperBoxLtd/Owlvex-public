@@ -2,6 +2,10 @@
 
 Prototype VS Code extension for security scanning, AI-assisted review, and fix preview workflows.
 
+## Current Version
+
+`0.1.23`
+
 ## Prototype Status
 
 Owlvex is not a finished commercial product yet.
@@ -18,6 +22,7 @@ Current expectations:
 Owlvex combines:
 
 - deterministic local checks
+- safe probe verification for selected sink-driven findings
 - AI-assisted targeted review
 - repo-context reasoning for some workflows
 - report generation
@@ -159,6 +164,13 @@ From findings or chat:
 - this is still a prototype
 - some flows are still optimized for evaluation rather than polished customer UX
 - report comparison depends on stored scan metadata and can fail on older reports created before comparison-safe IDs were stored
+
+### Safe Probe Verification
+
+- probe checks are side-effect blocked and only inspect whether canary input reaches an intercepted sink
+- probe support is intentionally narrow and does not replace full dynamic testing
+- unresolved probe residue means Owlvex found evidence that dangerous input can still reach a risky operation
+- blocked probe evidence can reduce unnecessary verifier calls, but it should still be read as scoped evidence
 
 ### AI / Model Behavior
 

@@ -464,11 +464,15 @@ function getAiConfidence(finding: ScanResult['findings'][number]): number {
 
 function hasAiReviewPass(finding: ScanResult['findings'][number], pass: 'verifier' | 'skeptic'): boolean {
     const score = finding.aiReviewScores?.[pass];
-    return (typeof score === 'number' && Number.isFinite(score)) || Boolean(finding.aiReviewNotes?.[pass]);
+    return typeof score === 'number' && Number.isFinite(score);
 }
 
 function hasIndependentAiReview(finding: ScanResult['findings'][number]): boolean {
     return hasAiReviewPass(finding, 'verifier') || hasAiReviewPass(finding, 'skeptic');
+}
+
+function hasNonScoringAiReviewNote(finding: ScanResult['findings'][number], pass: 'verifier' | 'skeptic'): boolean {
+    return Boolean(finding.aiReviewNotes?.[pass]) && !hasAiReviewPass(finding, pass);
 }
 
 function getAiReviewPathLabel(finding: ScanResult['findings'][number]): string {
@@ -479,7 +483,12 @@ function getAiReviewPathLabel(finding: ScanResult['findings'][number]): string {
     if (hasAiReviewPass(finding, 'skeptic')) {
         passes.push('skeptic');
     }
-    return passes.join('+');
+    const path = passes.join('+');
+    const noVerdict = [
+        hasNonScoringAiReviewNote(finding, 'verifier') ? 'verifier no verdict' : '',
+        hasNonScoringAiReviewNote(finding, 'skeptic') ? 'skeptic no verdict' : '',
+    ].filter(Boolean);
+    return noVerdict.length ? `${path} (${noVerdict.join(', ')})` : path;
 }
 
 function isLowConfidenceAiFinding(finding: ScanResult['findings'][number]): boolean {
@@ -633,6 +642,47 @@ function formatEvidenceConfidence(finding: ScanResult['findings'][number]): stri
     const evidence = getEvidenceDisplayLabel(finding);
     const manual = needsManualReview(finding) ? '; manual review recommended' : '';
     return `${confidence} AI signal, final ${formatPercent(getAiConfidence(finding))} (${getAiReviewPathLabel(finding)}; ${evidence}${manual})`;
+}
+
+function getBaseFindingTitle(finding: ScanResult['findings'][number]): string {
+    const title = finding.canonicalTitle || finding.title;
+    if (/missing audit trail for privileged action/i.test(title)) {
+        const source = finding.evidenceContract?.source?.expression ?? '';
+        if (/updateEmail\s*\(/i.test(source)) {
+            return 'Missing audit trail for account profile change';
+        }
+        if (/updateRole\s*\(/i.test(source)) {
+            return 'Missing audit trail for role change';
+        }
+        if (/approve\s*\(/i.test(source)) {
+            return 'Missing audit trail for refund approval';
+        }
+    }
+
+    return finding.canonicalTitle || finding.title;
+}
+
+function getEvidenceAnchor(finding: ScanResult['findings'][number]): string | undefined {
+    const source = finding.evidenceContract?.source?.expression?.trim();
+    if (source) {
+        return source;
+    }
+
+    return finding.evidenceContract?.sink?.expression?.trim();
+}
+
+function getFindingDisplayTitle(
+    finding: ScanResult['findings'][number],
+    peerFindings: ScanResult['findings'] = [],
+): string {
+    const title = getBaseFindingTitle(finding);
+    const duplicateTitleCount = peerFindings.filter(peer => getBaseFindingTitle(peer) === title).length;
+    const anchor = getEvidenceAnchor(finding);
+    if ((duplicateTitleCount > 1 || /missing audit trail/i.test(title)) && anchor) {
+        return `${title} (${anchor})`;
+    }
+
+    return title;
 }
 
 function buildAiReviewTrailLines(finding: ScanResult['findings'][number]): string[] {
@@ -1079,7 +1129,10 @@ function buildPossibleExtraFindingLines(
     ];
 
     for (const item of extras) {
-        const title = item.finding.canonicalTitle || item.finding.title;
+        const peerFindings = extras
+            .filter(peer => peer.file === item.file)
+            .map(peer => peer.finding);
+        const title = getFindingDisplayTitle(item.finding, peerFindings);
         const layer = item.finding.evidenceContract?.responsibilityLayer;
         const reason = isLikelyUnprovenHelperFinding(item.finding, item.file)
             ? 'helper-layer extra'
@@ -1472,7 +1525,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push('| --- | --- | --- |');
             for (const finding of item.result.findings.slice().sort((left, right) => riskRank(right) - riskRank(left))) {
                 lines.push(
-                    `| ${escapeMarkdown(finding.canonicalTitle || finding.title)} | ${escapeMarkdown(summarizeFindingRow(finding))} | ${escapeMarkdown(formatEvidenceConfidence(finding))} |`,
+                    `| ${escapeMarkdown(getFindingDisplayTitle(finding, item.result.findings))} | ${escapeMarkdown(summarizeFindingRow(finding))} | ${escapeMarkdown(formatEvidenceConfidence(finding))} |`,
                 );
             }
             lines.push('');
@@ -1485,7 +1538,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 const mappingSummary = formatMappings(finding.mappings, item.result.frameworks);
                 const stride = getFindingStride(finding, item.result.frameworks);
                 const signals = getFindingSignals(finding);
-                lines.push(`#### ${finding.canonicalTitle || finding.title}`);
+                lines.push(`#### ${getFindingDisplayTitle(finding, item.result.findings)}`);
                 lines.push(`- Location: \`${item.file}\` at L${finding.line}${finding.lineEnd !== finding.line ? `-${finding.lineEnd}` : ''}`);
                 lines.push(`- Finding risk: ${finding.severity} impact / ${getFindingLikelihood(finding)} likelihood / ${finding.riskScore ?? 'n/a'}/10`);
                 lines.push(`- Analysis mode: ${getScanTierDisplayLabel(finding.scanTier ?? (finding.provenance === 'deterministic' ? 'STATIC' : 'TARGETED_AI'))}`);

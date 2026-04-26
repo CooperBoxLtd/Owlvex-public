@@ -958,6 +958,103 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');
     });
 
+    it('does not count a no-verdict verifier note as an independent AI review pass', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = eval(input);'));
+        const snapshot = {
+            targetLabel: 'src/probes/eval.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\eval.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                canonicalId: 'owlvex.issue.code_injection.eval.001',
+                                canonicalTitle: 'Dynamic code evaluation of untrusted input',
+                                aiReviewScores: {
+                                    finder: 0.99,
+                                    skeptic: 0.99,
+                                    final: 0.99,
+                                },
+                                aiReviewNotes: {
+                                    finder: 'User input reaches eval.',
+                                    verifier: 'Verifier pass did not return a verdict for this candidate.',
+                                    skeptic: 'The eval sink is directly fed by untrusted input.',
+                                },
+                            },
+                        ],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('review path finder+skeptic (verifier no verdict)');
+        expect(written).toContain('- AI review path: finder+skeptic (verifier no verdict)');
+        expect(written).not.toContain('review path finder+verifier+skeptic');
+    });
+
+    it('disambiguates repeated finding titles with their evidence anchor', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('function updateRole() {}\nfunction approve() {}'));
+        const base = buildResult().findings[0];
+        const snapshot = {
+            targetLabel: 'src/store/repositories.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\store'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\store\\repositories.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...base,
+                                id: 'audit-role',
+                                line: 1,
+                                canonicalTitle: 'Missing audit trail for privileged action',
+                                evidenceContract: {
+                                    ...base.evidenceContract!,
+                                    source: {
+                                        kind: 'source',
+                                        label: 'role mutation',
+                                        expression: 'updateRole(userId, role)',
+                                        line: 1,
+                                    },
+                                },
+                            },
+                            {
+                                ...base,
+                                id: 'audit-refund',
+                                line: 2,
+                                canonicalTitle: 'Missing audit trail for privileged action',
+                                evidenceContract: {
+                                    ...base.evidenceContract!,
+                                    source: {
+                                        kind: 'source',
+                                        label: 'refund approval',
+                                        expression: 'approve(refundId, approvedBy)',
+                                        line: 2,
+                                    },
+                                },
+                            },
+                        ],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('Missing audit trail for role change (updateRole(userId, role))');
+        expect(written).toContain('Missing audit trail for refund approval (approve(refundId, approvedBy))');
+    });
+
     it('keeps a stable report headline posture for repo-ai findings', async () => {
         jest.useFakeTimers().setSystemTime(new Date('2026-04-16T00:00:00.000Z'));
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;

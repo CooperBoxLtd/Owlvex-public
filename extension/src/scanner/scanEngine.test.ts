@@ -2638,6 +2638,130 @@ class Demo {
         expect(result.summary).toBe('No findings detected.');
     });
 
+    it('suppresses AI-only csrf findings anchored only to cookie-reading auth middleware', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 5,
+                    summary: 'CSRF protection may be missing.',
+                    findings: [
+                        {
+                            id: 'ai-csrf-auth-helper',
+                            line: 2,
+                            line_end: 2,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A01-CSRF',
+                            title: 'Missing CSRF protection on state-changing request',
+                            explanation: 'Cookie auth is accepted without a CSRF token check.',
+                            threat: 'Cross-site requests may carry ambient credentials.',
+                            fix: 'Require CSRF checks on mutating browser routes.',
+                            confidence: 0.9,
+                            issue_id: 'owlvex.issue.csrf_missing_token.001',
+                            likelihood: 'MEDIUM',
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\src\\middleware\\auth.js',
+            getText: () => `function attachCurrentUser(req, next) {
+    const token = req.cookies?.session || req.header('authorization');
+    req.user = token ? verify(token) : null;
+    next();
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.score).toBe(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('adds a local csrf fallback for authenticated repository mutations when AI omits the finding', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 0,
+                    summary: 'No issues found.',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\src\\routes\\imports.js',
+            getText: () => `function createImportRouter(repositories) {
+  const router = express.Router();
+  router.post('/customer-notes-unsafe', requireUser, async (req, res) => {
+    const note = JSON.parse(req.body.payload);
+    repositories.imports.addCustomerNote(note);
+    res.json({ imported: true });
+  });
+  return router;
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.csrf_missing_token.001');
+        expect(result.findings[0].ruleCode).toBe('CS-LOCAL');
+        expect(result.findings[0].evidenceContract?.sink?.expression).toBe('repositories.imports.addCustomerNote(note)');
+    });
+
     it('deduplicates overlapping AI findings for the same canonical issue', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),

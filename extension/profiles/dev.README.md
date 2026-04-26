@@ -2,11 +2,24 @@
 
 Internal Owlvex development build.
 
+## Build
+
+- version: `0.1.23`
+- target: Azure dev backend
+- focus: evidence-first scanning, safe probe verification, report clarity, and fix verification loops
+
 ## Intended Use
 
 - internal testing
 - integration checks against the Azure dev control plane
 - UI, scanning, onboarding, and workflow validation
+
+## Current Engine Notes
+
+- Safe probe verification now runs before verifier escalation when a finding can be checked without side effects.
+- Probe-confirmed blocked flows skip extra AI verifier work.
+- Probe residue is reported as unresolved evidence only when canary data still reaches a risky sink.
+- Fix verification should continue until all findings on changed files are resolved or explicitly left for manual review.
 
 ## Notes
 
