@@ -42,24 +42,6 @@ describe('Demo fixture regression coverage', () => {
         });
     });
 
-    it('keeps only the unsafe sensitive logging helper in the demo-app logger fixture', async () => {
-        const engine = new ScanEngine({} as any, { getActive: jest.fn(() => ({ id: 'test', selectedModel: 'none' })) } as any);
-        const doc = buildDocument(
-            'd:\\repo\\tools\\demo-app\\src\\lib\\logger.js',
-            'javascript',
-            readRepoFixture('demo-app', 'src', 'lib', 'logger.js'),
-        );
-
-        const result = await engine.scanDocument(doc, {
-            forceDeterministicOnly: true,
-            deterministicOnlyReason: 'fixture regression',
-        });
-
-        expect(result.findings).toHaveLength(1);
-        expect(result.findings[0].canonicalId).toBe('owlvex.issue.sensitive_logging.001');
-        expect(result.findings[0].line).toBe(2);
-    });
-
     it('keeps the safe deserialization fixture clean under AI overclassification attempts', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
@@ -189,214 +171,6 @@ describe('Demo fixture regression coverage', () => {
         expect(result.summary).toBe('No findings detected.');
     });
 
-    it('keeps only the real db.js issues from the demo-app report shape', async () => {
-        const licenceMgr = {
-            getKey: jest.fn().mockResolvedValue('licence-key'),
-            validate: jest.fn().mockResolvedValue({
-                valid: true,
-                features: { frameworks: ['OWASP'] },
-            }),
-        } as any;
-        const provider = {
-            id: 'openai',
-            selectedModel: 'gpt-4o',
-            complete: jest.fn().mockResolvedValue({
-                content: JSON.stringify({
-                    score: 0,
-                    summary: 'Multiple issues detected.',
-                    findings: [
-                        {
-                            id: 'db-sqli-1',
-                            line: 23,
-                            line_end: 26,
-                            severity: 'CRITICAL',
-                            framework: 'OWASP',
-                            rule_code: 'A03-SQLI',
-                            title: 'Unsanitized SQL query construction',
-                            explanation: 'Direct SQL interpolation is used.',
-                            threat: 'Attackers can inject SQL.',
-                            fix: 'Use parameterized queries.',
-                            confidence: 0.62,
-                            issue_id: 'owlvex.issue.sql_injection.001',
-                            likelihood: 'HIGH',
-                            likelihood_reasons: ['Direct string interpolation is used in SQL.'],
-                        },
-                        {
-                            id: 'db-idor-unsafe',
-                            line: 11,
-                            line_end: 12,
-                            severity: 'HIGH',
-                            framework: 'OWASP',
-                            rule_code: 'A01-IDOR',
-                            title: 'Broken Access Control in getDocumentById',
-                            explanation: 'The helper returns a document without authorization checks.',
-                            threat: 'Attackers could access another document.',
-                            fix: 'Add ownership validation.',
-                            confidence: 0.9,
-                            issue_id: 'owlvex.issue.idor.001',
-                            likelihood: 'HIGH',
-                            likelihood_reasons: ['Resource access is derived from caller input.'],
-                        },
-                        {
-                            id: 'db-idor-safe',
-                            line: 19,
-                            line_end: 20,
-                            severity: 'HIGH',
-                            framework: 'OWASP',
-                            rule_code: 'A01-IDOR',
-                            title: 'Broken Access Control in getDocumentForTenant',
-                            explanation: 'The helper returns a document without enough access control checks.',
-                            threat: 'Attackers could access another document.',
-                            fix: 'Add tenant validation.',
-                            confidence: 0.9,
-                            issue_id: 'owlvex.issue.idor.001',
-                            likelihood: 'HIGH',
-                            likelihood_reasons: ['Resource access is derived from caller input.'],
-                        },
-                        {
-                            id: 'db-sqli-2',
-                            line: 23,
-                            line_end: 26,
-                            severity: 'HIGH',
-                            framework: 'OWASP',
-                            rule_code: 'A03-SQLI',
-                            title: 'Unsafe SQL query in findUsersByEmailUnsafe',
-                            explanation: 'The same SQL sink is described a second time.',
-                            threat: 'Attackers can inject SQL.',
-                            fix: 'Use parameterized queries.',
-                            confidence: 1,
-                            issue_id: 'owlvex.issue.sql_injection.001',
-                            likelihood: 'HIGH',
-                            likelihood_reasons: ['The same sink is described twice.'],
-                        },
-                        {
-                            id: 'db-log-misclass',
-                            line: 11,
-                            line_end: 15,
-                            severity: 'MEDIUM',
-                            framework: 'OWASP',
-                            rule_code: 'A09-LOG',
-                            title: 'Sensitive data exposed in logs',
-                            explanation: 'The document access functions do not implement logging or rate limiting.',
-                            threat: 'Attackers may abuse access without detection.',
-                            fix: 'Add logging and rate limiting.',
-                            confidence: 0.68,
-                            issue_id: 'owlvex.issue.sensitive_logging.001',
-                            likelihood: 'MEDIUM',
-                            likelihood_reasons: ['The file lacks audit logging.'],
-                        },
-                    ],
-                    positives: [],
-                    metrics: { critical: 1, high: 3, medium: 0, low: 0 },
-                }),
-                tokenCount: 42,
-            }),
-        };
-
-        (global.fetch as jest.Mock) = jest.fn()
-            .mockResolvedValueOnce(createJsonResponse({
-                system_prompt: 'prompt-body',
-                template_id: 'prompt-1',
-            }))
-            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
-
-        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
-        const doc = buildDocument(
-            'd:\\repo\\tools\\demo-app\\src\\db.js',
-            'javascript',
-            readRepoFixture('demo-app', 'src', 'db.js'),
-        );
-
-        const result = await engine.scanDocument(doc);
-
-        expect(result.findings).toHaveLength(2);
-        expect(result.findings.map(f => f.canonicalId).sort()).toEqual([
-            'owlvex.issue.idor.001',
-            'owlvex.issue.sql_injection.001',
-        ].sort());
-    });
-
-    it('keeps the real JWT and hardcoded-secret issues in the demo-app token helper', async () => {
-        const licenceMgr = {
-            getKey: jest.fn().mockResolvedValue('licence-key'),
-            validate: jest.fn().mockResolvedValue({
-                valid: true,
-                features: { frameworks: ['OWASP'] },
-            }),
-        } as any;
-        const provider = {
-            id: 'openai',
-            selectedModel: 'gpt-4o',
-            complete: jest.fn().mockResolvedValue({
-                content: JSON.stringify({
-                    score: 0,
-                    summary: 'JWT issues detected.',
-                    findings: [
-                        {
-                            id: 'jwt-unsafe-decode',
-                            line: 9,
-                            line_end: 15,
-                            severity: 'HIGH',
-                            framework: 'OWASP',
-                            rule_code: 'A07-JWT',
-                            title: 'Weak JWT validation',
-                            explanation: 'The token payload is decoded without signature verification.',
-                            threat: 'Attackers can forge claims.',
-                            fix: 'Verify JWT signatures before trusting claims.',
-                            confidence: 1,
-                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
-                            likelihood: 'HIGH',
-                            likelihood_reasons: ['The token is decoded directly from attacker-controlled input.'],
-                        },
-                        {
-                            id: 'jwt-manual-verify-overcall',
-                            line: 17,
-                            line_end: 35,
-                            severity: 'HIGH',
-                            framework: 'OWASP',
-                            rule_code: 'A07-JWT',
-                            title: 'Weak JWT validation',
-                            explanation: 'Manual HMAC verification is error-prone and may allow JWT bypass.',
-                            threat: 'Attackers may bypass token validation.',
-                            fix: 'Use a library for JWT verification.',
-                            confidence: 0.9,
-                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
-                            likelihood: 'MEDIUM',
-                            likelihood_reasons: ['Custom verification logic is used.'],
-                        },
-                    ],
-                    positives: [],
-                    metrics: { critical: 0, high: 2, medium: 0, low: 0 },
-                }),
-                tokenCount: 42,
-            }),
-        };
-
-        (global.fetch as jest.Mock) = jest.fn()
-            .mockResolvedValueOnce(createJsonResponse({
-                system_prompt: 'prompt-body',
-                template_id: 'prompt-1',
-            }))
-            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
-
-        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
-        const doc = buildDocument(
-            'd:\\repo\\tools\\demo-app\\src\\lib\\tokens.js',
-            'javascript',
-            readRepoFixture('demo-app', 'src', 'lib', 'tokens.js'),
-        );
-
-        const result = await engine.scanDocument(doc);
-
-        expect(result.findings).toHaveLength(2);
-        expect(result.findings.map(f => f.canonicalId).sort()).toEqual([
-            'owlvex.issue.hardcoded_secret.001',
-            'owlvex.issue.weak_jwt_validation.001',
-        ].sort());
-        expect(result.findings.find(f => f.canonicalId === 'owlvex.issue.weak_jwt_validation.001')?.line).toBe(9);
-        expect(result.findings.find(f => f.canonicalId === 'owlvex.issue.hardcoded_secret.001')?.line).toBe(3);
-    });
-
     it('keeps the allowlisted fetch-safe route clean under SSRF overclassification attempts', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
@@ -408,31 +182,43 @@ describe('Demo fixture regression coverage', () => {
         const provider = {
             id: 'openai',
             selectedModel: 'gpt-4o',
-            complete: jest.fn().mockResolvedValue({
-                content: JSON.stringify({
-                    score: 5,
-                    summary: 'Possible SSRF detected.',
-                    findings: [{
-                        id: 'safe-fetch-ssrf',
-                        line: 12,
-                        line_end: 18,
-                        severity: 'MEDIUM',
-                        framework: 'OWASP',
-                        rule_code: 'A10-SSRF',
-                        title: 'Potential incomplete validation in /fetch-safe endpoint',
-                        explanation: 'The URL validation helper may not be sufficient before fetch.',
-                        threat: 'Attackers may reach internal services.',
-                        fix: 'Tighten outbound URL validation.',
-                        confidence: 0.7,
-                        issue_id: 'owlvex.issue.ssrf.001',
-                        likelihood: 'MEDIUM',
-                        likelihood_reasons: ['User input still flows into fetch.'],
-                    }],
-                    positives: [],
-                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+            complete: jest.fn()
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        score: 5,
+                        summary: 'Possible SSRF detected.',
+                        findings: [{
+                            id: 'safe-fetch-ssrf',
+                            line: 12,
+                            line_end: 18,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A10-SSRF',
+                            title: 'Potential incomplete validation in /fetch-safe endpoint',
+                            explanation: 'The URL validation helper may not be sufficient before fetch.',
+                            threat: 'Attackers may reach internal services.',
+                            fix: 'Tighten outbound URL validation.',
+                            confidence: 0.7,
+                            issue_id: 'owlvex.issue.ssrf.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['User input still flows into fetch.'],
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                    }),
+                    tokenCount: 42,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{
+                            id: 'safe-fetch-ssrf',
+                            verdict: 'reject',
+                            confidence: 0.92,
+                            reason: 'The safe route calls fetchAllowedPartner with a partner key, not a request-controlled URL.',
+                        }],
+                    }),
+                    tokenCount: 12,
                 }),
-                tokenCount: 42,
-            }),
         };
 
         (global.fetch as jest.Mock) = jest.fn()
@@ -444,18 +230,20 @@ describe('Demo fixture regression coverage', () => {
 
         const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
         const doc = buildDocument(
-            'd:\\repo\\tools\\demo-app\\src\\routes\\integrations.js',
+            'd:\\repo\\tools\\benchmark-app\\src\\routes\\integrations.js',
             'javascript',
-            readRepoFixture('demo-app', 'src', 'routes', 'integrations.js'),
+            readRepoFixture('benchmark-app', 'src', 'routes', 'integrations.js'),
         );
 
         const result = await engine.scanDocument(doc);
 
-        expect(result.findings).toHaveLength(0);
-        expect(result.summary).toBe('No findings detected.');
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.ssrf.001');
+        expect(result.findings[0].line).toBe(8);
+        expect(result.findings.some(f => f.id === 'safe-fetch-ssrf')).toBe(false);
     });
 
-    it('keeps the demo-app server shell clean from route-mount and localhost overclaims', async () => {
+    it('keeps the benchmark-app server shell clean from route-mount and logging overclaims', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
             validate: jest.fn().mockResolvedValue({
@@ -471,22 +259,6 @@ describe('Demo fixture regression coverage', () => {
                     score: 3.3,
                     summary: 'Multiple issues detected.',
                     findings: [
-                        {
-                            id: 'server-http-overcall',
-                            line: 36,
-                            line_end: 38,
-                            severity: 'HIGH',
-                            framework: 'OWASP',
-                            rule_code: 'A02-TLS',
-                            title: 'Cleartext transmission of sensitive data over HTTP',
-                            explanation: 'The application listens on http://localhost:3030.',
-                            threat: 'Traffic could be intercepted.',
-                            fix: 'Use HTTPS.',
-                            confidence: 0.9,
-                            issue_id: 'owlvex.issue.http_over_https.001',
-                            likelihood: 'HIGH',
-                            likelihood_reasons: ['HTTP is used in the startup log.'],
-                        },
                         {
                             id: 'server-csrf-overcall',
                             line: 21,
@@ -521,7 +293,7 @@ describe('Demo fixture regression coverage', () => {
                         },
                     ],
                     positives: [],
-                    metrics: { critical: 0, high: 1, medium: 2, low: 0 },
+                    metrics: { critical: 0, high: 0, medium: 2, low: 0 },
                 }),
                 tokenCount: 42,
             }),
@@ -536,9 +308,9 @@ describe('Demo fixture regression coverage', () => {
 
         const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
         const doc = buildDocument(
-            'd:\\repo\\tools\\demo-app\\src\\server.js',
+            'd:\\repo\\tools\\benchmark-app\\src\\server.js',
             'javascript',
-            readRepoFixture('demo-app', 'src', 'server.js'),
+            readRepoFixture('benchmark-app', 'src', 'server.js'),
         );
 
         const result = await engine.scanDocument(doc);

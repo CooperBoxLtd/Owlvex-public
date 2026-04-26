@@ -30,16 +30,16 @@ Artifacts:
 
 - generated markdown reports in `tools/demo/`
 
-### Demo-app stabilization benchmark
+### Benchmark-app stabilization benchmark
 
 Source:
 
-- `tools/demo-app/benchmark.expectations.json`
-- `tools/demo-app/EXPECTATIONS.md`
+- `tools/benchmark-app/benchmark.expectations.json`
+- `tools/benchmark-app/EXPECTATIONS.md`
 
 Artifacts:
 
-- generated markdown reports in `tools/demo-app/`
+- generated markdown reports in `tools/benchmark-app/`
 
 ## Owlvex-Native AI Benchmarks
 

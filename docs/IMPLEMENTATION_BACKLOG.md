@@ -68,7 +68,7 @@ The next execution-shape contract for project grounding and explicit hybrid scan
 Benchmark source-of-truth files for that phase:
 
 - [tools/demo/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo/EXPECTATIONS.md)
-- [tools/demo-app/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo-app/EXPECTATIONS.md)
+- [tools/benchmark-app/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/benchmark-app/EXPECTATIONS.md)
 
 During stabilization, changes to AI normalization, report posture, confidence framing, and helper-context reasoning should be judged against those benchmark expectation files before broader issue-family expansion is considered.
 
@@ -359,7 +359,7 @@ Interpretation:
 
 ### Acceptance Criteria
 
-- mass AI scans use fewer verifier/skeptic calls without losing visible high-risk AI findings in the demo and demo-app expectation sets
+- mass AI scans use fewer verifier/skeptic calls without losing visible high-risk AI findings in the demo and benchmark-app expectation sets
 - deterministic findings are not re-reviewed by AI on the same span/family
 - AI still reviews the rest of a file when static findings exist
 - report wording makes the AI decision path clear
@@ -582,8 +582,8 @@ If one of those is missing, the family remains experimental and should not be ma
 - [stabilizationBenchmark.ts](D:/Dev/repos/CodeScanner/extension/src/scanner/stabilizationBenchmark.ts)
 - [tools/demo/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo/EXPECTATIONS.md)
 - [tools/demo/benchmark.expectations.json](D:/Dev/repos/CodeScanner/tools/demo/benchmark.expectations.json)
-- [tools/demo-app/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo-app/EXPECTATIONS.md)
-- [tools/demo-app/benchmark.expectations.json](D:/Dev/repos/CodeScanner/tools/demo-app/benchmark.expectations.json)
+- [tools/benchmark-app/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/benchmark-app/EXPECTATIONS.md)
+- [tools/benchmark-app/benchmark.expectations.json](D:/Dev/repos/CodeScanner/tools/benchmark-app/benchmark.expectations.json)
 
 ### Acceptance Criteria
 

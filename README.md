@@ -130,7 +130,7 @@ backend/          Licence and billing backend (FastAPI)
 tools/
   owlvex-benchmark/   Deterministic correctness gate (19 suites)
   demo/               Demo fixtures and script
-  demo-app/           Small intentionally vulnerable web app for full-repo scans
+  benchmark-app/      Realistic repo-context benchmark app
 ```
 
 ## Build Direction
@@ -206,7 +206,7 @@ cd extension && npm run benchmark:stabilization
 
 This runs the current stabilization test pack that protects:
 
-- benchmark expectation files in `tools/demo/` and `tools/demo-app/`
+- benchmark expectation files in `tools/demo/` and `tools/benchmark-app/`
 - regression cases for safe/unsafe companions
 - degraded scan posture
 - report and sidebar confidence framing
@@ -220,7 +220,7 @@ cd extension && npm run benchmark:refresh-and-evaluate
 This is the current stabilization trust loop. It:
 
 - compiles the extension
-- generates fresh Markdown reports for `tools/demo/` and `tools/demo-app/`
+- generates fresh Markdown reports for `tools/demo/` and `tools/benchmark-app/`
 - evaluates those reports against the benchmark expectation manifests
 
 Use this command when you want to know whether the current scanner behavior still matches the written stabilization contract, not just whether the unit tests pass.
@@ -250,7 +250,7 @@ cd extension && npm run package:dev
 This produces two `.vsix` packages from the same codebase:
 
 - `prod` -> default backend `https://owlvex-api.azurewebsites.net`
-- `dev` -> default backend `http://192.168.50.35:8000`
+- `dev` -> default backend `https://owlvexdev-api.azurewebsites.net`
 
 ### Start the backend (Docker)
 

@@ -114,7 +114,7 @@ describe('repoAiReview helpers', () => {
 
     it('builds a repo review prompt with scope and context', () => {
         const prompt = buildRepoAiReviewPrompt({
-            scopeLabel: 'Folder: demo-app',
+            scopeLabel: 'Folder: benchmark-app',
             projectContext: 'All reads must be tenant scoped.',
             fileSummaries: summarizeRepoAiResults([
                 {
@@ -165,7 +165,7 @@ describe('repoAiReview helpers', () => {
             }],
         });
 
-        expect(prompt).toContain('Folder: demo-app');
+        expect(prompt).toContain('Folder: benchmark-app');
         expect(prompt).toContain('All reads must be tenant scoped.');
         expect(prompt).toContain('"id": "db.js#f1"');
     });

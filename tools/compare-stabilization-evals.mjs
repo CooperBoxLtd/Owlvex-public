@@ -25,24 +25,24 @@ function printDelta(label, baseline, candidate) {
   console.log(`${label}: ${candidate} (${sign}${diff} vs baseline)`);
 }
 
-const [baselineLabel, demoBaseline, demoAppBaseline, candidateLabel, demoCandidate, demoAppCandidate] = process.argv.slice(2);
+const [baselineLabel, demoBaseline, benchmarkAppBaseline, candidateLabel, demoCandidate, benchmarkAppCandidate] = process.argv.slice(2);
 
-if (!baselineLabel || !demoBaseline || !demoAppBaseline || !candidateLabel || !demoCandidate || !demoAppCandidate) {
-  console.error('Usage: node tools/compare-stabilization-evals.mjs <baseline-label> <demo-report> <demo-app-report> <candidate-label> <demo-report> <demo-app-report>');
+if (!baselineLabel || !demoBaseline || !benchmarkAppBaseline || !candidateLabel || !demoCandidate || !benchmarkAppCandidate) {
+  console.error('Usage: node tools/compare-stabilization-evals.mjs <baseline-label> <demo-report> <benchmark-app-report> <candidate-label> <demo-report> <benchmark-app-report>');
   process.exit(1);
 }
 
 const baselineDemo = runEval('demo', demoBaseline);
-const baselineDemoApp = runEval('demo-app', demoAppBaseline);
+const baselineBenchmarkApp = runEval('benchmark-app', benchmarkAppBaseline);
 const candidateDemo = runEval('demo', demoCandidate);
-const candidateDemoApp = runEval('demo-app', demoAppCandidate);
+const candidateBenchmarkApp = runEval('benchmark-app', benchmarkAppCandidate);
 
-const baselineFailures = baselineDemo.metrics.totalFailures + baselineDemoApp.metrics.totalFailures;
-const candidateFailures = candidateDemo.metrics.totalFailures + candidateDemoApp.metrics.totalFailures;
-const baselineClean = baselineDemo.metrics.cleanFilesSatisfied + baselineDemoApp.metrics.cleanFilesSatisfied;
-const candidateClean = candidateDemo.metrics.cleanFilesSatisfied + candidateDemoApp.metrics.cleanFilesSatisfied;
-const baselineFindings = baselineDemo.metrics.findingFilesSatisfied + baselineDemoApp.metrics.findingFilesSatisfied;
-const candidateFindings = candidateDemo.metrics.findingFilesSatisfied + candidateDemoApp.metrics.findingFilesSatisfied;
+const baselineFailures = baselineDemo.metrics.totalFailures + baselineBenchmarkApp.metrics.totalFailures;
+const candidateFailures = candidateDemo.metrics.totalFailures + candidateBenchmarkApp.metrics.totalFailures;
+const baselineClean = baselineDemo.metrics.cleanFilesSatisfied + baselineBenchmarkApp.metrics.cleanFilesSatisfied;
+const candidateClean = candidateDemo.metrics.cleanFilesSatisfied + candidateBenchmarkApp.metrics.cleanFilesSatisfied;
+const baselineFindings = baselineDemo.metrics.findingFilesSatisfied + baselineBenchmarkApp.metrics.findingFilesSatisfied;
+const candidateFindings = candidateDemo.metrics.findingFilesSatisfied + candidateBenchmarkApp.metrics.findingFilesSatisfied;
 
 console.log(`Baseline: ${baselineLabel}`);
 console.log(`Candidate: ${candidateLabel}`);
@@ -52,34 +52,34 @@ printDelta('Expected finding files satisfied', baselineFindings, candidateFindin
 printDelta('Expected clean files satisfied', baselineClean, candidateClean);
 printDelta(
   'Required findings satisfied',
-  baselineDemo.metrics.requiredFindingsSatisfied + baselineDemoApp.metrics.requiredFindingsSatisfied,
-  candidateDemo.metrics.requiredFindingsSatisfied + candidateDemoApp.metrics.requiredFindingsSatisfied,
+  baselineDemo.metrics.requiredFindingsSatisfied + baselineBenchmarkApp.metrics.requiredFindingsSatisfied,
+  candidateDemo.metrics.requiredFindingsSatisfied + candidateBenchmarkApp.metrics.requiredFindingsSatisfied,
 );
 printDelta(
   'Forbidden findings respected',
-  baselineDemo.metrics.forbiddenFindingsSatisfied + baselineDemoApp.metrics.forbiddenFindingsSatisfied,
-  candidateDemo.metrics.forbiddenFindingsSatisfied + candidateDemoApp.metrics.forbiddenFindingsSatisfied,
+  baselineDemo.metrics.forbiddenFindingsSatisfied + baselineBenchmarkApp.metrics.forbiddenFindingsSatisfied,
+  candidateDemo.metrics.forbiddenFindingsSatisfied + candidateBenchmarkApp.metrics.forbiddenFindingsSatisfied,
 );
 printDelta(
   'Required detections satisfied',
-  baselineDemo.metrics.requiredDetectionSatisfied + baselineDemoApp.metrics.requiredDetectionSatisfied,
-  candidateDemo.metrics.requiredDetectionSatisfied + candidateDemoApp.metrics.requiredDetectionSatisfied,
+  baselineDemo.metrics.requiredDetectionSatisfied + baselineBenchmarkApp.metrics.requiredDetectionSatisfied,
+  candidateDemo.metrics.requiredDetectionSatisfied + candidateBenchmarkApp.metrics.requiredDetectionSatisfied,
 );
 printDelta(
   'Primary scan modes satisfied',
-  baselineDemo.metrics.primaryScanModesSatisfied + baselineDemoApp.metrics.primaryScanModesSatisfied,
-  candidateDemo.metrics.primaryScanModesSatisfied + candidateDemoApp.metrics.primaryScanModesSatisfied,
+  baselineDemo.metrics.primaryScanModesSatisfied + baselineBenchmarkApp.metrics.primaryScanModesSatisfied,
+  candidateDemo.metrics.primaryScanModesSatisfied + candidateBenchmarkApp.metrics.primaryScanModesSatisfied,
 );
 printDelta(
   'Scan tier posture checks satisfied',
-  baselineDemo.metrics.scanTierPostureSatisfied + baselineDemoApp.metrics.scanTierPostureSatisfied,
-  candidateDemo.metrics.scanTierPostureSatisfied + candidateDemoApp.metrics.scanTierPostureSatisfied,
+  baselineDemo.metrics.scanTierPostureSatisfied + baselineBenchmarkApp.metrics.scanTierPostureSatisfied,
+  candidateDemo.metrics.scanTierPostureSatisfied + candidateBenchmarkApp.metrics.scanTierPostureSatisfied,
 );
 printDelta(
   'Corroboration posture checks satisfied',
-  baselineDemo.metrics.corroborationPostureSatisfied + baselineDemoApp.metrics.corroborationPostureSatisfied,
-  candidateDemo.metrics.corroborationPostureSatisfied + candidateDemoApp.metrics.corroborationPostureSatisfied,
+  baselineDemo.metrics.corroborationPostureSatisfied + baselineBenchmarkApp.metrics.corroborationPostureSatisfied,
+  candidateDemo.metrics.corroborationPostureSatisfied + candidateBenchmarkApp.metrics.corroborationPostureSatisfied,
 );
 console.log('');
 console.log(`Demo reports: ${baselineLabel}=${path.resolve(demoBaseline)} | ${candidateLabel}=${path.resolve(demoCandidate)}`);
-console.log(`Demo-app reports: ${baselineLabel}=${path.resolve(demoAppBaseline)} | ${candidateLabel}=${path.resolve(demoAppCandidate)}`);
+console.log(`Benchmark-app reports: ${baselineLabel}=${path.resolve(benchmarkAppBaseline)} | ${candidateLabel}=${path.resolve(benchmarkAppCandidate)}`);

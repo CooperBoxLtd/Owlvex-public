@@ -14,7 +14,6 @@ Use this directory as the benchmark governance layer above the runnable assets i
 
 - [tools/owlvex-benchmark](D:/Dev/repos/CodeScanner/tools/owlvex-benchmark/README.md)
 - [tools/demo](D:/Dev/repos/CodeScanner/tools/demo/EXPECTATIONS.md)
-- [tools/demo-app](D:/Dev/repos/CodeScanner/tools/demo-app/EXPECTATIONS.md)
 - [tools/benchmark-app](D:/Dev/repos/CodeScanner/tools/benchmark-app/EXPECTATIONS.md)
 - [tools/fix-benchmark](D:/Dev/repos/CodeScanner/tools/fix-benchmark/README.md)
 

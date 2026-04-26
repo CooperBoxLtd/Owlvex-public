@@ -34,7 +34,7 @@ Examples:
 
 - `tools/owlvex-benchmark/`
 - `tools/demo/benchmark.expectations.json`
-- `tools/demo-app/benchmark.expectations.json`
+- `tools/benchmark-app/benchmark.expectations.json`
 
 ### Layer B: AI Product Benchmarks
 

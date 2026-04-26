@@ -46,20 +46,21 @@ Use the controlled fixture flow first.
 
 ## Secondary Demo Path
 
-Use `tools/demo-app` only after the primary path lands cleanly.
+Use `tools/benchmark-app` only after the primary path lands cleanly.
 
 ### What To Show
 
-- project context exists and can be edited locally
+- project context exists in a realistic application and can be edited locally
 - Owlvex shows analysis mode and evidence posture
 - deterministic findings and AI-backed findings are labeled differently
 
 ### Good Targets
 
-- `src/lib/logger.js`
-- `src/db.js`
+- `src/routes/documents.js`
+- `src/routes/integrations.js`
+- `src/lib/tokens.js`
 
-Use `logger.js` when you want the cleanest `Static proof` example.
+Use `documents.js` when you want the clearest repo-context authorization example.
 
 ## Fallback Paths
 
@@ -68,7 +69,7 @@ If quota, latency, or AI behavior gets awkward:
 1. Fall back to the deterministic fixture path.
 2. Use an already generated report:
    - `tools/demo/owlvex-scan-report-20260416-222605.md`
-   - `tools/demo-app/owlvex-scan-report-20260416-222605.md`
+   - `tools/benchmark-app/owlvex-scan-report-20260426-064042.md`
 3. Show the `Fix code` flow from an existing finding instead of rescanning.
 
 ## Phrases To Use

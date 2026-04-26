@@ -16,8 +16,7 @@ Each entry should answer:
 | Deterministic engine gate | proof | `tools/owlvex-benchmark/` | live | Owlvex deterministic axes are benchmark-backed for covered suites |
 | Engine proof-contract gate | proof | `tools/owlvex-benchmark/engine/proof-contracts/` | live | Engine 1.0 findings expose benchmarked source, sink, guard, verdict, and safe-companion behavior for covered cases |
 | Demo stabilization benchmark | proof/product | `tools/demo/benchmark.expectations.json` | live | Unsafe/safe demo fixtures remain aligned with the trusted surface |
-| Demo-app stabilization benchmark | proof/product | `tools/demo-app/benchmark.expectations.json` | live | Repo-style benchmark behavior stays aligned with the trusted surface |
-| Benchmark-app repo-context benchmark | AI/product | `tools/benchmark-app/benchmark.expectations.json` | draft | Realistic app workflows validate repo-context reasoning, authorization policy use, and safe helper recognition |
+| Benchmark-app repo-context benchmark | AI/product | `tools/benchmark-app/benchmark.expectations.json` | live | Realistic app workflows validate repo-context reasoning, authorization policy use, and safe helper recognition |
 | Demo AI benchmark | AI/product | `tools/demo/ai-benchmark.expectations.json` | live | AI lane can be scored on unsafe recall, safe quietness, family match, and lane fit |
 | AI benchmark evaluator | AI/tooling | `tools/evaluate-ai-benchmark.mjs` | live | AI benchmark results are repeatable and reviewable |
 | Fix benchmark starter manifest | remediation/product | `tools/fix-benchmark/fix-benchmark.expectations.json` | live | Fix attempts can be measured against explicit safety properties instead of ad hoc review |

@@ -904,12 +904,12 @@ describe('reportGenerator', () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
         const snapshot = {
-            targetLabel: 'tools/demo-app',
-            outputRoot: vscode.Uri.file('d:\\repo\\tools\\demo-app'),
+            targetLabel: 'tools/benchmark-app',
+            outputRoot: vscode.Uri.file('d:\\repo\\tools\\benchmark-app'),
             errors: [],
             results: [
                 {
-                    uri: vscode.Uri.file('d:\\repo\\tools\\demo-app\\src\\tokens.js'),
+                    uri: vscode.Uri.file('d:\\repo\\tools\\benchmark-app\\src\\tokens.js'),
                     result: buildResult({
                         score: 9,
                         findings: [
@@ -939,8 +939,8 @@ describe('reportGenerator', () => {
 "# Owlvex Vulnerability Scan Report
 
 Generated: 2026-04-16T00:00:00.000Z
-Target: \`tools/demo-app\`
-Report location: \`d:\\repo\\tools\\demo-app\`
+Target: \`tools/benchmark-app\`
+Report location: \`d:\\repo\\tools\\benchmark-app\`
 
 ## Summary
 

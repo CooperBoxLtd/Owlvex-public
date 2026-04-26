@@ -89,7 +89,7 @@ describe('stabilizationBenchmark', () => {
         ].join('\n'));
 
         const evaluation = evaluateParsedReport(report, {
-            name: 'demo-app',
+            name: 'benchmark-app',
             expectations: [
                 {
                     file: 'src\\db.js',
@@ -159,7 +159,7 @@ describe('stabilizationBenchmark', () => {
         ].join('\n'));
 
         const evaluation = evaluateParsedReport(report, {
-            name: 'demo-app',
+            name: 'benchmark-app',
             expectations: [
                 {
                     file: 'src\\lib\\logger.js',

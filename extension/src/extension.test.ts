@@ -59,7 +59,7 @@ describe('comparison picker helpers', () => {
     it('builds human-readable scan comparison choices from stored scan metadata', () => {
         const choice = buildStoredScanComparisonChoice({
             scanId: '12345678-90ab-cdef-1234-567890abcdef',
-            targetLabel: 'tools/demo-app',
+            targetLabel: 'tools/benchmark-app',
             scannedAt: '2026-04-22T19:16:27.000Z',
             result: {
                 scanId: '12345678-90ab-cdef-1234-567890abcdef',
@@ -75,7 +75,7 @@ describe('comparison picker helpers', () => {
             } as any,
         } as any);
 
-        expect(choice.label).toBe('tools/demo-app');
+        expect(choice.label).toBe('tools/benchmark-app');
         expect(choice.description).toContain('2026-04-22 19:16:27 UTC');
         expect(choice.description).toContain('azure-foundry / test-foundry-deployment-secondary');
         expect(choice.detail).toContain('10.0/10');
@@ -88,7 +88,7 @@ describe('comparison picker helpers', () => {
             reportId: 'report-12345678',
             reportUri: 'file:///d:/repo/tools/demo/owlvex-scan-report-20260423-120213.md',
             reportFileName: 'owlvex-scan-report-20260423-120213.md',
-            targetLabel: 'demo-app workspace',
+            targetLabel: 'benchmark-app workspace',
             createdAt: '2026-04-23T12:02:13.000Z',
             fileCount: 3,
             totalFindings: 7,
@@ -98,7 +98,7 @@ describe('comparison picker helpers', () => {
             results: [],
         } as any);
 
-        expect(choice.label).toBe('demo-app workspace');
+        expect(choice.label).toBe('benchmark-app workspace');
         expect(choice.description).toContain('2026-04-23 12:02:13 UTC');
         expect(choice.description).toContain('azure-foundry / owlvex-gpt54mini');
         expect(choice.detail).toContain('3 file(s)');

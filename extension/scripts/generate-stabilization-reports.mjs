@@ -482,7 +482,7 @@ function analyzeFile(filePath, code) {
     }));
   }
 
-  if (file.endsWith('\\tools\\demo-app\\src\\db.js') || /function getDocumentById\s*\(/i.test(code)) {
+  if (/function getDocumentById\s*\(/i.test(code)) {
     findings.push(makeFinding({
       id: 'db-idor',
       title: 'Broken Access Control in getDocumentById',
@@ -610,10 +610,6 @@ function listDemoFiles() {
   return manifest.expectations.map((entry) => path.join(repoRoot, 'tools', 'demo', entry.file));
 }
 
-function listDemoAppFiles() {
-  return listSourceFiles(path.join(repoRoot, 'tools', 'demo-app', 'src'));
-}
-
 function listBenchmarkAppFiles() {
   return listSourceFiles(path.join(repoRoot, 'tools', 'benchmark-app', 'src'));
 }
@@ -637,15 +633,12 @@ function listSourceFiles(srcRoot) {
 async function main() {
   configureVscodeMocks();
   const demoRoot = vscodeMock.Uri.file(path.join(repoRoot, 'tools', 'demo'));
-  const demoAppRoot = vscodeMock.Uri.file(path.join(repoRoot, 'tools', 'demo-app'));
   const benchmarkAppRoot = vscodeMock.Uri.file(path.join(repoRoot, 'tools', 'benchmark-app'));
 
   const demoReport = await scanFiles('tools/demo', demoRoot, listDemoFiles());
-  const demoAppReport = await scanFiles('tools/demo-app', demoAppRoot, listDemoAppFiles());
   const benchmarkAppReport = await scanFiles('tools/benchmark-app', benchmarkAppRoot, listBenchmarkAppFiles());
 
   console.log(`Demo report: ${demoReport.fsPath}`);
-  console.log(`Demo-app report: ${demoAppReport.fsPath}`);
   console.log(`Benchmark-app report: ${benchmarkAppReport.fsPath}`);
 }
 

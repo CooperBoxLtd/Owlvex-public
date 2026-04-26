@@ -332,7 +332,7 @@ Additional deterministic fixture pair:
 
 Demo runbook: [docs/DEMO_RUNBOOK.md](./DEMO_RUNBOOK.md)
 
-The next validation layer is moving from `tools/demo-app/` to `tools/benchmark-app/`. The old demo app remains as a transition baseline, but the new benchmark app is the long-term repo-context target: a realistic support and finance portal with auth middleware, tenant-scoped repositories, policy helpers, refund approval, role management, partner integrations, report downloads, profile updates, and import flows. This repo-style app exists to validate that Owlvex can use surrounding project context, not just isolated fixture files. Expected outcome: some issue candidates that look risky in single-file mode should disappear once the scanner can see the full route, helper, and authorization flow together.
+The repo-context validation layer is `tools/benchmark-app/`: a realistic support and finance portal with auth middleware, tenant-scoped repositories, policy helpers, refund approval, role management, partner integrations, report downloads, profile updates, and import flows. This repo-style app exists to validate that Owlvex can use surrounding project context, not just isolated fixture files. Expected outcome: some issue candidates that look risky in single-file mode should disappear once the scanner can see the full route, helper, and authorization flow together.
 
 Current execution rule: this benchmark layer is now governed by [STABILIZATION_CONTRACT.md](./STABILIZATION_CONTRACT.md). That contract intentionally prioritizes benchmark reliability, confidence boundaries, regression capture, and a smaller trusted issue set over rapid issue-family expansion.
 

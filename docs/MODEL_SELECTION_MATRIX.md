@@ -22,7 +22,7 @@ This document should be used together with:
 - [STABILIZATION_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/STABILIZATION_CONTRACT.md)
 - [IMPLEMENTATION_BACKLOG.md](D:/Dev/repos/CodeScanner/docs/IMPLEMENTATION_BACKLOG.md)
 - [tools/demo/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo/EXPECTATIONS.md)
-- [tools/demo-app/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo-app/EXPECTATIONS.md)
+- [tools/benchmark-app/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/benchmark-app/EXPECTATIONS.md)
 
 ---
 
@@ -233,7 +233,7 @@ After generating fresh reports from the candidate model/provider setup:
 ```bash
 cd extension
 npm run benchmark:stabilization:demo
-npm run benchmark:stabilization:demo-app
+npm run benchmark:stabilization:benchmark-app
 ```
 
 ### Required Comparison Outputs
@@ -397,7 +397,7 @@ For the next stronger-agent trial:
 
 1. keep the current model as the incumbent baseline
 2. run the same stabilization benchmark pack
-3. generate fresh demo and demo-app reports
+3. generate fresh demo and benchmark-app reports
 4. evaluate them with the report evaluator
 5. fill the matrix before making any product decision
 

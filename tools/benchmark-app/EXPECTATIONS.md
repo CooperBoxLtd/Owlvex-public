@@ -40,4 +40,4 @@ The benchmark app should behave like a small real application so Owlvex has actu
 
 ## Stabilization Rule
 
-This app replaces the old demo-app as the long-term repo-context benchmark target. During transition, keep both apps available so scanner changes can be compared against old and new baselines.
+This app is the long-term repo-context benchmark target. The older demo app has been removed so repo-context work has one realistic source of truth.

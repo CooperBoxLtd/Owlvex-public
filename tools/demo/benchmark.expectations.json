@@ -6,336 +6,607 @@
       "language": "javascript",
       "family": "Access Control & Authorization",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `AC-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `AC-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "02-idor-safe.js", "expectedState": "clean" },
-    { "file": "03-debug-unsafe.js", "expectedState": "finding" },
-    { "file": "04-debug-safe.js", "expectedState": "clean" },
-    { "file": "05-tenant-isolation-unsafe.js", "expectedState": "finding" },
-    { "file": "06-sqli-unsafe.js", "expectedState": "finding" },
-    { "file": "07-sqli-safe.js", "expectedState": "clean" },
+    {
+      "file": "02-idor-safe.js",
+      "expectedState": "clean"
+    },
+    {
+      "file": "03-debug-unsafe.js",
+      "expectedState": "finding"
+    },
+    {
+      "file": "04-debug-safe.js",
+      "expectedState": "clean"
+    },
+    {
+      "file": "05-tenant-isolation-unsafe.js",
+      "expectedState": "finding"
+    },
+    {
+      "file": "06-sqli-unsafe.js",
+      "expectedState": "finding"
+    },
+    {
+      "file": "07-sqli-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "08-command-injection-unsafe.js",
       "language": "javascript",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `GR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "09-command-injection-safe.js", "expectedState": "clean" },
-    { "file": "10-cookie-unsafe.js", "expectedState": "finding" },
-    { "file": "11-cookie-safe.js", "expectedState": "clean" },
-    { "file": "12-sensitive-logging-unsafe.js", "expectedState": "finding" },
-    { "file": "13-sensitive-logging-safe.js", "expectedState": "clean" },
-    { "file": "14-sqli-context-mismatch-unsafe.js", "expectedState": "finding" },
-    { "file": "15-sqli-context-mismatch-safe.js", "expectedState": "clean" },
+    {
+      "file": "09-command-injection-safe.js",
+      "expectedState": "clean"
+    },
+    {
+      "file": "10-cookie-unsafe.js",
+      "expectedState": "finding"
+    },
+    {
+      "file": "11-cookie-safe.js",
+      "expectedState": "clean"
+    },
+    {
+      "file": "12-sensitive-logging-unsafe.js",
+      "expectedState": "finding"
+    },
+    {
+      "file": "13-sensitive-logging-safe.js",
+      "expectedState": "clean"
+    },
+    {
+      "file": "14-sqli-context-mismatch-unsafe.js",
+      "expectedState": "finding"
+    },
+    {
+      "file": "15-sqli-context-mismatch-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "16-open-redirect-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "17-open-redirect-safe.js", "expectedState": "clean" },
+    {
+      "file": "17-open-redirect-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "18-csrf-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "19-csrf-safe.js", "expectedState": "clean" },
+    {
+      "file": "19-csrf-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "20-cors-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "21-cors-safe.js", "expectedState": "clean" },
+    {
+      "file": "21-cors-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "22-ssrf-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "23-ssrf-safe.js", "expectedState": "clean" },
+    {
+      "file": "23-ssrf-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "24-jwt-validation-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "25-jwt-validation-safe.js", "expectedState": "clean" },
+    {
+      "file": "25-jwt-validation-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "26-deserialization-unsafe.py",
       "language": "python",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `DS-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `DS-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "27-deserialization-safe.py", "expectedState": "clean" },
+    {
+      "file": "27-deserialization-safe.py",
+      "expectedState": "clean"
+    },
     {
       "file": "28-path-traversal-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "29-path-traversal-safe.js", "expectedState": "clean" },
+    {
+      "file": "29-path-traversal-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "30-ssrf-allowlist-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "31-ssrf-allowlist-safe.js", "expectedState": "clean" },
+    {
+      "file": "31-ssrf-allowlist-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "32-command-injection-shell-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "33-command-injection-shell-safe.js", "expectedState": "clean" },
+    {
+      "file": "33-command-injection-shell-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "34-sqli-concat-unsafe.js",
       "expectedState": "finding",
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "35-sqli-concat-safe.js", "expectedState": "clean" },
+    {
+      "file": "35-sqli-concat-safe.js",
+      "expectedState": "clean"
+    },
     {
       "file": "36-python-command-injection-unsafe.py",
       "language": "python",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `GR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "37-python-command-injection-safe.py", "expectedState": "clean" },
+    {
+      "file": "37-python-command-injection-safe.py",
+      "expectedState": "clean"
+    },
     {
       "file": "38-python-sqli-unsafe.py",
       "language": "python",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `SQ-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `SQ-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "39-python-sqli-safe.py", "expectedState": "clean" },
+    {
+      "file": "39-python-sqli-safe.py",
+      "expectedState": "clean"
+    },
     {
       "file": "40-python-path-traversal-unsafe.py",
       "language": "python",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `PT-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `PT-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "41-python-path-traversal-safe.py", "expectedState": "clean" },
+    {
+      "file": "41-python-path-traversal-safe.py",
+      "expectedState": "clean"
+    },
     {
       "file": "42-python-ssrf-unsafe.py",
       "language": "python",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `SR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `SR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "43-python-ssrf-safe.py", "expectedState": "clean" },
+    {
+      "file": "43-python-ssrf-safe.py",
+      "expectedState": "clean"
+    },
     {
       "file": "44-python-jwt-validation-unsafe.py",
       "language": "python",
       "family": "Identity & Auth Failures",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `JW-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `JW-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "45-python-jwt-validation-safe.py", "expectedState": "clean" },
+    {
+      "file": "45-python-jwt-validation-safe.py",
+      "expectedState": "clean"
+    },
     {
       "file": "46-java-command-injection-unsafe.java",
       "language": "java",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `GR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "47-java-command-injection-safe.java", "expectedState": "clean" },
+    {
+      "file": "47-java-command-injection-safe.java",
+      "expectedState": "clean"
+    },
     {
       "file": "48-java-sqli-unsafe.java",
       "language": "java",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `SQ-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `SQ-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "49-java-sqli-safe.java", "expectedState": "clean" },
+    {
+      "file": "49-java-sqli-safe.java",
+      "expectedState": "clean"
+    },
     {
       "file": "50-java-path-traversal-unsafe.java",
       "language": "java",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `PT-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `PT-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "51-java-path-traversal-safe.java", "expectedState": "clean" },
+    {
+      "file": "51-java-path-traversal-safe.java",
+      "expectedState": "clean"
+    },
     {
       "file": "52-java-ssrf-unsafe.java",
       "language": "java",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `SR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `SR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "53-java-ssrf-safe.java", "expectedState": "clean" },
+    {
+      "file": "53-java-ssrf-safe.java",
+      "expectedState": "clean"
+    },
     {
       "file": "54-java-jwt-validation-unsafe.java",
       "language": "java",
       "family": "Identity & Auth Failures",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `JW-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `JW-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "55-java-jwt-validation-safe.java", "expectedState": "clean" },
+    {
+      "file": "55-java-jwt-validation-safe.java",
+      "expectedState": "clean"
+    },
     {
       "file": "56-java-deserialization-unsafe.java",
       "language": "java",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `DS-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `DS-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "57-java-deserialization-safe.java", "expectedState": "clean" },
+    {
+      "file": "57-java-deserialization-safe.java",
+      "expectedState": "clean"
+    },
     {
       "file": "58-csharp-command-injection-unsafe.cs",
       "language": "csharp",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `GR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "59-csharp-command-injection-safe.cs", "expectedState": "clean" },
+    {
+      "file": "59-csharp-command-injection-safe.cs",
+      "expectedState": "clean"
+    },
     {
       "file": "60-csharp-sqli-unsafe.cs",
       "language": "csharp",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `SQ-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `SQ-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "61-csharp-sqli-safe.cs", "expectedState": "clean" },
+    {
+      "file": "61-csharp-sqli-safe.cs",
+      "expectedState": "clean"
+    },
     {
       "file": "62-csharp-path-traversal-unsafe.cs",
       "language": "csharp",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `PT-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `PT-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "63-csharp-path-traversal-safe.cs", "expectedState": "clean" },
+    {
+      "file": "63-csharp-path-traversal-safe.cs",
+      "expectedState": "clean"
+    },
     {
       "file": "64-csharp-ssrf-unsafe.cs",
       "language": "csharp",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `SR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `SR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "65-csharp-ssrf-safe.cs", "expectedState": "clean" },
+    {
+      "file": "65-csharp-ssrf-safe.cs",
+      "expectedState": "clean"
+    },
     {
       "file": "66-go-command-injection-unsafe.go",
       "language": "go",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `GR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `GR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "67-go-command-injection-safe.go", "expectedState": "clean" },
+    {
+      "file": "67-go-command-injection-safe.go",
+      "expectedState": "clean"
+    },
     {
       "file": "68-go-sqli-unsafe.go",
       "language": "go",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `SQ-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `SQ-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "69-go-sqli-safe.go", "expectedState": "clean" },
+    {
+      "file": "69-go-sqli-safe.go",
+      "expectedState": "clean"
+    },
     {
       "file": "70-go-path-traversal-unsafe.go",
       "language": "go",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `PT-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `PT-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "71-go-path-traversal-safe.go", "expectedState": "clean" },
+    {
+      "file": "71-go-path-traversal-safe.go",
+      "expectedState": "clean"
+    },
     {
       "file": "72-go-ssrf-unsafe.go",
       "language": "go",
       "family": "Injection & Execution",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `SR-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `SR-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "73-go-ssrf-safe.go", "expectedState": "clean" },
+    {
+      "file": "73-go-ssrf-safe.go",
+      "expectedState": "clean"
+    },
     {
       "file": "74-go-jwt-validation-unsafe.go",
       "language": "go",
       "family": "Identity & Auth Failures",
       "expectedState": "finding",
-      "requiredDetectionIncludes": ["Deterministic `JW-001`"],
-      "requiredPrimaryScanMode": "Static proof",
-      "requiredScanTierPostureIncludes": ["static: 1"],
-      "requiredCorroborationPostureIncludes": ["proven: 1"]
+      "requiredDetectionIncludes": [
+        "Confirmed by rule `JW-001`"
+      ],
+      "requiredScanTierPostureIncludes": [
+        "static: 1"
+      ],
+      "requiredCorroborationPostureIncludes": [
+        "proven: 1"
+      ]
     },
-    { "file": "75-go-jwt-validation-safe.go", "expectedState": "clean" }
+    {
+      "file": "75-go-jwt-validation-safe.go",
+      "expectedState": "clean"
+    }
   ]
 }
