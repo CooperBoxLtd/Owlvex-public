@@ -44,6 +44,13 @@ const candidateClean = candidateDemo.metrics.cleanFilesSatisfied + candidateBenc
 const baselineFindings = baselineDemo.metrics.findingFilesSatisfied + baselineBenchmarkApp.metrics.findingFilesSatisfied;
 const candidateFindings = candidateDemo.metrics.findingFilesSatisfied + candidateBenchmarkApp.metrics.findingFilesSatisfied;
 
+function sumMetric(metric) {
+  return {
+    baseline: baselineDemo.metrics[metric] + baselineBenchmarkApp.metrics[metric],
+    candidate: candidateDemo.metrics[metric] + candidateBenchmarkApp.metrics[metric],
+  };
+}
+
 console.log(`Baseline: ${baselineLabel}`);
 console.log(`Candidate: ${candidateLabel}`);
 console.log('');
@@ -80,6 +87,16 @@ printDelta(
   baselineDemo.metrics.corroborationPostureSatisfied + baselineBenchmarkApp.metrics.corroborationPostureSatisfied,
   candidateDemo.metrics.corroborationPostureSatisfied + candidateBenchmarkApp.metrics.corroborationPostureSatisfied,
 );
+const probeRun = sumMetric('probeQualityRun');
+const probeResolved = sumMetric('probeQualityResolved');
+const probeConfirmed = sumMetric('probeQualityConfirmedPaths');
+const probeRemoved = sumMetric('probeQualityRemovedOrDowngraded');
+const probeManual = sumMetric('probeQualityManualReviewResidue');
+printDelta('Probe quality resolved', probeResolved.baseline, probeResolved.candidate);
+printDelta('Probe quality run', probeRun.baseline, probeRun.candidate);
+printDelta('Probe confirmed paths', probeConfirmed.baseline, probeConfirmed.candidate);
+printDelta('Probe removed/downgraded candidates', probeRemoved.baseline, probeRemoved.candidate);
+printDelta('Probe manual-review residue', probeManual.baseline, probeManual.candidate);
 console.log('');
 console.log(`Demo reports: ${baselineLabel}=${path.resolve(demoBaseline)} | ${candidateLabel}=${path.resolve(demoCandidate)}`);
 console.log(`Benchmark-app reports: ${baselineLabel}=${path.resolve(benchmarkAppBaseline)} | ${candidateLabel}=${path.resolve(benchmarkAppCandidate)}`);
