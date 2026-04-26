@@ -1437,6 +1437,40 @@ function buildTargetRemovedVerificationMessage(targetUri: vscode.Uri, rescanned:
     return lines.filter(Boolean).join('\n');
 }
 
+function buildFixVerificationProbeNote(originalFinding: Finding, matchingFinding?: Finding): string | undefined {
+    const originalProbe = originalFinding.safeProbe;
+    if (!originalProbe?.fixVerificationReady) {
+        return undefined;
+    }
+
+    if (!matchingFinding) {
+        return `Fix verification probe: cleared; the original simulated ${originalProbe.family} path is no longer reported after Keep fix.`;
+    }
+
+    const postFixProbe = matchingFinding.safeProbe;
+    if (!postFixProbe) {
+        return 'Fix verification probe: no post-fix probe evidence was returned for the remaining finding; continue from the verification scan evidence.';
+    }
+
+    const guard = postFixProbe.guardKind
+        ? `${postFixProbe.guardStatus} (${postFixProbe.guardKind})`
+        : postFixProbe.guardStatus;
+
+    if (postFixProbe.verdict === 'confirmed') {
+        return `Fix verification probe: still confirms ${postFixProbe.family}; canary still reaches ${postFixProbe.sinkKind}, guard=${guard}. ${postFixProbe.reason}`;
+    }
+
+    if (postFixProbe.verdict === 'counter_evidence') {
+        return `Fix verification probe: found counter-evidence for ${postFixProbe.family}; guard=${guard}. ${postFixProbe.reason}`;
+    }
+
+    if (postFixProbe.verdict === 'unsupported') {
+        return `Fix verification probe: no longer supports ${postFixProbe.family}. ${postFixProbe.reason}`;
+    }
+
+    return `Fix verification probe: inconclusive for ${postFixProbe.family}. ${postFixProbe.reason}`;
+}
+
 function buildCombinedFixContinuationMessage(outcomes: AppliedFixVerificationOutcome[]): string | undefined {
     const unresolved = outcomes.filter(outcome =>
         outcome.status !== 'removed_clean'
@@ -2329,6 +2363,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         role: 'assistant',
                         content: [
                             buildTargetRemovedVerificationMessage(targetUri, rescanned),
+                            buildFixVerificationProbeNote(originalFinding),
                             ...providerComparisonNotes,
                         ].filter(Boolean).join('\n'),
                         kind: 'advisory',
@@ -2352,7 +2387,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     this.setPostFixContinuationTarget(targetUri, matchingFinding);
                     this.messages.push({
                         role: 'assistant',
-                        content: `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.\nFix continuation required before moving on. Regenerate the diff for this finding and verify again.`,
+                        content: [
+                            `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                            buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                            'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
+                        ].filter(Boolean).join('\n'),
                         kind: 'advisory',
                         actions: buildPostFixVerificationActions({
                             rescanned,
@@ -2374,7 +2413,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     this.setPostFixContinuationTarget(targetUri, matchingFinding);
                     this.messages.push({
                         role: 'assistant',
-                        content: `Verification complete: the finding is still present after the kept fix. File risk is ${rescanned.score.toFixed(1)}/10.\nFix continuation required before moving on. Regenerate the diff for this finding and verify again.`,
+                        content: [
+                            `Verification complete: the finding is still present after the kept fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
+                            buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                            'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
+                        ].filter(Boolean).join('\n'),
                         kind: 'advisory',
                         actions: buildPostFixVerificationActions({
                             rescanned,
@@ -2514,6 +2557,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     role: 'assistant',
                     content: [
                         buildTargetRemovedVerificationMessage(targetUri, rescanned),
+                        buildFixVerificationProbeNote(originalFinding),
                         ...providerComparisonNotes,
                     ].filter(Boolean).join('\n'),
                     kind: 'advisory',
@@ -2538,7 +2582,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.setPostFixContinuationTarget(targetUri, matchingFinding);
                 this.messages.push({
                     role: 'assistant',
-                    content: `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.\nFix continuation required before moving on. Regenerate the diff for this finding and verify again.`,
+                    content: [
+                        `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                        buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                        'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
+                    ].filter(Boolean).join('\n'),
                     kind: 'advisory',
                     actions: buildPostFixVerificationActions({
                         rescanned,
@@ -2561,7 +2609,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 this.setPostFixContinuationTarget(targetUri, matchingFinding);
                 this.messages.push({
                     role: 'assistant',
-                    content: `Verification complete: the finding is still present after the kept fix. File risk is ${rescanned.score.toFixed(1)}/10.\nFix continuation required before moving on. Regenerate the diff for this finding and verify again.`,
+                    content: [
+                        `Verification complete: the finding is still present after the kept fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
+                        buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                        'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
+                    ].filter(Boolean).join('\n'),
                     kind: 'advisory',
                     actions: buildPostFixVerificationActions({
                         rescanned,

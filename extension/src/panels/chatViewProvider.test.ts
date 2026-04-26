@@ -2127,6 +2127,20 @@ describe('parseChatIntent', () => {
                     provenance: 'ai',
                     likelihood: 'HIGH',
                     riskScore: 9,
+                    safeProbe: {
+                        family: 'sql-injection',
+                        techniques: ['sink_interception', 'static_execution_slice', 'fix_verification_probe'],
+                        verdict: 'confirmed',
+                        decision: 'promote',
+                        sinkKind: 'sql-query',
+                        sinkLine: 3,
+                        sourceKind: 'request-controlled SQL value',
+                        guardStatus: 'missing',
+                        canaryReachedSink: true,
+                        sideEffects: 'intercepted',
+                        fixVerificationReady: true,
+                        reason: 'Untrusted request data reaches a SQL query sink.',
+                    },
                 },
             },
             {
@@ -2164,6 +2178,7 @@ describe('parseChatIntent', () => {
         );
         expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Verifying the 2 updated files now');
         expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Verification complete: the reviewed finding is no longer present');
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Fix verification probe: cleared; the original simulated sql-injection path is no longer reported after Keep fix.');
     });
 
     it('summarizes continuation after a combined fix when any verified file still has findings', async () => {
@@ -3096,6 +3111,20 @@ describe('parseChatIntent', () => {
                             provenance: 'deterministic',
                             likelihood: 'HIGH',
                             riskScore: 9,
+                            safeProbe: {
+                                family: 'sql-injection',
+                                techniques: ['sink_interception', 'static_execution_slice', 'canary_propagation', 'fix_verification_probe'],
+                                verdict: 'confirmed',
+                                decision: 'promote',
+                                sinkKind: 'sql-query',
+                                sinkLine: 5,
+                                sourceKind: 'request-controlled SQL value',
+                                guardStatus: 'missing',
+                                canaryReachedSink: true,
+                                sideEffects: 'intercepted',
+                                fixVerificationReady: true,
+                                reason: 'Untrusted input still reaches the SQL sink.',
+                            },
                         }],
                         positives: [],
                         metrics: { critical: 0, high: 1, medium: 0, low: 0 },
@@ -3134,6 +3163,20 @@ describe('parseChatIntent', () => {
                 riskScore: 9,
                 canonicalId: 'owlvex.issue.sql_injection.001',
                 canonicalTitle: 'SQL Injection',
+                safeProbe: {
+                    family: 'sql-injection',
+                    techniques: ['sink_interception', 'static_execution_slice', 'canary_propagation', 'fix_verification_probe'],
+                    verdict: 'confirmed',
+                    decision: 'promote',
+                    sinkKind: 'sql-query',
+                    sinkLine: 1,
+                    sourceKind: 'request-controlled SQL value',
+                    guardStatus: 'missing',
+                    canaryReachedSink: true,
+                    sideEffects: 'intercepted',
+                    fixVerificationReady: true,
+                    reason: 'Untrusted request data reaches the SQL sink.',
+                },
             },
         };
 
@@ -3141,6 +3184,9 @@ describe('parseChatIntent', () => {
 
         expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
             'Verification complete: the finding is still present after the kept fix.',
+        );
+        expect((provider as any).messages[(provider as any).messages.length - 1].content).toContain(
+            'Fix verification probe: still confirms sql-injection; canary still reaches sql-query, guard=missing. Untrusted input still reaches the SQL sink.',
         );
     });
 
