@@ -626,6 +626,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- AI finding funnel: proposed 3 | after static/sink/probe filter 2 | after corroboration 1 | final AI survivors 1');
         expect(written).toContain('- Safe probes: run 2 | confirmed 1 | counter-evidence 1 | unsupported 0 | inconclusive 0');
         expect(written).toContain('- Probe decisions: promoted 1 | downgraded 0 | dropped 1 | manual review 0');
+        expect(written).toContain('- Probe quality signal: resolved 2/2 (100%) | confirmed paths 1 | AI candidates removed or downgraded 1 | manual review residue 0');
     });
 
     it('uses warning-aware summaries for clean files instead of degraded raw scan prose', async () => {

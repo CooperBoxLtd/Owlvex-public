@@ -390,6 +390,22 @@ function formatSinkFamilyCounts(telemetry: NonNullable<ScanResult['engineTelemet
         : 'none';
 }
 
+function buildProbeQualitySignal(telemetry: NonNullable<ScanResult['engineTelemetry']>): string {
+    const safeProbes = telemetry.safeProbes;
+    const resolved = safeProbes.confirmed + safeProbes.counterEvidence + safeProbes.unsupported;
+    const resolutionRate = safeProbes.run > 0
+        ? Math.round((resolved / safeProbes.run) * 100)
+        : 0;
+    const removedBeforeReport = safeProbes.dropped + safeProbes.downgraded;
+
+    return [
+        `- Probe quality signal: resolved ${resolved}/${safeProbes.run} (${resolutionRate}%)`,
+        `confirmed paths ${safeProbes.confirmed}`,
+        `AI candidates removed or downgraded ${removedBeforeReport}`,
+        `manual review residue ${safeProbes.inconclusive + safeProbes.manualReview}`,
+    ].join(' | ');
+}
+
 function buildEngineTelemetryLines(telemetry: NonNullable<ScanResult['engineTelemetry']> | undefined): string[] {
     if (!telemetry) {
         return [];
@@ -401,6 +417,7 @@ function buildEngineTelemetryLines(telemetry: NonNullable<ScanResult['engineTele
         `- AI finding funnel: proposed ${telemetry.aiFindings.proposed} | after static/sink/probe filter ${telemetry.aiFindings.afterStaticFilter} | after corroboration ${telemetry.aiFindings.afterCorroboration} | final AI survivors ${telemetry.aiFindings.finalSurvivors}`,
         `- Safe probes: run ${telemetry.safeProbes.run} | confirmed ${telemetry.safeProbes.confirmed} | counter-evidence ${telemetry.safeProbes.counterEvidence} | unsupported ${telemetry.safeProbes.unsupported} | inconclusive ${telemetry.safeProbes.inconclusive}`,
         `- Probe decisions: promoted ${telemetry.safeProbes.promoted} | downgraded ${telemetry.safeProbes.downgraded} | dropped ${telemetry.safeProbes.dropped} | manual review ${telemetry.safeProbes.manualReview}`,
+        buildProbeQualitySignal(telemetry),
     ];
 }
 
