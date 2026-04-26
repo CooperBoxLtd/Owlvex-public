@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.23
+
+- add local CSRF fallback evidence for authenticated repository mutations when AI omits the route finding
+- keep cookie-reading auth middleware out of promoted CSRF findings unless a state-changing route is proven
+- clarify AI review paths when verifier or skeptic passes return no verdict
+- disambiguate repeated audit findings with source/sink anchors in reports
+- improve report wording for safe-probe and finder-only evidence posture
+
 ## 0.1.21
 
 - make report confidence wording explicit for AI-backed findings
