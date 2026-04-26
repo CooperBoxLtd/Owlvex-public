@@ -6,11 +6,24 @@ function parseMarkdownReport(markdown) {
   const lines = markdown.split(/\r?\n/);
   const files = [];
   let targetLabel;
+  let probeQualitySignal;
 
   for (const line of lines) {
     const targetMatch = line.match(/^Target:\s+`(.+)`$/);
     if (targetMatch) {
       targetLabel = targetMatch[1];
+    }
+
+    const probeQualityMatch = line.match(/^-\s+Probe quality signal:\s+resolved\s+(\d+)\/(\d+)\s+\((\d+)%\)\s+\|\s+confirmed paths\s+(\d+)\s+\|\s+AI candidates removed or downgraded\s+(\d+)\s+\|\s+manual review residue\s+(\d+)$/);
+    if (probeQualityMatch && !probeQualitySignal) {
+      probeQualitySignal = {
+        resolved: Number(probeQualityMatch[1]),
+        run: Number(probeQualityMatch[2]),
+        resolutionRate: Number(probeQualityMatch[3]),
+        confirmedPaths: Number(probeQualityMatch[4]),
+        removedOrDowngraded: Number(probeQualityMatch[5]),
+        manualReviewResidue: Number(probeQualityMatch[6]),
+      };
     }
   }
 
@@ -86,7 +99,7 @@ function parseMarkdownReport(markdown) {
     });
   }
 
-  return { targetLabel, files };
+  return { targetLabel, files, probeQualitySignal };
 }
 
 function normalizeFile(value) {
@@ -181,6 +194,12 @@ function evaluateParsedReport(report, manifest) {
     proofStatusSatisfied: 0,
     proofPromotionChecks: 0,
     proofPromotionSatisfied: 0,
+    probeQualityResolved: report.probeQualitySignal?.resolved ?? 0,
+    probeQualityRun: report.probeQualitySignal?.run ?? 0,
+    probeQualityResolutionRate: report.probeQualitySignal?.resolutionRate ?? 0,
+    probeQualityConfirmedPaths: report.probeQualitySignal?.confirmedPaths ?? 0,
+    probeQualityRemovedOrDowngraded: report.probeQualitySignal?.removedOrDowngraded ?? 0,
+    probeQualityManualReviewResidue: report.probeQualitySignal?.manualReviewResidue ?? 0,
     totalFailures: 0,
   };
 
@@ -319,6 +338,7 @@ function printMetrics(metrics) {
   console.log(`Corroboration posture checks: ${metrics.corroborationPostureSatisfied}/${metrics.corroborationPostureChecks}`);
   console.log(`Proof status checks: ${metrics.proofStatusSatisfied}/${metrics.proofStatusChecks}`);
   console.log(`Proof promotion checks: ${metrics.proofPromotionSatisfied}/${metrics.proofPromotionChecks}`);
+  console.log(`Probe quality: resolved ${metrics.probeQualityResolved}/${metrics.probeQualityRun} (${metrics.probeQualityResolutionRate}%) | confirmed paths ${metrics.probeQualityConfirmedPaths} | removed/downgraded ${metrics.probeQualityRemovedOrDowngraded} | manual review residue ${metrics.probeQualityManualReviewResidue}`);
   console.log(`Total failures: ${metrics.totalFailures}`);
 }
 
