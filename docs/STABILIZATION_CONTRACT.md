@@ -393,6 +393,44 @@ Disagreement is product signal. It must not be hidden behind one flattened answe
 
 Owlvex should translate agreement and disagreement into report posture rather than fake certainty.
 
+### Safe Probe Rule
+
+For probeable AI-only findings, sink-first verification should be preferred over another free-form model opinion.
+
+Owlvex may use safe exploit probes when a finding has a concrete source, sink, and guard hypothesis. A safe probe replaces the dangerous sink with a recorder, sends canary input through the local path, and records whether the canary reached the sink or was blocked by a guard.
+
+Safe probes must not:
+
+- execute shell commands
+- make network calls
+- read or write real project files
+- connect to real databases
+- mutate user data
+
+Probe verdicts should feed the same adjudication posture:
+
+- `confirmed` -> stronger local evidence
+- `counter_evidence` -> suppress or downgrade
+- `unsupported` -> drop
+- `inconclusive` -> manual review
+
+Reports must label probe evidence as simulated and intercepted, not as live exploit execution.
+
+The probe contract recognizes these safe detonation techniques:
+
+- sink interception
+- canary propagation
+- guard verification
+- counterexample probes
+- static execution slices
+- taint trace probes
+- mutation probes
+- differential probes
+- fix verification probes
+- multi-file context probes
+
+The first runtime implementation may use static/intercepted evidence for some techniques. That is acceptable as long as reports do not imply live exploit execution.
+
 ---
 
 ## Anti-Overfitting Rule

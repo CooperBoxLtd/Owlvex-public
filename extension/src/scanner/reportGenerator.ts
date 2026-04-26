@@ -157,6 +157,59 @@ function buildEvidenceContractLines(finding: ScanResult['findings'][number], fil
     return lines;
 }
 
+function buildSafeProbeLines(finding: ScanResult['findings'][number]): string[] {
+    const probe = finding.safeProbe;
+    if (!probe) {
+        return [];
+    }
+
+    const lines = [
+        '- Safe exploit probe: simulated',
+        '- Sink execution: intercepted',
+        `- Probe techniques: ${probe.techniques.join(', ')}`,
+        `- Probe verdict: ${probe.verdict.replace(/_/g, ' ')}`,
+        `- Probe decision: ${probe.decision.replace(/_/g, ' ')}`,
+        `- Probe sink: ${probe.sinkKind}${probe.sinkLine ? ` at L${probe.sinkLine}` : ''}`,
+        `- Canary reached sink: ${probe.canaryReachedSink ? 'yes' : 'no'}`,
+        `- Guard observed: ${probe.guardStatus}${probe.guardKind ? ` ${probe.guardKind}` : ''}`,
+        `- Probe reason: ${probe.reason}`,
+    ];
+    if (probe.canary) {
+        lines.push(`- Canary: ${probe.canary}`);
+    }
+    if (probe.counterexample) {
+        const parts = [
+            probe.counterexample.unsafeInput ? `unsafe input \`${probe.counterexample.unsafeInput}\`` : '',
+            probe.counterexample.safeInput ? `safe input \`${probe.counterexample.safeInput}\`` : '',
+            typeof probe.counterexample.unsafeBlocked === 'boolean' ? `unsafe blocked: ${probe.counterexample.unsafeBlocked ? 'yes' : 'no'}` : '',
+            typeof probe.counterexample.safeAllowed === 'boolean' ? `safe allowed: ${probe.counterexample.safeAllowed ? 'yes' : 'no'}` : '',
+        ].filter(Boolean);
+        if (parts.length) {
+            lines.push(`- Counterexample probe: ${parts.join(' | ')}`);
+        }
+    }
+    if (probe.executionSlice) {
+        lines.push(`- Execution slice: ${probe.executionSlice.kind}${probe.executionSlice.target ? ` (${probe.executionSlice.target})` : ''}; dangerous capabilities blocked: ${probe.executionSlice.dangerousCapabilitiesBlocked ? 'yes' : 'no'}`);
+    }
+    if (probe.taintTrace?.length) {
+        lines.push(`- Taint trace: ${probe.taintTrace.join(' -> ')}`);
+    }
+    if (probe.mutationCount) {
+        lines.push(`- Mutation probes: ${probe.mutationCount}`);
+    }
+    if (probe.differentialTarget) {
+        lines.push(`- Differential target: ${probe.differentialTarget}`);
+    }
+    if (probe.fixVerificationReady) {
+        lines.push('- Fix verification probe: ready after Keep fix');
+    }
+    if (probe.contextDepth) {
+        lines.push(`- Probe context: ${probe.contextDepth}`);
+    }
+
+    return lines;
+}
+
 type ProofStatus = NonNullable<NonNullable<ScanResult['findings'][number]['evidenceContract']>['proofStatus']>;
 
 function getFindingProofStatus(finding: ScanResult['findings'][number], file?: string): ProofStatus {
@@ -1305,6 +1358,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                     lines.push(`- Proof status: ${getProofStatusDisplayLabel(getFindingProofStatus(finding, item.file))}`);
                 }
                 lines.push(...buildEvidenceContractLines(finding, item.file));
+                lines.push(...buildSafeProbeLines(finding));
                 lines.push(...buildAiReviewTrailLines(finding));
                 if (needsManualReview(finding)) {
                     lines.push('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');

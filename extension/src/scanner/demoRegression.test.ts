@@ -212,9 +212,9 @@ describe('Demo fixture regression coverage', () => {
                     content: JSON.stringify({
                         reviews: [{
                             id: 'safe-fetch-ssrf',
-                            verdict: 'reject',
-                            confidence: 0.92,
-                            reason: 'The safe route calls fetchAllowedPartner with a partner key, not a request-controlled URL.',
+                            verdict: 'support',
+                            confidence: 0.95,
+                            reason: 'The route still passes request input toward an outbound request helper.',
                         }],
                     }),
                     tokenCount: 12,
@@ -241,6 +241,286 @@ describe('Demo fixture regression coverage', () => {
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.ssrf.001');
         expect(result.findings[0].line).toBe(8);
         expect(result.findings.some(f => f.id === 'safe-fetch-ssrf')).toBe(false);
+    });
+
+    it('drops verifier-supported SQL injection overcalls when the sink probe sees parameter binding', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn()
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        score: 7,
+                        summary: 'Possible SQL injection detected.',
+                        findings: [{
+                            id: 'safe-sql-overcall',
+                            line: 7,
+                            line_end: 10,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A03-SQLI',
+                            title: 'SQL injection through user-controlled email',
+                            explanation: 'The email value reaches a SQL query.',
+                            threat: 'Attackers may alter the query.',
+                            fix: 'Use parameterized queries.',
+                            confidence: 0.75,
+                            issue_id: 'owlvex.issue.sql_injection.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['User input is used in a query call.'],
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    }),
+                    tokenCount: 42,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{
+                            id: 'safe-sql-overcall',
+                            verdict: 'support',
+                            confidence: 0.91,
+                            reason: 'The user-controlled email value reaches the db.query call.',
+                        }],
+                    }),
+                    tokenCount: 12,
+                }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\07-sqli-safe.js',
+            'javascript',
+            readRepoFixture('demo', '07-sqli-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('drops verifier-supported command injection overcalls when the sink probe sees argv separation', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn()
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        score: 7,
+                        summary: 'Possible command injection detected.',
+                        findings: [{
+                            id: 'safe-command-overcall',
+                            line: 8,
+                            line_end: 8,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A03-CMD',
+                            title: 'Command injection through username',
+                            explanation: 'The username reaches process execution.',
+                            threat: 'Attackers may execute shell syntax.',
+                            fix: 'Use argument arrays.',
+                            confidence: 0.76,
+                            issue_id: 'owlvex.issue.command_injection.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['User input is used in process execution.'],
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    }),
+                    tokenCount: 42,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{
+                            id: 'safe-command-overcall',
+                            verdict: 'support',
+                            confidence: 0.91,
+                            reason: 'The username reaches a process execution call.',
+                        }],
+                    }),
+                    tokenCount: 12,
+                }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\09-command-injection-safe.js',
+            'javascript',
+            readRepoFixture('demo', '09-command-injection-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('drops verifier-supported path traversal overcalls when the sink probe sees a file allowlist', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn()
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        score: 7,
+                        summary: 'Possible path traversal detected.',
+                        findings: [{
+                            id: 'safe-path-overcall',
+                            line: 17,
+                            line_end: 20,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-PATH',
+                            title: 'Path traversal through selected file',
+                            explanation: 'The selected filename reaches sendFile.',
+                            threat: 'Attackers may access arbitrary files.',
+                            fix: 'Constrain file names.',
+                            confidence: 0.78,
+                            issue_id: 'owlvex.issue.path_traversal.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['A request-controlled selector influences a file path.'],
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    }),
+                    tokenCount: 42,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{
+                            id: 'safe-path-overcall',
+                            verdict: 'support',
+                            confidence: 0.91,
+                            reason: 'The selected value influences a file sent to the user.',
+                        }],
+                    }),
+                    tokenCount: 12,
+                }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\29-path-traversal-safe.js',
+            'javascript',
+            readRepoFixture('demo', '29-path-traversal-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('drops verifier-supported weak JWT overcalls when the sink probe sees explicit verification', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn()
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        score: 7,
+                        summary: 'Possible weak JWT validation detected.',
+                        findings: [{
+                            id: 'safe-jwt-overcall',
+                            line: 6,
+                            line_end: 10,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A07-JWT',
+                            title: 'Weak JWT validation',
+                            explanation: 'The token is read for claims.',
+                            threat: 'Attackers may forge claims.',
+                            fix: 'Verify token signatures and claims.',
+                            confidence: 0.77,
+                            issue_id: 'owlvex.issue.weak_jwt_validation.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['JWT claims are used.'],
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                    }),
+                    tokenCount: 42,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{
+                            id: 'safe-jwt-overcall',
+                            verdict: 'support',
+                            confidence: 0.91,
+                            reason: 'The token is accepted and claims are returned.',
+                        }],
+                    }),
+                    tokenCount: 12,
+                }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\25-jwt-validation-safe.js',
+            'javascript',
+            readRepoFixture('demo', '25-jwt-validation-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
     });
 
     it('keeps the benchmark-app server shell clean from route-mount and logging overclaims', async () => {

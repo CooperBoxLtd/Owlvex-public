@@ -55,9 +55,54 @@ export interface Finding {
     riskScore?: number;
     proofStatus?: EvidenceProofStatus;
     evidenceContract?: EvidenceContract;
+    safeProbe?: SafeExploitProbeResult;
 }
 
 export type EvidenceProofStatus = 'static_proven' | 'ai_plausible' | 'counter_evidence_found' | 'unproven_extra';
+
+export type SafeProbeTechnique =
+    | 'sink_interception'
+    | 'canary_propagation'
+    | 'guard_verification'
+    | 'counterexample_probe'
+    | 'static_execution_slice'
+    | 'taint_trace_probe'
+    | 'mutation_probe'
+    | 'differential_probe'
+    | 'fix_verification_probe'
+    | 'multi_file_context_probe';
+
+export interface SafeExploitProbeResult {
+    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation';
+    techniques: SafeProbeTechnique[];
+    verdict: 'confirmed' | 'counter_evidence' | 'unsupported' | 'inconclusive';
+    decision: 'promote' | 'downgrade' | 'drop' | 'manual_review';
+    sinkKind: string;
+    sinkLine?: number;
+    sourceKind?: string;
+    guardStatus: 'missing' | 'present' | 'unknown';
+    guardKind?: string;
+    canaryReachedSink: boolean;
+    sideEffects: 'intercepted';
+    canary?: string;
+    counterexample?: {
+        unsafeInput?: string;
+        safeInput?: string;
+        unsafeBlocked?: boolean;
+        safeAllowed?: boolean;
+    };
+    executionSlice?: {
+        kind: 'static' | 'intercepted-function' | 'intercepted-route';
+        target?: string;
+        dangerousCapabilitiesBlocked: boolean;
+    };
+    taintTrace?: string[];
+    mutationCount?: number;
+    differentialTarget?: string;
+    fixVerificationReady?: boolean;
+    contextDepth?: 'single-file' | 'multi-file';
+    reason: string;
+}
 
 export interface EvidenceContract {
     issueType: string;
@@ -1174,6 +1219,603 @@ function finalizeAiFindingReview(state: AiFindingReviewState): Finding | undefin
     };
 }
 
+function getProbeIssueFamily(finding: Finding): SafeExploitProbeResult['family'] | undefined {
+    const haystack = [
+        finding.canonicalId,
+        finding.canonicalTitle,
+        finding.title,
+        finding.ruleCode,
+        finding.evidenceContract?.issueType,
+    ].join(' ').toLowerCase();
+
+    if (/ssrf|server-side request forgery|request-forgery/.test(haystack)) {
+        return 'ssrf';
+    }
+    if (/sql|sqli|sql injection/.test(haystack)) {
+        return 'sql-injection';
+    }
+    if (/command|shell|exec/.test(haystack)) {
+        return 'command-injection';
+    }
+    if (/path traversal|directory traversal|path-traversal/.test(haystack)) {
+        return 'path-traversal';
+    }
+    if (/jwt|token validation|weak_jwt/.test(haystack)) {
+        return 'jwt-validation';
+    }
+
+    return undefined;
+}
+
+function hasRequestControlledSignal(snippet: string): boolean {
+    return /\b(?:req|request)\.(?:body|query|params|headers|cookies)\b/i.test(snippet)
+        || /\b(?:request\.GET|request\.POST|request\.args|request\.form)\b/i.test(snippet)
+        || /\b(?:r\.URL\.Query|r\.FormValue|Request\.(?:Query|Form|Body)|HttpServletRequest)\b/i.test(snippet);
+}
+
+function buildSafeProbeResult(params: {
+    family: SafeExploitProbeResult['family'];
+    verdict: SafeExploitProbeResult['verdict'];
+    decision: SafeExploitProbeResult['decision'];
+    sinkKind: string;
+    sinkLine?: number;
+    sourceKind?: string;
+    guardStatus: SafeExploitProbeResult['guardStatus'];
+    guardKind?: string;
+    canaryReachedSink: boolean;
+    techniques?: SafeProbeTechnique[];
+    canary?: string;
+    counterexample?: SafeExploitProbeResult['counterexample'];
+    executionSlice?: SafeExploitProbeResult['executionSlice'];
+    taintTrace?: string[];
+    mutationCount?: number;
+    differentialTarget?: string;
+    fixVerificationReady?: boolean;
+    contextDepth?: SafeExploitProbeResult['contextDepth'];
+    reason: string;
+}): SafeExploitProbeResult {
+    const techniques = new Set<SafeProbeTechnique>(params.techniques ?? []);
+    techniques.add('sink_interception');
+    techniques.add('static_execution_slice');
+    if (params.canary || params.canaryReachedSink) {
+        techniques.add('canary_propagation');
+    }
+    if (params.guardStatus !== 'unknown') {
+        techniques.add('guard_verification');
+    }
+    if (params.counterexample) {
+        techniques.add('counterexample_probe');
+    }
+    if (params.taintTrace?.length || params.sourceKind) {
+        techniques.add('taint_trace_probe');
+    }
+    if (typeof params.mutationCount === 'number' && params.mutationCount > 0) {
+        techniques.add('mutation_probe');
+    }
+    if (params.differentialTarget) {
+        techniques.add('differential_probe');
+    }
+    if (params.fixVerificationReady) {
+        techniques.add('fix_verification_probe');
+    }
+    if (params.contextDepth === 'multi-file') {
+        techniques.add('multi_file_context_probe');
+    }
+
+    return {
+        ...params,
+        techniques: [...techniques],
+        sideEffects: 'intercepted',
+    };
+}
+
+function runSsrfSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 2);
+    const widerSnippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasFetchSink = /\b(?:fetch|http\.request|https\.request|axios\.(?:get|post|request)|request)\s*\(/i.test(snippet)
+        || /\bfetchAllowedPartner\s*\(/i.test(snippet);
+    const hasDirectRequestSource = hasRequestControlledSignal(snippet);
+    const hasAllowlistGuard = /\b(?:fetchAllowedPartner|allowedPartner|allowedPartners|allowedHosts|allowlist|allowList|trustedHosts|partnerMap|isAllowedHost|validateOutboundUrl|blockInternalAddress)\b/i.test(snippet);
+
+    if (!hasFetchSink) {
+        return buildSafeProbeResult({
+            family: 'ssrf',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'outbound-request',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No outbound request sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasAllowlistGuard && !/\bfetch\s*\(\s*(?:req|request)\.(?:body|query|params)/i.test(snippet)) {
+        return buildSafeProbeResult({
+            family: 'ssrf',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'outbound-request',
+            sinkLine,
+            sourceKind: hasDirectRequestSource ? 'request-controlled partner key' : undefined,
+            guardStatus: 'present',
+            guardKind: 'allowlist',
+            canaryReachedSink: false,
+            canary: 'http://169.254.169.254/latest/meta-data',
+            counterexample: {
+                unsafeInput: 'http://169.254.169.254/latest/meta-data',
+                safeInput: 'known partner key',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'outbound request path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'allowlisted partner helper',
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: 'The claimed SSRF path uses an allowlisted partner/helper rather than a request-controlled URL sink.',
+        });
+    }
+
+    if (hasDirectRequestSource || /\bfetch\s*\(\s*(?:req|request)\.(?:body|query|params)/i.test(widerSnippet)) {
+        return buildSafeProbeResult({
+            family: 'ssrf',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'outbound-request',
+            sinkLine,
+            sourceKind: 'request-controlled URL',
+            guardStatus: hasAllowlistGuard ? 'unknown' : 'missing',
+            guardKind: hasAllowlistGuard ? 'possible allowlist' : undefined,
+            canaryReachedSink: true,
+            canary: 'http://169.254.169.254/latest/meta-data',
+            counterexample: {
+                unsafeInput: 'http://169.254.169.254/latest/meta-data',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'outbound request path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['request-controlled destination', 'outbound request sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: 'A request-controlled destination can reach an intercepted outbound request sink.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'ssrf',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'outbound-request',
+        sinkLine,
+        guardStatus: hasAllowlistGuard ? 'present' : 'unknown',
+        guardKind: hasAllowlistGuard ? 'allowlist' : undefined,
+        canaryReachedSink: false,
+        reason: 'An outbound request sink is visible, but the probe could not prove request-controlled destination flow.',
+    });
+}
+
+function runSqlSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 4);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasSqlSink = /\.(?:query|execute|raw|exec|Query|QueryRow|Exec)\s*\(/.test(snippet)
+        || /\b(?:Statement|PreparedStatement|SqlCommand)\b/.test(snippet);
+    const hasRequestSource = hasRequestControlledSignal(snippet);
+
+    if (!hasSqlSink) {
+        return buildSafeProbeResult({
+            family: 'sql-injection',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'sql-query',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No SQL execution sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasParameterizedSqlUsage(snippet)) {
+        return buildSafeProbeResult({
+            family: 'sql-injection',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'sql-query',
+            sinkLine,
+            sourceKind: hasRequestSource ? 'request-controlled value' : undefined,
+            guardStatus: 'present',
+            guardKind: 'parameterization',
+            canaryReachedSink: false,
+            canary: "' OR '1'='1",
+            counterexample: {
+                unsafeInput: "' OR '1'='1",
+                safeInput: 'bound parameter value',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'SQL execution path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'parameterized query',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The SQL sink uses parameter binding, so the canary value would be passed as data rather than executable SQL.',
+        });
+    }
+
+    const hasConcatenatedSql = /(?:select|insert|update|delete)[\s\S]{0,220}(?:\+|\$\{|%|String\.format|fmt\.Sprintf|interpolation)/i.test(snippet)
+        || /\.(?:query|execute|raw|exec|Query|QueryRow|Exec)\s*\([^,\r\n]*(?:req|request|params|query|body)/i.test(snippet);
+
+    if (hasRequestSource || hasConcatenatedSql) {
+        return buildSafeProbeResult({
+            family: 'sql-injection',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'sql-query',
+            sinkLine,
+            sourceKind: hasRequestSource ? 'request-controlled value' : 'dynamic SQL value',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: "' OR '1'='1",
+            counterexample: {
+                unsafeInput: "' OR '1'='1",
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'SQL execution path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: [hasRequestSource ? 'request-controlled value' : 'dynamic value', 'SQL execution sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'A dynamic value can reach an intercepted SQL execution sink without visible parameter binding.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'sql-injection',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'sql-query',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'A SQL sink is visible, but the probe could not prove request-controlled SQL construction.',
+    });
+}
+
+function runCommandSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 4);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasProcessSink = /\b(?:exec|execFile|spawn|subprocess\.(?:run|Popen|call|check_output|check_call)|ProcessBuilder|Process\.Start|exec\.Command)\s*\(/.test(snippet);
+    const hasShellSink = /\bexec\s*\(/.test(snippet)
+        || /\bspawn\s*\([\s\S]{0,220}?\{\s*[^}]*\bshell\s*:\s*true\b/.test(snippet)
+        || /\bshell\s*=\s*True\b/.test(snippet)
+        || /\bexec\.Command\s*\(\s*"sh"\s*,\s*"-c"/.test(snippet);
+
+    if (!hasProcessSink) {
+        return buildSafeProbeResult({
+            family: 'command-injection',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'process-execution',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No process execution sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasSafeProcessExecution(snippet)) {
+        return buildSafeProbeResult({
+            family: 'command-injection',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'process-execution',
+            sinkLine,
+            sourceKind: 'argument value',
+            guardStatus: 'present',
+            guardKind: 'argv separation',
+            canaryReachedSink: false,
+            canary: 'OWLVEX_CANARY; whoami',
+            counterexample: {
+                unsafeInput: 'OWLVEX_CANARY; whoami',
+                safeInput: 'argument array value',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'process execution path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'argv-separated process call',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The process call passes user-controlled data as an argument array or shell-disabled execution path, not shell syntax.',
+        });
+    }
+
+    if (hasShellSink || /[`'"][\s\S]{0,180}\$\{|\+/.test(snippet)) {
+        return buildSafeProbeResult({
+            family: 'command-injection',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'process-execution',
+            sinkLine,
+            sourceKind: hasRequestControlledSignal(snippet) ? 'request-controlled command input' : 'dynamic command input',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'OWLVEX_CANARY; whoami',
+            counterexample: {
+                unsafeInput: 'OWLVEX_CANARY; whoami',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'process execution path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['dynamic command input', 'process execution sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'Dynamic input can reach an intercepted shell-interpreted process execution sink.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'command-injection',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'process-execution',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'A process sink is visible, but the probe could not prove shell-interpreted dynamic input.',
+    });
+}
+
+function hasPathAllowlist(snippet: string): boolean {
+    return /\b(?:SAFE_FILES|allowedFiles|allowedPaths|fileMap|downloadMap)\b/.test(snippet)
+        && /\[(?:req|request)\.(?:query|body|params)|\.get\s*\(\s*(?:req|request)\.(?:query|body|params)/i.test(snippet);
+}
+
+function runPathTraversalSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasFileSink = /\b(?:sendFile|download|readFile|createReadStream|writeFile|open|send_from_directory|FileStream|os\.Open)\s*\(/i.test(snippet);
+    const hasRequestPath = hasRequestControlledSignal(snippet);
+    const hasBoundary = hasPathBoundaryCheck(snippet);
+    const hasAllowlist = hasPathAllowlist(snippet);
+
+    if (!hasFileSink) {
+        return buildSafeProbeResult({
+            family: 'path-traversal',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'filesystem-path',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No filesystem path sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasBoundary || hasAllowlist) {
+        return buildSafeProbeResult({
+            family: 'path-traversal',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'filesystem-path',
+            sinkLine,
+            sourceKind: hasRequestPath ? 'request-controlled file selector' : undefined,
+            guardStatus: 'present',
+            guardKind: hasAllowlist ? 'file allowlist' : 'base-directory boundary',
+            canaryReachedSink: false,
+            canary: '../../etc/passwd',
+            counterexample: {
+                unsafeInput: '../../etc/passwd',
+                safeInput: hasAllowlist ? 'known file id' : 'normalized in-root path',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'filesystem path sink',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: hasAllowlist ? 'file allowlist' : 'base-directory guard',
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: hasAllowlist
+                ? 'The request value selects a known-safe filename from an allowlist before the filesystem sink.'
+                : 'The path is normalized and checked against an allowed base before the filesystem sink.',
+        });
+    }
+
+    if (hasRequestPath && /\b(?:path\.)?(?:join|resolve|normalize)\s*\([\s\S]{0,220}(?:req|request)\.(?:query|body|params)/i.test(snippet)) {
+        return buildSafeProbeResult({
+            family: 'path-traversal',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'filesystem-path',
+            sinkLine,
+            sourceKind: 'request-controlled path',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: '../../etc/passwd',
+            counterexample: {
+                unsafeInput: '../../etc/passwd',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'filesystem path sink',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['request-controlled path', 'filesystem path sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: 'A request-controlled path can reach an intercepted filesystem sink without a visible base-directory or allowlist guard.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'path-traversal',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'filesystem-path',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'A filesystem sink is visible, but the probe could not prove request-controlled path traversal.',
+    });
+}
+
+function runJwtSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasDecode = /\bjwt\.decode\s*\(|\bParseUnverified\s*\(|\bdecodeSessionTokenWithoutVerification\s*\(/i.test(snippet);
+    const hasVerify = /\bjwt\.verify\s*\(/i.test(snippet)
+        || hasManualJwtVerification(snippet)
+        || hasVerifiedPythonJwtDecode(snippet)
+        || hasVerifiedJavaJwtDecode(snippet)
+        || hasVerifiedGoJwtDecode(snippet);
+
+    if (hasVerify) {
+        return buildSafeProbeResult({
+            family: 'jwt-validation',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'jwt-claims',
+            sinkLine,
+            sourceKind: 'token claims',
+            guardStatus: 'present',
+            guardKind: 'signature/issuer/audience verification',
+            canaryReachedSink: false,
+            canary: 'forged unsigned JWT with elevated role',
+            counterexample: {
+                unsafeInput: 'forged unsigned JWT',
+                safeInput: 'verified signed JWT',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'JWT claim trust boundary',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'verified token path',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The token is verified with explicit validation before claims are trusted.',
+        });
+    }
+
+    if (hasDecode) {
+        return buildSafeProbeResult({
+            family: 'jwt-validation',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'jwt-claims',
+            sinkLine,
+            sourceKind: 'unverified token claims',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'forged unsigned JWT with elevated role',
+            counterexample: {
+                unsafeInput: 'forged unsigned JWT',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'JWT claim trust boundary',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['unverified token claims', 'claim trust boundary'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'Unverified token claims can reach the trust boundary without signature validation.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'jwt-validation',
+        verdict: 'unsupported',
+        decision: 'drop',
+        sinkKind: 'jwt-claims',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'No JWT decode or claim trust boundary is visible at the claimed span.',
+    });
+}
+
+function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeResult | undefined {
+    if (finding.provenance !== 'ai') {
+        return undefined;
+    }
+
+    const family = getProbeIssueFamily(finding);
+    switch (family) {
+        case 'ssrf':
+            return runSsrfSafeProbe(code, finding);
+        case 'sql-injection':
+            return runSqlSafeProbe(code, finding);
+        case 'command-injection':
+            return runCommandSafeProbe(code, finding);
+        case 'path-traversal':
+            return runPathTraversalSafeProbe(code, finding);
+        case 'jwt-validation':
+            return runJwtSafeProbe(code, finding);
+        default:
+            return undefined;
+    }
+}
+
+function applySafeExploitProbes(code: string, findings: Finding[]): Finding[] {
+    return findings
+        .map(finding => {
+            const probe = runSafeExploitProbe(code, finding);
+            if (!probe) {
+                return finding;
+            }
+
+            if (probe.decision === 'drop') {
+                return undefined;
+            }
+
+            return {
+                ...finding,
+                safeProbe: probe,
+                proofStatus: probe.verdict === 'confirmed' ? 'ai_plausible' as const : 'unproven_extra' as const,
+                corroboration: probe.verdict === 'confirmed' ? finding.corroboration : 'PARTIAL' as const,
+                confidence: probe.verdict === 'confirmed' ? Math.max(finding.confidence, 0.9) : Math.min(finding.confidence, 0.69),
+            };
+        })
+        .filter((finding): finding is Finding => Boolean(finding));
+}
+
 function normalizeEvidenceExpression(value: string | undefined): string {
     return String(value ?? '')
         .replace(/[`'"]/g, '')
@@ -1527,13 +2169,13 @@ export class ScanEngine {
                 }
             }
 
-            const keptAi = entry.filteredAiFindings
+            const keptAi = applySafeExploitProbes(entry.context.code, entry.filteredAiFindings
                 .map(finding => finalizeAiFindingReview({
                     finding,
                     verifier: verifierMap.get(finding.id),
                     skeptic: skepticMap.get(finding.id),
                 }))
-                .filter((finding): finding is Finding => Boolean(finding));
+                .filter((finding): finding is Finding => Boolean(finding)));
 
             warnings.push(
                 ...verifierWarnings.filter(warning =>
@@ -1904,13 +2546,13 @@ export class ScanEngine {
             }
         }
 
-        const kept = params.findings
+        const kept = applySafeExploitProbes(params.code, params.findings
             .map(finding => finalizeAiFindingReview({
                 finding,
                 verifier: verifierMap.get(finding.id),
                 skeptic: skepticMap.get(finding.id),
             }))
-            .filter((finding): finding is Finding => Boolean(finding));
+            .filter((finding): finding is Finding => Boolean(finding)));
 
         return {
             findings: kept,

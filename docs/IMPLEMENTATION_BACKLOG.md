@@ -366,6 +366,41 @@ Interpretation:
 - role confidence is always tied to a verdict
 - pass outcome telemetry is sufficient to answer "how often did verifier or skeptic change the decision?"
 
+## Workstream 0.92: Safe Exploit Probes For AI Findings
+
+### Goal
+
+Reduce AI false positives by validating AI-only findings with safe source-to-sink probes before promotion.
+
+This workstream is defined in [SAFE_EXPLOIT_PROBE_PLAN.md](D:/Dev/repos/CodeScanner/docs/SAFE_EXPLOIT_PROBE_PLAN.md). The short version is: Owlvex should verify probeable AI findings by intercepting dangerous sinks, sending canary input through a local harness, and recording whether the canary reaches the sink or is blocked by a guard. No real payload detonation, network request, process execution, database query, or filesystem side effect is allowed.
+
+### Product Rules
+
+- sink-first evidence beats generic AI confidence
+- probes must be local and non-executing
+- probe verdicts feed AI adjudication:
+  - `confirmed` -> promote
+  - `counter_evidence` -> downgrade or suppress
+  - `unsupported` -> drop
+  - `inconclusive` -> manual review
+- reports must say `simulated` or `intercepted` so users do not think Owlvex executed an exploit
+
+### Initial Scope
+
+- SSRF
+- SQL injection
+- command injection
+- path traversal
+- weak JWT validation
+
+### Acceptance Criteria
+
+- AI-only high-risk findings in supported families include source/sink/guard probe evidence before Fix First promotion
+- safe wrappers next to unsafe sinks remain clean
+- benchmark-app includes at least one unsafe and one safe probe case per initial sink family
+- probe outcome records are metadata-safe and do not include raw source
+- false-positive reduction can be measured from dropped or downgraded AI candidates
+
 ## Workstream 0.85: Benchmarking Department
 
 ### Goal
