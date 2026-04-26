@@ -2166,6 +2166,155 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Verification complete: the reviewed finding is no longer present');
     });
 
+    it('summarizes continuation after a combined fix when any verified file still has findings', async () => {
+        const originals = new Map([
+            ['d:\\repo\\src\\one.js', 'db.query(req.query.id);'],
+            ['d:\\repo\\src\\two.js', 'fetch(req.query.url);'],
+        ]);
+        const patched = new Map([
+            ['d:\\repo\\src\\one.js', 'const id = Number(req.query.id);\ndb.query(id);'],
+            ['d:\\repo\\src\\two.js', 'const target = allowlisted(req.query.url);\nfetch(target);'],
+        ]);
+        let applied = false;
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockImplementation(async (uri: any) => ({
+            uri,
+            fileName: uri.fsPath,
+            getText: () => applied
+                ? patched.get(uri.fsPath) ?? originals.get(uri.fsPath) ?? ''
+                : originals.get(uri.fsPath) ?? '',
+        }));
+        (vscode.workspace.applyEdit as jest.Mock).mockImplementation(async () => {
+            applied = true;
+            return true;
+        });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                if (target.fsPath === 'd:\\repo\\src\\two.js') {
+                    return {
+                        status: 'completed',
+                        uri: target,
+                        result: {
+                            score: 8,
+                            findings: [{
+                                id: 'remaining-ssrf',
+                                line: 2,
+                                lineEnd: 2,
+                                severity: 'HIGH',
+                                framework: 'OWASP',
+                                ruleCode: 'GR-003',
+                                title: 'Server-side request forgery through untrusted destination',
+                                canonicalId: 'owlvex.issue.ssrf.001',
+                                canonicalTitle: 'Server-side request forgery through untrusted destination',
+                                explanation: 'The destination can still reach an outbound request.',
+                                threat: 'Internal services may be reachable.',
+                                fix: 'Constrain outbound requests to approved destinations.',
+                                confidence: 0.9,
+                                provenance: 'ai',
+                                likelihood: 'HIGH',
+                                riskScore: 8,
+                            }],
+                            positives: [],
+                            metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                            durationMs: 10,
+                            model: 'owlvex-test-model',
+                            provider: 'test-provider',
+                            warnings: [],
+                            summary: '1 finding detected.',
+                        },
+                    };
+                }
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 0,
+                        findings: [],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: 'No findings detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
+
+        const complete = jest.fn()
+            .mockResolvedValueOnce({ content: patched.get('d:\\repo\\src\\one.js') })
+            .mockResolvedValueOnce({ content: patched.get('d:\\repo\\src\\two.js') });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await provider.generateBatchFixPreview([
+            {
+                targetPath: 'd:\\repo\\src\\one.js',
+                finding: {
+                    id: 'finding-sqli',
+                    line: 3,
+                    lineEnd: 3,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'SQ-001',
+                    title: 'SQL Injection',
+                    canonicalId: 'owlvex.issue.sql_injection.001',
+                    explanation: 'Unsafe SQL.',
+                    threat: 'Data exposure.',
+                    fix: 'Use parameters.',
+                    confidence: 0.9,
+                    provenance: 'ai',
+                    likelihood: 'HIGH',
+                    riskScore: 9,
+                },
+            },
+            {
+                targetPath: 'd:\\repo\\src\\two.js',
+                finding: {
+                    id: 'finding-ssrf',
+                    line: 4,
+                    lineEnd: 4,
+                    severity: 'HIGH',
+                    framework: 'OWASP',
+                    ruleCode: 'GR-003',
+                    title: 'SSRF',
+                    canonicalId: 'owlvex.issue.ssrf.001',
+                    explanation: 'Unsafe outbound request.',
+                    threat: 'Internal network reachability.',
+                    fix: 'Allow-list destinations.',
+                    confidence: 0.9,
+                    provenance: 'ai',
+                    likelihood: 'HIGH',
+                    riskScore: 9,
+                },
+            },
+        ] as any);
+
+        await provider.applyPendingFixPreview();
+
+        const contents = (provider as any).messages.map((message: any) => message.content).join('\n');
+        expect(contents).toContain('Verification complete: the finding still exists, but its risk dropped from 9/10 to 8/10.');
+        expect(contents).toContain('Fix continuation required across 1 verified file before moving on.');
+        expect(contents).toContain('Next fix target: Server-side request forgery through untrusted destination (8/10 risk) in d:\\repo\\src\\two.js at line 2.');
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Preview next fix', kind: 'generateFixPreview' }),
+            expect.objectContaining({ label: 'Scan workspace', kind: 'quickAction', quickAction: 'scanFolder' }),
+        ]));
+    });
+
     it('allows broader rewrites for latest-scan batch fixes without tripping the finding-anchored guardrail', async () => {
         const targetUri = vscode.Uri.file('d:\\repo\\src\\sessionHost.js');
         const originalLines = Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`).join('\n');
