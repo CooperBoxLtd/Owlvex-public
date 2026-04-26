@@ -342,18 +342,47 @@ function printMetrics(metrics) {
   console.log(`Total failures: ${metrics.totalFailures}`);
 }
 
-function writeLatestEvaluation(profile, reportPath, report, evaluation) {
-  const runsDir = path.join(repoRoot, 'tools', 'stabilization-evals', profile);
-  fs.mkdirSync(runsDir, { recursive: true });
-  const body = JSON.stringify({
+function evaluationArtifact(profile, reportPath, report, evaluation, generatedAt) {
+  return {
     profile,
-    generatedAt: new Date().toISOString(),
+    generatedAt,
     reportPath,
     targetLabel: report.targetLabel,
     passed: evaluation.passed,
     failures: evaluation.failures,
     metrics: evaluation.metrics,
-  }, null, 2);
+  };
+}
+
+function evaluationRunId(reportPath, generatedAt) {
+  const reportName = path.basename(reportPath, path.extname(reportPath));
+  const reportMatch = reportName.match(/^owlvex-scan-report-(\d{8}-\d{6})$/i);
+  if (reportMatch) {
+    return reportMatch[1];
+  }
+
+  return generatedAt.replace(/[:.]/g, '-');
+}
+
+function generatedAtForReport(reportPath) {
+  const reportName = path.basename(reportPath, path.extname(reportPath));
+  const reportMatch = reportName.match(/^owlvex-scan-report-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$/i);
+  if (reportMatch) {
+    return `${reportMatch[1]}-${reportMatch[2]}-${reportMatch[3]}T${reportMatch[4]}:${reportMatch[5]}:${reportMatch[6]}.000Z`;
+  }
+
+  return new Date().toISOString();
+}
+
+function writeEvaluationArtifacts(profile, reportPath, report, evaluation) {
+  const runsDir = path.join(repoRoot, 'tools', 'stabilization-evals', profile);
+  const historyDir = path.join(runsDir, 'runs');
+  const generatedAt = generatedAtForReport(reportPath);
+  const artifact = evaluationArtifact(profile, reportPath, report, evaluation, generatedAt);
+  const body = JSON.stringify(artifact, null, 2);
+  fs.mkdirSync(runsDir, { recursive: true });
+  fs.mkdirSync(historyDir, { recursive: true });
+  fs.writeFileSync(path.join(historyDir, `${evaluationRunId(reportPath, generatedAt)}.json`), `${body}\n`, 'utf8');
   fs.writeFileSync(path.join(runsDir, 'latest.json'), `${body}\n`, 'utf8');
 }
 
@@ -382,7 +411,7 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const markdown = fs.readFileSync(reportPath, 'utf8');
 const report = parseMarkdownReport(markdown);
 const evaluation = evaluateParsedReport(report, manifest);
-writeLatestEvaluation(profile, reportPath, report, evaluation);
+writeEvaluationArtifacts(profile, reportPath, report, evaluation);
 
 if (jsonMode) {
   console.log(JSON.stringify({

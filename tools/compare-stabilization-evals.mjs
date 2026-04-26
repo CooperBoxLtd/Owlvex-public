@@ -1,4 +1,5 @@
 import { spawnSync } from 'child_process';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -19,6 +20,21 @@ function runEval(profile, reportPath) {
   return JSON.parse(output);
 }
 
+function loadEval(profile, inputPath) {
+  if (/\.json$/i.test(inputPath)) {
+    const artifact = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
+    if (artifact.profile !== profile) {
+      throw new Error(`Expected ${profile} evaluation but found ${artifact.profile} in ${inputPath}`);
+    }
+    if (!artifact.metrics) {
+      throw new Error(`Evaluation artifact has no metrics: ${inputPath}`);
+    }
+    return artifact;
+  }
+
+  return runEval(profile, inputPath);
+}
+
 function printDelta(label, baseline, candidate) {
   const diff = candidate - baseline;
   const sign = diff > 0 ? '+' : '';
@@ -28,14 +44,14 @@ function printDelta(label, baseline, candidate) {
 const [baselineLabel, demoBaseline, benchmarkAppBaseline, candidateLabel, demoCandidate, benchmarkAppCandidate] = process.argv.slice(2);
 
 if (!baselineLabel || !demoBaseline || !benchmarkAppBaseline || !candidateLabel || !demoCandidate || !benchmarkAppCandidate) {
-  console.error('Usage: node tools/compare-stabilization-evals.mjs <baseline-label> <demo-report> <benchmark-app-report> <candidate-label> <demo-report> <benchmark-app-report>');
+  console.error('Usage: node tools/compare-stabilization-evals.mjs <baseline-label> <demo-report-or-eval-json> <benchmark-app-report-or-eval-json> <candidate-label> <demo-report-or-eval-json> <benchmark-app-report-or-eval-json>');
   process.exit(1);
 }
 
-const baselineDemo = runEval('demo', demoBaseline);
-const baselineBenchmarkApp = runEval('benchmark-app', benchmarkAppBaseline);
-const candidateDemo = runEval('demo', demoCandidate);
-const candidateBenchmarkApp = runEval('benchmark-app', benchmarkAppCandidate);
+const baselineDemo = loadEval('demo', demoBaseline);
+const baselineBenchmarkApp = loadEval('benchmark-app', benchmarkAppBaseline);
+const candidateDemo = loadEval('demo', demoCandidate);
+const candidateBenchmarkApp = loadEval('benchmark-app', benchmarkAppCandidate);
 
 const baselineFailures = baselineDemo.metrics.totalFailures + baselineBenchmarkApp.metrics.totalFailures;
 const candidateFailures = candidateDemo.metrics.totalFailures + candidateBenchmarkApp.metrics.totalFailures;
