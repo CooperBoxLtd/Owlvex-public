@@ -165,6 +165,16 @@ export interface EngineTelemetry {
         dropped: number;
         manualReview: number;
     };
+    corroborationRouting?: {
+        verifierRequested: number;
+        verifierSkippedHighConfidence: number;
+        verifierSkippedLowSignal: number;
+        skepticRequested: number;
+        skepticSkippedNoVerifier: number;
+        skepticSkippedVerifierRejected: number;
+        skepticSkippedStrongSupport: number;
+        skepticSkippedStable: number;
+    };
 }
 
 export interface ScanDocumentOptions {
@@ -218,6 +228,8 @@ interface AiUsageSummary {
     requestCount: number;
     totalTokens: number;
 }
+
+type CorroborationRoutingTelemetry = NonNullable<EngineTelemetry['corroborationRouting']>;
 
 
 type FindingSeverity = Finding['severity'];
@@ -1254,7 +1266,53 @@ function buildEmptyEngineTelemetry(localSinkEvidence: LocalSinkEvidence[] = []):
             dropped: 0,
             manualReview: 0,
         },
+        corroborationRouting: emptyCorroborationRoutingTelemetry(),
     };
+}
+
+function emptyCorroborationRoutingTelemetry(): CorroborationRoutingTelemetry {
+    return {
+        verifierRequested: 0,
+        verifierSkippedHighConfidence: 0,
+        verifierSkippedLowSignal: 0,
+        skepticRequested: 0,
+        skepticSkippedNoVerifier: 0,
+        skepticSkippedVerifierRejected: 0,
+        skepticSkippedStrongSupport: 0,
+        skepticSkippedStable: 0,
+    };
+}
+
+function buildCorroborationRoutingTelemetry(
+    findings: Finding[],
+    verifierMap: Map<string, AiCorroborationReview> = new Map(),
+): CorroborationRoutingTelemetry {
+    const telemetry = emptyCorroborationRoutingTelemetry();
+
+    for (const finding of findings) {
+        if (shouldRunVerifier(finding)) {
+            telemetry.verifierRequested += 1;
+        } else if (finderConfidence(finding) >= FINDER_HIGH_CONFIDENCE) {
+            telemetry.verifierSkippedHighConfidence += 1;
+        } else {
+            telemetry.verifierSkippedLowSignal += 1;
+        }
+
+        const verifier = verifierMap.get(finding.id);
+        if (shouldRunSkeptic(finding, verifier)) {
+            telemetry.skepticRequested += 1;
+        } else if (!verifier) {
+            telemetry.skepticSkippedNoVerifier += 1;
+        } else if (verifier.verdict === 'reject' && (verifier.confidence ?? 0) >= VERIFIER_REJECT_CONFIDENCE) {
+            telemetry.skepticSkippedVerifierRejected += 1;
+        } else if (verifier.verdict === 'support' && (verifier.confidence ?? 0) >= VERIFIER_STRONG_SUPPORT && finding.severity !== 'CRITICAL') {
+            telemetry.skepticSkippedStrongSupport += 1;
+        } else {
+            telemetry.skepticSkippedStable += 1;
+        }
+    }
+
+    return telemetry;
 }
 
 function buildEngineTelemetry(params: {
@@ -1264,6 +1322,7 @@ function buildEngineTelemetry(params: {
     reviewedAiFindings: Finding[];
     finalFindings: Finding[];
     safeProbes: SafeProbeTelemetry;
+    corroborationRouting?: CorroborationRoutingTelemetry;
 }): EngineTelemetry {
     const telemetry = buildEmptyEngineTelemetry(params.localSinkEvidence);
     telemetry.aiFindings = {
@@ -1273,6 +1332,7 @@ function buildEngineTelemetry(params: {
         finalSurvivors: params.finalFindings.filter(finding => finding.provenance === 'ai').length,
     };
     telemetry.safeProbes = params.safeProbes;
+    telemetry.corroborationRouting = params.corroborationRouting ?? emptyCorroborationRoutingTelemetry();
     return telemetry;
 }
 
@@ -1860,6 +1920,7 @@ export class ScanEngine {
                 reviewedAiFindings: keptAi,
                 finalFindings: allFindings,
                 safeProbes: safeProbeTelemetry,
+                corroborationRouting: buildCorroborationRoutingTelemetry(entry.filteredAiFindings, verifierMap),
             });
             const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
             const filteredWarnings = warnings.filter(warning =>
@@ -2090,6 +2151,7 @@ export class ScanEngine {
             reviewedAiFindings: corroboratedAi.findings,
             finalFindings: allFindings,
             safeProbes: safeProbeTelemetry,
+            corroborationRouting: corroboratedAi.corroborationRouting,
         });
         const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
         warnings.push(
@@ -2162,9 +2224,9 @@ export class ScanEngine {
         code: string;
         relatedProbeContext?: string;
         findings: Finding[];
-    }): Promise<{ findings: Finding[]; warnings: string[]; aiUsage: AiUsageSummary; safeProbes: SafeProbeTelemetry }> {
+    }): Promise<{ findings: Finding[]; warnings: string[]; aiUsage: AiUsageSummary; safeProbes: SafeProbeTelemetry; corroborationRouting: CorroborationRoutingTelemetry }> {
         if (!params.findings.length) {
-            return { findings: [], warnings: [], aiUsage: emptyAiUsage(), safeProbes: emptySafeProbeTelemetry() };
+            return { findings: [], warnings: [], aiUsage: emptyAiUsage(), safeProbes: emptySafeProbeTelemetry(), corroborationRouting: emptyCorroborationRoutingTelemetry() };
         }
 
         if (params.findings.length > MAX_CORROBORATION_CANDIDATES) {
@@ -2179,6 +2241,7 @@ export class ScanEngine {
                 ],
                 aiUsage: emptyAiUsage(),
                 safeProbes: probedAi.telemetry,
+                corroborationRouting: emptyCorroborationRoutingTelemetry(),
             };
         }
 
@@ -2260,6 +2323,7 @@ export class ScanEngine {
             warnings,
             aiUsage: mergeAiUsage(verifierReviews.aiUsage, skepticReviews.aiUsage),
             safeProbes: probedAi.telemetry,
+            corroborationRouting: buildCorroborationRoutingTelemetry(params.findings, verifierMap),
         };
     }
 

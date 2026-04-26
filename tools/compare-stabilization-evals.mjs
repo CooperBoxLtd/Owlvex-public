@@ -62,8 +62,8 @@ const candidateFindings = candidateDemo.metrics.findingFilesSatisfied + candidat
 
 function sumMetric(metric) {
   return {
-    baseline: baselineDemo.metrics[metric] + baselineBenchmarkApp.metrics[metric],
-    candidate: candidateDemo.metrics[metric] + candidateBenchmarkApp.metrics[metric],
+    baseline: Number(baselineDemo.metrics[metric] ?? 0) + Number(baselineBenchmarkApp.metrics[metric] ?? 0),
+    candidate: Number(candidateDemo.metrics[metric] ?? 0) + Number(candidateBenchmarkApp.metrics[metric] ?? 0),
   };
 }
 
@@ -108,11 +108,27 @@ const probeResolved = sumMetric('probeQualityResolved');
 const probeConfirmed = sumMetric('probeQualityConfirmedPaths');
 const probeRemoved = sumMetric('probeQualityRemovedOrDowngraded');
 const probeManual = sumMetric('probeQualityManualReviewResidue');
+const verifierRequested = sumMetric('verifierRequested');
+const verifierSkippedHigh = sumMetric('verifierSkippedHighConfidence');
+const verifierSkippedLow = sumMetric('verifierSkippedLowSignal');
+const skepticRequested = sumMetric('skepticRequested');
+const skepticSkippedNoVerifier = sumMetric('skepticSkippedNoVerifier');
+const skepticSkippedRejected = sumMetric('skepticSkippedVerifierRejected');
+const skepticSkippedStrong = sumMetric('skepticSkippedStrongSupport');
+const skepticSkippedStable = sumMetric('skepticSkippedStable');
 printDelta('Probe quality resolved', probeResolved.baseline, probeResolved.candidate);
 printDelta('Probe quality run', probeRun.baseline, probeRun.candidate);
 printDelta('Probe confirmed paths', probeConfirmed.baseline, probeConfirmed.candidate);
 printDelta('Probe removed/downgraded candidates', probeRemoved.baseline, probeRemoved.candidate);
 printDelta('Probe manual-review residue', probeManual.baseline, probeManual.candidate);
+printDelta('Verifier requested', verifierRequested.baseline, verifierRequested.candidate);
+printDelta('Verifier skipped high-confidence', verifierSkippedHigh.baseline, verifierSkippedHigh.candidate);
+printDelta('Verifier skipped low-signal', verifierSkippedLow.baseline, verifierSkippedLow.candidate);
+printDelta('Skeptic requested', skepticRequested.baseline, skepticRequested.candidate);
+printDelta('Skeptic skipped no-verifier', skepticSkippedNoVerifier.baseline, skepticSkippedNoVerifier.candidate);
+printDelta('Skeptic skipped verifier-rejected', skepticSkippedRejected.baseline, skepticSkippedRejected.candidate);
+printDelta('Skeptic skipped strong-support', skepticSkippedStrong.baseline, skepticSkippedStrong.candidate);
+printDelta('Skeptic skipped stable', skepticSkippedStable.baseline, skepticSkippedStable.candidate);
 console.log('');
 console.log(`Demo reports: ${baselineLabel}=${path.resolve(demoBaseline)} | ${candidateLabel}=${path.resolve(demoCandidate)}`);
 console.log(`Benchmark-app reports: ${baselineLabel}=${path.resolve(benchmarkAppBaseline)} | ${candidateLabel}=${path.resolve(benchmarkAppCandidate)}`);

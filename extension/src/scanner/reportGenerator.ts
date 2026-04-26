@@ -352,6 +352,16 @@ function aggregateEngineTelemetry(results: ReportEntry[]): NonNullable<ScanResul
             dropped: 0,
             manualReview: 0,
         },
+        corroborationRouting: {
+            verifierRequested: 0,
+            verifierSkippedHighConfidence: 0,
+            verifierSkippedLowSignal: 0,
+            skepticRequested: 0,
+            skepticSkippedNoVerifier: 0,
+            skepticSkippedVerifierRejected: 0,
+            skepticSkippedStrongSupport: 0,
+            skepticSkippedStable: 0,
+        },
     };
 
     for (const entry of entries) {
@@ -376,6 +386,14 @@ function aggregateEngineTelemetry(results: ReportEntry[]): NonNullable<ScanResul
         aggregate.safeProbes.downgraded += entry.safeProbes.downgraded;
         aggregate.safeProbes.dropped += entry.safeProbes.dropped;
         aggregate.safeProbes.manualReview += entry.safeProbes.manualReview;
+        aggregate.corroborationRouting!.verifierRequested += entry.corroborationRouting?.verifierRequested ?? 0;
+        aggregate.corroborationRouting!.verifierSkippedHighConfidence += entry.corroborationRouting?.verifierSkippedHighConfidence ?? 0;
+        aggregate.corroborationRouting!.verifierSkippedLowSignal += entry.corroborationRouting?.verifierSkippedLowSignal ?? 0;
+        aggregate.corroborationRouting!.skepticRequested += entry.corroborationRouting?.skepticRequested ?? 0;
+        aggregate.corroborationRouting!.skepticSkippedNoVerifier += entry.corroborationRouting?.skepticSkippedNoVerifier ?? 0;
+        aggregate.corroborationRouting!.skepticSkippedVerifierRejected += entry.corroborationRouting?.skepticSkippedVerifierRejected ?? 0;
+        aggregate.corroborationRouting!.skepticSkippedStrongSupport += entry.corroborationRouting?.skepticSkippedStrongSupport ?? 0;
+        aggregate.corroborationRouting!.skepticSkippedStable += entry.corroborationRouting?.skepticSkippedStable ?? 0;
     }
 
     return aggregate;
@@ -411,14 +429,23 @@ function buildEngineTelemetryLines(telemetry: NonNullable<ScanResult['engineTele
         return [];
     }
 
-    return [
+    const routing = telemetry.corroborationRouting;
+    const lines = [
         `- Local sinks discovered before AI: ${telemetry.sinkInventory.total} (${formatSinkFamilyCounts(telemetry)})`,
         `- Sink guard posture: guarded ${telemetry.sinkInventory.guarded} | missing guard ${telemetry.sinkInventory.missingGuard} | unknown ${telemetry.sinkInventory.unknownGuard}`,
         `- AI finding funnel: proposed ${telemetry.aiFindings.proposed} | after static/sink/probe filter ${telemetry.aiFindings.afterStaticFilter} | after corroboration ${telemetry.aiFindings.afterCorroboration} | final AI survivors ${telemetry.aiFindings.finalSurvivors}`,
         `- Safe probes: run ${telemetry.safeProbes.run} | confirmed ${telemetry.safeProbes.confirmed} | counter-evidence ${telemetry.safeProbes.counterEvidence} | unsupported ${telemetry.safeProbes.unsupported} | inconclusive ${telemetry.safeProbes.inconclusive}`,
         `- Probe decisions: promoted ${telemetry.safeProbes.promoted} | downgraded ${telemetry.safeProbes.downgraded} | dropped ${telemetry.safeProbes.dropped} | manual review ${telemetry.safeProbes.manualReview}`,
-        buildProbeQualitySignal(telemetry),
     ];
+
+    if (routing) {
+        lines.push(
+            `- AI corroboration routing: verifier requested ${routing.verifierRequested} | skipped high-confidence ${routing.verifierSkippedHighConfidence} | skipped low-signal ${routing.verifierSkippedLowSignal} | skeptic requested ${routing.skepticRequested} | skipped no-verifier ${routing.skepticSkippedNoVerifier} | skipped verifier-rejected ${routing.skepticSkippedVerifierRejected} | skipped strong-support ${routing.skepticSkippedStrongSupport} | skipped stable ${routing.skepticSkippedStable}`,
+        );
+    }
+
+    lines.push(buildProbeQualitySignal(telemetry));
+    return lines;
 }
 
 function getFindingLikelihood(finding: ScanResult['findings'][number]): string {
