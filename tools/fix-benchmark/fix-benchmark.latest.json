@@ -1,0 +1,21 @@
+{
+  "benchmark": "owlvex-fix-demo-benchmark",
+  "description": "Latest auto-recorded fix benchmark results captured from Owlvex review-and-verify flows.",
+  "runs": [
+    {
+      "caseId": "FIX-GR-003",
+      "attempted": true,
+      "previewGenerated": true,
+      "appliedCleanly": true,
+      "filesChanged": [
+        "tools/demo/22-ssrf-unsafe.js",
+        "tools/demo/26-deserialization-unsafe.py",
+        "tools/demo/74-go-jwt-validation-unsafe.go"
+      ],
+      "syntaxValid": true,
+      "targetFindingRemoved": false,
+      "introducedHighRiskFindings": false,
+      "notes": "Fix kept and verification scan completed; the target finding still matched after the rescan."
+    }
+  ]
+}
