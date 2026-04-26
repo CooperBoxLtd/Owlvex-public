@@ -79,6 +79,7 @@ export interface CallerPathEvidence {
         line: number;
         expression: string;
         functionName?: string;
+        via?: string[];
         guardStatus: 'present' | 'missing' | 'unknown';
         guardKind?: string;
         sourceSignal?: string;
@@ -88,6 +89,7 @@ export interface CallerPathEvidence {
         line: number;
         expression: string;
         functionName?: string;
+        via?: string[];
         guardStatus: 'present' | 'missing' | 'unknown';
         guardKind?: string;
         sourceSignal?: string;
@@ -679,6 +681,29 @@ function hasCallerSourceSignal(snippet: string): string | undefined {
     if (/\bprocess\s*\.\s*env\b/i.test(snippet)) {
         return 'environment-controlled input';
     }
+    return undefined;
+}
+
+function findEnclosingFunctionName(lines: string[], callLineIndex: number): string | undefined {
+    const start = Math.max(0, callLineIndex - 30);
+    for (let index = callLineIndex; index >= start; index -= 1) {
+        const line = lines[index];
+        const patterns = [
+            /\b(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/,
+            /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\(?[^=]*?\)?\s*=>/,
+            /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function\b/,
+            /^\s*(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/,
+            /\bexports\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\()/,
+            /\bmodule\.exports\.([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?(?:function|\()/,
+        ];
+        for (const pattern of patterns) {
+            const match = line.match(pattern);
+            if (match?.[1] && !['if', 'for', 'while', 'switch', 'catch'].includes(match[1])) {
+                return match[1];
+            }
+        }
+    }
+
     return undefined;
 }
 
@@ -2086,6 +2111,55 @@ export class ScanEngine {
             }
         }
 
+        async function resolveWrapperCallerEvidence(params: {
+            wrapperName: string;
+            directCallerUri: vscode.Uri;
+            finding: Finding;
+        }): Promise<{
+            guardStatus: 'present' | 'missing' | 'unknown';
+            guardKind?: string;
+            sourceSignal?: string;
+            via?: string[];
+        } | undefined> {
+            const wrapperPattern = new RegExp(`(?:\\.|\\b)${params.wrapperName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`);
+            const directPath = path.normalize(params.directCallerUri.fsPath).toLowerCase();
+            for (const uri of candidateUris) {
+                const normalized = path.normalize(uri.fsPath).toLowerCase();
+                if (normalized === directPath) {
+                    continue;
+                }
+                const text = await readCandidate(uri);
+                if (!text) {
+                    continue;
+                }
+                const lines = text.split(/\r?\n/);
+                for (let index = 0; index < lines.length; index += 1) {
+                    const line = lines[index];
+                    if (!wrapperPattern.test(line) || /^\s*(?:async\s+)?(?:function\s+)?[A-Za-z_$][\w$]*\s*\(/.test(line)) {
+                        continue;
+                    }
+                    const start = Math.max(0, index - 12);
+                    const end = Math.min(lines.length, index + 4);
+                    const snippet = lines.slice(start, end).join('\n');
+                    const guard = hasCallerGuard(snippet, params.finding);
+                    const sourceSignal = hasCallerSourceSignal(snippet);
+                    if (guard.present || sourceSignal) {
+                        return {
+                            guardStatus: guard.present ? 'present' : 'missing',
+                            guardKind: guard.kind,
+                            sourceSignal: sourceSignal ?? 'wrapper caller',
+                            via: [
+                                params.wrapperName,
+                                callerRoot ? `${path.relative(callerRoot.fsPath, uri.fsPath)}:${index + 1}` : `${uri.fsPath}:${index + 1}`,
+                            ],
+                        };
+                    }
+                }
+            }
+
+            return undefined;
+        }
+
         const enriched = await Promise.all(findings.map(async finding => {
             if (!isKnownHelperLayerFinding(finding, document.fileName)) {
                 return finding;
@@ -2112,14 +2186,34 @@ export class ScanEngine {
                     const end = Math.min(lines.length, index + 4);
                     const snippet = lines.slice(start, end).join('\n');
                     const guard = hasCallerGuard(snippet, finding);
-                    const sourceSignal = hasCallerSourceSignal(snippet);
+                    let sourceSignal = hasCallerSourceSignal(snippet);
+                    let guardStatus: CallerPathEvidence['callers'][number]['guardStatus'] = guard.present ? 'present' : sourceSignal ? 'missing' : 'unknown';
+                    let guardKind = guard.kind;
+                    let via: string[] | undefined;
+                    if (!guard.present && !sourceSignal) {
+                        const wrapperName = findEnclosingFunctionName(lines, index);
+                        if (wrapperName) {
+                            const wrapperEvidence = await resolveWrapperCallerEvidence({
+                                wrapperName,
+                                directCallerUri: uri,
+                                finding,
+                            });
+                            if (wrapperEvidence) {
+                                guardStatus = wrapperEvidence.guardStatus;
+                                guardKind = wrapperEvidence.guardKind;
+                                sourceSignal = wrapperEvidence.sourceSignal;
+                                via = wrapperEvidence.via;
+                            }
+                        }
+                    }
                     callers.push({
                         file: callerRoot ? path.relative(callerRoot.fsPath, uri.fsPath) : uri.fsPath,
                         line: index + 1,
                         expression: line.trim().slice(0, 240),
                         functionName: matchedName,
-                        guardStatus: guard.present ? 'present' : sourceSignal ? 'missing' : 'unknown',
-                        guardKind: guard.kind,
+                        via,
+                        guardStatus,
+                        guardKind,
                         sourceSignal,
                     });
                 }

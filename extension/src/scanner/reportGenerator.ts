@@ -1584,7 +1584,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                     }
                     for (const caller of finding.callerPath.callers.slice(0, 3)) {
                         const guard = caller.guardKind ? `${caller.guardStatus} (${caller.guardKind})` : caller.guardStatus;
-                        lines.push(`  - Caller: \`${caller.file}\` L${caller.line}${caller.functionName ? ` | function ${caller.functionName}` : ''} | guard ${guard}${caller.sourceSignal ? ` | source ${caller.sourceSignal}` : ''}`);
+                        lines.push(`  - Caller: \`${caller.file}\` L${caller.line}${caller.functionName ? ` | function ${caller.functionName}` : ''}${caller.via?.length ? ` | via ${caller.via.join(' -> ')}` : ''} | guard ${guard}${caller.sourceSignal ? ` | source ${caller.sourceSignal}` : ''}`);
                     }
                 }
                 lines.push(...buildAiReviewTrailLines(finding));

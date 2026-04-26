@@ -212,6 +212,8 @@ The caller-path verdict should affect posture:
 
 Caller-path analysis should prefer bounded project context over isolated single-file assumptions. For mixed callers, Owlvex must carry the unsafe caller list into the report and fix workflow so remediation is anchored to the reachable unguarded boundary, not blindly applied to every helper caller.
 
+The first deeper helper-resolution step is a bounded one-hop wrapper trace. If a helper sink is called from a service/repository wrapper that has no direct request signal, Owlvex may trace the wrapper function to one caller in project scope and use that caller snippet to classify guard/source posture. This catches common route -> service -> repository flows without building an unbounded call graph.
+
 ### 4.4.3 Confidence Routing
 
 Finder confidence is not enough by itself to decide whether a finding should trigger remediation.

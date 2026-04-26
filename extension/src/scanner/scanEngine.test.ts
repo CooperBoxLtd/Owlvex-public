@@ -674,6 +674,76 @@ router.post('/:userId/role-safe', requireUser, async (req, res) => {
         expect(result.findings[0].proofStatus).toBe('unproven_extra');
         expect(result.telemetry.guardedCallers).toBe(1);
     });
+
+    it('follows a bounded service wrapper hop from helper sink to unsafe route caller', async () => {
+        const helperUri = vscode.Uri.file('d:\\repo\\src\\store\\repositories.js');
+        const serviceUri = vscode.Uri.file('d:\\repo\\src\\services\\roleService.js');
+        const routeUri = vscode.Uri.file('d:\\repo\\src\\routes\\roles.js');
+        (vscode.workspace.findFiles as jest.Mock).mockImplementation(async (_include: any, _exclude?: any, maxResults?: number) =>
+            maxResults === 1 ? [] : [serviceUri, routeUri]
+        );
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+            if (uri.fsPath === serviceUri.fsPath) {
+                return Buffer.from(`
+function assignRole(repositories, userId, role) {
+  return repositories.users.updateRole(userId, role);
+}
+module.exports = { assignRole };
+`);
+            }
+            if (uri.fsPath === routeUri.fsPath) {
+                return Buffer.from(`
+router.post('/:userId/role-unsafe', requireUser, async (req, res) => {
+  const updated = roleService.assignRole(repositories, req.params.userId, req.body.role);
+  res.json({ user: updated });
+});
+`);
+            }
+            return Buffer.from('');
+        });
+
+        const scanEngine = new TestableScanEngine(mockLicenceMgr, mockRegistry);
+        const result = await scanEngine.applyCallerPathEvidence({
+            uri: helperUri,
+            fileName: helperUri.fsPath,
+            languageId: 'javascript',
+            getText: () => 'function updateRole(userId, role) { user.role = role; }',
+        } as any, [{
+            id: 'role-helper',
+            line: 2,
+            lineEnd: 2,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'A01-AUTHZ',
+            title: 'Privileged user role changes occur without visible authorization checks',
+            canonicalId: 'owlvex.issue.privileged_action_missing_authorization.001',
+            canonicalTitle: 'Privileged user role changes occur without visible authorization checks',
+            explanation: 'updateRole(userId, role) writes privileged roles without authorization.',
+            threat: 'Privilege escalation.',
+            fix: 'Authorize the actor before changing roles.',
+            confidence: 0.9,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+            evidenceContract: {
+                issueType: 'privileged-action-missing-authorization',
+                sink: { kind: 'role-update', line: 2, expression: 'updateRole(userId, role)' },
+                guard: { status: 'missing' },
+            },
+        }]);
+
+        expect(result.findings[0].callerPath.verdict).toBe('reachable_unguarded');
+        expect(result.findings[0].callerPath.callers[0]).toEqual(expect.objectContaining({
+            file: 'src\\services\\roleService.js',
+            functionName: 'updateRole',
+            guardStatus: 'missing',
+            sourceSignal: 'request-controlled input',
+            via: ['assignRole', 'src\\routes\\roles.js:3'],
+        }));
+        expect(result.findings[0].callerPath.unsafeCallers[0].via).toEqual(['assignRole', 'src\\routes\\roles.js:3']);
+        expect(result.findings[0].proofStatus).toBe('ai_plausible');
+        expect(result.telemetry.unguardedCallers).toBe(1);
+    });
 });
 
 describe('ScanEngine.scanDocument caching', () => {
