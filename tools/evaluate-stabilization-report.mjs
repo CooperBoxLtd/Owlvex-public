@@ -342,6 +342,21 @@ function printMetrics(metrics) {
   console.log(`Total failures: ${metrics.totalFailures}`);
 }
 
+function writeLatestEvaluation(profile, reportPath, report, evaluation) {
+  const runsDir = path.join(repoRoot, 'tools', 'stabilization-evals', profile);
+  fs.mkdirSync(runsDir, { recursive: true });
+  const body = JSON.stringify({
+    profile,
+    generatedAt: new Date().toISOString(),
+    reportPath,
+    targetLabel: report.targetLabel,
+    passed: evaluation.passed,
+    failures: evaluation.failures,
+    metrics: evaluation.metrics,
+  }, null, 2);
+  fs.writeFileSync(path.join(runsDir, 'latest.json'), `${body}\n`, 'utf8');
+}
+
 const profile = process.argv[2];
 const explicitReportPath = process.argv[3];
 const jsonMode = process.argv.includes('--json');
@@ -367,6 +382,7 @@ const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 const markdown = fs.readFileSync(reportPath, 'utf8');
 const report = parseMarkdownReport(markdown);
 const evaluation = evaluateParsedReport(report, manifest);
+writeLatestEvaluation(profile, reportPath, report, evaluation);
 
 if (jsonMode) {
   console.log(JSON.stringify({

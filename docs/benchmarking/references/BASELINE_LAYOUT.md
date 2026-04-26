@@ -29,6 +29,7 @@ Source:
 Artifacts:
 
 - generated markdown reports in `tools/demo/`
+- latest scored stabilization evaluation in `tools/stabilization-evals/demo/latest.json`
 
 ### Benchmark-app stabilization benchmark
 
@@ -40,6 +41,7 @@ Source:
 Artifacts:
 
 - generated markdown reports in `tools/benchmark-app/`
+- latest scored stabilization evaluation in `tools/stabilization-evals/benchmark-app/latest.json`
 
 ## Owlvex-Native AI Benchmarks
 
