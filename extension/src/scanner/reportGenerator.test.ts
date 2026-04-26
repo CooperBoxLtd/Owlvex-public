@@ -1022,6 +1022,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 | Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |
 | Confirmed by rule | Deterministic analysis proved the issue from code structure | Highest confidence |
 | Validated by AI review | AI found the issue and verifier or skeptic review also supported it | Strong signal, but not rule-proven |
+| Validated by safe probe | AI found the issue and a local non-executing probe confirmed the modeled source-to-sink path | Strong local signal; still not live exploit execution |
 | Finder-only AI review | The finder reported the issue, but verifier and skeptic were not triggered or were unavailable | Treat as model-backed evidence, not independent validation |
 | Finder high confidence, not independently verified | The finder score is high, but no verifier or skeptic pass is present in the audit trail | Useful triage signal; validate important fixes against the code |
 | Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |

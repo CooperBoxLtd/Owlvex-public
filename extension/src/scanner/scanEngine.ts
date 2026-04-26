@@ -167,6 +167,7 @@ export interface EngineTelemetry {
     };
     corroborationRouting?: {
         verifierRequested: number;
+        verifierSkippedSafeProbeConfirmed: number;
         verifierSkippedHighConfidence: number;
         verifierSkippedLowSignal: number;
         skepticRequested: number;
@@ -1273,6 +1274,7 @@ function buildEmptyEngineTelemetry(localSinkEvidence: LocalSinkEvidence[] = []):
 function emptyCorroborationRoutingTelemetry(): CorroborationRoutingTelemetry {
     return {
         verifierRequested: 0,
+        verifierSkippedSafeProbeConfirmed: 0,
         verifierSkippedHighConfidence: 0,
         verifierSkippedLowSignal: 0,
         skepticRequested: 0,
@@ -1292,6 +1294,8 @@ function buildCorroborationRoutingTelemetry(
     for (const finding of findings) {
         if (shouldRunVerifier(finding)) {
             telemetry.verifierRequested += 1;
+        } else if (hasConfirmedSafeProbe(finding)) {
+            telemetry.verifierSkippedSafeProbeConfirmed += 1;
         } else if (finderConfidence(finding) >= FINDER_HIGH_CONFIDENCE) {
             telemetry.verifierSkippedHighConfidence += 1;
         } else {
@@ -1369,8 +1373,16 @@ function isHighImpactFinding(finding: Finding): boolean {
     return finding.severity === 'HIGH' || finding.severity === 'CRITICAL';
 }
 
+function hasConfirmedSafeProbe(finding: Finding): boolean {
+    return finding.safeProbe?.verdict === 'confirmed' && finding.safeProbe.decision === 'promote';
+}
+
 function shouldRunVerifier(finding: Finding): boolean {
     const confidence = finderConfidence(finding);
+    if (hasConfirmedSafeProbe(finding)) {
+        return false;
+    }
+
     if (finding.severity === 'CRITICAL') {
         return true;
     }
@@ -1387,7 +1399,7 @@ function shouldRunVerifier(finding: Finding): boolean {
 }
 
 function shouldKeepFinderOnly(finding: Finding): boolean {
-    return finderConfidence(finding) >= FINDER_HIGH_CONFIDENCE;
+    return hasConfirmedSafeProbe(finding) || finderConfidence(finding) >= FINDER_HIGH_CONFIDENCE;
 }
 
 function shouldRunSkeptic(finding: Finding, verifier?: AiCorroborationReview): boolean {
@@ -1482,6 +1494,7 @@ function finalizeAiFindingReview(state: AiFindingReviewState): Finding | undefin
         return undefined;
     }
 
+    const safeProbeConfirmed = hasConfirmedSafeProbe(finding);
     return {
         ...finding,
         aiReviewScores: {
@@ -1491,7 +1504,7 @@ function finalizeAiFindingReview(state: AiFindingReviewState): Finding | undefin
         aiReviewNotes: {
             finder: finding.aiReviewNotes?.finder,
         },
-        corroboration: 'UNVERIFIED' as const,
+        corroboration: safeProbeConfirmed ? 'CORROBORATED' as const : 'UNVERIFIED' as const,
     };
 }
 

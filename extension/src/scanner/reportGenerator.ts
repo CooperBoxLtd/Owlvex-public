@@ -354,6 +354,7 @@ function aggregateEngineTelemetry(results: ReportEntry[]): NonNullable<ScanResul
         },
         corroborationRouting: {
             verifierRequested: 0,
+            verifierSkippedSafeProbeConfirmed: 0,
             verifierSkippedHighConfidence: 0,
             verifierSkippedLowSignal: 0,
             skepticRequested: 0,
@@ -387,6 +388,7 @@ function aggregateEngineTelemetry(results: ReportEntry[]): NonNullable<ScanResul
         aggregate.safeProbes.dropped += entry.safeProbes.dropped;
         aggregate.safeProbes.manualReview += entry.safeProbes.manualReview;
         aggregate.corroborationRouting!.verifierRequested += entry.corroborationRouting?.verifierRequested ?? 0;
+        aggregate.corroborationRouting!.verifierSkippedSafeProbeConfirmed += entry.corroborationRouting?.verifierSkippedSafeProbeConfirmed ?? 0;
         aggregate.corroborationRouting!.verifierSkippedHighConfidence += entry.corroborationRouting?.verifierSkippedHighConfidence ?? 0;
         aggregate.corroborationRouting!.verifierSkippedLowSignal += entry.corroborationRouting?.verifierSkippedLowSignal ?? 0;
         aggregate.corroborationRouting!.skepticRequested += entry.corroborationRouting?.skepticRequested ?? 0;
@@ -440,7 +442,7 @@ function buildEngineTelemetryLines(telemetry: NonNullable<ScanResult['engineTele
 
     if (routing) {
         lines.push(
-            `- AI corroboration routing: verifier requested ${routing.verifierRequested} | skipped high-confidence ${routing.verifierSkippedHighConfidence} | skipped low-signal ${routing.verifierSkippedLowSignal} | skeptic requested ${routing.skepticRequested} | skipped no-verifier ${routing.skepticSkippedNoVerifier} | skipped verifier-rejected ${routing.skepticSkippedVerifierRejected} | skipped strong-support ${routing.skepticSkippedStrongSupport} | skipped stable ${routing.skepticSkippedStable}`,
+            `- AI corroboration routing: verifier requested ${routing.verifierRequested} | skipped safe-probe-confirmed ${routing.verifierSkippedSafeProbeConfirmed} | skipped high-confidence ${routing.verifierSkippedHighConfidence} | skipped low-signal ${routing.verifierSkippedLowSignal} | skeptic requested ${routing.skepticRequested} | skipped no-verifier ${routing.skepticSkippedNoVerifier} | skipped verifier-rejected ${routing.skepticSkippedVerifierRejected} | skipped strong-support ${routing.skepticSkippedStrongSupport} | skipped stable ${routing.skepticSkippedStable}`,
         );
     }
 
@@ -755,6 +757,10 @@ function getEvidenceDisplayLabel(finding: ScanResult['findings'][number]): strin
     }
 
     const corroboration = finding.corroboration ?? 'UNVERIFIED';
+    if (finding.safeProbe?.verdict === 'confirmed' && !hasIndependentAiReview(finding)) {
+        return 'Validated by safe probe';
+    }
+
     if (corroboration === 'CORROBORATED' && !hasIndependentAiReview(finding)) {
         return 'Finder high confidence, not independently verified';
     }
@@ -775,6 +781,7 @@ function buildHowToReadTable(): string[] {
         '| Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |',
         '| Confirmed by rule | Deterministic analysis proved the issue from code structure | Highest confidence |',
         '| Validated by AI review | AI found the issue and verifier or skeptic review also supported it | Strong signal, but not rule-proven |',
+        '| Validated by safe probe | AI found the issue and a local non-executing probe confirmed the modeled source-to-sink path | Strong local signal; still not live exploit execution |',
         '| Finder-only AI review | The finder reported the issue, but verifier and skeptic were not triggered or were unavailable | Treat as model-backed evidence, not independent validation |',
         '| Finder high confidence, not independently verified | The finder score is high, but no verifier or skeptic pass is present in the audit trail | Useful triage signal; validate important fixes against the code |',
         '| Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |',

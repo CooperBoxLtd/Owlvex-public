@@ -109,6 +109,7 @@ const probeConfirmed = sumMetric('probeQualityConfirmedPaths');
 const probeRemoved = sumMetric('probeQualityRemovedOrDowngraded');
 const probeManual = sumMetric('probeQualityManualReviewResidue');
 const verifierRequested = sumMetric('verifierRequested');
+const verifierSkippedSafeProbe = sumMetric('verifierSkippedSafeProbeConfirmed');
 const verifierSkippedHigh = sumMetric('verifierSkippedHighConfidence');
 const verifierSkippedLow = sumMetric('verifierSkippedLowSignal');
 const skepticRequested = sumMetric('skepticRequested');
@@ -122,6 +123,7 @@ printDelta('Probe confirmed paths', probeConfirmed.baseline, probeConfirmed.cand
 printDelta('Probe removed/downgraded candidates', probeRemoved.baseline, probeRemoved.candidate);
 printDelta('Probe manual-review residue', probeManual.baseline, probeManual.candidate);
 printDelta('Verifier requested', verifierRequested.baseline, verifierRequested.candidate);
+printDelta('Verifier skipped safe-probe-confirmed', verifierSkippedSafeProbe.baseline, verifierSkippedSafeProbe.candidate);
 printDelta('Verifier skipped high-confidence', verifierSkippedHigh.baseline, verifierSkippedHigh.candidate);
 printDelta('Verifier skipped low-signal', verifierSkippedLow.baseline, verifierSkippedLow.candidate);
 printDelta('Skeptic requested', skepticRequested.baseline, skepticRequested.candidate);

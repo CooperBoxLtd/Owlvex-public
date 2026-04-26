@@ -27,17 +27,18 @@ function parseMarkdownReport(markdown) {
       };
     }
 
-    const corroborationRoutingMatch = line.match(/^-\s+AI corroboration routing:\s+verifier requested\s+(\d+)\s+\|\s+skipped high-confidence\s+(\d+)\s+\|\s+skipped low-signal\s+(\d+)\s+\|\s+skeptic requested\s+(\d+)\s+\|\s+skipped no-verifier\s+(\d+)\s+\|\s+skipped verifier-rejected\s+(\d+)\s+\|\s+skipped strong-support\s+(\d+)\s+\|\s+skipped stable\s+(\d+)$/);
+    const corroborationRoutingMatch = line.match(/^-\s+AI corroboration routing:\s+verifier requested\s+(\d+)\s+\|\s+(?:skipped safe-probe-confirmed\s+(\d+)\s+\|\s+)?skipped high-confidence\s+(\d+)\s+\|\s+skipped low-signal\s+(\d+)\s+\|\s+skeptic requested\s+(\d+)\s+\|\s+skipped no-verifier\s+(\d+)\s+\|\s+skipped verifier-rejected\s+(\d+)\s+\|\s+skipped strong-support\s+(\d+)\s+\|\s+skipped stable\s+(\d+)$/);
     if (corroborationRoutingMatch && !corroborationRoutingSignal) {
       corroborationRoutingSignal = {
         verifierRequested: Number(corroborationRoutingMatch[1]),
-        verifierSkippedHighConfidence: Number(corroborationRoutingMatch[2]),
-        verifierSkippedLowSignal: Number(corroborationRoutingMatch[3]),
-        skepticRequested: Number(corroborationRoutingMatch[4]),
-        skepticSkippedNoVerifier: Number(corroborationRoutingMatch[5]),
-        skepticSkippedVerifierRejected: Number(corroborationRoutingMatch[6]),
-        skepticSkippedStrongSupport: Number(corroborationRoutingMatch[7]),
-        skepticSkippedStable: Number(corroborationRoutingMatch[8]),
+        verifierSkippedSafeProbeConfirmed: Number(corroborationRoutingMatch[2] ?? 0),
+        verifierSkippedHighConfidence: Number(corroborationRoutingMatch[3]),
+        verifierSkippedLowSignal: Number(corroborationRoutingMatch[4]),
+        skepticRequested: Number(corroborationRoutingMatch[5]),
+        skepticSkippedNoVerifier: Number(corroborationRoutingMatch[6]),
+        skepticSkippedVerifierRejected: Number(corroborationRoutingMatch[7]),
+        skepticSkippedStrongSupport: Number(corroborationRoutingMatch[8]),
+        skepticSkippedStable: Number(corroborationRoutingMatch[9]),
       };
     }
   }
@@ -216,6 +217,7 @@ function evaluateParsedReport(report, manifest) {
     probeQualityRemovedOrDowngraded: report.probeQualitySignal?.removedOrDowngraded ?? 0,
     probeQualityManualReviewResidue: report.probeQualitySignal?.manualReviewResidue ?? 0,
     verifierRequested: report.corroborationRoutingSignal?.verifierRequested ?? 0,
+    verifierSkippedSafeProbeConfirmed: report.corroborationRoutingSignal?.verifierSkippedSafeProbeConfirmed ?? 0,
     verifierSkippedHighConfidence: report.corroborationRoutingSignal?.verifierSkippedHighConfidence ?? 0,
     verifierSkippedLowSignal: report.corroborationRoutingSignal?.verifierSkippedLowSignal ?? 0,
     skepticRequested: report.corroborationRoutingSignal?.skepticRequested ?? 0,
@@ -362,7 +364,7 @@ function printMetrics(metrics) {
   console.log(`Proof status checks: ${metrics.proofStatusSatisfied}/${metrics.proofStatusChecks}`);
   console.log(`Proof promotion checks: ${metrics.proofPromotionSatisfied}/${metrics.proofPromotionChecks}`);
   console.log(`Probe quality: resolved ${metrics.probeQualityResolved}/${metrics.probeQualityRun} (${metrics.probeQualityResolutionRate}%) | confirmed paths ${metrics.probeQualityConfirmedPaths} | removed/downgraded ${metrics.probeQualityRemovedOrDowngraded} | manual review residue ${metrics.probeQualityManualReviewResidue}`);
-  console.log(`Corroboration routing: verifier requested ${metrics.verifierRequested} | skipped high-confidence ${metrics.verifierSkippedHighConfidence} | skipped low-signal ${metrics.verifierSkippedLowSignal} | skeptic requested ${metrics.skepticRequested}`);
+  console.log(`Corroboration routing: verifier requested ${metrics.verifierRequested} | skipped safe-probe-confirmed ${metrics.verifierSkippedSafeProbeConfirmed} | skipped high-confidence ${metrics.verifierSkippedHighConfidence} | skipped low-signal ${metrics.verifierSkippedLowSignal} | skeptic requested ${metrics.skepticRequested}`);
   console.log(`Total failures: ${metrics.totalFailures}`);
 }
 
