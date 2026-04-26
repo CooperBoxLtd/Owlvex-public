@@ -73,7 +73,7 @@ export type SafeProbeTechnique =
     | 'multi_file_context_probe';
 
 export interface SafeExploitProbeResult {
-    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect' | 'insecure-deserialization' | 'cors' | 'csrf' | 'sensitive-logging' | 'debug-exposure';
+    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect' | 'insecure-deserialization' | 'cors' | 'csrf' | 'sensitive-logging' | 'debug-exposure' | 'object-authorization' | 'privileged-action' | 'mass-assignment';
     techniques: SafeProbeTechnique[];
     verdict: 'confirmed' | 'counter_evidence' | 'unsupported' | 'inconclusive';
     decision: 'promote' | 'downgrade' | 'drop' | 'manual_review';
@@ -815,6 +815,55 @@ function hasScopedResourceConstraint(snippet: string): boolean {
         && /\b(?:id|docId|documentId|recordId)\b[\s\S]{0,120}===/i.test(snippet);
 }
 
+function hasObjectAuthorizationGuard(snippet: string): boolean {
+    return /\b(?:findForTenant|findForOwner|findForUser|findScoped|findAuthorized)\s*\(/i.test(snippet)
+        || /\b(?:canRead|canAccess|authorize|isAuthorized|policy\.enforce)\w*\s*\(/i.test(snippet)
+        || /\bWHERE\s+id\s*=\s*\?[\s\S]{0,120}\bAND\s+(?:user_id|owner_id|tenant_id|account_id|organization_id|org_id)\s*=\s*\?/i.test(snippet)
+        || /\[(?:[^\]]*,\s*)?(?:currentUser|req\.user|actor|principal)\.(?:id|tenantId|accountId|organizationId|orgId)[^\]]*\]/i.test(snippet)
+        || /\b(?:tenantId|ownerId|userId|accountId|organizationId|orgId)\b[\s\S]{0,180}\b(?:req\.user|currentUser|actor|principal)\.(?:id|tenantId|accountId|organizationId|orgId)\b/i.test(snippet)
+        || hasScopedResourceConstraint(snippet);
+}
+
+function hasObjectLookupSink(snippet: string): boolean {
+    return /\b(?:findById|findOne|getById|loadById)\s*\(\s*(?:req|request)\.params\./i.test(snippet)
+        || /\b(?:SELECT|UPDATE|DELETE)\b[\s\S]{0,180}\bWHERE\s+id\s*=\s*\?/i.test(snippet)
+        || /\b(?:repositories|repository|repo)\.\w+\.(?:findById|findOne|getById|loadById)\s*\(/i.test(snippet);
+}
+
+function hasDirectUnscopedObjectLookup(snippet: string): boolean {
+    return /\b(?:findById|findOne|getById|loadById)\s*\(\s*(?:req|request)\.params\./i.test(snippet)
+        || /\b(?:repositories|repository|repo)\.\w+\.(?:findById|findOne|getById|loadById)\s*\(\s*(?:req|request)\.params\./i.test(snippet)
+        || /\b(?:SELECT|UPDATE|DELETE)\b[\s\S]{0,180}\bWHERE\s+id\s*=\s*\?(?![\s\S]{0,140}\bAND\s+(?:user_id|owner_id|tenant_id|account_id|organization_id|org_id)\s*=\s*\?)/i.test(snippet);
+}
+
+function hasPrivilegedAuthorizationGuard(snippet: string): boolean {
+    return /\b(?:requireAdmin|requireRole|canApprove|canAssign|canManage|authorize|isAuthorized|policy\.enforce)\w*\s*\(/i.test(snippet)
+        || /\b(?:role|roles|permissions)\b[\s\S]{0,160}(?:admin|finance|approver|write|manage)/i.test(snippet)
+        || /\bALLOWED_ROLES\b[\s\S]{0,160}\.(?:has|includes)\s*\(/.test(snippet);
+}
+
+function hasPrivilegedActionSink(snippet: string): boolean {
+    return /\b(?:approve|approveForTenant|updateRole|assignRole|grantPermission|rebuildSearchIndex|deleteUser|disableUser)\s*\(/i.test(snippet)
+        || /\b(?:role|permission|status)\s*[:=]\s*(?:req|request)\.body\./i.test(snippet)
+        || /\b['"]\/admin\b/i.test(snippet);
+}
+
+function hasDirectUnguardedPrivilegedAction(snippet: string): boolean {
+    return /\bupdateRole\s*\(\s*(?:req|request)\.params\.\w+\s*,\s*(?:req|request)\.body\.(?:role|permission)/i.test(snippet)
+        || /\bapprove\s*\(\s*(?:req|request)\.params\.\w+[\s\S]{0,120}\b(?:req|request)\.user\./i.test(snippet);
+}
+
+function hasRequestBodyMassAssignment(snippet: string): boolean {
+    return /\{\s*\.\.\.(?:req|request)\.body\s*\}/i.test(snippet)
+        || /\bObject\.assign\s*\([^)]*(?:req|request)\.body/i.test(snippet)
+        || /\.(?:update|save|create|insert)\s*\([^)]*(?:req|request)\.body/i.test(snippet);
+}
+
+function hasAllowedFieldProjection(snippet: string): boolean {
+    return /\b(?:ALLOWED_FIELDS|allowedFields|profileFields|safeFields)\b/i.test(snippet)
+        || /\b(?:displayName|timezone|email|firstName|lastName)\s*:\s*(?:req|request)\.body\.\w+/i.test(snippet);
+}
+
 function hasAllowlistedOutboundRequest(snippet: string): boolean {
     const hasGuard = /\b(?:isAllowedOutboundUrl|isSafeOutboundUrl|allowlistedOutboundUrl|validateOutboundUrl)\s*\(/i.test(snippet)
         || /\b(?:allowedHosts|trustedHosts|TRUSTED_HOSTS|allowlistedHosts)\s*(?:\.has|\.contains|\.Contains)\s*\(/.test(snippet);
@@ -1361,6 +1410,54 @@ function discoverLocalSinkEvidence(code: string, maxItems = 12): LocalSinkEviden
                     : 'Model production environment canary reaching debug activation.',
             }, seen);
         }
+
+        if (hasObjectLookupSink(window)) {
+            const hasGuard = hasObjectAuthorizationGuard(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'object-authorization',
+                sinkKind: 'object-lookup',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestSource ? 'request-controlled object identifier nearby' : undefined,
+                guardStatus: hasGuard ? 'present' : hasRequestSource ? 'missing' : 'unknown',
+                guardKind: hasGuard ? 'owner/tenant/policy scope' : undefined,
+                probeHint: hasGuard
+                    ? 'Model peer-object canary as blocked by owner, tenant, or policy scope.'
+                    : 'Model peer-object canary reaching an object lookup without authorization scope.',
+            }, seen);
+        }
+
+        if (hasPrivilegedActionSink(window)) {
+            const hasGuard = hasPrivilegedAuthorizationGuard(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'privileged-action',
+                sinkKind: 'privileged-state-change',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestSource ? 'request-controlled privileged action input nearby' : undefined,
+                guardStatus: hasGuard ? 'present' : hasRequestSource ? 'missing' : 'unknown',
+                guardKind: hasGuard ? 'role/policy/allowed-value guard' : undefined,
+                probeHint: hasGuard
+                    ? 'Model unauthorized actor canary as blocked by role, policy, or allowed-value validation.'
+                    : 'Model unauthorized actor canary reaching a privileged action.',
+            }, seen);
+        }
+
+        if (hasRequestBodyMassAssignment(window) || hasAllowedFieldProjection(window)) {
+            const hasProjection = hasAllowedFieldProjection(window) && !hasRequestBodyMassAssignment(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'mass-assignment',
+                sinkKind: 'model-update',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestSource ? 'request body fields nearby' : undefined,
+                guardStatus: hasProjection ? 'present' : hasRequestBodyMassAssignment(window) ? 'missing' : 'unknown',
+                guardKind: hasProjection ? 'explicit field projection' : undefined,
+                probeHint: hasProjection
+                    ? 'Model privileged field canary as dropped by explicit field projection.'
+                    : 'Model privileged field canary reaching a model update from request body.',
+            }, seen);
+        }
     }
 
     return evidence;
@@ -1667,6 +1764,15 @@ function getProbeIssueFamily(finding: Finding): SafeExploitProbeResult['family']
     }
     if (/debug|debug mode|debug_mode_production|verbose error/.test(haystack)) {
         return 'debug-exposure';
+    }
+    if (/idor|object-level|object level|tenant isolation|tenant_isolation|tenant scope|ownership/.test(haystack)) {
+        return 'object-authorization';
+    }
+    if (/broken function|function-level|function level|unprotected admin|privilege escalation|role assignment|assign role|approval workflow|admin route/.test(haystack)) {
+        return 'privileged-action';
+    }
+    if (/mass assignment|mass_assignment|bind request body|spread request body|assign req\.body/.test(haystack)) {
+        return 'mass-assignment';
     }
 
     return undefined;
@@ -2744,6 +2850,310 @@ function runDebugExposureSafeProbe(code: string, finding: Finding): SafeExploitP
     });
 }
 
+function runObjectAuthorizationSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 10);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasLookup = hasObjectLookupSink(snippet);
+    const hasGuard = hasObjectAuthorizationGuard(snippet);
+    const hasDirectUnscopedLookup = hasDirectUnscopedObjectLookup(snippet);
+    const hasRequestObjectId = hasRequestControlledSignal(snippet) || /\b(?:docId|documentId|recordId|userId|refundId)\b/i.test(snippet);
+
+    if (!hasLookup) {
+        return buildSafeProbeResult({
+            family: 'object-authorization',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'object-lookup',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No object lookup or object mutation sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasDirectUnscopedLookup && hasRequestObjectId) {
+        return buildSafeProbeResult({
+            family: 'object-authorization',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'object-lookup',
+            sinkLine,
+            sourceKind: 'request-controlled object identifier',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'peer-tenant-object-id',
+            counterexample: {
+                unsafeInput: 'peer-tenant-object-id',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'object access path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['request-controlled object id', 'object lookup sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: 'A request-controlled object identifier reaches a direct object lookup without owner, tenant, or policy scope at that sink.',
+        });
+    }
+
+    if (hasGuard) {
+        return buildSafeProbeResult({
+            family: 'object-authorization',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'object-lookup',
+            sinkLine,
+            sourceKind: hasRequestObjectId ? 'request-controlled object identifier' : undefined,
+            guardStatus: 'present',
+            guardKind: 'owner/tenant/policy scope',
+            canaryReachedSink: false,
+            canary: 'peer-tenant-object-id',
+            counterexample: {
+                unsafeInput: 'peer-tenant-object-id',
+                safeInput: 'same-tenant object id',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'object access path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'owner/tenant/policy scope',
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: 'Object access is scoped by owner, tenant, or an explicit authorization policy before data is returned.',
+        });
+    }
+
+    if (hasRequestObjectId) {
+        return buildSafeProbeResult({
+            family: 'object-authorization',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'object-lookup',
+            sinkLine,
+            sourceKind: 'request-controlled object identifier',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'peer-tenant-object-id',
+            counterexample: {
+                unsafeInput: 'peer-tenant-object-id',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'object access path',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['request-controlled object id', 'object lookup sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: 'A request-controlled object identifier reaches an object lookup without visible owner, tenant, or policy scope.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'object-authorization',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'object-lookup',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'An object access sink is visible, but request-controlled object flow could not be proven.',
+    });
+}
+
+function runPrivilegedActionSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 10);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasAction = hasPrivilegedActionSink(snippet);
+    const hasGuard = hasPrivilegedAuthorizationGuard(snippet);
+    const hasDirectUnguardedAction = hasDirectUnguardedPrivilegedAction(snippet);
+    const hasRequestInput = hasRequestControlledSignal(snippet) || /\breq\.user\b/i.test(snippet);
+
+    if (!hasAction) {
+        return buildSafeProbeResult({
+            family: 'privileged-action',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'privileged-state-change',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No privileged action sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasDirectUnguardedAction) {
+        return buildSafeProbeResult({
+            family: 'privileged-action',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'privileged-state-change',
+            sinkLine,
+            sourceKind: hasRequestInput ? 'actor/request-controlled privileged action input' : undefined,
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'unauthorized actor attempts privileged action',
+            counterexample: {
+                unsafeInput: 'unauthorized actor',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'privileged state change',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['actor/request input', 'privileged action sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: 'A request-controlled privileged action reaches the state change without a role, policy, or allowed-value guard at that sink.',
+        });
+    }
+
+    if (hasGuard) {
+        return buildSafeProbeResult({
+            family: 'privileged-action',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'privileged-state-change',
+            sinkLine,
+            sourceKind: hasRequestInput ? 'actor/request-controlled privileged action input' : undefined,
+            guardStatus: 'present',
+            guardKind: 'role/policy/allowed-value guard',
+            canaryReachedSink: false,
+            canary: 'unauthorized actor attempts privileged action',
+            counterexample: {
+                unsafeInput: 'unauthorized actor',
+                safeInput: 'authorized approver/admin',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'privileged state change',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'role or policy guard',
+            fixVerificationReady: true,
+            contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+            reason: 'The privileged action is protected by a role, policy, or allowed-value guard before state changes.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'privileged-action',
+        verdict: 'confirmed',
+        decision: 'promote',
+        sinkKind: 'privileged-state-change',
+        sinkLine,
+        sourceKind: hasRequestInput ? 'actor/request-controlled privileged action input' : undefined,
+        guardStatus: 'missing',
+        canaryReachedSink: true,
+        canary: 'unauthorized actor attempts privileged action',
+        counterexample: {
+            unsafeInput: 'unauthorized actor',
+            unsafeBlocked: false,
+        },
+        executionSlice: {
+            kind: 'static',
+            target: 'privileged state change',
+            dangerousCapabilitiesBlocked: true,
+        },
+        taintTrace: ['actor/request input', 'privileged action sink'],
+        mutationCount: 2,
+        fixVerificationReady: true,
+        contextDepth: /require\s*\(\s*['"][.][.]\//.test(code) ? 'multi-file' : 'single-file',
+        reason: 'A privileged action is reachable without a visible role, policy, or allowed-value guard.',
+    });
+}
+
+function runMassAssignmentSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasMassAssignment = hasRequestBodyMassAssignment(snippet);
+    const hasProjection = hasAllowedFieldProjection(snippet) && !hasMassAssignment;
+
+    if (hasProjection) {
+        return buildSafeProbeResult({
+            family: 'mass-assignment',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'model-update',
+            sinkLine,
+            sourceKind: 'request body fields',
+            guardStatus: 'present',
+            guardKind: 'explicit field projection',
+            canaryReachedSink: false,
+            canary: 'isAdmin=true',
+            counterexample: {
+                unsafeInput: 'isAdmin=true',
+                safeInput: 'displayName/timezone fields',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'model update payload',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'explicit allowed fields',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The update payload is built from explicit allowed request fields, so privileged extra fields are not assigned.',
+        });
+    }
+
+    if (!hasMassAssignment) {
+        return buildSafeProbeResult({
+            family: 'mass-assignment',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'model-update',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No request-body spread, bulk assignment, or direct request-body update sink is visible at the claimed span.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'mass-assignment',
+        verdict: 'confirmed',
+        decision: 'promote',
+        sinkKind: 'model-update',
+        sinkLine,
+        sourceKind: 'request body object',
+        guardStatus: 'missing',
+        canaryReachedSink: true,
+        canary: 'isAdmin=true',
+        counterexample: {
+            unsafeInput: 'isAdmin=true',
+            unsafeBlocked: false,
+        },
+        executionSlice: {
+            kind: 'static',
+            target: 'model update payload',
+            dangerousCapabilitiesBlocked: true,
+        },
+        taintTrace: ['request body object', 'model update payload'],
+        mutationCount: 2,
+        fixVerificationReady: true,
+        contextDepth: 'single-file',
+        reason: 'The request body is assigned wholesale into an update payload without an explicit field allowlist.',
+    });
+}
+
 function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeResult | undefined {
     if (finding.provenance !== 'ai') {
         return undefined;
@@ -2773,6 +3183,12 @@ function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeRe
             return runSensitiveLoggingSafeProbe(code, finding);
         case 'debug-exposure':
             return runDebugExposureSafeProbe(code, finding);
+        case 'object-authorization':
+            return runObjectAuthorizationSafeProbe(code, finding);
+        case 'privileged-action':
+            return runPrivilegedActionSafeProbe(code, finding);
+        case 'mass-assignment':
+            return runMassAssignmentSafeProbe(code, finding);
         default:
             return undefined;
     }

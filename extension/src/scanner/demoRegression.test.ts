@@ -420,6 +420,192 @@ describe('Demo fixture regression coverage', () => {
         expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
+    it('drops IDOR overcalls when object access is scoped to the current user', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 8,
+                    summary: 'Possible IDOR detected.',
+                    findings: [{
+                        id: 'safe-idor-overcall',
+                        line: 6,
+                        line_end: 9,
+                        severity: 'HIGH',
+                        framework: 'OWASP',
+                        rule_code: 'A01-IDOR',
+                        title: 'Missing object-level authorization',
+                        explanation: 'The document id reaches a database query.',
+                        threat: 'Attackers may read another user document.',
+                        fix: 'Scope document access to the actor.',
+                        confidence: 0.86,
+                        issue_id: 'owlvex.issue.idor.001',
+                        likelihood: 'HIGH',
+                        likelihood_reasons: ['A document id is used in a lookup.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\02-idor-safe.js',
+            'javascript',
+            readRepoFixture('demo', '02-idor-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['object-authorization']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+    });
+
+    it('drops privileged action overcalls when an admin guard protects the route', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 8,
+                    summary: 'Possible unprotected admin route.',
+                    findings: [{
+                        id: 'safe-admin-overcall',
+                        line: 14,
+                        line_end: 17,
+                        severity: 'HIGH',
+                        framework: 'OWASP',
+                        rule_code: 'A01-BFLA',
+                        title: 'Unprotected admin route',
+                        explanation: 'The admin route triggers a privileged rebuild action.',
+                        threat: 'Unauthorized users may trigger maintenance actions.',
+                        fix: 'Require an admin role before the action.',
+                        confidence: 0.85,
+                        issue_id: 'owlvex.issue.unprotected_admin_route.001',
+                        likelihood: 'HIGH',
+                        likelihood_reasons: ['An admin route invokes a privileged service.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\81-unprotected-admin-route-safe.js',
+            'javascript',
+            readRepoFixture('demo', '81-unprotected-admin-route-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['privileged-action']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+    });
+
+    it('drops mass-assignment overcalls when request fields are projected explicitly', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 7,
+                    summary: 'Possible mass assignment detected.',
+                    findings: [{
+                        id: 'safe-mass-assignment-overcall',
+                        line: 7,
+                        line_end: 10,
+                        severity: 'HIGH',
+                        framework: 'OWASP',
+                        rule_code: 'A01-MASS',
+                        title: 'Mass assignment through request body',
+                        explanation: 'The profile update uses request body fields.',
+                        threat: 'Attackers may set privileged fields.',
+                        fix: 'Use an explicit field allowlist.',
+                        confidence: 0.81,
+                        issue_id: 'owlvex.issue.mass_assignment.001',
+                        likelihood: 'MEDIUM',
+                        likelihood_reasons: ['Request body values are used in an update.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\79-mass-assignment-safe.js',
+            'javascript',
+            readRepoFixture('demo', '79-mass-assignment-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['mass-assignment']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+    });
+
     it('drops verifier-supported CORS overcalls when the sink probe sees an origin allowlist', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
