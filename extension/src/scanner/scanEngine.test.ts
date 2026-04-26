@@ -1099,6 +1099,82 @@ function decodeSessionTokenWithoutVerification(token) {
         expect(provider.complete).toHaveBeenCalledTimes(1);
     });
 
+    it('suppresses AI CSRF duplicates anchored to the route when static proof anchors on the mutation', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 7,
+                    summary: 'CSRF protection is missing.',
+                    findings: [
+                        {
+                            id: 'ai-csrf-route',
+                            line: 4,
+                            line_end: 4,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'CSRF-AI',
+                            title: 'Missing CSRF protection on state-changing request',
+                            explanation: 'The POST route is authenticated with cookies and has no CSRF middleware.',
+                            threat: 'Cross-site requests may mutate state.',
+                            fix: 'Add requireCsrf before the handler.',
+                            confidence: 0.96,
+                            issue_id: 'owlvex.issue.csrf_missing_token.001',
+                            evidence_contract: {
+                                source: { line: 4, expression: 'requireUser' },
+                                sink: { line: 4, expression: 'router.post' },
+                                guard: { status: 'missing', explanation: 'No requireCsrf middleware is present.' },
+                            },
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\imports.js',
+            getText: () => `const express = require('express');
+const { requireUser } = require('./auth');
+function createRouter(repositories) {
+  router.post('/customer-notes-safe', requireUser, async (req, res) => {
+    const note = JSON.parse(req.body.payload);
+    repositories.imports.addCustomerNote(note);
+    res.json({ imported: true });
+  });
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(1);
+        expect(result.findings[0].provenance).toBe('deterministic');
+        expect(result.findings[0].canonicalId).toBe('owlvex.issue.csrf_missing_token.001');
+        expect(result.findings[0].line).toBe(5);
+    });
+
     it('recalculates the final score from merged severity metrics instead of trusting the model score', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),

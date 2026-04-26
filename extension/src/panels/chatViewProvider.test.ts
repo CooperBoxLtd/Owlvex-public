@@ -2253,8 +2253,9 @@ describe('parseChatIntent', () => {
             expect.objectContaining({ fsPath: 'd:\\repo\\src\\two.js' }),
         );
         expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Verifying the 2 updated files now');
-        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Verification complete: the reviewed finding is no longer present');
-        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Fix verification probe: cleared; the original simulated sql-injection path is no longer reported after Keep fix.');
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Post-fix verification complete for 2 updated files.');
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Reviewed findings cleared: 2/2.');
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('No continuation findings were reported for the touched files.');
     });
 
     it('summarizes continuation after a combined fix when any verified file still has findings', async () => {
@@ -2396,9 +2397,11 @@ describe('parseChatIntent', () => {
         await provider.applyPendingFixPreview();
 
         const contents = (provider as any).messages.map((message: any) => message.content).join('\n');
-        expect(contents).toContain('Verification complete: the finding still exists, but its risk dropped from 9/10 to 8/10.');
+        expect(contents).toContain('Post-fix verification complete for 2 updated files.');
+        expect(contents).toContain('Reviewed findings cleared: 1/2.');
         expect(contents).toContain('Fix continuation required across 1 verified file before moving on.');
         expect(contents).toContain('Next fix target: Server-side request forgery through untrusted destination (8/10 risk) in d:\\repo\\src\\two.js at line 2.');
+        expect(contents).toContain('Target still present with lower risk: Server-side request forgery through untrusted destination in d:\\repo\\src\\two.js (8/10 risk).');
         expect(contents).toContain('Active continuation queue: 1 unresolved touched file ranked by remaining risk.');
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.actions).toEqual(expect.arrayContaining([

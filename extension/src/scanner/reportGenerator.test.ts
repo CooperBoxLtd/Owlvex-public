@@ -643,6 +643,59 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Evidence: Finder high confidence, not independently verified');
     });
 
+    it('counts safe-probe confirmed AI findings separately from finder-only posture', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('router.post("/role", requireUser, handler);'));
+        const snapshot = {
+            targetLabel: 'src/probes/role.js',
+            outputRoot: vscode.Uri.file('d:\\repo\\src\\probes'),
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\probes\\role.js'),
+                    result: buildResult({
+                        findings: [
+                            {
+                                ...buildResult().findings[0],
+                                title: 'Role update endpoint appears to allow privilege escalation without authorization',
+                                canonicalTitle: 'Role update endpoint appears to allow privilege escalation without authorization',
+                                confidence: 0.99,
+                                resolverConfidence: 0.99,
+                                corroboration: 'CORROBORATED',
+                                scanTier: 'REPO_AI',
+                                aiReviewScores: { finder: 0.99, final: 0.99 },
+                                aiReviewNotes: {
+                                    finder: 'The role update reaches a privileged state change without authorization.',
+                                },
+                                riskScore: 10,
+                                safeProbe: {
+                                    family: 'privileged-action',
+                                    techniques: ['sink_interception', 'fix_verification_probe'],
+                                    verdict: 'confirmed',
+                                    decision: 'promote',
+                                    sinkKind: 'privileged-state-change',
+                                    sinkLine: 2,
+                                    sourceKind: 'request-controlled role',
+                                    guardStatus: 'missing',
+                                    canaryReachedSink: true,
+                                    sideEffects: 'intercepted',
+                                    reason: 'A request-controlled role reaches the state change without a guard.',
+                                },
+                            },
+                        ],
+                    }),
+                },
+            ],
+        };
+
+        await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Confidence posture: 1 safe-probe validated');
+        expect(written).not.toContain('- Confidence posture: 1 finder-only');
+        expect(written).toContain('- Evidence: Validated by safe probe');
+    });
+
     it('includes scan warnings when a scan completed with recorder issues', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         const snapshot = {

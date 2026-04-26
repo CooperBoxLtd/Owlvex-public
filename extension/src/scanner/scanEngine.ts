@@ -1575,27 +1575,22 @@ function dedupeOverlappingAiFindings(findings: Finding[]): Finding[] {
 }
 
 function sameDeterministicOwnership(det: Finding, ai: Finding): boolean {
-    if (!findingsOverlap(det, ai)) {
+    const sameCanonical = Boolean(det.canonicalId && ai.canonicalId && det.canonicalId === ai.canonicalId);
+    const sameRule = Boolean(det.ruleCode && ai.ruleCode && det.ruleCode === ai.ruleCode);
+    const sameFamily = Boolean(
+        (det.canonicalFamily && ai.canonicalFamily && det.canonicalFamily === ai.canonicalFamily)
+        || (det.canonicalFamilyLabel && ai.canonicalFamilyLabel && det.canonicalFamilyLabel === ai.canonicalFamilyLabel),
+    );
+    const sameOwnership = sameCanonical || sameRule || sameFamily;
+    const closeRouteAnchors = sameCanonical
+        && det.canonicalId === 'owlvex.issue.csrf_missing_token.001'
+        && Math.abs(det.line - ai.line) <= 8;
+
+    if (!findingsOverlap(det, ai) && !closeRouteAnchors) {
         return false;
     }
 
-    if (det.canonicalId && ai.canonicalId) {
-        return det.canonicalId === ai.canonicalId;
-    }
-
-    if (det.ruleCode && ai.ruleCode) {
-        return det.ruleCode === ai.ruleCode;
-    }
-
-    if (det.canonicalFamily && ai.canonicalFamily) {
-        return det.canonicalFamily === ai.canonicalFamily;
-    }
-
-    if (det.canonicalFamilyLabel && ai.canonicalFamilyLabel) {
-        return det.canonicalFamilyLabel === ai.canonicalFamilyLabel;
-    }
-
-    return false;
+    return sameOwnership;
 }
 
 function filterStaticOwnedAiFindings(deterministicFindings: Finding[], aiFindings: Finding[]): Finding[] {

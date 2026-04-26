@@ -1067,7 +1067,18 @@ function buildConfidencePostureLine(
 
     const proven = findings.filter(finding => getCorroborationLabel(finding) === 'PROVEN').length;
     const corroborated = findings.filter(finding => getCorroborationLabel(finding) === 'CORROBORATED' && (finding.provenance === 'deterministic' || hasIndependentAiReview(finding))).length;
-    const finderOnly = findings.filter(finding => finding.provenance !== 'deterministic' && !hasIndependentAiReview(finding) && getCorroborationLabel(finding) === 'CORROBORATED').length;
+    const safeProbeValidated = findings.filter(finding =>
+        finding.provenance !== 'deterministic'
+        && finding.safeProbe?.verdict === 'confirmed'
+        && !hasIndependentAiReview(finding)
+        && getCorroborationLabel(finding) === 'CORROBORATED'
+    ).length;
+    const finderOnly = findings.filter(finding =>
+        finding.provenance !== 'deterministic'
+        && !hasIndependentAiReview(finding)
+        && finding.safeProbe?.verdict !== 'confirmed'
+        && getCorroborationLabel(finding) === 'CORROBORATED'
+    ).length;
     const manualReview = findings.filter(finding => needsManualReview(finding)).length;
     const partial = findings.filter(finding => getCorroborationLabel(finding) === 'PARTIAL').length;
 
@@ -1077,6 +1088,9 @@ function buildConfidencePostureLine(
     }
     if (corroborated > 0) {
         parts.push(`${corroborated} cross-checked`);
+    }
+    if (safeProbeValidated > 0) {
+        parts.push(`${safeProbeValidated} safe-probe validated`);
     }
     if (finderOnly > 0) {
         parts.push(`${finderOnly} finder-only`);

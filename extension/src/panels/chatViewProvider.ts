@@ -1585,6 +1585,71 @@ function buildCombinedFixContinuationMessage(outcomes: AppliedFixVerificationOut
     return [...lines, ...additional].join('\n');
 }
 
+function buildCombinedFixVerificationMessage(outcomes: AppliedFixVerificationOutcome[]): string {
+    const completed = outcomes.filter(outcome => outcome.status !== 'failed' && outcome.status !== 'incomplete');
+    const reviewedCleared = completed.filter(outcome =>
+        outcome.status === 'removed_clean' || outcome.status === 'removed_with_remaining'
+    );
+    const clean = completed.filter(outcome => outcome.status === 'removed_clean');
+    const unresolved = outcomes.filter(outcome =>
+        outcome.status !== 'removed_clean'
+        && outcome.status !== 'failed'
+        && outcome.status !== 'incomplete'
+    );
+    const incomplete = outcomes.filter(outcome => outcome.status === 'incomplete');
+    const failed = outcomes.filter(outcome => outcome.status === 'failed');
+    const lines = [
+        `Post-fix verification complete for ${outcomes.length} updated file${outcomes.length === 1 ? '' : 's'}.`,
+        `Reviewed findings cleared: ${reviewedCleared.length}/${outcomes.length}.`,
+        `Files clean after verification: ${clean.length}/${outcomes.length}.`,
+    ];
+
+    if (unresolved.length) {
+        const continuation = buildCombinedFixContinuationMessage(outcomes);
+        if (continuation) {
+            lines.push('', continuation);
+        }
+    } else if (!incomplete.length && !failed.length) {
+        lines.push('No continuation findings were reported for the touched files.');
+    }
+
+    const clearedWithRemaining = outcomes
+        .filter(outcome => outcome.status === 'removed_with_remaining' && outcome.nextFinding)
+        .slice(0, 4)
+        .map(outcome => {
+            const label = vscode.workspace.asRelativePath(outcome.targetUri, false);
+            const finding = outcome.nextFinding!;
+            return `Remaining after cleared target: ${finding.canonicalTitle || finding.title} in ${label} (${finding.riskScore ?? 'n/a'}/10 risk).`;
+        });
+    if (clearedWithRemaining.length) {
+        lines.push('', ...clearedWithRemaining);
+    }
+
+    const stillPresent = outcomes
+        .filter(outcome => outcome.status === 'still_present' || outcome.status === 'risk_reduced')
+        .slice(0, 4)
+        .map(outcome => {
+            const label = vscode.workspace.asRelativePath(outcome.targetUri, false);
+            const finding = outcome.matchingFinding!;
+            const prefix = outcome.status === 'risk_reduced'
+                ? 'Target still present with lower risk'
+                : 'Target still present';
+            return `${prefix}: ${finding.canonicalTitle || finding.title} in ${label} (${finding.riskScore ?? 'n/a'}/10 risk).`;
+        });
+    if (stillPresent.length) {
+        lines.push('', ...stillPresent);
+    }
+
+    if (incomplete.length || failed.length) {
+        lines.push(
+            '',
+            `Verification incomplete: ${incomplete.length} file${incomplete.length === 1 ? '' : 's'} returned no completed scan; ${failed.length} file${failed.length === 1 ? '' : 's'} failed verification.`,
+        );
+    }
+
+    return lines.filter(line => line !== undefined).join('\n');
+}
+
 function getCombinedFixContinuationTargets(outcomes: AppliedFixVerificationOutcome[]): ActionableFindingTarget[] {
     const targets: ActionableFindingTarget[] = [];
     for (const outcome of outcomes) {
@@ -2358,30 +2423,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     originalFinding: change.finding,
                     reviewedPaths,
                     patchedText: change.patchedText,
+                    suppressMessages: true,
                 }));
             }
-            const continuationMessage = buildCombinedFixContinuationMessage(verificationOutcomes);
-            if (continuationMessage) {
-                const continuationTargets = getCombinedFixContinuationTargets(verificationOutcomes);
+            const continuationTargets = getCombinedFixContinuationTargets(verificationOutcomes);
+            if (continuationTargets.length) {
                 this.latestActionableItems = continuationTargets.slice(0, 10);
                 this.latestActionableFinding = continuationTargets[0]?.finding;
                 this.latestActionableTargetPath = continuationTargets[0]?.targetPath;
-                this.messages.push({
-                    role: 'assistant',
-                    content: [
-                        continuationMessage,
-                        continuationTargets.length
-                            ? `Active continuation queue: ${continuationTargets.length} unresolved touched file${continuationTargets.length === 1 ? '' : 's'} ranked by remaining risk.`
-                            : '',
-                    ].filter(Boolean).join('\n'),
-                    kind: 'advisory',
-                    actions: buildCombinedFixContinuationActions(verificationOutcomes),
-                });
             } else {
                 this.latestActionableItems = [];
                 this.latestActionableFinding = undefined;
                 this.latestActionableTargetPath = undefined;
             }
+            this.messages.push({
+                role: 'assistant',
+                content: [
+                    buildCombinedFixVerificationMessage(verificationOutcomes),
+                    continuationTargets.length
+                        ? `Active continuation queue: ${continuationTargets.length} unresolved touched file${continuationTargets.length === 1 ? '' : 's'} ranked by remaining risk.`
+                        : '',
+                ].filter(Boolean).join('\n'),
+                kind: 'advisory',
+                actions: buildCombinedFixContinuationActions(verificationOutcomes)
+                    ?? [buildQuickActionAction('combined-post-fix-scan-workspace', 'Scan workspace', 'scanFolder')],
+            });
             void this.persistState();
             this.refresh();
             return;
@@ -2644,21 +2710,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         originalFinding: Finding;
         reviewedPaths: string[];
         patchedText: string;
+        suppressMessages?: boolean;
     }): Promise<AppliedFixVerificationOutcome> {
-        const { targetUri, originalFinding, reviewedPaths, patchedText } = options;
+        const { targetUri, originalFinding, reviewedPaths, patchedText, suppressMessages = false } = options;
         try {
             const scanResult = await vscode.commands.executeCommand(PROFILE.commands.scanFile, targetUri) as { status?: string; result?: ScanResult } | undefined;
             const rescanned = scanResult?.status === 'completed' ? scanResult.result : undefined;
             if (!rescanned) {
-                this.messages.push({
-                    role: 'assistant',
-                    content: `Verification could not confirm the result for ${vscode.workspace.asRelativePath(targetUri, false)}. The reviewed code was kept, but no completed rescan result was returned.`,
-                    kind: 'advisory',
-                    actions: buildPostFixVerificationActions({
-                        targetPath: targetUri.fsPath,
-                        originalFinding,
-                    }),
-                });
+                if (!suppressMessages) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: `Verification could not confirm the result for ${vscode.workspace.asRelativePath(targetUri, false)}. The reviewed code was kept, but no completed rescan result was returned.`,
+                        kind: 'advisory',
+                        actions: buildPostFixVerificationActions({
+                            targetPath: targetUri.fsPath,
+                            originalFinding,
+                        }),
+                    });
+                }
                 this.emitUsageTelemetry('fix_verification_completed', {
                     outcome: 'verification_incomplete',
                     file_count: 1,
@@ -2693,21 +2762,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     this.setPostFixContinuationTarget(targetUri, nextFinding);
                 }
                 const providerComparisonNotes = this.buildProviderComparisonNotes([{ uri: targetUri, result: rescanned }]);
-                this.messages.push({
-                    role: 'assistant',
-                    content: [
-                        buildTargetRemovedVerificationMessage(targetUri, rescanned),
-                        buildFixVerificationProbeNote(originalFinding),
-                        ...providerComparisonNotes,
-                    ].filter(Boolean).join('\n'),
-                    kind: 'advisory',
-                    actions: buildPostFixVerificationActions({
-                        rescanned,
-                        targetPath: targetUri.fsPath,
-                        originalFinding,
-                        nextFinding,
-                    }),
-                });
+                if (!suppressMessages) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: [
+                            buildTargetRemovedVerificationMessage(targetUri, rescanned),
+                            buildFixVerificationProbeNote(originalFinding),
+                            ...providerComparisonNotes,
+                        ].filter(Boolean).join('\n'),
+                        kind: 'advisory',
+                        actions: buildPostFixVerificationActions({
+                            rescanned,
+                            targetPath: targetUri.fsPath,
+                            originalFinding,
+                            nextFinding,
+                        }),
+                    });
+                }
                 this.emitUsageTelemetry('fix_verification_completed', {
                     outcome: 'removed',
                     file_count: 1,
@@ -2720,21 +2791,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 status = nextFinding ? 'removed_with_remaining' : 'removed_clean';
             } else if ((matchingFinding.riskScore ?? 0) < (originalFinding.riskScore ?? 0)) {
                 this.setPostFixContinuationTarget(targetUri, matchingFinding);
-                this.messages.push({
-                    role: 'assistant',
-                    content: [
-                        `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
-                        buildFixVerificationProbeNote(originalFinding, matchingFinding),
-                        'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
-                    ].filter(Boolean).join('\n'),
-                    kind: 'advisory',
-                    actions: buildPostFixVerificationActions({
-                        rescanned,
-                        targetPath: targetUri.fsPath,
-                        originalFinding,
-                        matchingFinding,
-                    }),
-                });
+                if (!suppressMessages) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: [
+                            `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
+                            buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                            'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
+                        ].filter(Boolean).join('\n'),
+                        kind: 'advisory',
+                        actions: buildPostFixVerificationActions({
+                            rescanned,
+                            targetPath: targetUri.fsPath,
+                            originalFinding,
+                            matchingFinding,
+                        }),
+                    });
+                }
                 this.emitUsageTelemetry('fix_verification_completed', {
                     outcome: 'risk_reduced',
                     file_count: 1,
@@ -2747,21 +2820,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 status = 'risk_reduced';
             } else {
                 this.setPostFixContinuationTarget(targetUri, matchingFinding);
-                this.messages.push({
-                    role: 'assistant',
-                    content: [
-                        `Verification complete: the finding is still present after the kept fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
-                        buildFixVerificationProbeNote(originalFinding, matchingFinding),
-                        'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
-                    ].filter(Boolean).join('\n'),
-                    kind: 'advisory',
-                    actions: buildPostFixVerificationActions({
-                        rescanned,
-                        targetPath: targetUri.fsPath,
-                        originalFinding,
-                        matchingFinding,
-                    }),
-                });
+                if (!suppressMessages) {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: [
+                            `Verification complete: the finding is still present after the kept fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
+                            buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                            'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
+                        ].filter(Boolean).join('\n'),
+                        kind: 'advisory',
+                        actions: buildPostFixVerificationActions({
+                            rescanned,
+                            targetPath: targetUri.fsPath,
+                            originalFinding,
+                            matchingFinding,
+                        }),
+                    });
+                }
                 this.emitUsageTelemetry('fix_verification_completed', {
                     outcome: 'still_present',
                     file_count: 1,
@@ -2795,15 +2870,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 status,
             };
         } catch (error: any) {
-            this.messages.push({
-                role: 'assistant',
-                content: `Verification scan failed after keeping the fix for ${vscode.workspace.asRelativePath(targetUri, false)}: ${error.message}`,
-                kind: 'advisory',
-                actions: buildPostFixVerificationActions({
-                    targetPath: targetUri.fsPath,
-                    originalFinding,
-                }),
-            });
+            if (!suppressMessages) {
+                this.messages.push({
+                    role: 'assistant',
+                    content: `Verification scan failed after keeping the fix for ${vscode.workspace.asRelativePath(targetUri, false)}: ${error.message}`,
+                    kind: 'advisory',
+                    actions: buildPostFixVerificationActions({
+                        targetPath: targetUri.fsPath,
+                        originalFinding,
+                    }),
+                });
+            }
             this.emitUsageTelemetry('fix_verification_completed', {
                 outcome: 'verification_failed',
                 file_count: 1,
