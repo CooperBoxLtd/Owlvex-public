@@ -570,6 +570,64 @@ describe('reportGenerator', () => {
         expect(written).toContain('- warn.js: Failed to record scan: Internal Server Error');
     });
 
+    it('renders engine telemetry when sink-first evidence is available', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(
+            Buffer.from([
+                'app.get("/user", async (req, res) => {',
+                '  return db.query(`SELECT * FROM users WHERE id = ${req.query.id}`);',
+                '});',
+            ].join('\n')),
+        );
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo\\src'), {
+            targetLabel: 'src',
+            outputRoot: vscode.Uri.file('d:\\repo\\src'),
+            errors: [],
+            results: [{
+                uri: vscode.Uri.file('d:\\repo\\src\\users.js'),
+                result: buildResult({
+                    engineTelemetry: {
+                        sinkInventory: {
+                            total: 2,
+                            byFamily: {
+                                'sql-injection': 1,
+                                ssrf: 1,
+                            },
+                            guarded: 1,
+                            missingGuard: 1,
+                            unknownGuard: 0,
+                        },
+                        aiFindings: {
+                            proposed: 3,
+                            afterStaticFilter: 2,
+                            afterCorroboration: 1,
+                            finalSurvivors: 1,
+                        },
+                        safeProbes: {
+                            run: 2,
+                            confirmed: 1,
+                            counterEvidence: 1,
+                            unsupported: 0,
+                            inconclusive: 0,
+                            promoted: 1,
+                            downgraded: 0,
+                            dropped: 1,
+                            manualReview: 0,
+                        },
+                    },
+                }),
+            }],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Local sinks discovered before AI: 2 (sql-injection: 1 | ssrf: 1)');
+        expect(written).toContain('- Sink guard posture: guarded 1 | missing guard 1 | unknown 0');
+        expect(written).toContain('- AI finding funnel: proposed 3 | after static/sink/probe filter 2 | after corroboration 1 | final AI survivors 1');
+        expect(written).toContain('- Safe probes: run 2 | confirmed 1 | counter-evidence 1 | unsupported 0 | inconclusive 0');
+        expect(written).toContain('- Probe decisions: promoted 1 | downgraded 0 | dropped 1 | manual review 0');
+    });
+
     it('uses warning-aware summaries for clean files instead of degraded raw scan prose', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         const snapshot = {

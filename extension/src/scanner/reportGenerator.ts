@@ -319,6 +319,91 @@ function summarizeEngineEvidence(findings: ScanResult['findings']): string {
     ].join(' | ');
 }
 
+function aggregateEngineTelemetry(results: ReportEntry[]): NonNullable<ScanResult['engineTelemetry']> | undefined {
+    const entries = results
+        .map(item => item.result.engineTelemetry)
+        .filter((telemetry): telemetry is NonNullable<ScanResult['engineTelemetry']> => Boolean(telemetry));
+    if (!entries.length) {
+        return undefined;
+    }
+
+    const aggregate: NonNullable<ScanResult['engineTelemetry']> = {
+        sinkInventory: {
+            total: 0,
+            byFamily: {},
+            guarded: 0,
+            missingGuard: 0,
+            unknownGuard: 0,
+        },
+        aiFindings: {
+            proposed: 0,
+            afterStaticFilter: 0,
+            afterCorroboration: 0,
+            finalSurvivors: 0,
+        },
+        safeProbes: {
+            run: 0,
+            confirmed: 0,
+            counterEvidence: 0,
+            unsupported: 0,
+            inconclusive: 0,
+            promoted: 0,
+            downgraded: 0,
+            dropped: 0,
+            manualReview: 0,
+        },
+    };
+
+    for (const entry of entries) {
+        aggregate.sinkInventory.total += entry.sinkInventory.total;
+        aggregate.sinkInventory.guarded += entry.sinkInventory.guarded;
+        aggregate.sinkInventory.missingGuard += entry.sinkInventory.missingGuard;
+        aggregate.sinkInventory.unknownGuard += entry.sinkInventory.unknownGuard;
+        for (const [family, count] of Object.entries(entry.sinkInventory.byFamily)) {
+            const key = family as keyof typeof aggregate.sinkInventory.byFamily;
+            aggregate.sinkInventory.byFamily[key] = (aggregate.sinkInventory.byFamily[key] ?? 0) + Number(count ?? 0);
+        }
+        aggregate.aiFindings.proposed += entry.aiFindings.proposed;
+        aggregate.aiFindings.afterStaticFilter += entry.aiFindings.afterStaticFilter;
+        aggregate.aiFindings.afterCorroboration += entry.aiFindings.afterCorroboration;
+        aggregate.aiFindings.finalSurvivors += entry.aiFindings.finalSurvivors;
+        aggregate.safeProbes.run += entry.safeProbes.run;
+        aggregate.safeProbes.confirmed += entry.safeProbes.confirmed;
+        aggregate.safeProbes.counterEvidence += entry.safeProbes.counterEvidence;
+        aggregate.safeProbes.unsupported += entry.safeProbes.unsupported;
+        aggregate.safeProbes.inconclusive += entry.safeProbes.inconclusive;
+        aggregate.safeProbes.promoted += entry.safeProbes.promoted;
+        aggregate.safeProbes.downgraded += entry.safeProbes.downgraded;
+        aggregate.safeProbes.dropped += entry.safeProbes.dropped;
+        aggregate.safeProbes.manualReview += entry.safeProbes.manualReview;
+    }
+
+    return aggregate;
+}
+
+function formatSinkFamilyCounts(telemetry: NonNullable<ScanResult['engineTelemetry']> | undefined): string {
+    const entries = Object.entries(telemetry?.sinkInventory.byFamily ?? {})
+        .filter(([, count]) => Number(count) > 0)
+        .sort(([left], [right]) => left.localeCompare(right));
+    return entries.length
+        ? entries.map(([family, count]) => `${family}: ${count}`).join(' | ')
+        : 'none';
+}
+
+function buildEngineTelemetryLines(telemetry: NonNullable<ScanResult['engineTelemetry']> | undefined): string[] {
+    if (!telemetry) {
+        return [];
+    }
+
+    return [
+        `- Local sinks discovered before AI: ${telemetry.sinkInventory.total} (${formatSinkFamilyCounts(telemetry)})`,
+        `- Sink guard posture: guarded ${telemetry.sinkInventory.guarded} | missing guard ${telemetry.sinkInventory.missingGuard} | unknown ${telemetry.sinkInventory.unknownGuard}`,
+        `- AI finding funnel: proposed ${telemetry.aiFindings.proposed} | after static/sink/probe filter ${telemetry.aiFindings.afterStaticFilter} | after corroboration ${telemetry.aiFindings.afterCorroboration} | final AI survivors ${telemetry.aiFindings.finalSurvivors}`,
+        `- Safe probes: run ${telemetry.safeProbes.run} | confirmed ${telemetry.safeProbes.confirmed} | counter-evidence ${telemetry.safeProbes.counterEvidence} | unsupported ${telemetry.safeProbes.unsupported} | inconclusive ${telemetry.safeProbes.inconclusive}`,
+        `- Probe decisions: promoted ${telemetry.safeProbes.promoted} | downgraded ${telemetry.safeProbes.downgraded} | dropped ${telemetry.safeProbes.dropped} | manual review ${telemetry.safeProbes.manualReview}`,
+    ];
+}
+
 function getFindingLikelihood(finding: ScanResult['findings'][number]): string {
     return String(finding.likelihood ?? 'MEDIUM').toUpperCase();
 }
@@ -1023,6 +1108,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
     );
     const providerComparisonNotes = getProviderComparisonNotes(snapshot.results);
     const providerDisagreementProofLines = getProviderDisagreementProofLines(root, snapshot.results);
+    const engineTelemetry = aggregateEngineTelemetry(snapshot.results);
     const packCoverageSummary = buildKnowledgeSourcesSummary(snapshot.results);
     const projectContextSummary = [...new Set(
         snapshot.results
@@ -1157,6 +1243,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
             `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
             `- Proof posture: ${summarizeProofPosture(allFindings)}`,
+            ...buildEngineTelemetryLines(engineTelemetry),
             `- Files scanned: ${snapshot.results.length}`,
             `- Total findings: ${totalFindings}`,
             `- Manual-review findings: ${manualReviewAiCount}`,
@@ -1220,6 +1307,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
         `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
         `- Proof posture: ${summarizeProofPosture(allFindings)}`,
+        ...buildEngineTelemetryLines(engineTelemetry),
         '',
         '## Fix First',
         '',
@@ -1235,6 +1323,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
         `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
         `- Proof posture: ${summarizeProofPosture(allFindings)}`,
+        ...buildEngineTelemetryLines(engineTelemetry),
         '',
         '## AI Usage',
         '',
@@ -1300,6 +1389,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Confidence: ${buildConfidencePostureLine(item.result.findings)}`);
             lines.push(`- Engine evidence: ${summarizeEngineEvidence(item.result.findings)}`);
             lines.push(`- Proof posture: ${summarizeProofPosture(item.result.findings, item.file)}`);
+            lines.push(...buildEngineTelemetryLines(item.result.engineTelemetry));
             lines.push(`- Manual review: ${item.result.findings.filter(finding => needsManualReview(finding)).length} AI finding(s) needing review`);
             lines.push('');
 
@@ -1320,6 +1410,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Evidence: ${summarizeCorroborationCounts(item.result.findings)}`);
             lines.push(`- Engine evidence: ${summarizeEngineEvidence(item.result.findings)}`);
             lines.push(`- Proof posture: ${summarizeProofPosture(item.result.findings, item.file)}`);
+            lines.push(...buildEngineTelemetryLines(item.result.engineTelemetry));
             if (!usesAiForFindings(item.result)) {
                 lines.push('- AI review: not used for the final finding set in this file');
             }

@@ -42,6 +42,123 @@ describe('Demo fixture regression coverage', () => {
         });
     });
 
+    it('feeds a local sink inventory into the Finder prompt before AI review', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 0,
+                    summary: 'No findings detected.',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                }),
+                tokenCount: 12,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\22-ssrf-unsafe.js',
+            'javascript',
+            readRepoFixture('demo', '22-ssrf-unsafe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        const userMessage = provider.complete.mock.calls[0][0].userMessage;
+        expect(userMessage).toContain('Local sink inventory before AI:');
+        expect(userMessage).toContain('family=ssrf');
+        expect(userMessage).toContain('sink=outbound-request');
+        expect(userMessage).toContain('Sink-first evidence beats generic suspicion.');
+        expect(result.engineTelemetry?.sinkInventory.total).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.sinkInventory.byFamily.ssrf).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.aiFindings.proposed).toBe(0);
+        expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
+    });
+
+    it('drops probeable AI candidates before verifier when no matching local sink exists', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 8,
+                    summary: 'Possible SSRF detected.',
+                    findings: [{
+                        id: 'ssrf-without-sink',
+                        line: 3,
+                        line_end: 3,
+                        severity: 'HIGH',
+                        framework: 'OWASP',
+                        rule_code: 'A10-SSRF',
+                        title: 'Server-side request forgery through untrusted destination',
+                        explanation: 'The route allegedly fetches an untrusted URL.',
+                        threat: 'Attackers may reach internal services.',
+                        fix: 'Validate outbound destinations.',
+                        confidence: 0.82,
+                        issue_id: 'owlvex.issue.ssrf.001',
+                        likelihood: 'HIGH',
+                        likelihood_reasons: ['The model claimed a request-controlled destination.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\src\\profile.js',
+            'javascript',
+            [
+                'export function profile(req, res) {',
+                '  const name = String(req.query.name || "guest");',
+                '  res.json({ name });',
+                '}',
+            ].join('\n'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.engineTelemetry?.sinkInventory.total).toBe(0);
+        expect(result.engineTelemetry?.aiFindings.proposed).toBe(1);
+        expect(result.engineTelemetry?.aiFindings.afterStaticFilter).toBe(0);
+        expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
+    });
+
     it('keeps the safe deserialization fixture clean under AI overclassification attempts', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
@@ -237,10 +354,13 @@ describe('Demo fixture regression coverage', () => {
 
         const result = await engine.scanDocument(doc);
 
+        expect(provider.complete).toHaveBeenCalledTimes(1);
         expect(result.findings).toHaveLength(1);
         expect(result.findings[0].canonicalId).toBe('owlvex.issue.ssrf.001');
         expect(result.findings[0].line).toBe(8);
         expect(result.findings.some(f => f.id === 'safe-fetch-ssrf')).toBe(false);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
     it('drops verifier-supported SQL injection overcalls when the sink probe sees parameter binding', async () => {
@@ -311,6 +431,80 @@ describe('Demo fixture regression coverage', () => {
 
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('drops verifier-supported open redirect overcalls when the sink probe sees a local route allowlist', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn()
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        score: 6,
+                        summary: 'Possible open redirect detected.',
+                        findings: [{
+                            id: 'safe-redirect-overcall',
+                            line: 9,
+                            line_end: 9,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'A01-REDIRECT',
+                            title: 'Open redirect through untrusted next parameter',
+                            explanation: 'The next value reaches res.redirect.',
+                            threat: 'Attackers may send users to a phishing site.',
+                            fix: 'Constrain redirect destinations.',
+                            confidence: 0.76,
+                            issue_id: 'owlvex.issue.open_redirect.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['The request next parameter influences the redirect target.'],
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                    }),
+                    tokenCount: 42,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{
+                            id: 'safe-redirect-overcall',
+                            verdict: 'support',
+                            confidence: 0.91,
+                            reason: 'The next parameter influences res.redirect.',
+                        }],
+                    }),
+                    tokenCount: 12,
+                }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\17-open-redirect-safe.js',
+            'javascript',
+            readRepoFixture('demo', '17-open-redirect-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['open-redirect']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
     it('drops verifier-supported command injection overcalls when the sink probe sees argv separation', async () => {

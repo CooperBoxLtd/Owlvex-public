@@ -73,7 +73,7 @@ export type SafeProbeTechnique =
     | 'multi_file_context_probe';
 
 export interface SafeExploitProbeResult {
-    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation';
+    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect';
     techniques: SafeProbeTechnique[];
     verdict: 'confirmed' | 'counter_evidence' | 'unsupported' | 'inconclusive';
     decision: 'promote' | 'downgrade' | 'drop' | 'manual_review';
@@ -156,6 +156,7 @@ export interface ScanResult {
     warnings: string[];
     providerComparisonNotes?: string[];
     providerDisagreementProofs?: ProviderDisagreementProof[];
+    engineTelemetry?: EngineTelemetry;
     aiUsage?: {
         requestCount: number;
         totalTokens: number;
@@ -171,6 +172,33 @@ export interface ProviderDisagreementProof {
     source?: string;
     sink?: string;
     guard?: string;
+}
+
+export interface EngineTelemetry {
+    sinkInventory: {
+        total: number;
+        byFamily: Partial<Record<SafeExploitProbeResult['family'], number>>;
+        guarded: number;
+        missingGuard: number;
+        unknownGuard: number;
+    };
+    aiFindings: {
+        proposed: number;
+        afterStaticFilter: number;
+        afterCorroboration: number;
+        finalSurvivors: number;
+    };
+    safeProbes: {
+        run: number;
+        confirmed: number;
+        counterEvidence: number;
+        unsupported: number;
+        inconclusive: number;
+        promoted: number;
+        downgraded: number;
+        dropped: number;
+        manualReview: number;
+    };
 }
 
 export interface ScanDocumentOptions {
@@ -191,6 +219,18 @@ interface BatchDocumentContext {
     fileName: string;
     fileHash: string;
     deterministicFindings: Finding[];
+    localSinkEvidence: LocalSinkEvidence[];
+}
+
+interface LocalSinkEvidence {
+    family: SafeExploitProbeResult['family'];
+    sinkKind: string;
+    line: number;
+    expression: string;
+    sourceSignal?: string;
+    guardStatus: 'missing' | 'present' | 'unknown';
+    guardKind?: string;
+    probeHint: string;
 }
 
 interface AiCorroborationReview {
@@ -222,6 +262,8 @@ interface AiUsageSummary {
     requestCount: number;
     totalTokens: number;
 }
+
+type SafeProbeTelemetry = EngineTelemetry['safeProbes'];
 
 type FindingSeverity = Finding['severity'];
 type FindingLikelihood = NonNullable<Finding['likelihood']>;
@@ -877,6 +919,12 @@ function hasSafeRedirectConstraint(snippet: string): boolean {
     return hasGuard && hasRedirectSink && hasRejectPath;
 }
 
+function hasRedirectAllowlist(snippet: string): boolean {
+    return /\b(?:ALLOWED_ROUTES|ALLOWED_REDIRECTS|allowedRoutes|allowedRedirects|trustedRedirects|localRedirects)\b[\s\S]{0,220}\.(?:has|includes|contains|Contains)\s*\(/.test(snippet)
+        || /\b(?:isSafeRedirect|isAllowedRedirect|isLocalRedirect|allowlistedRedirect|validateRedirectTarget)\s*\(/i.test(snippet)
+        || /\?[\s\S]{0,160}:\s*['"]\/[A-Za-z0-9/_-]*['"]/.test(snippet);
+}
+
 function hasVisibleCsrfTokenCheck(snippet: string): boolean {
     return /\bcsrf(?:Token)?\b[\s\S]{0,120}(?:===|!==|==|!=)[\s\S]{0,120}\bcsrf(?:Token)?\b/i.test(snippet)
         || /\bvalidateCsrf(?:Token)?\s*\(/i.test(snippet)
@@ -1058,6 +1106,243 @@ function buildDeterministicGroundingContext(findings: Finding[]): string {
         'Do not emit a second competing finding for the same code region.',
         'If a deterministic finding exists for a region, only enrich it consistently or stay silent for that region.',
     ].join('\n');
+}
+
+function getLineWindowByIndex(lines: string[], lineIndex: number, radius = 4): string {
+    const start = Math.max(0, lineIndex - radius);
+    const end = Math.min(lines.length, lineIndex + radius + 1);
+    return lines.slice(start, end).join('\n');
+}
+
+function addLocalSinkEvidence(
+    evidence: LocalSinkEvidence[],
+    item: LocalSinkEvidence,
+    seen: Set<string>,
+): void {
+    const key = `${item.family}:${item.sinkKind}:${item.line}`;
+    if (seen.has(key)) {
+        return;
+    }
+    seen.add(key);
+    evidence.push(item);
+}
+
+function discoverLocalSinkEvidence(code: string, maxItems = 12): LocalSinkEvidence[] {
+    const lines = code.split(/\r?\n/);
+    const evidence: LocalSinkEvidence[] = [];
+    const seen = new Set<string>();
+
+    for (let index = 0; index < lines.length && evidence.length < maxItems; index += 1) {
+        const line = lines[index];
+        const lineNumber = index + 1;
+        const window = getLineWindowByIndex(lines, index, 5);
+        const expression = line.trim().slice(0, 180);
+        const hasRequestSource = hasRequestControlledSignal(window);
+
+        if (/\b(?:fetch|axios\.(?:get|post|request)|https?\.request|request|got)\s*\(/i.test(line)) {
+            const hasGuard = hasAllowlistedOutboundRequest(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'ssrf',
+                sinkKind: 'outbound-request',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestSource ? 'request-controlled destination nearby' : undefined,
+                guardStatus: hasGuard ? 'present' : hasRequestSource ? 'missing' : 'unknown',
+                guardKind: hasGuard ? 'allowlist/internal-address guard' : undefined,
+                probeHint: hasGuard
+                    ? 'Model SSRF canary against the allowlist/internal-address guard before reporting.'
+                    : 'Model metadata/internal-host canary reaching the outbound request sink.',
+            }, seen);
+        }
+
+        if (/\.(?:query|execute|raw|exec|Query|QueryRow|Exec)\s*\(/.test(line)) {
+            const hasParams = hasParameterizedSqlUsage(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'sql-injection',
+                sinkKind: 'sql-query',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestSource ? 'request-controlled SQL value nearby' : undefined,
+                guardStatus: hasParams ? 'present' : hasRequestSource ? 'missing' : 'unknown',
+                guardKind: hasParams ? 'parameter binding' : undefined,
+                probeHint: hasParams
+                    ? 'Treat SQL canary as data when parameter binding is visible.'
+                    : 'Model quote/boolean SQL canary reaching a dynamic query sink.',
+            }, seen);
+        }
+
+        if (/\b(?:exec|execFile|spawn|subprocess\.(?:run|Popen|call|check_output|check_call)|ProcessBuilder|Process\.Start|exec\.Command)\s*\(/.test(line)) {
+            const hasSafeArgs = hasSafeProcessExecution(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'command-injection',
+                sinkKind: 'process-execution',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestSource ? 'request-controlled process argument nearby' : undefined,
+                guardStatus: hasSafeArgs ? 'present' : hasRequestSource ? 'missing' : 'unknown',
+                guardKind: hasSafeArgs ? 'argv separation/shell disabled' : undefined,
+                probeHint: hasSafeArgs
+                    ? 'Treat shell metacharacter canary as an argv value, not shell syntax.'
+                    : 'Model shell metacharacter canary reaching a shell-interpreted sink.',
+            }, seen);
+        }
+
+        if (/\b(?:sendFile|download|readFile|createReadStream|writeFile|open|send_from_directory|FileStream|os\.Open)\s*\(/i.test(line)) {
+            const hasBoundary = hasPathBoundaryCheck(window);
+            const hasAllowlist = hasPathAllowlist(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'path-traversal',
+                sinkKind: 'filesystem-path',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestSource ? 'request-controlled path/file selector nearby' : undefined,
+                guardStatus: hasBoundary || hasAllowlist ? 'present' : hasRequestSource ? 'missing' : 'unknown',
+                guardKind: hasAllowlist ? 'file allowlist' : hasBoundary ? 'base-directory boundary' : undefined,
+                probeHint: hasBoundary || hasAllowlist
+                    ? 'Model traversal canary against the allowlist/base-directory guard before reporting.'
+                    : 'Model traversal canary reaching a filesystem path sink.',
+            }, seen);
+        }
+
+        if (/\bjwt\.(?:decode|verify)\s*\(|\bParseUnverified\s*\(|\bdecodeSessionTokenWithoutVerification\s*\(/i.test(line)) {
+            const hasVerify = /\bjwt\.verify\s*\(/i.test(window)
+                || hasManualJwtVerification(window)
+                || hasVerifiedPythonJwtDecode(window)
+                || hasVerifiedJavaJwtDecode(window)
+                || hasVerifiedGoJwtDecode(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'jwt-validation',
+                sinkKind: 'jwt-claims',
+                line: lineNumber,
+                expression,
+                sourceSignal: 'token claims',
+                guardStatus: hasVerify ? 'present' : 'missing',
+                guardKind: hasVerify ? 'signature/issuer/audience verification' : undefined,
+                probeHint: hasVerify
+                    ? 'Model forged-token canary as blocked by explicit verification.'
+                    : 'Model forged-token canary reaching the claim trust boundary.',
+            }, seen);
+        }
+
+        if (/\b(?:res\.redirect|Response\.Redirect|redirect)\s*\(/i.test(line)) {
+            const hasGuard = hasSafeRedirectConstraint(window) || hasRedirectAllowlist(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'open-redirect',
+                sinkKind: 'redirect-target',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestSource ? 'request-controlled redirect target nearby' : undefined,
+                guardStatus: hasGuard ? 'present' : hasRequestSource ? 'missing' : 'unknown',
+                guardKind: hasGuard ? 'local route allowlist/fallback' : undefined,
+                probeHint: hasGuard
+                    ? 'Model external-URL canary against the local redirect allowlist before reporting.'
+                    : 'Model external-URL canary reaching the redirect sink.',
+            }, seen);
+        }
+    }
+
+    return evidence;
+}
+
+function buildLocalSinkEvidenceContext(evidence: LocalSinkEvidence[]): string {
+    if (!evidence.length) {
+        return [
+            'Local sink inventory before AI: none detected for the currently supported sink-first probe families.',
+            'Do not invent a sink. If you report a non-sink issue, explain the concrete local evidence that makes it security-relevant.',
+        ].join('\n');
+    }
+
+    return [
+        'Local sink inventory before AI:',
+        'Use this as the starting evidence map. Prefer findings anchored to these sinks, guards, and probe hints. If a listed guard defeats the issue, stay silent or describe counter-evidence instead of overcalling.',
+        ...evidence.map((item, index) => [
+            `${index + 1}. line ${item.line} | family=${item.family} | sink=${item.sinkKind} | guard=${item.guardStatus}${item.guardKind ? ` (${item.guardKind})` : ''}`,
+            item.sourceSignal ? ` | source=${item.sourceSignal}` : '',
+            ` | probe=${item.probeHint}`,
+            ` | expression=${item.expression}`,
+        ].join('')),
+    ].join('\n');
+}
+
+function buildEmptyEngineTelemetry(localSinkEvidence: LocalSinkEvidence[] = []): EngineTelemetry {
+    const byFamily: EngineTelemetry['sinkInventory']['byFamily'] = {};
+    for (const item of localSinkEvidence) {
+        byFamily[item.family] = (byFamily[item.family] ?? 0) + 1;
+    }
+
+    return {
+        sinkInventory: {
+            total: localSinkEvidence.length,
+            byFamily,
+            guarded: localSinkEvidence.filter(item => item.guardStatus === 'present').length,
+            missingGuard: localSinkEvidence.filter(item => item.guardStatus === 'missing').length,
+            unknownGuard: localSinkEvidence.filter(item => item.guardStatus === 'unknown').length,
+        },
+        aiFindings: {
+            proposed: 0,
+            afterStaticFilter: 0,
+            afterCorroboration: 0,
+            finalSurvivors: 0,
+        },
+        safeProbes: {
+            run: 0,
+            confirmed: 0,
+            counterEvidence: 0,
+            unsupported: 0,
+            inconclusive: 0,
+            promoted: 0,
+            downgraded: 0,
+            dropped: 0,
+            manualReview: 0,
+        },
+    };
+}
+
+function emptySafeProbeTelemetry(): SafeProbeTelemetry {
+    return {
+        run: 0,
+        confirmed: 0,
+        counterEvidence: 0,
+        unsupported: 0,
+        inconclusive: 0,
+        promoted: 0,
+        downgraded: 0,
+        dropped: 0,
+        manualReview: 0,
+    };
+}
+
+function mergeSafeProbeTelemetry(...items: SafeProbeTelemetry[]): SafeProbeTelemetry {
+    return items.reduce((total, item) => ({
+        run: total.run + item.run,
+        confirmed: total.confirmed + item.confirmed,
+        counterEvidence: total.counterEvidence + item.counterEvidence,
+        unsupported: total.unsupported + item.unsupported,
+        inconclusive: total.inconclusive + item.inconclusive,
+        promoted: total.promoted + item.promoted,
+        downgraded: total.downgraded + item.downgraded,
+        dropped: total.dropped + item.dropped,
+        manualReview: total.manualReview + item.manualReview,
+    }), emptySafeProbeTelemetry());
+}
+
+function buildEngineTelemetry(params: {
+    localSinkEvidence: LocalSinkEvidence[];
+    proposedAiFindings: number;
+    filteredAiFindings: number;
+    reviewedAiFindings: Finding[];
+    finalFindings: Finding[];
+    safeProbes: SafeProbeTelemetry;
+}): EngineTelemetry {
+    const telemetry = buildEmptyEngineTelemetry(params.localSinkEvidence);
+    telemetry.aiFindings = {
+        proposed: params.proposedAiFindings,
+        afterStaticFilter: params.filteredAiFindings,
+        afterCorroboration: params.reviewedAiFindings.length,
+        finalSurvivors: params.finalFindings.filter(finding => finding.provenance === 'ai').length,
+    };
+    telemetry.safeProbes = params.safeProbes;
+    return telemetry;
 }
 
 function findingsOverlap(left: Finding, right: Finding): boolean {
@@ -1243,8 +1528,27 @@ function getProbeIssueFamily(finding: Finding): SafeExploitProbeResult['family']
     if (/jwt|token validation|weak_jwt/.test(haystack)) {
         return 'jwt-validation';
     }
+    if (/open redirect|redirect/.test(haystack)) {
+        return 'open-redirect';
+    }
 
     return undefined;
+}
+
+function filterAiFindingsByLocalSinkInventory(findings: Finding[], localSinkEvidence: LocalSinkEvidence[]): Finding[] {
+    if (!findings.length) {
+        return findings;
+    }
+
+    const sinkFamilies = new Set(localSinkEvidence.map(item => item.family));
+    return findings.filter(finding => {
+        const family = getProbeIssueFamily(finding);
+        if (!family) {
+            return true;
+        }
+
+        return sinkFamilies.has(family);
+    });
 }
 
 function hasRequestControlledSignal(snippet: string): boolean {
@@ -1771,6 +2075,97 @@ function runJwtSafeProbe(code: string, finding: Finding): SafeExploitProbeResult
     });
 }
 
+function runOpenRedirectSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasRedirectSink = /\b(?:res\.redirect|Response\.Redirect|redirect)\s*\(/i.test(snippet);
+    const hasRequestTarget = hasRequestControlledSignal(snippet);
+    const hasAllowlist = hasSafeRedirectConstraint(snippet) || hasRedirectAllowlist(snippet);
+
+    if (!hasRedirectSink) {
+        return buildSafeProbeResult({
+            family: 'open-redirect',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'redirect-target',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No redirect sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasAllowlist) {
+        return buildSafeProbeResult({
+            family: 'open-redirect',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'redirect-target',
+            sinkLine,
+            sourceKind: hasRequestTarget ? 'request-controlled redirect selector' : undefined,
+            guardStatus: 'present',
+            guardKind: 'local route allowlist/fallback',
+            canaryReachedSink: false,
+            canary: 'https://evil.example/phish',
+            counterexample: {
+                unsafeInput: 'https://evil.example/phish',
+                safeInput: '/dashboard',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'redirect target sink',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'local redirect allowlist',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The redirect target is constrained to a local allowlist or safe fallback before the redirect sink.',
+        });
+    }
+
+    if (hasRequestTarget) {
+        return buildSafeProbeResult({
+            family: 'open-redirect',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'redirect-target',
+            sinkLine,
+            sourceKind: 'request-controlled redirect target',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'https://evil.example/phish',
+            counterexample: {
+                unsafeInput: 'https://evil.example/phish',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'redirect target sink',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['request-controlled redirect target', 'redirect target sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'A request-controlled redirect target can reach the redirect sink without a visible local-route or allowlist guard.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'open-redirect',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'redirect-target',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'A redirect sink is visible, but the probe could not prove request-controlled redirect flow.',
+    });
+}
+
 function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeResult | undefined {
     if (finding.provenance !== 'ai') {
         return undefined;
@@ -1788,18 +2183,35 @@ function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeRe
             return runPathTraversalSafeProbe(code, finding);
         case 'jwt-validation':
             return runJwtSafeProbe(code, finding);
+        case 'open-redirect':
+            return runOpenRedirectSafeProbe(code, finding);
         default:
             return undefined;
     }
 }
 
-function applySafeExploitProbes(code: string, findings: Finding[]): Finding[] {
-    return findings
+function applySafeExploitProbes(code: string, findings: Finding[]): { findings: Finding[]; telemetry: SafeProbeTelemetry } {
+    const telemetry = emptySafeProbeTelemetry();
+    const kept = findings
         .map(finding => {
+            if (finding.safeProbe) {
+                return finding;
+            }
+
             const probe = runSafeExploitProbe(code, finding);
             if (!probe) {
                 return finding;
             }
+
+            telemetry.run += 1;
+            if (probe.verdict === 'confirmed') telemetry.confirmed += 1;
+            if (probe.verdict === 'counter_evidence') telemetry.counterEvidence += 1;
+            if (probe.verdict === 'unsupported') telemetry.unsupported += 1;
+            if (probe.verdict === 'inconclusive') telemetry.inconclusive += 1;
+            if (probe.decision === 'promote') telemetry.promoted += 1;
+            if (probe.decision === 'downgrade') telemetry.downgraded += 1;
+            if (probe.decision === 'drop') telemetry.dropped += 1;
+            if (probe.decision === 'manual_review') telemetry.manualReview += 1;
 
             if (probe.decision === 'drop') {
                 return undefined;
@@ -1814,6 +2226,8 @@ function applySafeExploitProbes(code: string, findings: Finding[]): Finding[] {
             };
         })
         .filter((finding): finding is Finding => Boolean(finding));
+
+    return { findings: kept, telemetry };
 }
 
 function normalizeEvidenceExpression(value: string | undefined): string {
@@ -1961,6 +2375,7 @@ export class ScanEngine {
                 .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding))
                 .map(f => enrichFindingRisk(f))
                 .map(f => applyProofStatus(f, document.fileName));
+            const localSinkEvidence = discoverLocalSinkEvidence(code);
 
             return {
                 fileId: `file-${index + 1}`,
@@ -1970,6 +2385,7 @@ export class ScanEngine {
                 fileName: document.fileName.split(/[/\\]/).pop() ?? 'unknown',
                 fileHash: crypto.createHash('sha256').update(code).digest('hex'),
                 deterministicFindings,
+                localSinkEvidence,
             };
         });
 
@@ -1977,11 +2393,12 @@ export class ScanEngine {
         if (!licenceKey) {
             return contexts.map(context =>
                 this._buildDeterministicOnlyResult(
-                    context.deterministicFindings,
-                    'Owlvex backend unavailable: no licence key configured. Returning deterministic-only results.',
-                    provider,
-                    projectContext.summary,
-                ),
+                context.deterministicFindings,
+                'Owlvex backend unavailable: no licence key configured. Returning deterministic-only results.',
+                provider,
+                projectContext.summary,
+                context.localSinkEvidence,
+            ),
             );
         }
 
@@ -2006,6 +2423,7 @@ export class ScanEngine {
                     `Owlvex backend unavailable: ${error.message}`,
                     provider,
                     projectContext.summary,
+                    context.localSinkEvidence,
                 ),
             );
         }
@@ -2032,6 +2450,7 @@ export class ScanEngine {
                     `AI provider unavailable: ${error.message}`,
                     provider,
                     projectContext.summary,
+                    context.localSinkEvidence,
                 ),
             );
         }
@@ -2047,6 +2466,7 @@ export class ScanEngine {
                     `AI response unusable: ${error.message}`,
                     provider,
                     projectContext.summary,
+                    context.localSinkEvidence,
                 ),
             );
         }
@@ -2059,18 +2479,25 @@ export class ScanEngine {
                 metrics: { critical: 0, high: 0, medium: 0, low: 0 },
             };
 
-            return {
-                context,
-                parsed,
-                filteredAiFindings: dedupeOverlappingAiFindings(
-                    filterStaticOwnedAiFindings(
-                        context.deterministicFindings,
+            const filteredAiFindings = dedupeOverlappingAiFindings(
+                filterStaticOwnedAiFindings(
+                    context.deterministicFindings,
+                    filterAiFindingsByLocalSinkInventory(
                         suppressUnsupportedAiFindings(
                             context.code,
                             normalizeFindingLocationsFromCode(context.code, parsed.findings),
                         ),
+                        context.localSinkEvidence,
                     ),
                 ),
+            );
+            const preCorroborationProbes = applySafeExploitProbes(context.code, filteredAiFindings);
+
+            return {
+                context,
+                parsed,
+                filteredAiFindings: preCorroborationProbes.findings,
+                safeProbeTelemetry: preCorroborationProbes.telemetry,
             };
         });
 
@@ -2169,13 +2596,16 @@ export class ScanEngine {
                 }
             }
 
-            const keptAi = applySafeExploitProbes(entry.context.code, entry.filteredAiFindings
+            const reviewedAiBeforeProbes = entry.filteredAiFindings
                 .map(finding => finalizeAiFindingReview({
                     finding,
                     verifier: verifierMap.get(finding.id),
                     skeptic: skepticMap.get(finding.id),
                 }))
-                .filter((finding): finding is Finding => Boolean(finding)));
+                .filter((finding): finding is Finding => Boolean(finding));
+            const probedAi = applySafeExploitProbes(entry.context.code, reviewedAiBeforeProbes);
+            const keptAi = probedAi.findings;
+            const safeProbeTelemetry = mergeSafeProbeTelemetry(entry.safeProbeTelemetry, probedAi.telemetry);
 
             warnings.push(
                 ...verifierWarnings.filter(warning =>
@@ -2189,6 +2619,14 @@ export class ScanEngine {
             const allFindings = mergeDeterministicAndAiFindings(entry.context.deterministicFindings, keptAi)
                 .map(finding => enrichFindingRisk(finding))
                 .map(finding => applyProofStatus(finding, entry.context.document.fileName));
+            const engineTelemetry = buildEngineTelemetry({
+                localSinkEvidence: entry.context.localSinkEvidence,
+                proposedAiFindings: entry.parsed.findings.length,
+                filteredAiFindings: entry.filteredAiFindings.length,
+                reviewedAiFindings: keptAi,
+                finalFindings: allFindings,
+                safeProbes: safeProbeTelemetry,
+            });
             const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
             const filteredWarnings = warnings.filter(warning =>
                 hasAiFindingsInFinalResult || !isAiCorroborationWarning(warning.replace(`${entry.context.fileName}: `, '')),
@@ -2252,6 +2690,7 @@ export class ScanEngine {
                 model: provider.selectedModel,
                 provider: provider.id,
                 warnings: filteredWarnings,
+                engineTelemetry,
                 aiUsage,
             };
         }));
@@ -2272,6 +2711,7 @@ export class ScanEngine {
             .map(f => this._resolveCanonicalFinding({ ...f, provenance: 'deterministic' } as Finding))
             .map(f => enrichFindingRisk(f))
             .map(f => applyProofStatus(f, document.fileName));
+        const localSinkEvidence = discoverLocalSinkEvidence(code);
 
         if (options?.forceDeterministicOnly || options?.deterministicOnlyReason) {
             return this._buildDeterministicOnlyResult(
@@ -2279,6 +2719,7 @@ export class ScanEngine {
                 options?.deterministicOnlyReason ?? 'AI enrichment skipped for this scan.',
                 provider,
                 projectContext.summary,
+                localSinkEvidence,
             );
         }
 
@@ -2289,6 +2730,7 @@ export class ScanEngine {
                 'Owlvex backend unavailable: no licence key configured. Returning deterministic-only results.',
                 provider,
                 projectContext.summary,
+                localSinkEvidence,
             );
         }
 
@@ -2309,6 +2751,7 @@ export class ScanEngine {
                 `Owlvex backend unavailable: ${error.message}`,
                 provider,
                 projectContext.summary,
+                localSinkEvidence,
             );
         }
         const systemPrompt = promptContext.systemPrompt;
@@ -2340,6 +2783,7 @@ export class ScanEngine {
                     code,
                     projectContextContract: projectContext.combined,
                     deterministicFindings,
+                    localSinkEvidence,
                     groundedFrameworkContext,
                     groundedAiIssueContext,
                     groundedRemediationContext,
@@ -2353,6 +2797,7 @@ export class ScanEngine {
                 `AI provider unavailable: ${error.message}`,
                 provider,
                 projectContext.summary,
+                localSinkEvidence,
             );
         }
 
@@ -2367,6 +2812,7 @@ export class ScanEngine {
                 `AI response unusable: ${error.message}`,
                 provider,
                 projectContext.summary,
+                localSinkEvidence,
             );
         }
 
@@ -2381,20 +2827,33 @@ export class ScanEngine {
         const filteredAiFindings = dedupeOverlappingAiFindings(
             filterStaticOwnedAiFindings(
                 deterministicFindings,
-                suppressUnsupportedAiFindings(code, normalizeFindingLocationsFromCode(code, parsed.findings)),
+                filterAiFindingsByLocalSinkInventory(
+                    suppressUnsupportedAiFindings(code, normalizeFindingLocationsFromCode(code, parsed.findings)),
+                    localSinkEvidence,
+                ),
             ),
         );
+        const preCorroborationProbes = applySafeExploitProbes(code, filteredAiFindings);
         const corroboratedAi = await this._runSingleAgentCorroboration({
             provider,
             systemPrompt,
             language,
             code,
-            findings: filteredAiFindings,
+            findings: preCorroborationProbes.findings,
         });
+        const safeProbeTelemetry = mergeSafeProbeTelemetry(preCorroborationProbes.telemetry, corroboratedAi.safeProbes);
         const aiUsage = mergeAiUsage(finderUsage, corroboratedAi.aiUsage);
         const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, corroboratedAi.findings)
             .map(finding => enrichFindingRisk(finding))
             .map(finding => applyProofStatus(finding, document.fileName));
+        const engineTelemetry = buildEngineTelemetry({
+            localSinkEvidence,
+            proposedAiFindings: parsed.findings.length,
+            filteredAiFindings: preCorroborationProbes.findings.length,
+            reviewedAiFindings: corroboratedAi.findings,
+            finalFindings: allFindings,
+            safeProbes: safeProbeTelemetry,
+        });
         const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
         warnings.push(
             ...corroboratedAi.warnings.filter(warning =>
@@ -2454,6 +2913,7 @@ export class ScanEngine {
             model: provider.selectedModel,
             provider: provider.id,
             warnings,
+            engineTelemetry,
             aiUsage,
         };
     }
@@ -2464,21 +2924,23 @@ export class ScanEngine {
         language: string;
         code: string;
         findings: Finding[];
-    }): Promise<{ findings: Finding[]; warnings: string[]; aiUsage: AiUsageSummary }> {
+    }): Promise<{ findings: Finding[]; warnings: string[]; aiUsage: AiUsageSummary; safeProbes: SafeProbeTelemetry }> {
         if (!params.findings.length) {
-            return { findings: [], warnings: [], aiUsage: emptyAiUsage() };
+            return { findings: [], warnings: [], aiUsage: emptyAiUsage(), safeProbes: emptySafeProbeTelemetry() };
         }
 
         if (params.findings.length > MAX_CORROBORATION_CANDIDATES) {
+            const probedAi = applySafeExploitProbes(params.code, params.findings.map(finding => ({
+                ...finding,
+                corroboration: 'UNVERIFIED' as const,
+            })));
             return {
-                findings: params.findings.map(finding => ({
-                    ...finding,
-                    corroboration: 'UNVERIFIED' as const,
-                })),
+                findings: probedAi.findings,
                 warnings: [
                     `AI corroboration partial: review passes skipped because candidate count ${params.findings.length} exceeded corroboration budget ${MAX_CORROBORATION_CANDIDATES}.`,
                 ],
                 aiUsage: emptyAiUsage(),
+                safeProbes: probedAi.telemetry,
             };
         }
 
@@ -2546,18 +3008,20 @@ export class ScanEngine {
             }
         }
 
-        const kept = applySafeExploitProbes(params.code, params.findings
+        const reviewedAiBeforeProbes = params.findings
             .map(finding => finalizeAiFindingReview({
                 finding,
                 verifier: verifierMap.get(finding.id),
                 skeptic: skepticMap.get(finding.id),
             }))
-            .filter((finding): finding is Finding => Boolean(finding)));
+            .filter((finding): finding is Finding => Boolean(finding));
+        const probedAi = applySafeExploitProbes(params.code, reviewedAiBeforeProbes);
 
         return {
-            findings: kept,
+            findings: probedAi.findings,
             warnings,
             aiUsage: mergeAiUsage(verifierReviews.aiUsage, skepticReviews.aiUsage),
+            safeProbes: probedAi.telemetry,
         };
     }
 
@@ -2566,6 +3030,7 @@ export class ScanEngine {
         warning: string,
         provider: { id: string; selectedModel: string },
         projectContextSummary?: string,
+        localSinkEvidence: LocalSinkEvidence[] = [],
     ): ScanResult {
         const metrics = buildMetrics(deterministicFindings);
         const score = calculateScoreFromFindings(deterministicFindings);
@@ -2589,6 +3054,14 @@ export class ScanEngine {
             model: `${provider.selectedModel} (deterministic-only)`,
             provider: provider.id,
             warnings: [warning],
+            engineTelemetry: buildEngineTelemetry({
+                localSinkEvidence,
+                proposedAiFindings: 0,
+                filteredAiFindings: 0,
+                reviewedAiFindings: [],
+                finalFindings: deterministicFindings,
+                safeProbes: emptySafeProbeTelemetry(),
+            }),
             aiUsage: emptyAiUsage(),
         };
     }
@@ -2714,6 +3187,7 @@ export class ScanEngine {
         code: string;
         projectContextContract?: string;
         deterministicFindings: Finding[];
+        localSinkEvidence: LocalSinkEvidence[];
         groundedFrameworkContext: string;
         groundedAiIssueContext: string;
         groundedRemediationContext: string;
@@ -2734,11 +3208,13 @@ export class ScanEngine {
             'Use grounded Owlvex remediation when a canonical issue below applies; adapt it to the local code instead of inventing a different remediation standard.',
             'Deterministic findings are confirmed structural violations. Do not duplicate them as separate AI findings unless the AI candidate adds materially different evidence.',
             'AI-only findings should stay evidence-based and avoid overclaiming.',
+            'Start from the local sink inventory before broad review. Sink-first evidence beats generic suspicion.',
             'Do not treat architecture taste, naming style, or generic code quality comments as security findings.',
             'When the visible code is ambiguous, prefer a narrower title/explanation over a broader accusation.',
             '',
             params.projectContextContract ? `Project context contract:\n${params.projectContextContract}\n` : '',
             buildDeterministicGroundingContext(params.deterministicFindings),
+            buildLocalSinkEvidenceContext(params.localSinkEvidence),
             params.groundedFrameworkContext ? `\n${params.groundedFrameworkContext}\n` : '',
             params.groundedAiIssueContext ? `\n${params.groundedAiIssueContext}\n` : '',
             params.groundedRemediationContext ? `\nGrounded remediation guidance:\n${params.groundedRemediationContext}\n` : '',
@@ -2771,6 +3247,7 @@ export class ScanEngine {
                 `PATH: ${context.document.fileName}`,
                 `LANGUAGE: ${context.language}`,
                 buildDeterministicGroundingContext(context.deterministicFindings),
+                buildLocalSinkEvidenceContext(context.localSinkEvidence),
                 groundedFrameworkContext ? `\n${groundedFrameworkContext}\n` : '',
                 groundedAiIssueContext ? `\n${groundedAiIssueContext}\n` : '',
                 groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : '',
@@ -2783,6 +3260,7 @@ export class ScanEngine {
             'You are the Finder pass.',
             'Your job is candidate discovery, not final confirmation.',
             'Optimize for bounded recall: nominate plausible security findings that are genuinely visible in each file, but do not claim proof unless the code is unambiguous.',
+            'Start from each file local sink inventory before broad review. Sink-first evidence beats generic suspicion.',
             'Treat each file independently. Do not merge findings across files.',
             'Resolve each finding to the closest Owlvex canonical issue when possible.',
             'Return JSON only in this shape:',

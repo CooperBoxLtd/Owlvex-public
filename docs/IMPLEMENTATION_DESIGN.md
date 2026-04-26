@@ -145,6 +145,37 @@ It must remain:
 
 The AI lane should not rely on a single unconstrained pass when product trust depends on corroboration.
 
+The target engine direction is **evidence-first scanning**:
+
+1. discover security-relevant sinks locally
+2. classify source, sink, and visible guard posture
+3. run safe non-executing probe logic where the family is supported
+4. send AI only the unresolved or context-sensitive reasoning problem
+5. run verifier/skeptic only when the result can still change
+
+This replaces the older mental model of "ask AI to review the file, then validate what it says." Owlvex should increasingly behave as a local evidence engine that uses AI for gaps in proof, not as a generic AI code reviewer.
+
+The current first implementation step is a pre-AI local sink inventory. Finder prompts receive the locally discovered sinks, visible guards, and probe hints before the raw file. The Finder should start from that evidence map and avoid broad claims that are not tied to concrete local behavior.
+
+For probeable families, the sink inventory is also an adjudication input. An AI candidate for SSRF, SQL injection, command injection, path traversal, JWT validation, or open redirect should not advance to verifier/skeptic unless the local inventory contains the corresponding sink family in that file. This is intentionally conservative: non-probeable families still follow the existing AI corroboration path until local evidence models exist for them.
+
+Probeable AI candidates should then run safe probes before verifier/skeptic. The engine should spend corroboration calls only after local source/sink/guard evidence fails to resolve the candidate. This means:
+
+- unsupported or counter-evidence probe outcomes can drop the candidate before verifier
+- confirmed probe outcomes can be promoted or kept without verifier when confidence routing allows
+- inconclusive/manual-review outcomes may still go through verifier/skeptic
+- post-corroboration probes remain as a fallback when earlier routing did not resolve the finding
+
+Each scan should also emit metadata-safe engine telemetry for this evidence-first path:
+
+- how many sinks were found before AI
+- which sink families were present
+- how many sinks had visible guards, missing guards, or unknown guard posture
+- how many AI candidates survived static filtering, sink gating, pre-corroboration probes, and corroboration
+- how many safe probes confirmed, contradicted, dropped, or left a finding for manual review
+
+This telemetry is product-critical because it turns false-positive reduction and AI-cost reduction into measurable release criteria.
+
 The intended verification direction is:
 
 - one selected model may be used across multiple sequential passes
