@@ -455,8 +455,11 @@ function buildToolUsageGuidance(): string {
         '- Full evidence report is for deeper review: all findings by file, confidence posture, AI pass details, mappings, remediation, coverage, warnings, and scan errors.',
         '- Evidence labels matter: Static proof is strongest; AI-reviewed is supported by review; Partially validated and Needs manual review should be checked before acting.',
         '- Raw AI percentages are audit trace only. They should not be treated as proof by themselves.',
+        '- Possible Extra means Owlvex sees a risky sink or hypothesis but has not proven reachability. Use Trace caller path or Verify reachability before patching.',
+        '- Action gating matters: Preview fix is for Fix First or proof-supported findings; investigation-first findings should not jump straight to code changes.',
         '- Fix First is the recommended starting point, not a guarantee that lower-ranked findings are unimportant.',
         '- Preview fix opens a side-by-side remediation diff. Code is not changed until the user keeps the fix.',
+        '- Generated reports are written at the project/workspace report root, not inside source subfolders.',
         '- Compare reports should be used after rescanning; Owlvex orders reports by generation time so Before is the earlier report and After is the later report.',
         '- Provider throttle guidance appears only when a scan sees a 429 or rate-limit warning.',
         '- When users ask how to use Owlvex, give the next concrete click/action and explain which report or scan scope fits their goal.',
@@ -515,6 +518,8 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                         'AI-reviewed: AI found the issue and review supported it.',
                         'Partially validated: some evidence supports it, but verification is incomplete.',
                         'Needs manual review: useful candidate, but do not treat it as confirmed yet.',
+                        'Possible Extra: risky helper/sink or unproven hypothesis. Trace caller path or verify reachability before fixing.',
+                        'Action gating: Preview fix appears for proof-supported findings; investigation-first items lead with Trace caller path or Verify reachability.',
                         'AI signal percentages: audit trace only. Use the evidence label for decisions.',
                         '',
                         'Use Fix First for priority, but check manual-review findings before acting.',
@@ -540,6 +545,8 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                                 '',
                                 'Controls: choose the report type from the dropdown beside Create Report, then press Create Report.',
                                 'Reading confidence: Static proof is strongest; AI-reviewed is supported; Partially validated and Needs manual review should be checked before acting. Raw AI percentages are audit trace only.',
+                                'Possible Extra findings are investigation-first. Use caller-path evidence to decide whether they are real route-level vulnerabilities.',
+                                'Reports are written at the project/workspace report root so source folders stay clean.',
                             ]
                             : scanFocused
                                 ? [
@@ -661,6 +668,15 @@ function summarizeEngineEvidence(findings: Finding[]): string {
     ].join(' | ');
 }
 
+function summarizeActionGating(findings: Finding[]): string {
+    if (!findings.length) {
+        return 'Action gating: no findings.';
+    }
+    const fixPreviewEligible = findings.filter(isFixPreviewEligibleFinding).length;
+    const investigationFirst = findings.filter(isInvestigationFirstFinding).length;
+    return `Action gating: fix-preview eligible ${fixPreviewEligible} | investigation-first ${investigationFirst}`;
+}
+
 function formatProviderDisagreementProof(proof: ProviderDisagreementProof): string {
     const parts = [
         proof.reason,
@@ -673,7 +689,9 @@ function formatProviderDisagreementProof(proof: ProviderDisagreementProof): stri
 }
 
 export function buildGroundedRemediationHighlights(findings: Finding[], maxFindings = 2): string[] {
-    return findings
+    const eligible = findings.filter(isFixPreviewEligibleFinding);
+    const source = eligible.length ? eligible : findings;
+    return source
         .slice()
         .sort((left, right) => riskRank(right) - riskRank(left))
         .slice(0, maxFindings)
@@ -697,6 +715,7 @@ function buildScanSummaryLines(result: ScanResult): string[] {
         `Analysis mode: ${getScanTierDisplayLabel(getPrimaryScanTierLabel(result.findings))}`,
         `Analysis mix: ${summarizeScanTierCounts(result.findings)}`,
         summarizeEngineEvidence(result.findings),
+        summarizeActionGating(result.findings),
         `Project context: ${result.projectContextSummary && result.projectContextSummary !== 'none' ? result.projectContextSummary : 'none'}`,
         topRiskFinding
             ? `Top issue: ${topRiskFinding.title} | via ${getScanTierDisplayLabel(getScanTierLabel(topRiskFinding))} | impact ${topRiskFinding.severity} | likelihood ${getFindingLikelihood(topRiskFinding)} | finding risk ${topRiskFinding.riskScore ?? 'n/a'}/10`
@@ -746,6 +765,7 @@ function buildMultiFileScanResponse(
         `Total findings: ${findings.length}`,
         `Average file risk score: ${averageScore.toFixed(1)}/10`,
         summarizeEngineEvidence(findings),
+        summarizeActionGating(findings),
         issueFamilies,
         ...buildGroundedRemediationHighlights(findings).map((line, index) => `Remediation ${index + 1}: ${line}`),
         topActionable ? `Next step: Preview fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
@@ -1304,6 +1324,50 @@ function severityRank(severity: string): number {
     }
 }
 
+function getFindingProofStatus(finding: Finding): 'static_proven' | 'ai_plausible' | 'counter_evidence_found' | 'unproven_extra' {
+    if (finding.proofStatus) {
+        return finding.proofStatus;
+    }
+    if (finding.evidenceContract?.proofStatus) {
+        return finding.evidenceContract.proofStatus;
+    }
+    if (finding.provenance === 'deterministic') {
+        return 'static_proven';
+    }
+    if (finding.evidenceContract?.source?.expression && finding.evidenceContract.sink?.expression && finding.evidenceContract.guard?.status === 'missing') {
+        return 'ai_plausible';
+    }
+    return finding.provenance === 'ai' ? 'ai_plausible' : 'unproven_extra';
+}
+
+function isInvestigationFirstFinding(finding: Finding): boolean {
+    const explicitProofStatus = finding.proofStatus ?? finding.evidenceContract?.proofStatus;
+    return explicitProofStatus === 'unproven_extra'
+        || explicitProofStatus === 'counter_evidence_found'
+        || Boolean(finding.callerPath && finding.callerPath.verdict !== 'reachable_unguarded' && finding.callerPath.verdict !== 'mixed_callers');
+}
+
+function isFixPreviewEligibleFinding(finding: Finding): boolean {
+    const proofStatus = getFindingProofStatus(finding);
+    return !isInvestigationFirstFinding(finding)
+        && (proofStatus === 'static_proven' || proofStatus === 'ai_plausible');
+}
+
+function buildInvestigateFindingAction(finding: Finding, targetPath?: string): ChatMessageAction {
+    return {
+        id: `investigate-finding-${finding.id ?? finding.line}`,
+        label: finding.callerPath ? 'Trace caller path' : 'Verify reachability',
+        kind: 'quickAction',
+        quickAction: [
+            `Explain why this finding is not Fix First yet: ${finding.canonicalTitle || finding.title}.`,
+            targetPath ? `File: ${vscode.workspace.asRelativePath(vscode.Uri.file(targetPath), false)}.` : '',
+            finding.callerPath ? `Caller-path verdict: ${finding.callerPath.verdict}.` : 'Check caller path, proof status, and whether fix preview is appropriate.',
+        ].filter(Boolean).join(' '),
+        finding,
+        path: targetPath,
+    };
+}
+
 function buildReviewFixAction(finding: Finding, targetPath?: string): ChatMessageAction {
     return {
         id: `generate-fix-preview-${finding.id ?? finding.line}`,
@@ -1399,11 +1463,16 @@ function buildPostFixVerificationActions(options: {
     }
 
     if (options.nextFinding) {
-        actions.unshift({
-            ...buildReviewFixAction(options.nextFinding, options.targetPath),
-            id: 'post-fix-preview-next-finding',
-            label: 'Preview next fix',
-        });
+        actions.unshift(isFixPreviewEligibleFinding(options.nextFinding)
+            ? {
+                ...buildReviewFixAction(options.nextFinding, options.targetPath),
+                id: 'post-fix-preview-next-finding',
+                label: 'Preview next fix',
+            }
+            : {
+                ...buildInvestigateFindingAction(options.nextFinding, options.targetPath),
+                id: 'post-fix-investigate-next-finding',
+            });
     }
 
     return actions;
@@ -1425,9 +1494,13 @@ function buildTargetRemovedVerificationMessage(targetUri: vscode.Uri, rescanned:
     ];
 
     if (remainingFinding) {
+        const continuationAction = isFixPreviewEligibleFinding(remainingFinding)
+            ? 'Preview the next fix before applying more code changes.'
+            : 'Trace caller path or verify reachability before applying more code changes.';
         lines.push(
             'Fix continuation required before moving on. This file still has unresolved security findings.',
             `File is not clean yet. Next remaining issue: ${remainingFinding.canonicalTitle || remainingFinding.title} (${remainingFinding.riskScore ?? 'n/a'}/10 risk) at line ${remainingFinding.line}.`,
+            `Continuation action: ${continuationAction}`,
             `What to change next: ${remainingFinding.fix || resolveRemediationForFinding(remainingFinding).remediation}`,
         );
     } else {
@@ -1512,26 +1585,39 @@ function buildCombinedFixContinuationMessage(outcomes: AppliedFixVerificationOut
     return [...lines, ...additional].join('\n');
 }
 
+function getCombinedFixContinuationTargets(outcomes: AppliedFixVerificationOutcome[]): ActionableFindingTarget[] {
+    const targets: ActionableFindingTarget[] = [];
+    for (const outcome of outcomes) {
+        const finding = outcome.matchingFinding || outcome.nextFinding;
+        if (finding) {
+            targets.push({ targetPath: outcome.targetUri.fsPath, finding });
+        }
+    }
+    targets.sort((left, right) => riskRank(right.finding) - riskRank(left.finding));
+    return targets;
+}
+
 function buildCombinedFixContinuationActions(outcomes: AppliedFixVerificationOutcome[]): ChatMessageAction[] | undefined {
-    const sorted = outcomes
-        .map(outcome => ({
-            ...outcome,
-            finding: outcome.matchingFinding || outcome.nextFinding,
-        }))
-        .filter((outcome): outcome is AppliedFixVerificationOutcome & { finding: Finding } => Boolean(outcome.finding))
-        .sort((left, right) => riskRank(right.finding) - riskRank(left.finding));
+    const sorted = getCombinedFixContinuationTargets(outcomes);
 
     const top = sorted[0];
     if (!top) {
         return undefined;
     }
 
-    return [
-        {
-            ...buildReviewFixAction(top.finding, top.targetUri.fsPath),
+    const primary = isFixPreviewEligibleFinding(top.finding)
+        ? {
+            ...buildReviewFixAction(top.finding, top.targetPath),
             id: 'combined-post-fix-preview-next',
             label: 'Preview next fix',
-        },
+        }
+        : {
+            ...buildInvestigateFindingAction(top.finding, top.targetPath),
+            id: 'combined-post-fix-investigate-next',
+        };
+
+    return [
+        primary,
         buildQuickActionAction('combined-post-fix-scan-workspace', 'Scan workspace', 'scanFolder'),
     ];
 }
@@ -1615,25 +1701,33 @@ function getActionableFindingResults(
     );
 
     return candidates
+        .filter(item => isFixPreviewEligibleFinding(item.finding))
         .slice()
         .sort((left, right) => riskRank(right.finding) - riskRank(left.finding))
         .slice(0, typeof limit === 'number' ? limit : candidates.length);
 }
 
 function buildReviewFixActions(items: ActionableFindingTarget[]): ChatMessageAction[] {
-    return items.map(item => buildReviewFixAction(item.finding, item.targetPath));
+    return items
+        .filter(item => isFixPreviewEligibleFinding(item.finding))
+        .map(item => buildReviewFixAction(item.finding, item.targetPath));
 }
 
 function buildPrimaryFixAction(items: ActionableFindingTarget[]): ChatMessageAction[] {
+    const eligibleItems = items.filter(item => isFixPreviewEligibleFinding(item.finding));
     if (!items.length) {
         return [];
     }
 
-    if (items.length === 1) {
-        return [buildReviewFixAction(items[0].finding, items[0].targetPath)];
+    if (!eligibleItems.length) {
+        return [buildInvestigateFindingAction(items[0].finding, items[0].targetPath)];
     }
 
-    const batchAction = buildBatchReviewFixAction(items);
+    if (eligibleItems.length === 1) {
+        return [buildReviewFixAction(eligibleItems[0].finding, eligibleItems[0].targetPath)];
+    }
+
+    const batchAction = buildBatchReviewFixAction(eligibleItems);
     return batchAction ? [batchAction] : [];
 }
 
@@ -1837,6 +1931,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.currentMode = 'fix';
         this.latestActionableFinding = finding;
         this.latestActionableTargetPath = targetPath ?? this.latestActionableTargetPath;
+        if (!isFixPreviewEligibleFinding(finding)) {
+            const action = buildInvestigateFindingAction(finding, targetPath);
+            this.messages.push({
+                role: 'assistant',
+                content: [
+                    'This finding is investigation-first, not fix-preview-first.',
+                    `Evidence posture: ${getFindingProofStatus(finding).replace(/_/g, ' ')}.`,
+                    finding.callerPath ? `Caller-path verdict: ${finding.callerPath.verdict.replace(/_/g, ' ')}.` : 'Caller-path reachability has not been proven.',
+                    'Trace the caller path or verify reachability before generating a code change.',
+                ].join('\n'),
+                kind: 'advisory',
+                actions: [action],
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         let document = vscode.window.activeTextEditor?.document;
         if (targetPath) {
             const targetUri = vscode.Uri.file(targetPath);
@@ -1971,7 +2083,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     async generateBatchFixPreview(items: ActionableFindingTarget[], options: GenerateFixPreviewOptions = {}): Promise<void> {
         this.currentMode = 'fix';
-        const validItems = items.filter(item => item.targetPath);
+        const eligibleItems = items.filter(item => isFixPreviewEligibleFinding(item.finding));
+        if (!eligibleItems.length && items.length) {
+            this.messages.push({
+                role: 'assistant',
+                content: [
+                    'No findings in this set are fix-preview eligible yet.',
+                    'Owlvex needs caller-path or reachability verification first because the current findings are Possible Extra or manual-review candidates.',
+                ].join('\n'),
+                kind: 'advisory',
+                actions: [buildInvestigateFindingAction(items[0].finding, items[0].targetPath)],
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+        const validItems = eligibleItems.filter(item => item.targetPath);
         if (!validItems.length) {
             vscode.window.showWarningMessage('No actionable files were available for a combined fix preview.');
             return;
@@ -2235,12 +2362,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
             const continuationMessage = buildCombinedFixContinuationMessage(verificationOutcomes);
             if (continuationMessage) {
+                const continuationTargets = getCombinedFixContinuationTargets(verificationOutcomes);
+                this.latestActionableItems = continuationTargets.slice(0, 10);
+                this.latestActionableFinding = continuationTargets[0]?.finding;
+                this.latestActionableTargetPath = continuationTargets[0]?.targetPath;
                 this.messages.push({
                     role: 'assistant',
-                    content: continuationMessage,
+                    content: [
+                        continuationMessage,
+                        continuationTargets.length
+                            ? `Active continuation queue: ${continuationTargets.length} unresolved touched file${continuationTargets.length === 1 ? '' : 's'} ranked by remaining risk.`
+                            : '',
+                    ].filter(Boolean).join('\n'),
                     kind: 'advisory',
                     actions: buildCombinedFixContinuationActions(verificationOutcomes),
                 });
+            } else {
+                this.latestActionableItems = [];
+                this.latestActionableFinding = undefined;
+                this.latestActionableTargetPath = undefined;
             }
             void this.persistState();
             this.refresh();
@@ -4275,19 +4415,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             if (!finding || !targetPath) {
                 return undefined;
             }
-            return [buildReviewFixAction(finding, targetPath)];
+            return isFixPreviewEligibleFinding(finding)
+                ? [buildReviewFixAction(finding, targetPath)]
+                : [buildInvestigateFindingAction(finding, targetPath)];
         }
 
         if (this.latestActionableItems.length) {
-            const batchAction = buildBatchReviewFixAction(this.latestActionableItems);
-            return batchAction ? [batchAction] : undefined;
+            return buildPrimaryFixAction(this.latestActionableItems);
         }
 
         if (!finding || !targetPath) {
             return undefined;
         }
 
-        return [buildReviewFixAction(finding, targetPath)];
+        return isFixPreviewEligibleFinding(finding)
+            ? [buildReviewFixAction(finding, targetPath)]
+            : [buildInvestigateFindingAction(finding, targetPath)];
     }
 
     private async handleScanFileIntent(intent: ChatLocalIntent): Promise<LocalActionResult> {

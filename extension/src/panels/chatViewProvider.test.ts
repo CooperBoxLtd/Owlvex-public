@@ -849,6 +849,82 @@ describe('parseChatIntent', () => {
         ]));
     });
 
+    it('gates Possible Extra scan findings behind reachability investigation', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    uri: target ?? vscode.Uri.file('d:\\repo\\src\\store\\repositories.js'),
+                    result: {
+                        score: 9,
+                        findings: [{
+                            id: 'finding-helper-role',
+                            line: 25,
+                            lineEnd: 37,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            ruleCode: 'A01-HELPER',
+                            title: 'Privileged user role changes occur without visible authorization checks',
+                            explanation: 'Helper updates a role without owning the caller authorization decision.',
+                            threat: 'Privilege escalation if reached from an unsafe caller.',
+                            fix: 'Trace callers before editing the helper.',
+                            confidence: 0.95,
+                            provenance: 'ai',
+                            likelihood: 'HIGH',
+                            riskScore: 9,
+                            proofStatus: 'unproven_extra',
+                            callerPath: {
+                                verdict: 'reachable_guarded',
+                                functionNames: ['updateRole'],
+                                callers: [{
+                                    file: 'src/routes/roles.js',
+                                    line: 36,
+                                    expression: 'repositories.users.updateRole(targetUser.id, nextRole)',
+                                    guardStatus: 'present',
+                                    guardKind: 'authorization policy',
+                                }],
+                                reason: 'All resolved caller paths have a visible relevant guard.',
+                            },
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: '1 finding(s) detected.',
+                    },
+                };
+            }
+
+            return undefined;
+        });
+
+        await (provider as any).handleUserMessage('scan this file');
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Action gating: fix-preview eligible 0 | investigation-first 1');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Trace caller path', kind: 'quickAction' }),
+            expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
+        ]));
+        expect(finalMessage.actions).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ label: 'Preview fix', kind: 'generateFixPreview' }),
+        ]));
+    });
+
     it('keeps a single scan-level Preview fix action for the latest scan results', async () => {
         const provider = new ChatViewProvider({
             getActive: () => ({
@@ -2323,11 +2399,19 @@ describe('parseChatIntent', () => {
         expect(contents).toContain('Verification complete: the finding still exists, but its risk dropped from 9/10 to 8/10.');
         expect(contents).toContain('Fix continuation required across 1 verified file before moving on.');
         expect(contents).toContain('Next fix target: Server-side request forgery through untrusted destination (8/10 risk) in d:\\repo\\src\\two.js at line 2.');
+        expect(contents).toContain('Active continuation queue: 1 unresolved touched file ranked by remaining risk.');
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.actions).toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Preview next fix', kind: 'generateFixPreview' }),
             expect.objectContaining({ label: 'Scan workspace', kind: 'quickAction', quickAction: 'scanFolder' }),
         ]));
+        expect((provider as any).latestActionableTargetPath).toBe('d:\\repo\\src\\two.js');
+        expect((provider as any).latestActionableItems).toEqual([
+            expect.objectContaining({
+                targetPath: 'd:\\repo\\src\\two.js',
+                finding: expect.objectContaining({ id: 'remaining-ssrf' }),
+            }),
+        ]);
     });
 
     it('allows broader rewrites for latest-scan batch fixes without tripping the finding-anchored guardrail', async () => {
@@ -2723,6 +2807,115 @@ describe('parseChatIntent', () => {
             targetPath: targetUri.fsPath,
             finding: expect.objectContaining({ canonicalTitle: 'Hardcoded secret in source code' }),
         }));
+    });
+
+    it('keeps post-fix continuation investigation-first when the next finding is Possible Extra', async () => {
+        const targetUri = vscode.Uri.file('d:\\repo\\src\\repositories.js');
+        const originalText = 'function decode(token) { return jwt.decode(token); }';
+        const patchedText = 'function decode(token) { return jwt.verify(token, secret); }';
+        const saveDocument = jest.fn().mockResolvedValue(true);
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({
+            uri: targetUri,
+            getText: () => originalText,
+            save: saveDocument,
+        });
+        (vscode.workspace.applyEdit as jest.Mock).mockResolvedValue(true);
+        (vscode.window.showTextDocument as jest.Mock).mockResolvedValue({ revealRange: jest.fn() });
+        (vscode.commands.executeCommand as jest.Mock).mockImplementation(async (command: string, target?: any) => {
+            if (command === PROFILE.commands.scanFile) {
+                return {
+                    status: 'completed',
+                    uri: target,
+                    result: {
+                        score: 9,
+                        findings: [{
+                            id: 'helper-role-update',
+                            line: 24,
+                            lineEnd: 24,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            ruleCode: 'A01-AUTHZ',
+                            title: 'Privileged user role changes occur without visible authorization checks',
+                            canonicalId: 'owlvex.issue.privileged_action_missing_authorization.001',
+                            canonicalTitle: 'Privileged user role changes occur without visible authorization checks',
+                            explanation: 'Repository helper changes roles, but route-level caller reachability has not been proven.',
+                            threat: 'Could become privilege escalation if an unguarded route reaches it.',
+                            fix: 'Trace callers and enforce authorization at the reachable boundary.',
+                            confidence: 0.82,
+                            provenance: 'ai',
+                            likelihood: 'HIGH',
+                            riskScore: 9,
+                            proofStatus: 'unproven_extra',
+                            callerPath: {
+                                verdict: 'no_callers_found',
+                                functionNames: ['updateRole'],
+                                callers: [],
+                                reason: 'No in-project callers were found in the bounded caller-path scan.',
+                            },
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                        durationMs: 10,
+                        model: 'owlvex-test-model',
+                        provider: 'test-provider',
+                        warnings: [],
+                        summary: '1 finding detected.',
+                    },
+                };
+            }
+            return undefined;
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (provider as any).pendingFixPreview = {
+            targetPath: targetUri.fsPath,
+            originalText,
+            patchedText,
+            title: 'Weak JWT validation',
+            reviewedPaths: [targetUri.fsPath],
+            finding: {
+                id: 'weak-jwt',
+                line: 1,
+                lineEnd: 1,
+                severity: 'HIGH',
+                framework: 'OWASP',
+                ruleCode: 'JW-001',
+                title: 'Weak JWT validation',
+                canonicalId: 'owlvex.issue.weak_jwt_validation.001',
+                explanation: 'JWT is parsed without signature verification.',
+                threat: 'Attackers can forge claims.',
+                fix: 'Verify signature and claims.',
+                confidence: 1,
+                provenance: 'deterministic',
+                likelihood: 'HIGH',
+                riskScore: 9,
+            },
+        };
+
+        await provider.applyPendingFixPreview();
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Continuation action: Trace caller path or verify reachability before applying more code changes.');
+        expect(finalMessage.actions).toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: 'post-fix-investigate-next-finding', label: 'Trace caller path', kind: 'quickAction' }),
+            expect.objectContaining({ label: 'Explain score', kind: 'explainScore' }),
+        ]));
+        expect(finalMessage.actions).not.toEqual(expect.arrayContaining([
+            expect.objectContaining({ id: 'post-fix-preview-next-finding' }),
+        ]));
     });
 
     it('captures provider disagreement when a later provider finds issues after a clean scan', () => {

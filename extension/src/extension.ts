@@ -34,6 +34,8 @@ const RECENT_SCAN_SNAPSHOTS_KEY = `${PROFILE.storagePrefix}.recentScanSnapshots`
 const ISSUE_PACK_ID = 'owlvex.issue-pack.v1';
 const ISSUE_MAPPING_PACK_ID = 'owlvex.issue-mapping-pack.v1';
 const REMEDIATION_PACK_ID = 'owlvex.remediation-pack.v1';
+const REPORT_ROOT_MARKERS = ['package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml'];
+const SOURCE_DIRECTORY_NAMES = new Set(['src', 'lib', 'routes', 'store', 'middleware', 'policies', 'controllers', 'services']);
 
 interface ScanFileCommandResult {
     status: 'completed' | 'cancelled';
@@ -92,6 +94,77 @@ interface RecentScanSnapshot {
 
 interface ReportCommandOptions {
     reportVariant?: ReportVariant;
+}
+
+async function uriExists(uri: vscode.Uri): Promise<boolean> {
+    try {
+        await vscode.workspace.fs.stat(uri);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+function isSourceSubdirectory(root: vscode.Uri): boolean {
+    const parts = root.fsPath.split(/[\\/]/).map(part => part.toLowerCase());
+    return parts.some(part => SOURCE_DIRECTORY_NAMES.has(part));
+}
+
+export async function resolveReportOutputRoot(outputRoot: vscode.Uri, results: Array<{ uri: vscode.Uri }>): Promise<{
+    root: vscode.Uri;
+    warning?: string;
+}> {
+    const firstResult = results[0]?.uri;
+    const workspaceFolder = firstResult
+        ? vscode.workspace.getWorkspaceFolder(firstResult)
+        : vscode.workspace.workspaceFolders?.[0];
+    const workspaceRoot = workspaceFolder?.uri.fsPath;
+    const startPath = outputRoot.scheme === 'file'
+        ? outputRoot.fsPath
+        : firstResult
+            ? path.dirname(firstResult.fsPath)
+            : workspaceRoot;
+
+    if (!startPath) {
+        return { root: outputRoot };
+    }
+
+    let current = startPath;
+    while (!workspaceRoot || current.toLowerCase().startsWith(workspaceRoot.toLowerCase())) {
+        for (const marker of REPORT_ROOT_MARKERS) {
+            if (await uriExists(vscode.Uri.file(path.join(current, marker)))) {
+                return {
+                    root: vscode.Uri.file(current),
+                    warning: outputRoot.scheme !== 'file'
+                        ? 'Report output root was invalid, so Owlvex used the nearest project root.'
+                        : isSourceSubdirectory(outputRoot) && path.normalize(outputRoot.fsPath) !== path.normalize(current)
+                            ? 'Report output was moved to the nearest project root so generated reports do not pollute source folders.'
+                            : undefined,
+                };
+            }
+        }
+
+        const parent = path.dirname(current);
+        if (parent === current) {
+            break;
+        }
+        current = parent;
+    }
+
+    if (outputRoot.scheme === 'file' && !isSourceSubdirectory(outputRoot)) {
+        return { root: outputRoot };
+    }
+
+    if (workspaceFolder) {
+        return {
+            root: workspaceFolder.uri,
+            warning: outputRoot.scheme !== 'file'
+                ? 'Report output root was invalid, so Owlvex used the workspace root.'
+                : 'Report output was moved to the workspace root so generated reports do not pollute source folders.',
+        };
+    }
+
+    return { root: outputRoot };
 }
 
 interface StoredReportRecord {
@@ -1664,7 +1737,7 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const createAndOpenReport = async (snapshot: ReportSnapshot, reportVariant: ReportVariant = 'full') => {
-        const safeSnapshot = normalizeReportSnapshot(snapshot);
+        const safeSnapshot = await normalizeReportSnapshot(snapshot);
         const reportUri = await generateReportFromSnapshot(safeSnapshot.outputRoot, safeSnapshot, { variant: reportVariant });
         const reportDoc = await vscode.workspace.openTextDocument(reportUri);
         await vscode.window.showTextDocument(reportDoc, { preview: false });
@@ -1721,26 +1794,20 @@ export function activate(context: vscode.ExtensionContext) {
         };
     };
 
-    const normalizeReportSnapshot = (snapshot: ReportSnapshot): ReportSnapshot => {
-        if (snapshot.outputRoot?.scheme === 'file') {
-            return snapshot;
-        }
-
-        const fallbackRoot = snapshot.results[0]?.uri
-            ? vscode.Uri.file(path.dirname(snapshot.results[0].uri.fsPath))
-            : vscode.workspace.workspaceFolders?.[0]?.uri;
-
-        if (!fallbackRoot) {
+    const normalizeReportSnapshot = async (snapshot: ReportSnapshot): Promise<ReportSnapshot> => {
+        const resolved = await resolveReportOutputRoot(snapshot.outputRoot, snapshot.results);
+        const sameRoot = snapshot.outputRoot?.scheme === 'file'
+            && path.normalize(snapshot.outputRoot.fsPath) === path.normalize(resolved.root.fsPath);
+        if (sameRoot && !resolved.warning) {
             return snapshot;
         }
 
         return {
             ...snapshot,
-            outputRoot: fallbackRoot,
-            errors: [
-                ...snapshot.errors,
-                'Report output root was invalid, so Owlvex used the first scanned file folder instead.',
-            ],
+            outputRoot: resolved.root,
+            errors: resolved.warning
+                ? [...snapshot.errors, resolved.warning]
+                : snapshot.errors,
         };
     };
 

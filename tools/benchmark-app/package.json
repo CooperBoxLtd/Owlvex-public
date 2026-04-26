@@ -6,7 +6,9 @@
   "type": "commonjs",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "benchmark:reset": "node scripts/reset-unsafe-baseline.mjs --apply",
+    "benchmark:reset:check": "node scripts/reset-unsafe-baseline.mjs"
   },
   "dependencies": {
     "cookie-parser": "^1.4.6",

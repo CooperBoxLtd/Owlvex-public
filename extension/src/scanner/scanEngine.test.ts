@@ -14,6 +14,10 @@ class TestableScanEngine extends ScanEngine {
     public parseBatch(raw: string, contexts: any[]) {
         return (this as any)._parseBatchAIResponse(raw, contexts);
     }
+
+    public applyCallerPathEvidence(document: vscode.TextDocument, findings: any[]) {
+        return (this as any)._applyCallerPathEvidence(document, findings);
+    }
 }
 
 // Minimal mocks — scanDocument is not called in these tests, only _parseAIResponse.
@@ -540,6 +544,135 @@ describe('ScanEngine AI throttling', () => {
         await jest.advanceTimersByTimeAsync(1);
         await Promise.all([first, second]);
         expect(provider.complete).toHaveBeenCalledTimes(2);
+    });
+});
+
+describe('ScanEngine caller-path evidence', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (vscode.workspace.workspaceFolders as any) = [
+            { uri: vscode.Uri.file('d:\\repo') },
+        ];
+        (vscode.workspace.getWorkspaceFolder as jest.Mock).mockImplementation((uri: vscode.Uri) => {
+            const fsPath = uri.fsPath.toLowerCase();
+            return fsPath.startsWith('d:\\repo') ? { uri: vscode.Uri.file('d:\\repo') } : undefined;
+        });
+        (vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+            if (uri.fsPath.toLowerCase() === 'd:\\repo\\package.json') {
+                return { type: vscode.FileType.File };
+            }
+            throw new Error('missing');
+        });
+    });
+
+    it('does not treat authentication alone as an authorization guard for privileged helpers', async () => {
+        const helperUri = vscode.Uri.file('d:\\repo\\src\\store\\repositories.js');
+        const routeUri = vscode.Uri.file('d:\\repo\\src\\routes\\roles.js');
+        (vscode.workspace.findFiles as jest.Mock).mockImplementation(async (_include: any, _exclude?: any, maxResults?: number) =>
+            maxResults === 1 ? [] : [routeUri]
+        );
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+            if (uri.fsPath === routeUri.fsPath) {
+                return Buffer.from(`
+router.post('/:userId/role-unsafe', requireUser, async (req, res) => {
+  const updated = repositories.users.updateRole(req.params.userId, req.body.role);
+  res.json({ user: updated });
+});
+`);
+            }
+            return Buffer.from('');
+        });
+
+        const scanEngine = new TestableScanEngine(mockLicenceMgr, mockRegistry);
+        const result = await scanEngine.applyCallerPathEvidence({
+            uri: helperUri,
+            fileName: helperUri.fsPath,
+            languageId: 'javascript',
+            getText: () => 'function updateRole(userId, role) { user.role = role; }',
+        } as any, [{
+            id: 'role-helper',
+            line: 2,
+            lineEnd: 2,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'A01-AUTHZ',
+            title: 'Privileged user role changes occur without visible authorization checks',
+            canonicalId: 'owlvex.issue.privileged_action_missing_authorization.001',
+            canonicalTitle: 'Privileged user role changes occur without visible authorization checks',
+            explanation: 'updateRole(userId, role) writes privileged roles without authorization.',
+            threat: 'Privilege escalation.',
+            fix: 'Authorize the actor before changing roles.',
+            confidence: 0.9,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+            evidenceContract: {
+                issueType: 'privileged-action-missing-authorization',
+                sink: { kind: 'role-update', line: 2, expression: 'updateRole(userId, role)' },
+                guard: { status: 'missing' },
+            },
+        }]);
+
+        expect(result.findings[0].callerPath.verdict).toBe('reachable_unguarded');
+        expect(result.findings[0].callerPath.callers[0].guardStatus).toBe('missing');
+        expect(result.findings[0].proofStatus).toBe('ai_plausible');
+        expect(result.telemetry.unguardedCallers).toBe(1);
+    });
+
+    it('keeps authorization helpers guarded when a real policy check is visible', async () => {
+        const helperUri = vscode.Uri.file('d:\\repo\\src\\store\\repositories.js');
+        const routeUri = vscode.Uri.file('d:\\repo\\src\\routes\\roles.js');
+        (vscode.workspace.findFiles as jest.Mock).mockImplementation(async (_include: any, _exclude?: any, maxResults?: number) =>
+            maxResults === 1 ? [] : [routeUri]
+        );
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+            if (uri.fsPath === routeUri.fsPath) {
+                return Buffer.from(`
+router.post('/:userId/role-safe', requireUser, async (req, res) => {
+  if (!canAssignRole(req.user, targetUser, req.body.role)) return res.status(403).end();
+  const updated = repositories.users.updateRole(req.params.userId, req.body.role);
+  res.json({ user: updated });
+});
+`);
+            }
+            return Buffer.from('');
+        });
+
+        const scanEngine = new TestableScanEngine(mockLicenceMgr, mockRegistry);
+        const result = await scanEngine.applyCallerPathEvidence({
+            uri: helperUri,
+            fileName: helperUri.fsPath,
+            languageId: 'javascript',
+            getText: () => 'function updateRole(userId, role) { user.role = role; }',
+        } as any, [{
+            id: 'role-helper',
+            line: 2,
+            lineEnd: 2,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'A01-AUTHZ',
+            title: 'Privileged user role changes occur without visible authorization checks',
+            canonicalId: 'owlvex.issue.privileged_action_missing_authorization.001',
+            canonicalTitle: 'Privileged user role changes occur without visible authorization checks',
+            explanation: 'updateRole(userId, role) writes privileged roles without authorization.',
+            threat: 'Privilege escalation.',
+            fix: 'Authorize the actor before changing roles.',
+            confidence: 0.9,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 9,
+            evidenceContract: {
+                issueType: 'privileged-action-missing-authorization',
+                sink: { kind: 'role-update', line: 2, expression: 'updateRole(userId, role)' },
+                guard: { status: 'missing' },
+            },
+        }]);
+
+        expect(result.findings[0].callerPath.verdict).toBe('reachable_guarded');
+        expect(result.findings[0].callerPath.callers[0].guardStatus).toBe('present');
+        expect(result.findings[0].callerPath.callers[0].guardKind).toBe('authorization policy');
+        expect(result.findings[0].proofStatus).toBe('unproven_extra');
+        expect(result.telemetry.guardedCallers).toBe(1);
     });
 });
 

@@ -38,6 +38,36 @@ The benchmark app should behave like a small real application so Owlvex has actu
 | `src/routes/imports.js` `POST /imports/customer-notes-safe` | clean: JSON-only data import with shape validation |
 | `src/lib/tokens.js` `verifySessionToken` | clean: signature, issuer, audience, and algorithm validation |
 
+## Helper-Layer Findings
+
+Some files contain dangerous sinks that are intentionally reusable by safe and unsafe workflows.
+
+For helper or repository files, Owlvex should not promote a finding to Fix First only because the helper contains a risky state change. It should first resolve caller context:
+
+| Helper area | Expected behavior |
+| --- | --- |
+| `src/store/repositories.js` `users.updateRole` | Possible Extra when scanned alone; Fix First only when reached from an unguarded role route |
+| `src/store/repositories.js` `refunds.approve` | Possible Extra when scanned alone; Fix First only when reached from an unguarded approval workflow |
+| `src/store/repositories.js` `refunds.approveForTenant` | clean/constrained when caller enforces approval policy and tenant scope |
+| `src/store/repositories.js` audit writes | audit-gap findings should distinguish missing audit from unsafe caller-supplied audit identity |
+
+Expected action gating:
+
+- Fix First findings may offer fix preview.
+- Possible Extra findings should offer caller-path investigation before fix preview.
+- Finder-only helper findings should not be treated as fully proven without caller evidence.
+
+## Fix Preview Evaluation
+
+Fix preview tests may temporarily change the vulnerable source files. Those changes are test artifacts unless explicitly committed as product code.
+
+After evaluating a generated fix:
+
+- verify the anchored finding
+- rescan every touched file
+- record residual or newly introduced findings
+- restore the unsafe benchmark baseline before future baseline scans
+
 ## Stabilization Rule
 
 This app is the long-term repo-context benchmark target. The older demo app has been removed so repo-context work has one realistic source of truth.

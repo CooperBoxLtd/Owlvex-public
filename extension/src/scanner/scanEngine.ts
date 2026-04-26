@@ -66,9 +66,34 @@ export interface Finding {
     proofStatus?: EvidenceProofStatus;
     evidenceContract?: EvidenceContract;
     safeProbe?: SafeExploitProbeResult;
+    callerPath?: CallerPathEvidence;
 }
 
 export type EvidenceProofStatus = 'static_proven' | 'ai_plausible' | 'counter_evidence_found' | 'unproven_extra';
+
+export interface CallerPathEvidence {
+    verdict: 'reachable_unguarded' | 'reachable_guarded' | 'unknown_reachability' | 'no_callers_found' | 'mixed_callers';
+    functionNames: string[];
+    callers: Array<{
+        file: string;
+        line: number;
+        expression: string;
+        functionName?: string;
+        guardStatus: 'present' | 'missing' | 'unknown';
+        guardKind?: string;
+        sourceSignal?: string;
+    }>;
+    unsafeCallers?: Array<{
+        file: string;
+        line: number;
+        expression: string;
+        functionName?: string;
+        guardStatus: 'present' | 'missing' | 'unknown';
+        guardKind?: string;
+        sourceSignal?: string;
+    }>;
+    reason: string;
+}
 
 export interface EvidenceContract {
     issueType: string;
@@ -176,6 +201,20 @@ export interface EngineTelemetry {
         skepticSkippedStrongSupport: number;
         skepticSkippedStable: number;
     };
+    callerPathRouting?: {
+        requested: number;
+        skipped: number;
+        callersFound: number;
+        guardedCallers: number;
+        unguardedCallers: number;
+        unknownCallers: number;
+    };
+    actionGating?: {
+        fixPreviewEligible: number;
+        investigationFirst: number;
+        manualReview: number;
+        suppressed: number;
+    };
 }
 
 export interface ScanDocumentOptions {
@@ -256,6 +295,10 @@ const CORROBORATION_SPREAD_THRESHOLD = 0.1;
 const RELATED_PROBE_CONTEXT_MAX_FILES = 4;
 const RELATED_PROBE_CONTEXT_MAX_CHARS_PER_FILE = 3500;
 const RELATED_PROBE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.java', '.cs'];
+const CALLER_PATH_MAX_FILES = 200;
+const CALLER_PATH_MAX_CALLERS = 8;
+const CALLER_PATH_EXTENSIONS = '{ts,tsx,js,jsx,mjs,cjs,py,go,java,cs}';
+const CALLER_PATH_ROOT_MARKERS = ['package.json', 'pyproject.toml', 'go.mod', 'pom.xml', 'Cargo.toml', '*.csproj'];
 
 function extractRelativeModuleSpecifiers(code: string): string[] {
     const specifiers = new Set<string>();
@@ -287,6 +330,42 @@ function resolveRelatedProbeCandidatePaths(fromFile: string, specifier: string):
         ...RELATED_PROBE_EXTENSIONS.map(ext => `${basePath}${ext}`),
         ...RELATED_PROBE_EXTENSIONS.map(ext => path.join(basePath, `index${ext}`)),
     ];
+}
+
+async function fileExists(uri: vscode.Uri): Promise<boolean> {
+    try {
+        await vscode.workspace.fs.stat(uri);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function findNearestProjectRoot(fileName: string): Promise<vscode.Uri | undefined> {
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(fileName));
+    const workspaceRoot = workspaceFolder?.uri.fsPath;
+    let current = path.dirname(fileName);
+
+    while (!workspaceRoot || current.toLowerCase().startsWith(workspaceRoot.toLowerCase())) {
+        for (const marker of CALLER_PATH_ROOT_MARKERS) {
+            if (marker.includes('*')) {
+                const matches = await vscode.workspace.findFiles(new vscode.RelativePattern(current, marker), undefined, 1);
+                if (matches.length) {
+                    return vscode.Uri.file(current);
+                }
+            } else if (await fileExists(vscode.Uri.file(path.join(current, marker)))) {
+                return vscode.Uri.file(current);
+            }
+        }
+
+        const parent = path.dirname(current);
+        if (parent === current) {
+            break;
+        }
+        current = parent;
+    }
+
+    return workspaceFolder?.uri;
 }
 
 function buildMetrics(findings: Finding[]): SeverityMetrics {
@@ -447,6 +526,48 @@ function isKnownHelperLayerFinding(finding: Finding, filePath?: string): boolean
     return false;
 }
 
+function isFixPreviewEligibleFinding(finding: Finding, filePath?: string): boolean {
+    const status = classifyFindingProofStatus(finding, filePath);
+    return status === 'static_proven' || status === 'ai_plausible';
+}
+
+function emptyCallerPathRoutingTelemetry(): NonNullable<EngineTelemetry['callerPathRouting']> {
+    return {
+        requested: 0,
+        skipped: 0,
+        callersFound: 0,
+        guardedCallers: 0,
+        unguardedCallers: 0,
+        unknownCallers: 0,
+    };
+}
+
+function emptyActionGatingTelemetry(): NonNullable<EngineTelemetry['actionGating']> {
+    return {
+        fixPreviewEligible: 0,
+        investigationFirst: 0,
+        manualReview: 0,
+        suppressed: 0,
+    };
+}
+
+function buildActionGatingTelemetry(findings: Finding[], filePath?: string): NonNullable<EngineTelemetry['actionGating']> {
+    const telemetry = emptyActionGatingTelemetry();
+    for (const finding of findings) {
+        const proofStatus = classifyFindingProofStatus(finding, filePath);
+        if (isFixPreviewEligibleFinding(finding, filePath)) {
+            telemetry.fixPreviewEligible += 1;
+        } else if (proofStatus === 'counter_evidence_found') {
+            telemetry.suppressed += 1;
+        } else if (isKnownHelperLayerFinding(finding, filePath) || proofStatus === 'unproven_extra') {
+            telemetry.investigationFirst += 1;
+        } else {
+            telemetry.manualReview += 1;
+        }
+    }
+    return telemetry;
+}
+
 function classifyFindingProofStatus(finding: Finding, filePath?: string): EvidenceProofStatus {
     if (isKnownHelperLayerFinding(finding, filePath)) {
         return 'unproven_extra';
@@ -481,6 +602,159 @@ function applyProofStatus(finding: Finding, filePath?: string): Finding {
             ? {
                 ...finding.evidenceContract,
                 proofStatus,
+            }
+            : finding.evidenceContract,
+    };
+}
+
+function extractCallerPathFunctionNames(finding: Finding): string[] {
+    const raw = [
+        finding.evidenceContract?.source?.expression,
+        finding.evidenceContract?.sink?.expression,
+        ...(finding.evidenceContract?.flow ?? []).map(point => point.expression),
+        finding.title,
+        finding.explanation,
+    ].filter((value): value is string => Boolean(value));
+
+    const names = new Set<string>();
+    for (const value of raw) {
+        for (const match of value.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g)) {
+            const name = match[1];
+            if (!['if', 'for', 'while', 'switch', 'catch', 'function', 'return', 'String', 'Boolean'].includes(name)) {
+                names.add(name);
+            }
+        }
+        for (const match of value.matchAll(/\b([A-Za-z_$][\w$]*)\s*\./g)) {
+            const name = match[1];
+            if (!['req', 'request', 'res', 'response', 'state', 'this'].includes(name)) {
+                names.add(name);
+            }
+        }
+    }
+
+    return [...names].slice(0, 4);
+}
+
+function hasCallerGuard(snippet: string, finding: Finding): { present: boolean; kind?: string } {
+    const text = snippet.toLowerCase();
+    const issueText = [
+        finding.title,
+        finding.canonicalTitle ?? '',
+        finding.canonicalFamily ?? '',
+        finding.canonicalFamilyLabel ?? '',
+        finding.evidenceContract?.issueType ?? '',
+    ].join(' ').toLowerCase();
+    const isAuthorizationIssue = /\b(?:authorization|authorisation|access control|idor|object-level|function-level|tenant|role|privilege|privileged|refund|approve|admin)\b/.test(issueText);
+    const isAuthenticationIssue = /\b(?:authentication|session|jwt|token|identity)\b/.test(issueText) && !isAuthorizationIssue;
+
+    if (/\b(canassignrole|allowed_roles|requireadmin|requirerole|permissions?\s*\.?\s*includes|authorize|isauthorized)\b/i.test(snippet)) {
+        return { present: true, kind: 'authorization policy' };
+    }
+    if (/\b(canapproverefund|finance_approver|approveforTenant|findForTenant|tenantId)\b/i.test(snippet)) {
+        return { present: true, kind: 'tenant or workflow policy' };
+    }
+    if (/\b(requirecsrf|validatecsrf|verifycsrf|csrf)\b/i.test(snippet)) {
+        return { present: true, kind: 'csrf guard' };
+    }
+    if (/\b(fetchAllowedPartner|allowedPartners?|allowlist|trusted)\b/i.test(snippet)) {
+        return { present: true, kind: 'destination allowlist' };
+    }
+    if (/\b(json\.parse|schema|validate|allowedFields?)\b/i.test(snippet) && /\b(?:deserial|eval|import|mass|nosql)\b/.test(issueText)) {
+        return { present: true, kind: 'parser or schema guard' };
+    }
+    if (isAuthenticationIssue && (/\brequireuser\b/i.test(snippet) || text.includes('req.user') || text.includes('actor') || text.includes('principal'))) {
+        return { present: true, kind: 'authenticated actor binding' };
+    }
+
+    return { present: false };
+}
+
+function hasCallerSourceSignal(snippet: string): string | undefined {
+    if (/\breq\s*\.\s*(?:body|params|query|headers|cookies)\b/i.test(snippet)) {
+        return 'request-controlled input';
+    }
+    if (/\brequest\s*\.\s*(?:body|params|query|headers|cookies)\b/i.test(snippet)) {
+        return 'request-controlled input';
+    }
+    if (/\bprocess\s*\.\s*env\b/i.test(snippet)) {
+        return 'environment-controlled input';
+    }
+    return undefined;
+}
+
+function classifyCallerPathEvidence(functionNames: string[], callers: CallerPathEvidence['callers']): CallerPathEvidence {
+    if (!functionNames.length) {
+        return {
+            verdict: 'unknown_reachability',
+            functionNames,
+            callers: [],
+            reason: 'No stable helper function name could be extracted from the finding evidence.',
+        };
+    }
+
+    if (!callers.length) {
+        return {
+            verdict: 'no_callers_found',
+            functionNames,
+            callers,
+            reason: 'No in-project callers were found in the bounded caller-path scan.',
+        };
+    }
+
+    const guarded = callers.filter(caller => caller.guardStatus === 'present');
+    const unguarded = callers.filter(caller => caller.guardStatus === 'missing');
+    const unknown = callers.filter(caller => caller.guardStatus === 'unknown');
+    const unsafeCallers = unguarded.slice(0, 3);
+    const verdict: CallerPathEvidence['verdict'] = guarded.length && unguarded.length
+        ? 'mixed_callers'
+        : unguarded.length
+            ? 'reachable_unguarded'
+            : guarded.length
+                ? 'reachable_guarded'
+                : 'unknown_reachability';
+
+    const reason = verdict === 'mixed_callers'
+        ? 'At least one guarded and one unguarded caller path were found.'
+        : verdict === 'reachable_unguarded'
+            ? 'A caller path reaches this helper without a visible relevant guard.'
+            : verdict === 'reachable_guarded'
+                ? 'All resolved caller paths have a visible relevant guard.'
+                : `${unknown.length} caller path(s) were found, but guard posture could not be resolved.`;
+
+    return {
+        verdict,
+        functionNames,
+        callers,
+        unsafeCallers: unsafeCallers.length ? unsafeCallers : undefined,
+        reason,
+    };
+}
+
+function applyCallerPathProofStatus(finding: Finding, filePath?: string): Finding {
+    if (!isKnownHelperLayerFinding(finding, filePath) || !finding.callerPath) {
+        return finding;
+    }
+
+    if (finding.callerPath.verdict !== 'reachable_unguarded' && finding.callerPath.verdict !== 'mixed_callers') {
+        return applyProofStatus({
+            ...finding,
+            proofStatus: 'unproven_extra',
+            evidenceContract: finding.evidenceContract
+                ? {
+                    ...finding.evidenceContract,
+                    proofStatus: 'unproven_extra',
+                }
+                : finding.evidenceContract,
+        }, filePath);
+    }
+
+    return {
+        ...finding,
+        proofStatus: 'ai_plausible',
+        evidenceContract: finding.evidenceContract
+            ? {
+                ...finding.evidenceContract,
+                proofStatus: 'ai_plausible',
             }
             : finding.evidenceContract,
     };
@@ -1357,6 +1631,8 @@ function buildEmptyEngineTelemetry(localSinkEvidence: LocalSinkEvidence[] = []):
             manualReview: 0,
         },
         corroborationRouting: emptyCorroborationRoutingTelemetry(),
+        callerPathRouting: emptyCallerPathRoutingTelemetry(),
+        actionGating: emptyActionGatingTelemetry(),
     };
 }
 
@@ -1416,6 +1692,8 @@ function buildEngineTelemetry(params: {
     finalFindings: Finding[];
     safeProbes: SafeProbeTelemetry;
     corroborationRouting?: CorroborationRoutingTelemetry;
+    callerPathRouting?: NonNullable<EngineTelemetry['callerPathRouting']>;
+    filePath?: string;
 }): EngineTelemetry {
     const telemetry = buildEmptyEngineTelemetry(params.localSinkEvidence);
     telemetry.aiFindings = {
@@ -1426,6 +1704,8 @@ function buildEngineTelemetry(params: {
     };
     telemetry.safeProbes = params.safeProbes;
     telemetry.corroborationRouting = params.corroborationRouting ?? emptyCorroborationRoutingTelemetry();
+    telemetry.callerPathRouting = params.callerPathRouting ?? emptyCallerPathRoutingTelemetry();
+    telemetry.actionGating = buildActionGatingTelemetry(params.finalFindings, params.filePath);
     return telemetry;
 }
 
@@ -1466,6 +1746,16 @@ function hasConfirmedSafeProbe(finding: Finding): boolean {
     return finding.safeProbe?.verdict === 'confirmed' && finding.safeProbe.decision === 'promote';
 }
 
+function isHelperLayerCandidate(finding: Finding): boolean {
+    return finding.evidenceContract?.responsibilityLayer === 'repository'
+        || finding.evidenceContract?.responsibilityLayer === 'audit'
+        || /\b(repository|helper|service layer|store|caller path)\b/i.test([
+            finding.title,
+            finding.explanation,
+            finding.evidenceContract?.rationale ?? '',
+        ].join(' '));
+}
+
 function shouldRunVerifier(finding: Finding): boolean {
     const confidence = finderConfidence(finding);
     if (hasConfirmedSafeProbe(finding)) {
@@ -1473,6 +1763,10 @@ function shouldRunVerifier(finding: Finding): boolean {
     }
 
     if (finding.severity === 'CRITICAL') {
+        return true;
+    }
+
+    if (isHighImpactFinding(finding) && isHelperLayerCandidate(finding)) {
         return true;
     }
 
@@ -1750,6 +2044,98 @@ export class ScanEngine {
         return snippets.join('\n\n--- RELATED HELPER ---\n\n');
     }
 
+    private async _applyCallerPathEvidence(document: vscode.TextDocument, findings: Finding[]): Promise<{
+        findings: Finding[];
+        telemetry: NonNullable<EngineTelemetry['callerPathRouting']>;
+    }> {
+        const telemetry = emptyCallerPathRoutingTelemetry();
+        if (!findings.length) {
+            return { findings, telemetry };
+        }
+
+        const helperFindings = findings.filter(finding => isKnownHelperLayerFinding(finding, document.fileName));
+        telemetry.requested = helperFindings.length;
+        telemetry.skipped = findings.length - helperFindings.length;
+        if (!helperFindings.length) {
+            return { findings, telemetry };
+        }
+
+        const callerRoot = await findNearestProjectRoot(document.fileName);
+        const exclude = '**/{node_modules,.git,dist,out,coverage}/**';
+        const candidateUris = callerRoot
+            ? await vscode.workspace.findFiles(new vscode.RelativePattern(callerRoot, `**/*.${CALLER_PATH_EXTENSIONS}`), exclude, CALLER_PATH_MAX_FILES)
+            : await vscode.workspace.findFiles(`**/*.${CALLER_PATH_EXTENSIONS}`, exclude, CALLER_PATH_MAX_FILES);
+        const sourcePath = path.normalize(document.fileName).toLowerCase();
+        const fileCache = new Map<string, string>();
+
+        async function readCandidate(uri: vscode.Uri): Promise<string | undefined> {
+            const normalized = path.normalize(uri.fsPath).toLowerCase();
+            if (normalized === sourcePath) {
+                return undefined;
+            }
+            if (fileCache.has(normalized)) {
+                return fileCache.get(normalized);
+            }
+            try {
+                const raw = await vscode.workspace.fs.readFile(uri);
+                const text = Buffer.from(raw).toString('utf8');
+                fileCache.set(normalized, text);
+                return text;
+            } catch {
+                return undefined;
+            }
+        }
+
+        const enriched = await Promise.all(findings.map(async finding => {
+            if (!isKnownHelperLayerFinding(finding, document.fileName)) {
+                return finding;
+            }
+
+            const functionNames = extractCallerPathFunctionNames(finding);
+            const callers: CallerPathEvidence['callers'] = [];
+            for (const uri of candidateUris) {
+                if (callers.length >= CALLER_PATH_MAX_CALLERS) {
+                    break;
+                }
+                const text = await readCandidate(uri);
+                if (!text) {
+                    continue;
+                }
+                const lines = text.split(/\r?\n/);
+                for (let index = 0; index < lines.length && callers.length < CALLER_PATH_MAX_CALLERS; index += 1) {
+                    const line = lines[index];
+                    const matchedName = functionNames.find(name => new RegExp(`(?:\\.|\\b)${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\(`).test(line));
+                    if (!matchedName) {
+                        continue;
+                    }
+                    const start = Math.max(0, index - 12);
+                    const end = Math.min(lines.length, index + 4);
+                    const snippet = lines.slice(start, end).join('\n');
+                    const guard = hasCallerGuard(snippet, finding);
+                    const sourceSignal = hasCallerSourceSignal(snippet);
+                    callers.push({
+                        file: callerRoot ? path.relative(callerRoot.fsPath, uri.fsPath) : uri.fsPath,
+                        line: index + 1,
+                        expression: line.trim().slice(0, 240),
+                        functionName: matchedName,
+                        guardStatus: guard.present ? 'present' : sourceSignal ? 'missing' : 'unknown',
+                        guardKind: guard.kind,
+                        sourceSignal,
+                    });
+                }
+            }
+
+            const callerPath = classifyCallerPathEvidence(functionNames, callers);
+            telemetry.callersFound += callers.length;
+            telemetry.guardedCallers += callers.filter(caller => caller.guardStatus === 'present').length;
+            telemetry.unguardedCallers += callers.filter(caller => caller.guardStatus === 'missing').length;
+            telemetry.unknownCallers += callers.filter(caller => caller.guardStatus === 'unknown').length;
+            return applyCallerPathProofStatus({ ...finding, callerPath }, document.fileName);
+        }));
+
+        return { findings: enriched, telemetry };
+    }
+
     async scanDocumentsBatch(documents: vscode.TextDocument[]): Promise<ScanResult[]> {
         if (documents.length <= 1) {
             return Promise.all(documents.map(document => this.scanDocument(document)));
@@ -2020,9 +2406,11 @@ export class ScanEngine {
                 ),
             );
 
-            const allFindings = mergeDeterministicAndAiFindings(entry.context.deterministicFindings, keptAi)
+            const initialAllFindings = mergeDeterministicAndAiFindings(entry.context.deterministicFindings, keptAi)
                 .map(finding => enrichFindingRisk(finding))
                 .map(finding => applyProofStatus(finding, entry.context.document.fileName));
+            const callerPath = await this._applyCallerPathEvidence(entry.context.document, initialAllFindings);
+            const allFindings = callerPath.findings;
             const engineTelemetry = buildEngineTelemetry({
                 localSinkEvidence: entry.context.localSinkEvidence,
                 proposedAiFindings: entry.parsed.findings.length,
@@ -2031,6 +2419,8 @@ export class ScanEngine {
                 finalFindings: allFindings,
                 safeProbes: safeProbeTelemetry,
                 corroborationRouting: buildCorroborationRoutingTelemetry(entry.filteredAiFindings, verifierMap),
+                callerPathRouting: callerPath.telemetry,
+                filePath: entry.context.document.fileName,
             });
             const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
             const filteredWarnings = warnings.filter(warning =>
@@ -2259,9 +2649,11 @@ export class ScanEngine {
         });
         const safeProbeTelemetry = mergeSafeProbeTelemetry(preCorroborationProbes.telemetry, corroboratedAi.safeProbes);
         const aiUsage = mergeAiUsage(finderUsage, corroboratedAi.aiUsage);
-        const allFindings = mergeDeterministicAndAiFindings(deterministicFindings, corroboratedAi.findings)
+        const initialAllFindings = mergeDeterministicAndAiFindings(deterministicFindings, corroboratedAi.findings)
             .map(finding => enrichFindingRisk(finding))
             .map(finding => applyProofStatus(finding, document.fileName));
+        const callerPath = await this._applyCallerPathEvidence(document, initialAllFindings);
+        const allFindings = callerPath.findings;
         const engineTelemetry = buildEngineTelemetry({
             localSinkEvidence,
             proposedAiFindings: parsed.findings.length,
@@ -2270,6 +2662,8 @@ export class ScanEngine {
             finalFindings: allFindings,
             safeProbes: safeProbeTelemetry,
             corroborationRouting: corroboratedAi.corroborationRouting,
+            callerPathRouting: callerPath.telemetry,
+            filePath: document.fileName,
         });
         const hasAiFindingsInFinalResult = allFindings.some(finding => finding.provenance === 'ai');
         warnings.push(

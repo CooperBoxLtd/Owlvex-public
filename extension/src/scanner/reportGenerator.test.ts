@@ -212,6 +212,103 @@ describe('reportGenerator', () => {
         expect(written).not.toContain('## Framework Correlation View');
     });
 
+    it('reports unsafe caller paths for mixed helper-layer reachability', async () => {
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from([
+            'function updateRole(userId, role) {',
+            '  user.role = role;',
+            '}',
+        ].join('\n')));
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo'), {
+            targetLabel: 'tools/benchmark-app/src/store/repositories.js',
+            outputRoot: vscode.Uri.file('d:\\repo'),
+            errors: [],
+            results: [{
+                uri: vscode.Uri.file('d:\\repo\\tools\\benchmark-app\\src\\store\\repositories.js'),
+                result: buildResult({
+                    score: 9,
+                    findings: [{
+                        ...buildResult().findings[0],
+                        id: 'helper-role',
+                        title: 'Privileged user role changes occur without visible authorization checks',
+                        canonicalTitle: undefined,
+                        ruleCode: 'A01-HELPER',
+                        proofStatus: 'ai_plausible',
+                        evidenceContract: {
+                            issueType: 'missing-authorization',
+                            verdict: 'confirmed',
+                            source: {
+                                kind: 'source',
+                                label: 'Caller-controlled role update',
+                                expression: 'updateRole(userId, role)',
+                                line: 1,
+                            },
+                            flow: [],
+                            sink: {
+                                kind: 'sink',
+                                label: 'Role mutation',
+                                expression: 'user.role = role',
+                                line: 2,
+                            },
+                            guard: {
+                                status: 'missing',
+                                label: 'Authorization check',
+                                reason: 'No local guard is visible.',
+                            },
+                            rationale: 'The helper contains a privileged state change.',
+                            proofStatus: 'ai_plausible',
+                            responsibilityLayer: 'repository',
+                        },
+                        callerPath: {
+                            verdict: 'mixed_callers',
+                            functionNames: ['updateRole'],
+                            callers: [{
+                                file: 'src/routes/roles.js',
+                                line: 36,
+                                expression: 'repositories.users.updateRole(targetUser.id, nextRole)',
+                                functionName: 'updateRole',
+                                guardStatus: 'present',
+                                guardKind: 'authorization policy',
+                            }, {
+                                file: 'src/routes/admin.js',
+                                line: 18,
+                                expression: 'repositories.users.updateRole(req.params.userId, req.body.role)',
+                                functionName: 'updateRole',
+                                guardStatus: 'missing',
+                                sourceSignal: 'request-controlled input',
+                            }],
+                            unsafeCallers: [{
+                                file: 'src/routes/admin.js',
+                                line: 18,
+                                expression: 'repositories.users.updateRole(req.params.userId, req.body.role)',
+                                functionName: 'updateRole',
+                                guardStatus: 'missing',
+                                sourceSignal: 'request-controlled input',
+                            }],
+                            reason: 'At least one guarded and one unguarded caller path were found.',
+                        },
+                    }],
+                    engineTelemetry: {
+                        sinkInventory: { total: 1, byFamily: { 'privileged-action': 1 }, guarded: 0, missingGuard: 1, unknownGuard: 0 },
+                        aiFindings: { proposed: 1, afterStaticFilter: 1, afterCorroboration: 1, finalSurvivors: 1 },
+                        safeProbes: { run: 0, confirmed: 0, counterEvidence: 0, unsupported: 0, inconclusive: 0, promoted: 0, downgraded: 0, dropped: 0, manualReview: 0 },
+                        callerPathRouting: { requested: 1, skipped: 0, callersFound: 2, guardedCallers: 1, unguardedCallers: 1, unknownCallers: 0 },
+                        actionGating: { fixPreviewEligible: 1, investigationFirst: 0, manualReview: 0, suppressed: 0 },
+                    },
+                }),
+            }],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Caller-path routing: requested 1 | skipped 0 | callers 2 | guarded 1 | unguarded 1 | unknown 0');
+        expect(written).toContain('- Action gating: fix-preview eligible 1 | investigation-first 0 | manual-review 0 | suppressed 0');
+        expect(written).toContain('caller path: mixed callers');
+        expect(written).toContain('- Caller-path verdict: mixed callers');
+        expect(written).toContain('- Unsafe caller path(s): `src/routes/admin.js` L18 (updateRole)');
+        expect(written).toContain('- Caller: `src/routes/roles.js` L36 | function updateRole | guard present (authorization policy)');
+    });
+
     it('writes a summary report focused on developer action', async () => {
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(
             Buffer.from([
@@ -1124,6 +1221,9 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 | Finder high confidence, not independently verified | The finder score is high, but no verifier or skeptic pass is present in the audit trail | Useful triage signal; validate important fixes against the code |
 | Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |
 | Needs manual review | Evidence is weak, incomplete, or low-confidence | Do not treat as confirmed yet |
+| Possible Extra | Risky helper-layer sink or unproven hypothesis that is not promoted to Fix First | Trace caller path or verify reachability before patching |
+| Action gating | Whether the finding is eligible for Preview fix or should be investigated first | Use Preview fix for proof-supported findings; use caller-path actions for investigation-first items |
+| Caller-path verdict | Whether Owlvex found guarded, unguarded, mixed, missing, or unknown callers for a helper sink | Promote only unsafe reachable paths; keep guarded/unknown helpers as review items |
 | AI signal | Qualitative band plus final raw confidence from the model review trail | Use with the evidence label; the percentage is model confidence, not proof |
 | Impact | How serious the damage could be if exploited | Business/security severity |
 | Likelihood | How likely exploitation is from the observed code | Exploitability estimate |

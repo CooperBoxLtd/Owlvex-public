@@ -445,6 +445,18 @@ function buildEngineTelemetryLines(telemetry: NonNullable<ScanResult['engineTele
             `- AI corroboration routing: verifier requested ${routing.verifierRequested} | skipped safe-probe-confirmed ${routing.verifierSkippedSafeProbeConfirmed} | skipped high-confidence ${routing.verifierSkippedHighConfidence} | skipped low-signal ${routing.verifierSkippedLowSignal} | skeptic requested ${routing.skepticRequested} | skipped no-verifier ${routing.skepticSkippedNoVerifier} | skipped verifier-rejected ${routing.skepticSkippedVerifierRejected} | skipped strong-support ${routing.skepticSkippedStrongSupport} | skipped stable ${routing.skepticSkippedStable}`,
         );
     }
+    if (telemetry.callerPathRouting) {
+        const caller = telemetry.callerPathRouting;
+        lines.push(
+            `- Caller-path routing: requested ${caller.requested} | skipped ${caller.skipped} | callers ${caller.callersFound} | guarded ${caller.guardedCallers} | unguarded ${caller.unguardedCallers} | unknown ${caller.unknownCallers}`,
+        );
+    }
+    if (telemetry.actionGating) {
+        const gating = telemetry.actionGating;
+        lines.push(
+            `- Action gating: fix-preview eligible ${gating.fixPreviewEligible} | investigation-first ${gating.investigationFirst} | manual-review ${gating.manualReview} | suppressed ${gating.suppressed}`,
+        );
+    }
 
     lines.push(buildProbeQualitySignal(telemetry));
     return lines;
@@ -836,6 +848,9 @@ function buildHowToReadTable(): string[] {
         '| Finder high confidence, not independently verified | The finder score is high, but no verifier or skeptic pass is present in the audit trail | Useful triage signal; validate important fixes against the code |',
         '| Partially validated | Some supporting evidence exists, but verification was incomplete | Review before acting |',
         '| Needs manual review | Evidence is weak, incomplete, or low-confidence | Do not treat as confirmed yet |',
+        '| Possible Extra | Risky helper-layer sink or unproven hypothesis that is not promoted to Fix First | Trace caller path or verify reachability before patching |',
+        '| Action gating | Whether the finding is eligible for Preview fix or should be investigated first | Use Preview fix for proof-supported findings; use caller-path actions for investigation-first items |',
+        '| Caller-path verdict | Whether Owlvex found guarded, unguarded, mixed, missing, or unknown callers for a helper sink | Promote only unsafe reachable paths; keep guarded/unknown helpers as review items |',
         '| AI signal | Qualitative band plus final raw confidence from the model review trail | Use with the evidence label; the percentage is model confidence, not proof |',
         '| Impact | How serious the damage could be if exploited | Business/security severity |',
         '| Likelihood | How likely exploitation is from the observed code | Exploitability estimate |',
@@ -1137,7 +1152,10 @@ function buildPossibleExtraFindingLines(
         const reason = isLikelyUnprovenHelperFinding(item.finding, item.file)
             ? 'helper-layer extra'
             : 'missing proof contract';
-        lines.push(`- \`${item.file}\`: ${title} (${reason}${layer ? `, layer: ${layer}` : ''}).`);
+        const callerPath = item.finding.callerPath
+            ? `, caller path: ${item.finding.callerPath.verdict.replace(/_/g, ' ')}`
+            : '';
+        lines.push(`- \`${item.file}\`: ${title} (${reason}${layer ? `, layer: ${layer}` : ''}${callerPath}).`);
     }
 
     lines.push('');
@@ -1554,6 +1572,21 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 }
                 lines.push(...buildEvidenceContractLines(finding, item.file));
                 lines.push(...buildSafeProbeLines(finding));
+                if (finding.callerPath) {
+                    lines.push(`- Caller-path verdict: ${finding.callerPath.verdict.replace(/_/g, ' ')}`);
+                    lines.push(`- Caller-path reason: ${finding.callerPath.reason}`);
+                    if (finding.callerPath.unsafeCallers?.length) {
+                        const unsafe = finding.callerPath.unsafeCallers
+                            .slice(0, 3)
+                            .map(caller => `\`${caller.file}\` L${caller.line}${caller.functionName ? ` (${caller.functionName})` : ''}`)
+                            .join(', ');
+                        lines.push(`- Unsafe caller path(s): ${unsafe}`);
+                    }
+                    for (const caller of finding.callerPath.callers.slice(0, 3)) {
+                        const guard = caller.guardKind ? `${caller.guardStatus} (${caller.guardKind})` : caller.guardStatus;
+                        lines.push(`  - Caller: \`${caller.file}\` L${caller.line}${caller.functionName ? ` | function ${caller.functionName}` : ''} | guard ${guard}${caller.sourceSignal ? ` | source ${caller.sourceSignal}` : ''}`);
+                    }
+                }
                 lines.push(...buildAiReviewTrailLines(finding));
                 if (needsManualReview(finding)) {
                     lines.push('- Review note: This AI finding is not fully corroborated or has low confidence. Verify the classification, title, and remediation against the code before acting on it.');

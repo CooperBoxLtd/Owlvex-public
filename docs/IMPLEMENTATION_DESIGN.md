@@ -178,6 +178,70 @@ Each scan should also emit metadata-safe engine telemetry for this evidence-firs
 
 This telemetry is product-critical because it turns false-positive reduction and AI-cost reduction into measurable release criteria.
 
+### 4.4.1 Action Gating
+
+Owlvex must not present every finding with the same user action.
+
+The action surface is part of the evidence contract:
+
+- **Fix First** findings may offer `Preview fix`
+- **Possible Extra** findings should offer investigation actions first, such as `Trace caller path`, `Find callers`, or `Verify reachability`
+- **Finder-only** findings should offer `Verify with reviewer` before code changes when the issue is high impact or helper-layer only
+- **helper/repository sink** findings should resolve caller context before fix-preview is treated as the primary action
+- **deterministic/proof-promoted** findings can skip caller-path investigation only when the rule already proves reachability in the scanned scope
+
+The rule is: Owlvex should not push a user toward editing code when the engine itself says the issue is an unproven extra or a helper-layer risk whose exploitability depends on callers.
+
+### 4.4.2 Caller-Path Dynamics
+
+For helper-layer findings, especially repositories, services, policy helpers, and shared utility functions, Owlvex should ask a caller-path question before promotion:
+
+1. who calls the risky function?
+2. does attacker-controlled input reach the call?
+3. is authentication, authorization, tenant scope, value allowlisting, or object ownership enforced before the call?
+4. is the risky function exposed only behind a safe wrapper?
+5. does a safe companion route or policy helper prove the expected guard pattern?
+
+The caller-path verdict should affect posture:
+
+- reachable unguarded caller path -> promote to Fix First
+- reachable guarded caller path -> downgrade or keep clean with evidence
+- helper sink with unknown callers -> Possible Extra / manual review
+- no caller path found in project scope -> Possible Extra, not Fix First
+- mixed guarded and unguarded callers -> promote only the unsafe caller path and name it in the report
+
+Caller-path analysis should prefer bounded project context over isolated single-file assumptions. For mixed callers, Owlvex must carry the unsafe caller list into the report and fix workflow so remediation is anchored to the reachable unguarded boundary, not blindly applied to every helper caller.
+
+### 4.4.3 Confidence Routing
+
+Finder confidence is not enough by itself to decide whether a finding should trigger remediation.
+
+Default routing rules:
+
+- low finder confidence -> verifier
+- finder/verifier disagreement -> skeptic
+- high confidence + low impact + route-local evidence -> verifier can be skipped
+- high confidence + high impact + route-level sink -> verifier or safe probe should run unless deterministic evidence already proves the issue
+- high confidence + high impact + helper-layer sink -> caller-path verifier should run before promotion
+- safe-probe confirmed path -> verifier can be skipped when the finding is already locally supported
+- safe-probe counter-evidence or unsupported path -> downgrade/drop before spending corroboration calls
+
+Reports and advisory answers must show when verifier or skeptic were skipped and why.
+
+### 4.4.4 Fix Continuation
+
+After a user chooses `Keep fix`, Owlvex should not treat the first clean single-file verification as the end of the workflow when the original fix touched multiple files or produced new findings.
+
+Fix continuation should:
+
+1. verify the anchored original finding
+2. rescan every touched file
+3. identify residual findings in the same family, same caller path, or newly introduced by the patch
+4. continue remediation only for unresolved related findings
+5. stop with an explicit state: resolved, partially resolved, downgraded to manual review, or still vulnerable
+
+The product must avoid wording such as "fixed" or "clean" for the whole patch when only one file or one finding has been verified.
+
 The intended verification direction is:
 
 - one selected model may be used across multiple sequential passes
@@ -403,6 +467,8 @@ The architecture should support:
 - strengthen release rules
 - add controlled remediation discussion and patch-generation flows that stay grounded in findings and require explicit apply/approve steps
 - add progressive project-context expansion for AI reasoning and remediation flows so single-file analysis is the default, not the maximum context path
+- gate user actions by evidence posture so Possible Extra and helper-layer findings ask for caller-path investigation before fix preview
+- add fix-continuation behavior after `Keep fix` so touched files and related findings are rechecked before the product claims resolution
 
 ### Phase D: Coverage And Claim Maintenance
 

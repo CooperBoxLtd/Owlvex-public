@@ -21,6 +21,7 @@ import {
     providerAllowsOptionalApiKey,
     resolveProviderApiKeyInput,
     resolveConnectedModelSelection,
+    resolveReportOutputRoot,
     selectLatestTwoReports,
     shouldPromptUsefulnessFeedback,
 } from './extension';
@@ -544,6 +545,69 @@ describe('provider throttling command helper', () => {
         expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
             'Owlvex: Opened provider throttling settings. A starter override for Anthropic was copied to the clipboard.',
         );
+    });
+});
+
+describe('report output root resolution', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (vscode.workspace.workspaceFolders as any) = [
+            { uri: vscode.Uri.file('d:\\repo') },
+        ];
+        (vscode.workspace.getWorkspaceFolder as jest.Mock).mockImplementation((uri: vscode.Uri) => {
+            const fsPath = uri.fsPath.toLowerCase();
+            if (fsPath.startsWith('d:\\repo')) {
+                return { uri: vscode.Uri.file('d:\\repo') };
+            }
+            return undefined;
+        });
+    });
+
+    it('moves generated reports from source folders to the nearest project root', async () => {
+        (vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+            if (uri.fsPath.toLowerCase() === 'd:\\repo\\tools\\benchmark-app\\package.json') {
+                return { type: vscode.FileType.File };
+            }
+            throw new Error('missing');
+        });
+
+        const resolved = await resolveReportOutputRoot(
+            vscode.Uri.file('d:\\repo\\tools\\benchmark-app\\src\\store'),
+            [{ uri: vscode.Uri.file('d:\\repo\\tools\\benchmark-app\\src\\store\\repositories.js') }],
+        );
+
+        expect(resolved.root.fsPath).toBe('d:\\repo\\tools\\benchmark-app');
+        expect(resolved.warning).toContain('nearest project root');
+        expect(resolved.warning).toContain('do not pollute source folders');
+    });
+
+    it('keeps an existing project report root unchanged', async () => {
+        (vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: vscode.Uri) => {
+            if (uri.fsPath.toLowerCase() === 'd:\\repo\\tools\\benchmark-app\\package.json') {
+                return { type: vscode.FileType.File };
+            }
+            throw new Error('missing');
+        });
+
+        const resolved = await resolveReportOutputRoot(
+            vscode.Uri.file('d:\\repo\\tools\\benchmark-app'),
+            [{ uri: vscode.Uri.file('d:\\repo\\tools\\benchmark-app\\src\\routes\\reports.js') }],
+        );
+
+        expect(resolved.root.fsPath).toBe('d:\\repo\\tools\\benchmark-app');
+        expect(resolved.warning).toBeUndefined();
+    });
+
+    it('falls back to the workspace root when a source folder has no project marker', async () => {
+        (vscode.workspace.fs.stat as jest.Mock).mockRejectedValue(new Error('missing'));
+
+        const resolved = await resolveReportOutputRoot(
+            vscode.Uri.file('d:\\repo\\src'),
+            [{ uri: vscode.Uri.file('d:\\repo\\src\\index.js') }],
+        );
+
+        expect(resolved.root.fsPath).toBe('d:\\repo');
+        expect(resolved.warning).toContain('workspace root');
     });
 });
 

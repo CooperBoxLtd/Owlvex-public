@@ -111,6 +111,10 @@ export class Uri {
     static parse(value: string) { return { fsPath: value, toString: () => value, scheme: value.includes(':') ? 'file' : '' }; }
 }
 
+export class RelativePattern {
+    constructor(public base: any, public pattern: string) {}
+}
+
 export class WorkspaceEdit {
     entries: Array<{ uri: any; range: Range; text: string }> = [];
 
