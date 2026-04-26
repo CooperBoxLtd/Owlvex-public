@@ -73,7 +73,7 @@ export type SafeProbeTechnique =
     | 'multi_file_context_probe';
 
 export interface SafeExploitProbeResult {
-    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect' | 'insecure-deserialization' | 'cors' | 'csrf' | 'sensitive-logging' | 'debug-exposure' | 'object-authorization' | 'privileged-action' | 'mass-assignment';
+    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect' | 'insecure-deserialization' | 'cors' | 'csrf' | 'sensitive-logging' | 'debug-exposure' | 'object-authorization' | 'privileged-action' | 'mass-assignment' | 'nosql-injection' | 'audit-gap' | 'pii-overexposure';
     techniques: SafeProbeTechnique[];
     verdict: 'confirmed' | 'counter_evidence' | 'unsupported' | 'inconclusive';
     decision: 'promote' | 'downgrade' | 'drop' | 'manual_review';
@@ -864,6 +864,45 @@ function hasAllowedFieldProjection(snippet: string): boolean {
         || /\b(?:displayName|timezone|email|firstName|lastName)\s*:\s*(?:req|request)\.body\.\w+/i.test(snippet);
 }
 
+function hasNoSqlQuerySink(snippet: string): boolean {
+    return /\.(?:find|findOne|updateOne|updateMany|deleteOne|deleteMany)\s*\(/i.test(snippet)
+        && /\b(?:users|accounts|collection|db|model|repository)\b/i.test(snippet);
+}
+
+function hasDirectRequestFilterObject(snippet: string): boolean {
+    return /\.(?:find|findOne|updateOne|updateMany|deleteOne|deleteMany)\s*\(\s*(?:req|request)\.body\.(?:filter|query|where)/i.test(snippet)
+        || /\b(?:filter|query|where)\s*=\s*(?:req|request)\.body\.(?:filter|query|where)/i.test(snippet);
+}
+
+function hasNoSqlFieldProjection(snippet: string): boolean {
+    return /\b(?:query|filter)\s*=\s*\{\s*\}/i.test(snippet)
+        && /\b(?:query|filter)\.(?:email|active|id|status|displayName)\s*=/i.test(snippet)
+        && !/\b(?:query|filter|where)\s*=\s*(?:req|request)\.body/i.test(snippet);
+}
+
+function hasAuditSink(snippet: string): boolean {
+    return /\b(?:auditLogger|audit|auditSafe|securityEvent|eventLogger)\.(?:record|write|log|emit)\s*\(/i.test(snippet)
+        || /\bauditSafe\s*\(/i.test(snippet);
+}
+
+function hasPrivilegedAuditTarget(snippet: string): boolean {
+    return /\b(?:suspend|approve|updateRole|assignRole|grantPermission|deleteUser|disableUser|rebuildSearchIndex|refund\.approved|account\.suspend)\b/i.test(snippet)
+        || /\b(?:suspended|approved|role|permission)\s*[:=]/i.test(snippet);
+}
+
+function hasPiiResponseSink(snippet: string): boolean {
+    return /\b(?:res|response)\.json\s*\(/i.test(snippet);
+}
+
+function hasWholeObjectResponse(snippet: string): boolean {
+    return /\b(?:res|response)\.json\s*\(\s*(?:account|user|profile|customer|record|document)\s*\)/i.test(snippet);
+}
+
+function hasSafePiiProjection(snippet: string): boolean {
+    return /\b(?:res|response)\.json\s*\(\s*\{[\s\S]{0,260}\b(?:id|email|displayName|name)\s*:/i.test(snippet)
+        && !/\b(?:password|passwordHash|ssn|dob|dateOfBirth|token|secret|apiKey)\s*:/i.test(snippet);
+}
+
 function hasAllowlistedOutboundRequest(snippet: string): boolean {
     const hasGuard = /\b(?:isAllowedOutboundUrl|isSafeOutboundUrl|allowlistedOutboundUrl|validateOutboundUrl)\s*\(/i.test(snippet)
         || /\b(?:allowedHosts|trustedHosts|TRUSTED_HOSTS|allowlistedHosts)\s*(?:\.has|\.contains|\.Contains)\s*\(/.test(snippet);
@@ -1458,6 +1497,56 @@ function discoverLocalSinkEvidence(code: string, maxItems = 12): LocalSinkEviden
                     : 'Model privileged field canary reaching a model update from request body.',
             }, seen);
         }
+
+        if (hasNoSqlQuerySink(window)) {
+            const hasProjection = hasNoSqlFieldProjection(window);
+            const hasDirectFilter = hasDirectRequestFilterObject(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'nosql-injection',
+                sinkKind: 'nosql-query',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasDirectFilter || hasRequestSource ? 'request-controlled query object nearby' : undefined,
+                guardStatus: hasProjection ? 'present' : hasDirectFilter ? 'missing' : 'unknown',
+                guardKind: hasProjection ? 'explicit field projection' : undefined,
+                probeHint: hasProjection
+                    ? 'Model Mongo operator canary as dropped by explicit field projection.'
+                    : 'Model Mongo operator canary reaching a NoSQL query object.',
+            }, seen);
+        }
+
+        if (hasPrivilegedAuditTarget(window) || hasAuditSink(window)) {
+            const audited = hasAuditSink(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'audit-gap',
+                sinkKind: 'privileged-audit-trail',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasPrivilegedAuditTarget(window) ? 'privileged action nearby' : undefined,
+                guardStatus: audited ? 'present' : hasPrivilegedAuditTarget(window) ? 'missing' : 'unknown',
+                guardKind: audited ? 'audit event recording' : undefined,
+                probeHint: audited
+                    ? 'Model privileged action canary as recorded with actor/action/target metadata.'
+                    : 'Model privileged action canary completing without an audit event.',
+            }, seen);
+        }
+
+        if (hasPiiResponseSink(window)) {
+            const safeProjection = hasSafePiiProjection(window);
+            const wholeObject = hasWholeObjectResponse(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'pii-overexposure',
+                sinkKind: 'api-response',
+                line: lineNumber,
+                expression,
+                sourceSignal: wholeObject ? 'whole account/user object returned' : undefined,
+                guardStatus: safeProjection ? 'present' : wholeObject ? 'missing' : 'unknown',
+                guardKind: safeProjection ? 'safe response projection' : undefined,
+                probeHint: safeProjection
+                    ? 'Model sensitive-field canary as omitted by explicit response projection.'
+                    : 'Model sensitive-field canary reaching the API response.',
+            }, seen);
+        }
     }
 
     return evidence;
@@ -1773,6 +1862,15 @@ function getProbeIssueFamily(finding: Finding): SafeExploitProbeResult['family']
     }
     if (/mass assignment|mass_assignment|bind request body|spread request body|assign req\.body/.test(haystack)) {
         return 'mass-assignment';
+    }
+    if (/nosql|mongo|mongodb|\$where|\$ne|untrusted query object/.test(haystack)) {
+        return 'nosql-injection';
+    }
+    if (/audit gap|audit_gap|missing audit|audit trail|forensic|traceability/.test(haystack)) {
+        return 'audit-gap';
+    }
+    if (/pii|personal data|overexposure|sensitive fields|full user object|password hash|ssn/.test(haystack)) {
+        return 'pii-overexposure';
     }
 
     return undefined;
@@ -3154,6 +3252,265 @@ function runMassAssignmentSafeProbe(code: string, finding: Finding): SafeExploit
     });
 }
 
+function runNoSqlSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasSink = hasNoSqlQuerySink(snippet);
+    const hasDirectFilter = hasDirectRequestFilterObject(snippet);
+    const hasProjection = hasNoSqlFieldProjection(snippet);
+
+    if (!hasSink) {
+        return buildSafeProbeResult({
+            family: 'nosql-injection',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'nosql-query',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No NoSQL query sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasProjection) {
+        return buildSafeProbeResult({
+            family: 'nosql-injection',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'nosql-query',
+            sinkLine,
+            sourceKind: 'request body fields',
+            guardStatus: 'present',
+            guardKind: 'explicit field projection',
+            canaryReachedSink: false,
+            canary: '{"$ne": null}',
+            counterexample: {
+                unsafeInput: '{"$ne": null}',
+                safeInput: 'email/active fields only',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'NoSQL query object',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'explicit query field projection',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The NoSQL query is built from explicit scalar fields rather than a client-controlled filter object.',
+        });
+    }
+
+    if (hasDirectFilter) {
+        return buildSafeProbeResult({
+            family: 'nosql-injection',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'nosql-query',
+            sinkLine,
+            sourceKind: 'request-controlled query object',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: '{"$ne": null}',
+            counterexample: {
+                unsafeInput: '{"$ne": null}',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'NoSQL query object',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['request-controlled filter object', 'NoSQL query sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'A client-controlled query/filter object can reach the NoSQL query sink without field projection.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'nosql-injection',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'nosql-query',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'A NoSQL query sink is visible, but request-controlled operator flow could not be proven.',
+    });
+}
+
+function runAuditGapSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 10);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasPrivilegedAction = hasPrivilegedAuditTarget(snippet) || hasPrivilegedActionSink(snippet);
+    const hasAudit = hasAuditSink(snippet);
+
+    if (!hasPrivilegedAction && !hasAudit) {
+        return buildSafeProbeResult({
+            family: 'audit-gap',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'privileged-audit-trail',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No privileged action or audit trail target is visible at the claimed span.',
+        });
+    }
+
+    if (hasAudit) {
+        return buildSafeProbeResult({
+            family: 'audit-gap',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'privileged-audit-trail',
+            sinkLine,
+            sourceKind: 'privileged action',
+            guardStatus: 'present',
+            guardKind: 'audit event recording',
+            canaryReachedSink: false,
+            canary: 'privileged-action-event',
+            counterexample: {
+                unsafeInput: 'privileged action without audit metadata',
+                safeInput: 'actor/action/target audit event',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'audit trail',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'audit event recording',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The privileged action records an audit event with actor/action/target metadata.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'audit-gap',
+        verdict: 'confirmed',
+        decision: 'promote',
+        sinkKind: 'privileged-audit-trail',
+        sinkLine,
+        sourceKind: 'privileged action',
+        guardStatus: 'missing',
+        canaryReachedSink: true,
+        canary: 'privileged-action-event',
+        counterexample: {
+            unsafeInput: 'privileged action without audit metadata',
+            unsafeBlocked: false,
+        },
+        executionSlice: {
+            kind: 'static',
+            target: 'audit trail',
+            dangerousCapabilitiesBlocked: true,
+        },
+        taintTrace: ['privileged action', 'missing audit event'],
+        mutationCount: 1,
+        fixVerificationReady: true,
+        contextDepth: 'single-file',
+        reason: 'A privileged action completes without a visible audit event.',
+    });
+}
+
+function runPiiOverexposureSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasResponse = hasPiiResponseSink(snippet);
+    const wholeObject = hasWholeObjectResponse(snippet);
+    const safeProjection = hasSafePiiProjection(snippet);
+
+    if (!hasResponse) {
+        return buildSafeProbeResult({
+            family: 'pii-overexposure',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'api-response',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No API response sink is visible at the claimed span.',
+        });
+    }
+
+    if (safeProjection) {
+        return buildSafeProbeResult({
+            family: 'pii-overexposure',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'api-response',
+            sinkLine,
+            sourceKind: 'account/user record',
+            guardStatus: 'present',
+            guardKind: 'safe response projection',
+            canaryReachedSink: false,
+            canary: 'passwordHash/ssn canary',
+            counterexample: {
+                unsafeInput: 'passwordHash/ssn fields',
+                safeInput: 'id/email/displayName projection',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'API response payload',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'safe response projection',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The response returns an explicit safe projection instead of the whole account/user object.',
+        });
+    }
+
+    if (wholeObject) {
+        return buildSafeProbeResult({
+            family: 'pii-overexposure',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'api-response',
+            sinkLine,
+            sourceKind: 'whole account/user record',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'passwordHash/ssn canary',
+            counterexample: {
+                unsafeInput: 'whole account/user object',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'API response payload',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['whole account/user object', 'API response sink'],
+            mutationCount: 1,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The API response returns the whole account/user object without an explicit safe projection.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'pii-overexposure',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'api-response',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'An API response sink is visible, but sensitive field exposure could not be proven.',
+    });
+}
+
 function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeResult | undefined {
     if (finding.provenance !== 'ai') {
         return undefined;
@@ -3189,6 +3546,12 @@ function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeRe
             return runPrivilegedActionSafeProbe(code, finding);
         case 'mass-assignment':
             return runMassAssignmentSafeProbe(code, finding);
+        case 'nosql-injection':
+            return runNoSqlSafeProbe(code, finding);
+        case 'audit-gap':
+            return runAuditGapSafeProbe(code, finding);
+        case 'pii-overexposure':
+            return runPiiOverexposureSafeProbe(code, finding);
         default:
             return undefined;
     }

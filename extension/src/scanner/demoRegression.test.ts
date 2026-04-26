@@ -153,7 +153,7 @@ describe('Demo fixture regression coverage', () => {
 
         expect(provider.complete).toHaveBeenCalledTimes(1);
         expect(result.findings).toHaveLength(0);
-        expect(result.engineTelemetry?.sinkInventory.total).toBe(0);
+        expect(result.engineTelemetry?.sinkInventory.byFamily.ssrf ?? 0).toBe(0);
         expect(result.engineTelemetry?.aiFindings.proposed).toBe(1);
         expect(result.engineTelemetry?.aiFindings.afterStaticFilter).toBe(0);
         expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
@@ -602,6 +602,191 @@ describe('Demo fixture regression coverage', () => {
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
         expect(result.engineTelemetry?.sinkInventory.byFamily['mass-assignment']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+    });
+
+    it('drops NoSQL injection overcalls when query fields are projected explicitly', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 7,
+                    summary: 'Possible NoSQL injection detected.',
+                    findings: [{
+                        id: 'safe-nosql-overcall',
+                        line: 16,
+                        line_end: 16,
+                        severity: 'HIGH',
+                        framework: 'OWASP',
+                        rule_code: 'A03-NOSQL',
+                        title: 'NoSQL injection through untrusted query object',
+                        explanation: 'Request body values influence a Mongo query.',
+                        threat: 'Attackers may inject Mongo operators.',
+                        fix: 'Build queries from explicit fields.',
+                        confidence: 0.82,
+                        issue_id: 'owlvex.issue.nosql_injection.001',
+                        likelihood: 'MEDIUM',
+                        likelihood_reasons: ['Request body values are used before users.find.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\77-nosql-injection-safe.js',
+            'javascript',
+            readRepoFixture('demo', '77-nosql-injection-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['nosql-injection']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
+    });
+
+    it('drops audit-gap overcalls when a privileged action records an audit event', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 6,
+                    summary: 'Possible audit gap detected.',
+                    findings: [{
+                        id: 'safe-audit-overcall',
+                        line: 14,
+                        line_end: 18,
+                        severity: 'MEDIUM',
+                        framework: 'OWASP',
+                        rule_code: 'LOG-001',
+                        title: 'Missing audit trail for privileged action',
+                        explanation: 'The handler suspends an account.',
+                        threat: 'Privileged changes may lack traceability.',
+                        fix: 'Record actor, action, and target audit metadata.',
+                        confidence: 0.78,
+                        issue_id: 'owlvex.issue.audit_gap.001',
+                        likelihood: 'MEDIUM',
+                        likelihood_reasons: ['A privileged account action is visible.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\85-audit-gap-safe.js',
+            'javascript',
+            readRepoFixture('demo', '85-audit-gap-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['audit-gap']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+    });
+
+    it('drops PII overexposure overcalls when responses use safe projection', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 7,
+                    summary: 'Possible PII overexposure detected.',
+                    findings: [{
+                        id: 'safe-pii-overcall',
+                        line: 9,
+                        line_end: 13,
+                        severity: 'MEDIUM',
+                        framework: 'OWASP',
+                        rule_code: 'DP-002',
+                        title: 'PII overexposure in API response',
+                        explanation: 'The profile endpoint returns account data.',
+                        threat: 'Sensitive account fields may leak.',
+                        fix: 'Return only fields required by the client.',
+                        confidence: 0.8,
+                        issue_id: 'owlvex.issue.pii_overexposure.001',
+                        likelihood: 'MEDIUM',
+                        likelihood_reasons: ['Account data is returned in JSON.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\87-pii-overexposure-safe.js',
+            'javascript',
+            readRepoFixture('demo', '87-pii-overexposure-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['pii-overexposure']).toBeGreaterThan(0);
         expect(result.engineTelemetry?.safeProbes.run).toBe(1);
         expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
