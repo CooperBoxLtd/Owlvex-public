@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.24
+
+- fix benchmark-app helper-layer promotion evaluation so zero-count proof posture labels are not treated as promoted findings
+- add a stabilization evaluator regression test for helper-layer Possible Extra findings
+- include the evaluator regression check in the standard regression test gate
+
 ## 0.1.23
 
 - add local CSRF fallback evidence for authenticated repository mutations when AI omits the route finding

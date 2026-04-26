@@ -4,7 +4,7 @@ Internal Owlvex development build.
 
 ## Build
 
-- version: `0.1.23`
+- version: `0.1.24`
 - target: Azure dev backend
 - focus: evidence-first scanning, safe probe verification, report clarity, and fix verification loops
 

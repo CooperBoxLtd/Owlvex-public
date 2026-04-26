@@ -2,7 +2,10 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-function parseMarkdownReport(markdown) {
+const modulePath = fileURLToPath(import.meta.url);
+const repoRoot = path.resolve(path.dirname(modulePath), '..');
+
+export function parseMarkdownReport(markdown) {
   const lines = markdown.split(/\r?\n/);
   const files = [];
   let targetLabel;
@@ -185,7 +188,24 @@ function matchesExpectedFinding(expectedTitle, reportEntry) {
   return false;
 }
 
-function evaluateParsedReport(report, manifest) {
+function proofPostureCount(proofPosture, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = String(proofPosture ?? '').match(new RegExp(`${escaped}:\\s*(\\d+)`, 'i'));
+  return match ? Number(match[1]) : 0;
+}
+
+function hasProofPromotedFinding(reportEntry) {
+  const proofStatuses = reportEntry?.proofStatuses ?? [];
+  const hasPromotedFindingStatus = proofStatuses
+    .map(normalizeText)
+    .some(status => /\b(static proven|ai plausible)\b/.test(status));
+
+  return hasPromotedFindingStatus
+    || proofPostureCount(reportEntry?.proofPosture, 'static proven') > 0
+    || proofPostureCount(reportEntry?.proofPosture, 'AI plausible') > 0;
+}
+
+export function evaluateParsedReport(report, manifest) {
   const failures = [];
   const byFile = new Map(report.files.map(entry => [normalizeFile(entry.file), entry]));
   const metrics = {
@@ -324,10 +344,7 @@ function evaluateParsedReport(report, manifest) {
 
     if (expectation.forbidProofPromotedFindings) {
       metrics.proofPromotionChecks += 1;
-      const hasPromotedProof = /\b(static proven|ai plausible)\b/.test(proofText)
-        || /static proven:\s*[1-9]/i.test(proofPosture)
-        || /ai plausible:\s*[1-9]/i.test(proofPosture);
-      if (hasPromotedProof) {
+      if (hasProofPromotedFinding(reportEntry)) {
         failures.push(`${expectation.file}: helper-layer finding was proof-promoted`);
       } else {
         metrics.proofPromotionSatisfied += 1;
@@ -412,55 +429,60 @@ function writeEvaluationArtifacts(profile, reportPath, report, evaluation) {
   fs.writeFileSync(path.join(runsDir, 'latest.json'), `${body}\n`, 'utf8');
 }
 
-const profile = process.argv[2];
-const explicitReportPath = process.argv[3];
-const jsonMode = process.argv.includes('--json');
+function main() {
+  const profile = process.argv[2];
+  const explicitReportPath = process.argv[3];
+  const jsonMode = process.argv.includes('--json');
 
-if (!profile || !['demo', 'benchmark-app'].includes(profile)) {
-  console.error('Usage: node tools/evaluate-stabilization-report.mjs <demo|benchmark-app> [report-path] [--json]');
-  process.exit(1);
-}
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const targetDir = path.join(repoRoot, 'tools', profile);
-const manifestPath = path.join(targetDir, 'benchmark.expectations.json');
-const reportPath = explicitReportPath && explicitReportPath !== '--json'
-  ? path.resolve(explicitReportPath)
-  : path.join(targetDir, latestReportPath(targetDir) ?? '');
-
-if (!fs.existsSync(reportPath)) {
-  console.error(`No report found for ${profile}. Provide a report path explicitly or generate a fresh report first.`);
-  process.exit(1);
-}
-
-const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-const markdown = fs.readFileSync(reportPath, 'utf8');
-const report = parseMarkdownReport(markdown);
-const evaluation = evaluateParsedReport(report, manifest);
-writeEvaluationArtifacts(profile, reportPath, report, evaluation);
-
-if (jsonMode) {
-  console.log(JSON.stringify({
-    profile,
-    reportPath,
-    targetLabel: report.targetLabel,
-    ...evaluation,
-  }, null, 2));
-} else {
-  console.log(`Evaluating ${profile} report: ${reportPath}`);
-  printMetrics(evaluation.metrics);
-}
-
-if (!evaluation.passed) {
-  if (!jsonMode) {
-    console.error('Expectation check failed:');
-    for (const failure of evaluation.failures) {
-      console.error(`- ${failure}`);
-    }
+  if (!profile || !['demo', 'benchmark-app'].includes(profile)) {
+    console.error('Usage: node tools/evaluate-stabilization-report.mjs <demo|benchmark-app> [report-path] [--json]');
+    process.exit(1);
   }
-  process.exit(1);
+
+  const targetDir = path.join(repoRoot, 'tools', profile);
+  const manifestPath = path.join(targetDir, 'benchmark.expectations.json');
+  const reportPath = explicitReportPath && explicitReportPath !== '--json'
+    ? path.resolve(explicitReportPath)
+    : path.join(targetDir, latestReportPath(targetDir) ?? '');
+
+  if (!fs.existsSync(reportPath)) {
+    console.error(`No report found for ${profile}. Provide a report path explicitly or generate a fresh report first.`);
+    process.exit(1);
+  }
+
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const markdown = fs.readFileSync(reportPath, 'utf8');
+  const report = parseMarkdownReport(markdown);
+  const evaluation = evaluateParsedReport(report, manifest);
+  writeEvaluationArtifacts(profile, reportPath, report, evaluation);
+
+  if (jsonMode) {
+    console.log(JSON.stringify({
+      profile,
+      reportPath,
+      targetLabel: report.targetLabel,
+      ...evaluation,
+    }, null, 2));
+  } else {
+    console.log(`Evaluating ${profile} report: ${reportPath}`);
+    printMetrics(evaluation.metrics);
+  }
+
+  if (!evaluation.passed) {
+    if (!jsonMode) {
+      console.error('Expectation check failed:');
+      for (const failure of evaluation.failures) {
+        console.error(`- ${failure}`);
+      }
+    }
+    process.exit(1);
+  }
+
+  if (!jsonMode) {
+    console.log('Expectation check passed.');
+  }
 }
 
-if (!jsonMode) {
-  console.log('Expectation check passed.');
+if (process.argv[1] && path.resolve(process.argv[1]) === modulePath) {
+  main();
 }
