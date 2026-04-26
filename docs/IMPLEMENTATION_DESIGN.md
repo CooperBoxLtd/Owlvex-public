@@ -157,7 +157,7 @@ This replaces the older mental model of "ask AI to review the file, then validat
 
 The current first implementation step is a pre-AI local sink inventory. Finder prompts receive the locally discovered sinks, visible guards, and probe hints before the raw file. The Finder should start from that evidence map and avoid broad claims that are not tied to concrete local behavior.
 
-For probeable families, the sink inventory is also an adjudication input. An AI candidate for SSRF, SQL injection, command injection, path traversal, JWT validation, or open redirect should not advance to verifier/skeptic unless the local inventory contains the corresponding sink family in that file. This is intentionally conservative: non-probeable families still follow the existing AI corroboration path until local evidence models exist for them.
+For probeable families, the sink inventory is also an adjudication input. An AI candidate for SSRF, SQL injection, command injection, path traversal, JWT validation, open redirect, insecure deserialization, or CORS misconfiguration should not advance to verifier/skeptic unless the local inventory contains the corresponding sink family in that file. This is intentionally conservative: non-probeable families still follow the existing AI corroboration path until local evidence models exist for them.
 
 Probeable AI candidates should then run safe probes before verifier/skeptic. The engine should spend corroboration calls only after local source/sink/guard evidence fails to resolve the candidate. This means:
 

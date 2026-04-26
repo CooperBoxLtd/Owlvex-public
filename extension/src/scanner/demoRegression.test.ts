@@ -226,8 +226,12 @@ describe('Demo fixture regression coverage', () => {
 
         const result = await engine.scanDocument(doc);
 
+        expect(provider.complete).toHaveBeenCalledTimes(1);
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['insecure-deserialization']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
     it('keeps the guarded debug fixture clean under AI overclassification attempts', async () => {
@@ -286,6 +290,80 @@ describe('Demo fixture regression coverage', () => {
 
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
+    });
+
+    it('drops verifier-supported CORS overcalls when the sink probe sees an origin allowlist', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn()
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        score: 6,
+                        summary: 'Possible CORS issue detected.',
+                        findings: [{
+                            id: 'safe-cors-overcall',
+                            line: 11,
+                            line_end: 12,
+                            severity: 'MEDIUM',
+                            framework: 'OWASP',
+                            rule_code: 'CORS-001',
+                            title: 'Overly permissive CORS policy',
+                            explanation: 'The response allows credentials for request origins.',
+                            threat: 'Attackers may abuse cross-origin browser access.',
+                            fix: 'Constrain CORS origins.',
+                            confidence: 0.78,
+                            issue_id: 'owlvex.issue.insecure_cors.001',
+                            likelihood: 'MEDIUM',
+                            likelihood_reasons: ['The Origin header influences CORS response headers.'],
+                        }],
+                        positives: [],
+                        metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                    }),
+                    tokenCount: 42,
+                })
+                .mockResolvedValueOnce({
+                    content: JSON.stringify({
+                        reviews: [{
+                            id: 'safe-cors-overcall',
+                            verdict: 'support',
+                            confidence: 0.91,
+                            reason: 'The Origin header affects Access-Control-Allow-Origin.',
+                        }],
+                    }),
+                    tokenCount: 12,
+                }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\21-cors-safe.js',
+            'javascript',
+            readRepoFixture('demo', '21-cors-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily.cors).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
     it('keeps the allowlisted fetch-safe route clean under SSRF overclassification attempts', async () => {
@@ -429,6 +507,7 @@ describe('Demo fixture regression coverage', () => {
 
         const result = await engine.scanDocument(doc);
 
+        expect(provider.complete).toHaveBeenCalledTimes(1);
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
     });
@@ -573,6 +652,7 @@ describe('Demo fixture regression coverage', () => {
 
         const result = await engine.scanDocument(doc);
 
+        expect(provider.complete).toHaveBeenCalledTimes(1);
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
     });
@@ -643,8 +723,11 @@ describe('Demo fixture regression coverage', () => {
 
         const result = await engine.scanDocument(doc);
 
+        expect(provider.complete).toHaveBeenCalledTimes(1);
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
     it('drops verifier-supported weak JWT overcalls when the sink probe sees explicit verification', async () => {
@@ -713,8 +796,11 @@ describe('Demo fixture regression coverage', () => {
 
         const result = await engine.scanDocument(doc);
 
+        expect(provider.complete).toHaveBeenCalledTimes(1);
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
     it('keeps the benchmark-app server shell clean from route-mount and logging overclaims', async () => {

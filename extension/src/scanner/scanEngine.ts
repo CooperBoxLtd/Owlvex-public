@@ -73,7 +73,7 @@ export type SafeProbeTechnique =
     | 'multi_file_context_probe';
 
 export interface SafeExploitProbeResult {
-    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect';
+    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect' | 'insecure-deserialization' | 'cors';
     techniques: SafeProbeTechnique[];
     verdict: 'confirmed' | 'counter_evidence' | 'unsupported' | 'inconclusive';
     decision: 'promote' | 'downgrade' | 'drop' | 'manual_review';
@@ -783,6 +783,10 @@ function hasExecutableDeserializationPrimitive(code: string): boolean {
     return /\b(yaml\.load|deserialize\s*\(|unserialize\s*\(|pickle\.loads|BinaryFormatter|ObjectInputStream)\b/i.test(code);
 }
 
+function hasDataOnlyDeserializationParser(code: string): boolean {
+    return /\b(?:JSON\.parse|json\.loads|ObjectMapper|readTree|Gson|JsonSerializer|System\.Text\.Json)\b/i.test(code);
+}
+
 function hasUnguardedDebugActivation(code: string): boolean {
     const hasDebugActivation = /\bapp\s*\.\s*(?:set\s*\(\s*['"]debug['"]\s*,\s*true\s*\)|enable\s*\(\s*['"]debug['"]\s*\))/i.test(code);
     if (!hasDebugActivation) {
@@ -925,6 +929,16 @@ function hasRedirectAllowlist(snippet: string): boolean {
         || /\?[\s\S]{0,160}:\s*['"]\/[A-Za-z0-9/_-]*['"]/.test(snippet);
 }
 
+function hasCorsOriginAllowlist(snippet: string): boolean {
+    return /\b(?:ALLOWED_ORIGINS|allowedOrigins|trustedOrigins|originAllowlist)\b[\s\S]{0,220}\.(?:has|includes|contains|Contains)\s*\(/.test(snippet)
+        || /\b(?:isAllowedOrigin|isTrustedOrigin|validateCorsOrigin)\s*\(/i.test(snippet);
+}
+
+function hasCredentialedWildcardCors(snippet: string): boolean {
+    return /Access-Control-Allow-Origin['"]\s*,\s*['"]\*['"]/i.test(snippet)
+        && /Access-Control-Allow-Credentials['"]\s*,\s*['"]true['"]/i.test(snippet);
+}
+
 function hasVisibleCsrfTokenCheck(snippet: string): boolean {
     return /\bcsrf(?:Token)?\b[\s\S]{0,120}(?:===|!==|==|!=)[\s\S]{0,120}\bcsrf(?:Token)?\b/i.test(snippet)
         || /\bvalidateCsrf(?:Token)?\s*\(/i.test(snippet)
@@ -962,7 +976,7 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     }
 
     if (finding.canonicalId === 'owlvex.issue.insecure_deserialization.001') {
-        return !hasExecutableDeserializationPrimitive(code);
+        return !hasExecutableDeserializationPrimitive(code) && !hasDataOnlyDeserializationParser(code);
     }
 
     if (finding.canonicalId === 'owlvex.issue.debug_mode_production.001') {
@@ -1237,6 +1251,40 @@ function discoverLocalSinkEvidence(code: string, maxItems = 12): LocalSinkEviden
                 probeHint: hasGuard
                     ? 'Model external-URL canary against the local redirect allowlist before reporting.'
                     : 'Model external-URL canary reaching the redirect sink.',
+            }, seen);
+        }
+
+        if (/\b(?:yaml\.load|deserialize\s*\(|unserialize\s*\(|pickle\.loads|BinaryFormatter|ObjectInputStream|JSON\.parse|json\.loads|readTree|ObjectMapper|Gson)\b/i.test(line)) {
+            const executable = hasExecutableDeserializationPrimitive(window);
+            const dataOnly = hasDataOnlyDeserializationParser(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'insecure-deserialization',
+                sinkKind: executable ? 'executable-deserializer' : 'data-only-parser',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasRequestControlledSignal(window) || /\brequest\.body\b/i.test(window) ? 'request-controlled serialized payload nearby' : undefined,
+                guardStatus: dataOnly && !executable ? 'present' : executable ? 'missing' : 'unknown',
+                guardKind: dataOnly && !executable ? 'data-only parser' : undefined,
+                probeHint: dataOnly && !executable
+                    ? 'Model malicious object canary as blocked because JSON/data-only parsing cannot instantiate executable object graphs.'
+                    : 'Model malicious object canary reaching an executable deserializer sink.',
+            }, seen);
+        }
+
+        if (/Access-Control-Allow-Origin|Access-Control-Allow-Credentials|\bcors\s*\(/i.test(line)) {
+            const hasAllowlist = hasCorsOriginAllowlist(window);
+            const hasWildcardCredentials = hasCredentialedWildcardCors(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'cors',
+                sinkKind: 'browser-origin-policy',
+                line: lineNumber,
+                expression,
+                sourceSignal: /req\.headers\.origin|request\.headers\.origin|Origin/i.test(window) ? 'request Origin header nearby' : undefined,
+                guardStatus: hasAllowlist ? 'present' : hasWildcardCredentials ? 'missing' : 'unknown',
+                guardKind: hasAllowlist ? 'origin allowlist' : undefined,
+                probeHint: hasAllowlist
+                    ? 'Model hostile Origin canary as blocked unless it appears in the trusted-origin allowlist.'
+                    : 'Model hostile Origin canary against wildcard credentialed CORS.',
             }, seen);
         }
     }
@@ -1530,6 +1578,12 @@ function getProbeIssueFamily(finding: Finding): SafeExploitProbeResult['family']
     }
     if (/open redirect|redirect/.test(haystack)) {
         return 'open-redirect';
+    }
+    if (/deserial|deserialize|unserialize|pickle|objectinputstream|binaryformatter/.test(haystack)) {
+        return 'insecure-deserialization';
+    }
+    if (/cors|cross-origin|access-control-allow-origin|access-control-allow-credentials/.test(haystack)) {
+        return 'cors';
     }
 
     return undefined;
@@ -2166,6 +2220,188 @@ function runOpenRedirectSafeProbe(code: string, finding: Finding): SafeExploitPr
     });
 }
 
+function runDeserializationSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasExecutableSink = hasExecutableDeserializationPrimitive(snippet);
+    const hasDataParser = hasDataOnlyDeserializationParser(snippet);
+    const hasRequestPayload = hasRequestControlledSignal(snippet) || /\brequest\.body\b/i.test(snippet);
+
+    if (hasDataParser && !hasExecutableSink) {
+        return buildSafeProbeResult({
+            family: 'insecure-deserialization',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'data-only-parser',
+            sinkLine,
+            sourceKind: hasRequestPayload ? 'request-controlled data payload' : undefined,
+            guardStatus: 'present',
+            guardKind: 'data-only parser',
+            canaryReachedSink: false,
+            canary: 'serialized object gadget canary',
+            counterexample: {
+                unsafeInput: 'serialized object gadget canary',
+                safeInput: '{"name":"alice","role":"user"}',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'deserialization boundary',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'data-only parser',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The code uses a data-only parser, so a serialized object gadget cannot instantiate executable object graphs.',
+        });
+    }
+
+    if (!hasExecutableSink) {
+        return buildSafeProbeResult({
+            family: 'insecure-deserialization',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'executable-deserializer',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No executable deserialization sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasRequestPayload) {
+        return buildSafeProbeResult({
+            family: 'insecure-deserialization',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'executable-deserializer',
+            sinkLine,
+            sourceKind: 'request-controlled serialized payload',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'serialized object gadget canary',
+            counterexample: {
+                unsafeInput: 'serialized object gadget canary',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'deserialization boundary',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['request-controlled serialized payload', 'executable deserializer sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'A request-controlled payload can reach an executable deserialization sink without a trusted data-only boundary.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'insecure-deserialization',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'executable-deserializer',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'An executable deserialization sink is visible, but request-controlled payload flow was not proven.',
+    });
+}
+
+function runCorsSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasCorsSink = /Access-Control-Allow-Origin|Access-Control-Allow-Credentials|\bcors\s*\(/i.test(snippet);
+    const hasAllowlist = hasCorsOriginAllowlist(snippet);
+    const wildcardCredentials = hasCredentialedWildcardCors(snippet);
+
+    if (!hasCorsSink) {
+        return buildSafeProbeResult({
+            family: 'cors',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'browser-origin-policy',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No CORS response policy sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasAllowlist) {
+        return buildSafeProbeResult({
+            family: 'cors',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'browser-origin-policy',
+            sinkLine,
+            sourceKind: 'Origin header',
+            guardStatus: 'present',
+            guardKind: 'origin allowlist',
+            canaryReachedSink: false,
+            canary: 'https://evil.example',
+            counterexample: {
+                unsafeInput: 'https://evil.example',
+                safeInput: 'https://portal.example.com',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'CORS response policy',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'trusted origin allowlist',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The CORS response origin is constrained by a trusted-origin allowlist before credentials are allowed.',
+        });
+    }
+
+    if (wildcardCredentials) {
+        return buildSafeProbeResult({
+            family: 'cors',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'browser-origin-policy',
+            sinkLine,
+            sourceKind: 'any browser origin',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'https://evil.example',
+            counterexample: {
+                unsafeInput: 'https://evil.example',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'CORS response policy',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['wildcard browser origin', 'credentialed CORS response policy'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'Wildcard Access-Control-Allow-Origin is paired with credentialed CORS without a visible trusted-origin allowlist.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'cors',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'browser-origin-policy',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'A CORS policy sink is visible, but the probe could not prove wildcard credentialed exposure or a trusted-origin guard.',
+    });
+}
+
 function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeResult | undefined {
     if (finding.provenance !== 'ai') {
         return undefined;
@@ -2185,6 +2421,10 @@ function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeRe
             return runJwtSafeProbe(code, finding);
         case 'open-redirect':
             return runOpenRedirectSafeProbe(code, finding);
+        case 'insecure-deserialization':
+            return runDeserializationSafeProbe(code, finding);
+        case 'cors':
+            return runCorsSafeProbe(code, finding);
         default:
             return undefined;
     }
