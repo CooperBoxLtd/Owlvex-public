@@ -247,6 +247,69 @@ describe('Demo fixture regression coverage', () => {
         expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
+    it('confirms SSRF when a request URL object reaches fetch after a weak substring host check', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 9,
+                    summary: 'Weak SSRF guard.',
+                    findings: [{
+                        id: 'weak-host-ssrf',
+                        line: 13,
+                        line_end: 13,
+                        severity: 'HIGH',
+                        framework: 'OWASP',
+                        rule_code: 'A10-SSRF',
+                        title: 'Server-side request forgery through untrusted destination',
+                        explanation: 'A request URL object reaches fetch after a weak hostname substring check.',
+                        threat: 'Attackers can supply lookalike hosts that pass the substring check.',
+                        fix: 'Use an exact trusted host allowlist and block internal destinations.',
+                        confidence: 0.83,
+                        issue_id: 'owlvex.issue.ssrf.001',
+                        likelihood: 'HIGH',
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\30-ssrf-allowlist-unsafe.js',
+            'javascript',
+            readRepoFixture('demo', '30-ssrf-allowlist-unsafe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+        const aiFinding = result.findings.find(finding => finding.id === 'weak-host-ssrf');
+
+        expect(aiFinding?.safeProbe?.verdict).toBe('confirmed');
+        expect(aiFinding?.safeProbe?.guardKind).toBe('weak substring host check');
+        expect(aiFinding?.safeProbe?.taintTrace).toContain('url.toString()');
+        expect(result.engineTelemetry?.safeProbes.confirmed).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.inconclusive).toBe(0);
+        expect(result.engineTelemetry?.corroborationRouting?.verifierSkippedSafeProbeConfirmed).toBe(1);
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+    });
+
     it('keeps the safe deserialization fixture clean under AI overclassification attempts', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
