@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as path from 'path';
 import { LicenceManager } from '../licence/licenceManager';
 import { ProviderRegistry } from '../providers/registry';
 import type { CompletionRequest } from '../providers/registry';
@@ -185,6 +186,7 @@ interface BatchDocumentContext {
     fileHash: string;
     deterministicFindings: Finding[];
     localSinkEvidence: LocalSinkEvidence[];
+    relatedProbeContext: string;
 }
 
 interface AiCorroborationReview {
@@ -238,6 +240,41 @@ const VERIFIER_STRONG_SUPPORT = 0.9;
 const VERIFIER_REJECT_CONFIDENCE = 0.8;
 const VERIFIER_BORDERLINE_SUPPORT = 0.6;
 const CORROBORATION_SPREAD_THRESHOLD = 0.1;
+const RELATED_PROBE_CONTEXT_MAX_FILES = 4;
+const RELATED_PROBE_CONTEXT_MAX_CHARS_PER_FILE = 3500;
+const RELATED_PROBE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs', '.py', '.go', '.java', '.cs'];
+
+function extractRelativeModuleSpecifiers(code: string): string[] {
+    const specifiers = new Set<string>();
+    const patterns = [
+        /\bimport\s+(?:[\s\S]*?\s+from\s+)?['"](\.[^'"]+)['"]/g,
+        /\bexport\s+[\s\S]*?\s+from\s+['"](\.[^'"]+)['"]/g,
+        /\brequire\s*\(\s*['"](\.[^'"]+)['"]\s*\)/g,
+    ];
+
+    for (const pattern of patterns) {
+        for (const match of code.matchAll(pattern)) {
+            if (match[1]) {
+                specifiers.add(match[1]);
+            }
+        }
+    }
+
+    return [...specifiers].slice(0, RELATED_PROBE_CONTEXT_MAX_FILES);
+}
+
+function resolveRelatedProbeCandidatePaths(fromFile: string, specifier: string): string[] {
+    const basePath = path.resolve(path.dirname(fromFile), specifier);
+    const extension = path.extname(basePath);
+    if (extension) {
+        return [basePath];
+    }
+
+    return [
+        ...RELATED_PROBE_EXTENSIONS.map(ext => `${basePath}${ext}`),
+        ...RELATED_PROBE_EXTENSIONS.map(ext => path.join(basePath, `index${ext}`)),
+    ];
+}
 
 function buildMetrics(findings: Finding[]): SeverityMetrics {
     return {
@@ -1524,6 +1561,33 @@ export class ScanEngine {
         private readonly registry: ProviderRegistry,
     ) {}
 
+    private async _buildRelatedProbeContext(document: vscode.TextDocument, code: string): Promise<string> {
+        const snippets: string[] = [];
+        const seen = new Set<string>();
+        for (const specifier of extractRelativeModuleSpecifiers(code)) {
+            for (const candidate of resolveRelatedProbeCandidatePaths(document.fileName, specifier)) {
+                const normalized = path.normalize(candidate).toLowerCase();
+                if (seen.has(normalized)) {
+                    continue;
+                }
+                seen.add(normalized);
+                try {
+                    const raw = await vscode.workspace.fs.readFile(vscode.Uri.file(candidate));
+                    const text = Buffer.from(raw).toString('utf8').slice(0, RELATED_PROBE_CONTEXT_MAX_CHARS_PER_FILE);
+                    snippets.push([
+                        `RELATED_FILE: ${path.relative(path.dirname(document.fileName), candidate) || path.basename(candidate)}`,
+                        text,
+                    ].join('\n'));
+                    break;
+                } catch {
+                    continue;
+                }
+            }
+        }
+
+        return snippets.join('\n\n--- RELATED HELPER ---\n\n');
+    }
+
     async scanDocumentsBatch(documents: vscode.TextDocument[]): Promise<ScanResult[]> {
         if (documents.length <= 1) {
             return Promise.all(documents.map(document => this.scanDocument(document)));
@@ -1536,7 +1600,7 @@ export class ScanEngine {
         const provider = this.registry.getActive();
         const projectContext = await loadProjectContextInfo();
 
-        const contexts: BatchDocumentContext[] = documents.map((document, index) => {
+        const contexts: BatchDocumentContext[] = await Promise.all(documents.map(async (document, index) => {
             const code = document.getText();
             const deterministicFindings = this.deterministicScanner
                 .scan(code, document.languageId)
@@ -1544,6 +1608,7 @@ export class ScanEngine {
                 .map(f => enrichFindingRisk(f))
                 .map(f => applyProofStatus(f, document.fileName));
             const localSinkEvidence = discoverLocalSinkEvidence(code);
+            const relatedProbeContext = await this._buildRelatedProbeContext(document, code);
 
             return {
                 fileId: `file-${index + 1}`,
@@ -1554,8 +1619,9 @@ export class ScanEngine {
                 fileHash: crypto.createHash('sha256').update(code).digest('hex'),
                 deterministicFindings,
                 localSinkEvidence,
+                relatedProbeContext,
             };
-        });
+        }));
 
         const licenceKey = await this.licenceMgr.getKey();
         if (!licenceKey) {
@@ -1659,7 +1725,7 @@ export class ScanEngine {
                     ),
                 ),
             );
-            const preCorroborationProbes = applySafeExploitProbes(context.code, filteredAiFindings);
+            const preCorroborationProbes = applySafeExploitProbes(context.code, filteredAiFindings, { relatedCode: context.relatedProbeContext });
 
             return {
                 context,
@@ -1771,7 +1837,7 @@ export class ScanEngine {
                     skeptic: skepticMap.get(finding.id),
                 }))
                 .filter((finding): finding is Finding => Boolean(finding));
-            const probedAi = applySafeExploitProbes(entry.context.code, reviewedAiBeforeProbes);
+            const probedAi = applySafeExploitProbes(entry.context.code, reviewedAiBeforeProbes, { relatedCode: entry.context.relatedProbeContext });
             const keptAi = probedAi.findings;
             const safeProbeTelemetry = mergeSafeProbeTelemetry(entry.safeProbeTelemetry, probedAi.telemetry);
 
@@ -1880,6 +1946,7 @@ export class ScanEngine {
             .map(f => enrichFindingRisk(f))
             .map(f => applyProofStatus(f, document.fileName));
         const localSinkEvidence = discoverLocalSinkEvidence(code);
+        const relatedProbeContext = await this._buildRelatedProbeContext(document, code);
 
         if (options?.forceDeterministicOnly || options?.deterministicOnlyReason) {
             return this._buildDeterministicOnlyResult(
@@ -1952,6 +2019,7 @@ export class ScanEngine {
                     projectContextContract: projectContext.combined,
                     deterministicFindings,
                     localSinkEvidence,
+                    relatedProbeContext,
                     groundedFrameworkContext,
                     groundedAiIssueContext,
                     groundedRemediationContext,
@@ -2001,12 +2069,13 @@ export class ScanEngine {
                 ),
             ),
         );
-        const preCorroborationProbes = applySafeExploitProbes(code, filteredAiFindings);
+        const preCorroborationProbes = applySafeExploitProbes(code, filteredAiFindings, { relatedCode: relatedProbeContext });
         const corroboratedAi = await this._runSingleAgentCorroboration({
             provider,
             systemPrompt,
             language,
             code,
+            relatedProbeContext,
             findings: preCorroborationProbes.findings,
         });
         const safeProbeTelemetry = mergeSafeProbeTelemetry(preCorroborationProbes.telemetry, corroboratedAi.safeProbes);
@@ -2091,6 +2160,7 @@ export class ScanEngine {
         systemPrompt: string;
         language: string;
         code: string;
+        relatedProbeContext?: string;
         findings: Finding[];
     }): Promise<{ findings: Finding[]; warnings: string[]; aiUsage: AiUsageSummary; safeProbes: SafeProbeTelemetry }> {
         if (!params.findings.length) {
@@ -2101,7 +2171,7 @@ export class ScanEngine {
             const probedAi = applySafeExploitProbes(params.code, params.findings.map(finding => ({
                 ...finding,
                 corroboration: 'UNVERIFIED' as const,
-            })));
+            })), { relatedCode: params.relatedProbeContext });
             return {
                 findings: probedAi.findings,
                 warnings: [
@@ -2183,7 +2253,7 @@ export class ScanEngine {
                 skeptic: skepticMap.get(finding.id),
             }))
             .filter((finding): finding is Finding => Boolean(finding));
-        const probedAi = applySafeExploitProbes(params.code, reviewedAiBeforeProbes);
+        const probedAi = applySafeExploitProbes(params.code, reviewedAiBeforeProbes, { relatedCode: params.relatedProbeContext });
 
         return {
             findings: probedAi.findings,
@@ -2356,6 +2426,7 @@ export class ScanEngine {
         projectContextContract?: string;
         deterministicFindings: Finding[];
         localSinkEvidence: LocalSinkEvidence[];
+        relatedProbeContext?: string;
         groundedFrameworkContext: string;
         groundedAiIssueContext: string;
         groundedRemediationContext: string;
@@ -2383,6 +2454,7 @@ export class ScanEngine {
             params.projectContextContract ? `Project context contract:\n${params.projectContextContract}\n` : '',
             buildDeterministicGroundingContext(params.deterministicFindings),
             buildLocalSinkEvidenceContext(params.localSinkEvidence),
+            params.relatedProbeContext ? `Related helper context for guard resolution:\n${params.relatedProbeContext}\n` : '',
             params.groundedFrameworkContext ? `\n${params.groundedFrameworkContext}\n` : '',
             params.groundedAiIssueContext ? `\n${params.groundedAiIssueContext}\n` : '',
             params.groundedRemediationContext ? `\nGrounded remediation guidance:\n${params.groundedRemediationContext}\n` : '',
@@ -2416,6 +2488,7 @@ export class ScanEngine {
                 `LANGUAGE: ${context.language}`,
                 buildDeterministicGroundingContext(context.deterministicFindings),
                 buildLocalSinkEvidenceContext(context.localSinkEvidence),
+                context.relatedProbeContext ? `Related helper context for guard resolution:\n${context.relatedProbeContext}` : '',
                 groundedFrameworkContext ? `\n${groundedFrameworkContext}\n` : '',
                 groundedAiIssueContext ? `\n${groundedAiIssueContext}\n` : '',
                 groundedRemediationContext ? `\nGrounded remediation guidance:\n${groundedRemediationContext}\n` : '',

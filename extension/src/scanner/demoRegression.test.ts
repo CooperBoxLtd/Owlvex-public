@@ -24,6 +24,7 @@ function buildDocument(fileName: string, languageId: string, source: string) {
 describe('Demo fixture regression coverage', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+        (vscode.workspace.fs.readFile as jest.Mock).mockReset();
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
             get: (key: string, defaultValue?: any) => {
                 switch (key) {
@@ -157,6 +158,93 @@ describe('Demo fixture regression coverage', () => {
         expect(result.engineTelemetry?.aiFindings.proposed).toBe(1);
         expect(result.engineTelemetry?.aiFindings.afterStaticFilter).toBe(0);
         expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
+    });
+
+    it('uses imported helper context to drop SSRF overcalls when the helper enforces an allowlist', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 9,
+                    summary: 'Possible SSRF detected.',
+                    findings: [{
+                        id: 'ssrf-imported-helper',
+                        line: 5,
+                        line_end: 5,
+                        severity: 'HIGH',
+                        framework: 'OWASP',
+                        rule_code: 'A10-SSRF',
+                        title: 'Server-side request forgery through untrusted destination',
+                        explanation: 'The route fetches a URL derived from request input.',
+                        threat: 'Attackers may reach internal services.',
+                        fix: 'Validate outbound destinations.',
+                        confidence: 0.9,
+                        issue_id: 'owlvex.issue.ssrf.001',
+                        likelihood: 'HIGH',
+                        likelihood_reasons: ['A request value is used before fetch.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            if (String(uri.fsPath).endsWith('partners.ts')) {
+                return Buffer.from([
+                    'const allowedPartners = new Map([["stripe", "https://api.stripe.example/status"]]);',
+                    'export function normalizePartnerUrl(partner) {',
+                    '  if (!allowedPartners.has(partner)) { throw new Error("unknown partner"); }',
+                    '  const target = allowedPartners.get(partner);',
+                    '  blockInternalAddress(target);',
+                    '  return target;',
+                    '}',
+                ].join('\n'));
+            }
+            throw new Error('not found');
+        });
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\src\\routes\\partners.js',
+            'javascript',
+            [
+                'import { normalizePartnerUrl } from "../net/partners";',
+                '',
+                'export async function partnerStatus(req, res) {',
+                '  const target = normalizePartnerUrl(req.query.partner);',
+                '  const response = await fetch(target);',
+                '  res.json(await response.json());',
+                '}',
+            ].join('\n'),
+        );
+
+        const result = await engine.scanDocument(doc);
+        const userMessage = provider.complete.mock.calls[0][0].userMessage;
+
+        expect(userMessage).toContain('Related helper context for guard resolution:');
+        expect(userMessage).toContain('allowedPartners');
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.engineTelemetry?.sinkInventory.byFamily.ssrf).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
     it('keeps the safe deserialization fixture clean under AI overclassification attempts', async () => {

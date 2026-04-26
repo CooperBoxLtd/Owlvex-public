@@ -166,6 +166,8 @@ Probeable AI candidates should then run safe probes before verifier/skeptic. The
 - inconclusive/manual-review outcomes may still go through verifier/skeptic
 - post-corroboration probes remain as a fallback when earlier routing did not resolve the finding
 
+Safe probes can also receive bounded helper context from relative imports and requires. Related files are used to resolve guards, allowlists, wrappers, and policy helper evidence. They do not create findings by themselves: the candidate sink must still be present in the scanned file before related helper code can influence the probe verdict.
+
 Each scan should also emit metadata-safe engine telemetry for this evidence-first path:
 
 - how many sinks were found before AI
