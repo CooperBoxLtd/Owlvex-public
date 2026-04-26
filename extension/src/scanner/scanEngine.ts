@@ -73,7 +73,7 @@ export type SafeProbeTechnique =
     | 'multi_file_context_probe';
 
 export interface SafeExploitProbeResult {
-    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect' | 'insecure-deserialization' | 'cors';
+    family: 'ssrf' | 'sql-injection' | 'command-injection' | 'path-traversal' | 'jwt-validation' | 'open-redirect' | 'insecure-deserialization' | 'cors' | 'csrf' | 'sensitive-logging' | 'debug-exposure';
     techniques: SafeProbeTechnique[];
     verdict: 'confirmed' | 'counter_evidence' | 'unsupported' | 'inconclusive';
     decision: 'promote' | 'downgrade' | 'drop' | 'manual_review';
@@ -787,14 +787,20 @@ function hasDataOnlyDeserializationParser(code: string): boolean {
     return /\b(?:JSON\.parse|json\.loads|ObjectMapper|readTree|Gson|JsonSerializer|System\.Text\.Json)\b/i.test(code);
 }
 
+function hasDebugActivation(code: string): boolean {
+    return /\bapp\s*\.\s*(?:set\s*\(\s*['"]debug['"]\s*,\s*true\s*\)|enable\s*\(\s*['"]debug['"]\s*\))/i.test(code);
+}
+
+function hasGuardedDebugActivation(code: string): boolean {
+    return /if\s*\(\s*[^)]*(?:NODE_ENV|APP_ENV)\s*(?:!==?|===?)\s*['"](?:production|prod)['"][^)]*\)\s*\{[\s\S]{0,400}?\bapp\s*\.\s*(?:set\s*\(\s*['"]debug['"]\s*,\s*true\s*\)|enable\s*\(\s*['"]debug['"]\s*\))/i.test(code);
+}
+
 function hasUnguardedDebugActivation(code: string): boolean {
-    const hasDebugActivation = /\bapp\s*\.\s*(?:set\s*\(\s*['"]debug['"]\s*,\s*true\s*\)|enable\s*\(\s*['"]debug['"]\s*\))/i.test(code);
-    if (!hasDebugActivation) {
+    if (!hasDebugActivation(code)) {
         return false;
     }
 
-    const hasGuardedActivation = /if\s*\(\s*[^)]*(?:NODE_ENV|APP_ENV)\s*(?:!==?|===?)\s*['"](?:production|prod)['"][^)]*\)\s*\{[\s\S]{0,400}?\bapp\s*\.\s*(?:set\s*\(\s*['"]debug['"]\s*,\s*true\s*\)|enable\s*\(\s*['"]debug['"]\s*\))/i.test(code);
-    return !hasGuardedActivation;
+    return !hasGuardedDebugActivation(code);
 }
 
 function getLineWindow(code: string, line: number, radius = 5): string {
@@ -834,6 +840,16 @@ function hasFixedLiteralOutboundRequest(snippet: string): boolean {
 
 function hasLocalLogSink(snippet: string): boolean {
     return /\b(?:console\.(?:log|info|warn|error|debug)|logger\.(?:info|warn|error|debug|trace|log)|log\.(?:info|warn|error|debug|trace))\s*\(/i.test(snippet);
+}
+
+function hasSensitiveLogPayload(snippet: string): boolean {
+    return hasLocalLogSink(snippet)
+        && /\b(?:password|passwd|pwd|token|secret|apiKey|api_key|authorization|cookie|session|credential|suppliedSecret)\b/i.test(snippet);
+}
+
+function hasRedactedLogPayload(snippet: string): boolean {
+    return /\b(?:redact|redacted|mask|masked|sanitize|sanitized|credentialSupplied|tokenPresent|secretPresent)\b/i.test(snippet)
+        || /\bBoolean\s*\(\s*(?:password|passwd|pwd|token|secret|apiKey|api_key|authorization|cookie|session|credential|suppliedSecret)\s*\)/i.test(snippet);
 }
 
 function hasManualJwtVerification(snippet: string): boolean {
@@ -945,6 +961,13 @@ function hasVisibleCsrfTokenCheck(snippet: string): boolean {
         || /\bverifyCsrf(?:Token)?\s*\(/i.test(snippet);
 }
 
+function hasStateChangingBrowserAction(snippet: string): boolean {
+    return /\b(?:app|router)\.(?:post|put|patch|delete)\s*\(/i.test(snippet)
+        || /\b(?:UPDATE|INSERT|DELETE)\b/i.test(snippet)
+        || /\b(?:db|repository|repo)\.(?:query|execute|update|insert|delete|save)\s*\(/i.test(snippet)
+        || /\b(?:req|request)\.(?:session|cookies)\b/i.test(snippet);
+}
+
 function isRouteMountShellSnippet(snippet: string): boolean {
     return /\bapp\.use\s*\(\s*['"]\//i.test(snippet)
         && !/\b(?:app|router)\.(?:post|put|patch|delete)\s*\(/i.test(snippet);
@@ -980,7 +1003,7 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
     }
 
     if (finding.canonicalId === 'owlvex.issue.debug_mode_production.001') {
-        return !hasUnguardedDebugActivation(code);
+        return !hasDebugActivation(code);
     }
 
     if ((finding.canonicalId === 'owlvex.issue.idor.001'
@@ -1025,7 +1048,7 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
         return true;
     }
 
-    if (finding.canonicalId === 'owlvex.issue.csrf_missing_token.001' && hasVisibleCsrfTokenCheck(snippet)) {
+    if (finding.canonicalId === 'owlvex.issue.csrf_missing_token.001' && !hasStateChangingBrowserAction(snippet)) {
         return true;
     }
 
@@ -1285,6 +1308,57 @@ function discoverLocalSinkEvidence(code: string, maxItems = 12): LocalSinkEviden
                 probeHint: hasAllowlist
                     ? 'Model hostile Origin canary as blocked unless it appears in the trusted-origin allowlist.'
                     : 'Model hostile Origin canary against wildcard credentialed CORS.',
+            }, seen);
+        }
+
+        if (/\b(?:app|router)\.(?:post|put|patch|delete)\s*\(|\b(?:req|request)\.(?:session|cookies)\b/i.test(line)
+            || /\b(?:UPDATE|INSERT|DELETE)\b/i.test(line)) {
+            const hasCsrfGuard = hasVisibleCsrfTokenCheck(window);
+            const hasBrowserSession = /\b(?:req|request)\.(?:session|cookies)\b/i.test(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'csrf',
+                sinkKind: 'browser-state-change',
+                line: lineNumber,
+                expression,
+                sourceSignal: hasBrowserSession ? 'browser session/cookie identity nearby' : undefined,
+                guardStatus: hasCsrfGuard ? 'present' : hasBrowserSession || hasStateChangingBrowserAction(window) ? 'missing' : 'unknown',
+                guardKind: hasCsrfGuard ? 'csrf token validation' : undefined,
+                probeHint: hasCsrfGuard
+                    ? 'Model cross-site request canary as blocked by CSRF token validation.'
+                    : 'Model ambient browser credentials reaching a state-changing action without a CSRF token.',
+            }, seen);
+        }
+
+        if (hasLocalLogSink(line)) {
+            const redacted = hasRedactedLogPayload(window);
+            const sensitive = hasSensitiveLogPayload(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'sensitive-logging',
+                sinkKind: 'log-output',
+                line: lineNumber,
+                expression,
+                sourceSignal: sensitive ? 'sensitive credential/token field nearby' : undefined,
+                guardStatus: redacted ? 'present' : sensitive ? 'missing' : 'unknown',
+                guardKind: redacted ? 'redaction/masking' : undefined,
+                probeHint: redacted
+                    ? 'Model sensitive-value canary as converted to presence/masked metadata before logging.'
+                    : 'Model sensitive-value canary reaching the log sink.',
+            }, seen);
+        }
+
+        if (/\bapp\s*\.\s*(?:set\s*\(\s*['"]debug['"]\s*,\s*true\s*\)|enable\s*\(\s*['"]debug['"]\s*\))/i.test(line)) {
+            const guarded = hasGuardedDebugActivation(window);
+            addLocalSinkEvidence(evidence, {
+                family: 'debug-exposure',
+                sinkKind: 'debug-mode-toggle',
+                line: lineNumber,
+                expression,
+                sourceSignal: 'runtime environment',
+                guardStatus: guarded ? 'present' : 'missing',
+                guardKind: guarded ? 'production environment guard' : undefined,
+                probeHint: guarded
+                    ? 'Model production environment canary as blocked by the debug guard.'
+                    : 'Model production environment canary reaching debug activation.',
             }, seen);
         }
     }
@@ -1584,6 +1658,15 @@ function getProbeIssueFamily(finding: Finding): SafeExploitProbeResult['family']
     }
     if (/cors|cross-origin|access-control-allow-origin|access-control-allow-credentials/.test(haystack)) {
         return 'cors';
+    }
+    if (/csrf|cross-site request forgery|csrf_missing_token/.test(haystack)) {
+        return 'csrf';
+    }
+    if (/sensitive log|sensitive_logging|credential logging|secret logging|password.*log|token.*log/.test(haystack)) {
+        return 'sensitive-logging';
+    }
+    if (/debug|debug mode|debug_mode_production|verbose error/.test(haystack)) {
+        return 'debug-exposure';
     }
 
     return undefined;
@@ -2402,6 +2485,265 @@ function runCorsSafeProbe(code: string, finding: Finding): SafeExploitProbeResul
     });
 }
 
+function runCsrfSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasStateChange = hasStateChangingBrowserAction(snippet);
+    const hasSessionIdentity = /\b(?:req|request)\.(?:session|cookies)\b/i.test(snippet);
+    const hasTokenGuard = hasVisibleCsrfTokenCheck(snippet);
+
+    if (!hasStateChange) {
+        return buildSafeProbeResult({
+            family: 'csrf',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'browser-state-change',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No browser-authenticated state-changing action is visible at the claimed span.',
+        });
+    }
+
+    if (hasTokenGuard) {
+        return buildSafeProbeResult({
+            family: 'csrf',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'browser-state-change',
+            sinkLine,
+            sourceKind: hasSessionIdentity ? 'browser session/cookie identity' : undefined,
+            guardStatus: 'present',
+            guardKind: 'csrf token validation',
+            canaryReachedSink: false,
+            canary: 'cross-site POST without csrf token',
+            counterexample: {
+                unsafeInput: 'missing or forged CSRF token',
+                safeInput: 'matching session CSRF token',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'state-changing browser request',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'csrf token guard',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The state-changing browser request validates a CSRF token before performing the action.',
+        });
+    }
+
+    if (hasSessionIdentity || /\b(?:app|router)\.(?:post|put|patch|delete)\s*\(/i.test(snippet)) {
+        return buildSafeProbeResult({
+            family: 'csrf',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'browser-state-change',
+            sinkLine,
+            sourceKind: hasSessionIdentity ? 'ambient browser session/cookie identity' : 'state-changing browser route',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'cross-site POST without csrf token',
+            counterexample: {
+                unsafeInput: 'cross-site request with ambient cookies',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'state-changing browser request',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['ambient browser credentials', 'state-changing action'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'A browser-authenticated state-changing action is visible without CSRF token validation.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'csrf',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'browser-state-change',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'A state-changing action is visible, but browser credential use could not be proven.',
+    });
+}
+
+function runSensitiveLoggingSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 6);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasLogSink = hasLocalLogSink(snippet);
+    const hasSensitivePayload = hasSensitiveLogPayload(snippet);
+    const hasRedaction = hasRedactedLogPayload(snippet);
+
+    if (!hasLogSink) {
+        return buildSafeProbeResult({
+            family: 'sensitive-logging',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'log-output',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No local log sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasRedaction) {
+        return buildSafeProbeResult({
+            family: 'sensitive-logging',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'log-output',
+            sinkLine,
+            sourceKind: hasSensitivePayload ? 'sensitive credential/token field' : undefined,
+            guardStatus: 'present',
+            guardKind: 'redaction/masking',
+            canaryReachedSink: false,
+            canary: 'secret-token-canary',
+            counterexample: {
+                unsafeInput: 'secret-token-canary',
+                safeInput: 'credentialSupplied: true',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'log output',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'redacted logging payload',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'The log payload records presence or masked metadata rather than the raw sensitive value.',
+        });
+    }
+
+    if (hasSensitivePayload) {
+        return buildSafeProbeResult({
+            family: 'sensitive-logging',
+            verdict: 'confirmed',
+            decision: 'promote',
+            sinkKind: 'log-output',
+            sinkLine,
+            sourceKind: 'sensitive credential/token field',
+            guardStatus: 'missing',
+            canaryReachedSink: true,
+            canary: 'secret-token-canary',
+            counterexample: {
+                unsafeInput: 'secret-token-canary',
+                unsafeBlocked: false,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'log output',
+                dangerousCapabilitiesBlocked: true,
+            },
+            taintTrace: ['sensitive value', 'log sink'],
+            mutationCount: 2,
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'A raw sensitive field can reach the log sink without visible redaction or masking.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'sensitive-logging',
+        verdict: 'inconclusive',
+        decision: 'manual_review',
+        sinkKind: 'log-output',
+        sinkLine,
+        guardStatus: 'unknown',
+        canaryReachedSink: false,
+        reason: 'A log sink is visible, but the probe could not prove raw sensitive data reaches it.',
+    });
+}
+
+function runDebugExposureSafeProbe(code: string, finding: Finding): SafeExploitProbeResult {
+    const line = inferFindingLineFromCode(code, finding) ?? finding.line;
+    const snippet = getLineWindow(code, line, 8);
+    const sinkLine = findLineForEvidenceExpression(code, finding.evidenceContract?.sink?.expression) ?? line;
+    const hasActivation = hasDebugActivation(snippet);
+    const hasGuard = hasGuardedDebugActivation(snippet);
+
+    if (!hasActivation) {
+        return buildSafeProbeResult({
+            family: 'debug-exposure',
+            verdict: 'unsupported',
+            decision: 'drop',
+            sinkKind: 'debug-mode-toggle',
+            sinkLine,
+            guardStatus: 'unknown',
+            canaryReachedSink: false,
+            reason: 'No debug activation sink is visible at the claimed span.',
+        });
+    }
+
+    if (hasGuard) {
+        return buildSafeProbeResult({
+            family: 'debug-exposure',
+            verdict: 'counter_evidence',
+            decision: 'drop',
+            sinkKind: 'debug-mode-toggle',
+            sinkLine,
+            sourceKind: 'runtime environment',
+            guardStatus: 'present',
+            guardKind: 'production environment guard',
+            canaryReachedSink: false,
+            canary: 'NODE_ENV=production',
+            counterexample: {
+                unsafeInput: 'NODE_ENV=production',
+                safeInput: 'NODE_ENV=development',
+                unsafeBlocked: true,
+                safeAllowed: true,
+            },
+            executionSlice: {
+                kind: 'static',
+                target: 'debug activation',
+                dangerousCapabilitiesBlocked: true,
+            },
+            differentialTarget: 'production debug guard',
+            fixVerificationReady: true,
+            contextDepth: 'single-file',
+            reason: 'Debug activation is guarded so production does not reach the debug-mode toggle.',
+        });
+    }
+
+    return buildSafeProbeResult({
+        family: 'debug-exposure',
+        verdict: 'confirmed',
+        decision: 'promote',
+        sinkKind: 'debug-mode-toggle',
+        sinkLine,
+        sourceKind: 'runtime environment',
+        guardStatus: 'missing',
+        canaryReachedSink: true,
+        canary: 'NODE_ENV=production',
+        counterexample: {
+            unsafeInput: 'NODE_ENV=production',
+            unsafeBlocked: false,
+        },
+        executionSlice: {
+            kind: 'static',
+            target: 'debug activation',
+            dangerousCapabilitiesBlocked: true,
+        },
+        taintTrace: ['production runtime', 'debug activation'],
+        mutationCount: 1,
+        fixVerificationReady: true,
+        contextDepth: 'single-file',
+        reason: 'Debug mode can be activated without a visible production environment guard.',
+    });
+}
+
 function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeResult | undefined {
     if (finding.provenance !== 'ai') {
         return undefined;
@@ -2425,6 +2767,12 @@ function runSafeExploitProbe(code: string, finding: Finding): SafeExploitProbeRe
             return runDeserializationSafeProbe(code, finding);
         case 'cors':
             return runCorsSafeProbe(code, finding);
+        case 'csrf':
+            return runCsrfSafeProbe(code, finding);
+        case 'sensitive-logging':
+            return runSensitiveLoggingSafeProbe(code, finding);
+        case 'debug-exposure':
+            return runDebugExposureSafeProbe(code, finding);
         default:
             return undefined;
     }

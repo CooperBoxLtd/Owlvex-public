@@ -288,8 +288,136 @@ describe('Demo fixture regression coverage', () => {
 
         const result = await engine.scanDocument(doc);
 
+        expect(provider.complete).toHaveBeenCalledTimes(1);
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['debug-exposure']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+    });
+
+    it('drops CSRF overcalls when a state-changing route validates a CSRF token', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 7,
+                    summary: 'Possible CSRF issue detected.',
+                    findings: [{
+                        id: 'safe-csrf-overcall',
+                        line: 7,
+                        line_end: 7,
+                        severity: 'HIGH',
+                        framework: 'OWASP',
+                        rule_code: 'A01-CSRF',
+                        title: 'State-changing request missing CSRF protection',
+                        explanation: 'The route updates a user email using browser session state.',
+                        threat: 'Attackers may trigger cross-site requests.',
+                        fix: 'Require and validate a CSRF token.',
+                        confidence: 0.84,
+                        issue_id: 'owlvex.issue.csrf_missing_token.001',
+                        likelihood: 'HIGH',
+                        likelihood_reasons: ['A browser-authenticated update is visible.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\19-csrf-safe.js',
+            'javascript',
+            readRepoFixture('demo', '19-csrf-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily.csrf).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+    });
+
+    it('drops sensitive logging overcalls when the log payload is redacted metadata', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 6,
+                    summary: 'Possible sensitive logging detected.',
+                    findings: [{
+                        id: 'safe-log-overcall',
+                        line: 7,
+                        line_end: 10,
+                        severity: 'MEDIUM',
+                        framework: 'OWASP',
+                        rule_code: 'DP-001',
+                        title: 'Sensitive credential written to logs',
+                        explanation: 'A login handler logs credential-related fields.',
+                        threat: 'Secrets may be retained in log systems.',
+                        fix: 'Redact secrets before logging.',
+                        confidence: 0.79,
+                        issue_id: 'owlvex.issue.sensitive_logging.001',
+                        likelihood: 'MEDIUM',
+                        likelihood_reasons: ['The logging call is near a supplied secret value.'],
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\demo\\13-sensitive-logging-safe.js',
+            'javascript',
+            readRepoFixture('demo', '13-sensitive-logging-safe.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.summary).toBe('No findings detected.');
+        expect(result.engineTelemetry?.sinkInventory.byFamily['sensitive-logging']).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
+        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
     it('drops verifier-supported CORS overcalls when the sink probe sees an origin allowlist', async () => {
