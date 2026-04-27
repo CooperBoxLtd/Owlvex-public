@@ -117,6 +117,13 @@ The extension caches valid packs locally and reuses them until the signed manife
 
 This protects customer code by keeping scan execution local, and protects Owlvex IP better than shipping all curated knowledge statically in the VSIX. It is not absolute secrecy: once a pack is delivered to a client machine, it can be inspected. The product control comes from entitlement, expiry, update cadence, and signed replacement.
 
+Product direction:
+
+- after first successful licence activation, Owlvex should pull the entitled signed intelligence packs from Azure
+- curated framework/profile, issue, mapping, remediation, confidence-calibration, and false-positive suppression data should live in those packs by default
+- the VSIX should retain only baseline fallback knowledge needed for degraded operation
+- fallback mode should be visible in report provenance so users know whether the scan used current signed packs or bundled baseline data
+
 ## Trial and demo users
 
 Trial and demo users follow the same data-boundary model.

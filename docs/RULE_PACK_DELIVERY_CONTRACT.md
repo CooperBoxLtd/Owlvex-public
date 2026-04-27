@@ -22,15 +22,23 @@ The extension is allowed to contain:
 The backend should retain ownership of:
 
 - versioned issue packs
+- versioned framework/profile packs
 - framework mappings
 - policy packs
 - prompt templates
 - grounded rule/config metadata
 - release confidence metadata
 
-The client may temporarily download that intelligence, cache what it needs, and use it locally.
+The client may download that intelligence after licence activation, cache what it needs, and use it locally.
 
 The client must never send customer source code back to Owlvex in order to receive or use that intelligence.
+
+Architecture decision as of 2026-04-27:
+
+- production-grade curated Owlvex intelligence lives in Azure-served signed packs
+- the first successful licence validation/activation should attempt to hydrate those packs
+- the shipped extension may keep only baseline fallback knowledge and local execution code
+- new proprietary framework, issue, mapping, remediation, calibration, and suppression data should be authored for pack delivery first, not as VSIX-bundled content
 
 ## 2. Non-Negotiable Boundary
 
@@ -42,6 +50,7 @@ These rules are mandatory:
 4. Rule packs must be integrity-verifiable.
 5. Clients may cache packs locally, but Owlvex remains the authoritative source of current pack versions.
 6. High-value evolving grounded intelligence should be served from the backend rather than assumed secret in the shipped extension.
+7. First licensed use should hydrate entitled signed packs before presenting the scanner as fully up to date.
 
 ## 3. What A Rule Pack Is
 
@@ -77,6 +86,13 @@ The intended model is:
 
 All execution against customer code still happens locally.
 
+First-licence behavior:
+
+- after Free, Trial, Developer, or other paid licence activation, the extension should immediately request the signed pack manifest
+- if entitled packs are available, the extension should download only missing or changed artifacts
+- if no valid packs are available, the extension may enter bundled fallback mode, but reports and diagnostics must preserve that provenance
+- a failed pack refresh must not block deterministic local scanning, but it should not be silently described as current Owlvex intelligence
+
 ## 5. Pack Types
 
 Recommended first-class pack types:
@@ -102,6 +118,8 @@ Contains:
 - entitlement visibility rules
 - prompt-oriented framework guidance for AI-assisted reasoning where appropriate
 - provenance and upstream source references for curated framework blobs
+
+Framework/profile packs are the preferred home for OWASP 2025 alignment, Owlvex STRIDE profiles, future OWASP AI/LLM mappings, and any proprietary framework interpretation rules.
 
 ### 5.3 Policy Pack
 

@@ -122,17 +122,22 @@ Telemetry policy for launch:
 
 ### Grounded Data Packs
 
-Owlvex now maintains versioned local grounded-data assets that can later become signed rule-pack artifacts. Current pack families include:
+Owlvex's product direction is that production-grade curated intelligence lives in Azure-served signed packs and is pulled after first successful licence activation. The VSIX should carry only baseline fallback knowledge and local execution code.
+
+Current pack families include:
 
 - canonical issue and mapping packs under `docs/data/issues/`
 - curated framework blobs under `docs/data/frameworks/`
 - raw upstream framework source mirrors under `docs/data/framework-sources/`
 - curated OWASP cheat sheet guidance under `docs/data/cheatsheets/`
 
-These packs are intended to make the AI lane more data-backed over time, especially for framework-guided interpretation and remediation guidance.
+These assets are the source material for signed pack delivery. They make the AI lane more data-backed over time, especially for framework-guided interpretation and remediation guidance, without sending customer source code to Owlvex Azure.
 
 Current product direction:
 
+- first licensed use hydrates entitled signed packs from Azure where available
+- proprietary framework/profile, issue, mapping, remediation, confidence-calibration, and false-positive suppression data ships through signed packs by default
+- extension-bundled data is a degraded/offline fallback, not the primary source of current Owlvex curation
 - scan-time AI grounding can consume curated framework and remediation guidance
 - fix preview generation is grounded first in canonical remediation and local code context
 - canonical remediation now carries richer normalized fix guidance into chat and fix prompts, including:

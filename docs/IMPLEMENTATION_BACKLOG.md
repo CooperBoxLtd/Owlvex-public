@@ -916,16 +916,24 @@ Make the local-vs-backend boundary explicit in code, configuration, and docs so 
 
 ### Goal
 
-Move toward a model where the extension executes locally but can receive versioned grounded intelligence from the backend.
+Make Azure-served signed packs the authoritative delivery channel for production-grade Owlvex intelligence while the extension executes locally.
+
+Architecture decision:
+
+- curated framework/profile, issue, mapping, remediation, confidence-calibration, and false-positive suppression data live in Azure-served signed packs by default
+- first licensed use hydrates entitled packs immediately after licence validation/activation
+- VSIX-bundled knowledge is baseline fallback only and must be reported as such
+- customer source code is never required for pack selection, manifest generation, or artifact download
 
 ### Tasks
 
-- define rule-pack/config payload shape
-- decide what is bundled baseline vs fetched from backend
-- add extension-side caching of last known good rule/config packs
-- add versioning to backend-served rule/config metadata
-- define integrity model for rule/config delivery
-- document offline fallback behavior
+- extend backend pack manifest/artifact support to cover framework/profile packs, issue packs, mapping packs, remediation packs, calibration packs, and suppression packs
+- make licence activation trigger immediate pack hydration in the extension
+- keep extension-side caching of last known good rule/config packs
+- ensure backend-served pack metadata has explicit versioning, expiry, compatibility, entitlement scope, hash, and signature
+- define and enforce what remains bundled baseline versus Azure-served proprietary curation
+- document offline fallback behavior and make report provenance distinguish signed-pack mode from bundled fallback mode
+- add backend tests that pack delivery requests reject or ignore source-bearing payloads
 
 ### Likely Files
 
@@ -938,7 +946,10 @@ Move toward a model where the extension executes locally but can receive version
 
 - extension can request grounded rule/config metadata without sending source code
 - extension can cache and reuse rule/config data locally
+- first successful licence activation attempts signed pack hydration
+- unchanged signed manifest entries reuse cached artifacts instead of redownloading them
 - rule/config versions are explicit and traceable
+- proprietary curation is pack-authored first, not introduced primarily as VSIX-bundled data
 - product behavior is defined for online and offline states
 
 ## Workstream 2A: Trusted Source Provenance
