@@ -6,6 +6,7 @@
 - keep changed-file scans on the existing multi-file scan, report, and fix-preview workflow
 - classify CSRF middleware/helpers as guard providers instead of missing-guard sinks
 - add regression coverage for Git changed-file collection and CSRF guard implementation telemetry
+- publish the security test benchmark publicly with a path-scoped CodeQL workflow for independent SAST comparison
 
 ## 0.1.25
 

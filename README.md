@@ -43,6 +43,22 @@ Owlvex combines:
 - report comparison
 - fix preview and verification flows
 
+## Security Test Benchmark
+
+This repository also publishes `security-test-benchmark/`, a deliberately vulnerable Express application used to evaluate Owlvex against a realistic codebase.
+
+This folder is test material. It contains intentionally unsafe routes and helpers so scanners can be compared against known expectations. It is not product code and must not be deployed.
+
+The benchmark is public so GitHub CodeQL can scan the same source and provide an independent SAST signal.
+
+Benchmark materials:
+
+- [security-test-benchmark/README.md](security-test-benchmark/README.md)
+- [security-test-benchmark/EXPECTATIONS.md](security-test-benchmark/EXPECTATIONS.md)
+- [security-test-benchmark/benchmark.expectations.json](security-test-benchmark/benchmark.expectations.json)
+
+CodeQL runs through `.github/workflows/codeql-benchmark.yml` and is scoped to `security-test-benchmark/`.
+
 Supported provider paths include:
 
 - Azure AI Foundry
