@@ -3675,10 +3675,25 @@ ${JSON.stringify(fileBlocks, null, 2)}`;
             && !/\b(res\.cookie|set-cookie|httponly|samesite|secure flag|cookie flags)\b/i.test(findingEvidenceText)
             && /\b(x-user-id|x-tenant-id|x-role|req\.headers|client-controlled.*header|role header|identity header|attachsession)\b/i.test(findingEvidenceText);
 
+        const shouldRemapGraphQlToPii =
+            finding.canonicalId === 'owlvex.issue.graphql_introspection.001'
+            && /pii|sensitive[-_ ]?response|sensitive[-_ ]?data|over[-_ ]?exposure|overexposure/i.test(finding.evidenceContract?.issueType ?? '');
+
         if (shouldRemapCookieFinding) {
             finding = {
                 ...finding,
                 canonicalId: undefined,
+                canonicalTitle: undefined,
+                canonicalCategory: undefined,
+                canonicalFamily: undefined,
+                canonicalFamilyLabel: undefined,
+            };
+        }
+
+        if (shouldRemapGraphQlToPii) {
+            finding = {
+                ...finding,
+                canonicalId: 'owlvex.issue.pii_overexposure.001',
                 canonicalTitle: undefined,
                 canonicalCategory: undefined,
                 canonicalFamily: undefined,

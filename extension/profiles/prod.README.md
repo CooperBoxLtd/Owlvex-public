@@ -4,7 +4,7 @@ Prototype VS Code extension for security scanning, AI-assisted review, and fix p
 
 ## Current Version
 
-`0.1.24`
+`0.1.27`
 
 ## Prototype Status
 
@@ -191,6 +191,17 @@ From findings or chat:
 - some AI findings may still need manual review
 - deterministic and AI-backed findings do not have the same trust posture
 - report wording and comparison UX are still evolving
+
+### Framework Selection
+
+Framework selection is a scan lens, not a hard security-rule firewall.
+
+- selected frameworks guide AI grounding, report emphasis, remediation variants, and which mappings are expanded in detail
+- deterministic evidence rules still run security-first when code proves a vulnerability pattern
+- a finding may still show canonical references such as CWE, OWASP, MITRE, or NIST even if that framework was not selected
+- those unselected-framework mappings are taxonomy references for the finding, not evidence that every framework lens was used
+
+Use selected frameworks to tune how Owlvex explains and maps findings. Do not assume deselecting a framework disables core local security evidence.
 
 ### Reading Confidence
 

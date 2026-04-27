@@ -659,6 +659,14 @@ function formatEvidenceConfidence(finding: ScanResult['findings'][number]): stri
 
 function getBaseFindingTitle(finding: ScanResult['findings'][number]): string {
     const title = finding.canonicalTitle || finding.title;
+    const evidenceIssueType = finding.evidenceContract?.issueType ?? '';
+    if (
+        /pii|sensitive[-_ ]?response|sensitive[-_ ]?data|over[-_ ]?exposure|overexposure/i.test(evidenceIssueType)
+        && /graphql|introspection/i.test(title)
+    ) {
+        return 'PII or sensitive fields over-exposed in API response';
+    }
+
     if (/missing audit trail for privileged action/i.test(title)) {
         const source = finding.evidenceContract?.source?.expression ?? '';
         if (/updateEmail\s*\(/i.test(source)) {
@@ -857,7 +865,22 @@ function buildHowToReadTable(): string[] {
         '| Likelihood | How likely exploitation is from the observed code | Exploitability estimate |',
         '| Risk score | Overall priority if the finding is real | Use this to prioritize fixes |',
         '| Evidence confidence | Rule proof or qualitative AI signal for the detection | Separate from risk score |',
+        '| Frameworks in scope | Frameworks selected for AI grounding, mapping display, and report emphasis | Deterministic evidence rules may still identify security issues that map to other frameworks; those mappings are reference taxonomy, not proof that every framework lens was used |',
         '',
+    ];
+}
+
+function getSelectedFrameworks(results: ReportSnapshot['results']): string[] {
+    return [...new Set(results.flatMap(item => item.result.frameworks ?? []))];
+}
+
+function buildFrameworkScopeLines(results: ReportSnapshot['results']): string[] {
+    const selectedSummary = formatFrameworkSummary(getSelectedFrameworks(results));
+    return [
+        `- Selected framework lens: ${selectedSummary || 'none recorded'}`,
+        '- Framework selection controls AI grounding, report emphasis, remediation variants, and which mapping families are expanded in detail.',
+        '- Deterministic evidence rules still run security-first. If code evidence proves an issue, Owlvex may show canonical mappings such as CWE, OWASP, MITRE, or NIST even when that framework was not selected.',
+        '- Treat unselected-framework mappings as reference taxonomy for the finding, not as evidence that Owlvex scanned with every framework lens enabled.',
     ];
 }
 
@@ -1377,6 +1400,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             '',
             `- ${buildOverallPriorityLine(findingsByFile)}`,
             `- ${buildScanTrustLine(snapshot.results)}`,
+            ...buildFrameworkScopeLines(snapshot.results),
             `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
             `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
             `- Proof posture: ${summarizeProofPosture(allFindings)}`,
@@ -1476,7 +1500,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         '',
         `- Coverage: ${snapshot.results.some(item => hasPartialAiCoverage(item.result)) ? 'Partial AI coverage in this scan' : 'Normal for the current provider and runtime state'}`,
         `- Knowledge sources: ${packCoverageSummary}`,
-        `- Frameworks in scope: ${formatFrameworkSummary([...new Set(snapshot.results.flatMap(item => item.result.frameworks ?? []))])}`,
+        ...buildFrameworkScopeLines(snapshot.results),
         `- Project context: ${buildProjectContextLabel(projectContextSummary)}`,
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,

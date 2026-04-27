@@ -51,6 +51,16 @@ When validating reports, check that AI evidence language does not overstate the 
 - `Validated by AI review` should only appear when verifier or skeptic evidence exists
 - high AI confidence is model confidence, not deterministic proof
 
+## Framework Selection Checks
+
+When testing framework selection:
+
+- selected frameworks should guide AI grounding, report emphasis, remediation variants, and expanded mapping detail
+- deterministic scanner rules should still run security-first when code evidence proves an issue
+- reports should explain why canonical mappings such as CWE, OWASP, MITRE, or NIST can appear even when those frameworks were not selected
+- unselected-framework mappings should read as taxonomy references, not as proof that all framework lenses were active
+- issue titles must follow the evidence contract; for example PII response evidence must not render as a GraphQL introspection finding
+
 ## Reminder
 
 If you need customer-facing install/use/limitations guidance, use the production package documentation instead.

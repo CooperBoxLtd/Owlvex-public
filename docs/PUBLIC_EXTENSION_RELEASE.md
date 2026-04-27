@@ -101,6 +101,8 @@ The public README should continue to state clearly that:
 - some limitations are known and documented
 - AI confidence is not proof; finder-only AI findings must be described as finder-only or not independently verified
 - `Validated by AI review` should only describe findings with verifier or skeptic support
+- framework selection is a scan lens for AI grounding, report emphasis, remediation variants, and expanded mapping detail, not a hard disable switch for deterministic security evidence
+- reports may show canonical CWE, OWASP, MITRE, or NIST references for a finding even when that framework was not selected; those are taxonomy mappings, not proof that all framework lenses were active
 
 ## Bottom Line
 

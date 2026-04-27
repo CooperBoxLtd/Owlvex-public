@@ -162,13 +162,16 @@ describe('reportGenerator', () => {
         expect(written).not.toContain('Provider rate limit note:');
         expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
         expect(written).toContain('- Knowledge sources: Fresh packs (1)');
-        expect(written).toContain('- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
+        expect(written).toContain('- Selected framework lens: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
+        expect(written).toContain('- Framework selection controls AI grounding, report emphasis, remediation variants, and which mapping families are expanded in detail.');
+        expect(written).toContain('- Deterministic evidence rules still run security-first. If code evidence proves an issue, Owlvex may show canonical mappings such as CWE, OWASP, MITRE, or NIST even when that framework was not selected.');
         expect(written).toContain('- Project context: inline project contract');
         expect(written).toContain('## Fix First');
         expect(written).toContain('- `example.js` (7.0/10): Unsanitized SQL query construction.');
         expect(written).toContain('## How To Read This Report');
         expect(written).toContain('| Report field | What it means | How to use it |');
         expect(written).toContain('| Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |');
+        expect(written).toContain('| Frameworks in scope | Frameworks selected for AI grounding, mapping display, and report emphasis | Deterministic evidence rules may still identify security issues that map to other frameworks; those mappings are reference taxonomy, not proof that every framework lens was used |');
         expect(written).toContain('## Findings By File');
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
@@ -341,6 +344,8 @@ describe('reportGenerator', () => {
         expect(written).toContain('# Owlvex Summary Report');
         expect(written).toContain('This is the developer summary view.');
         expect(written).toContain('## What To Fix First');
+        expect(written).toContain('- Selected framework lens: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
+        expect(written).toContain('- Framework selection controls AI grounding, report emphasis, remediation variants, and which mapping families are expanded in detail.');
         expect(written).toContain('## Confirmed Or AI-Reviewed Findings');
         expect(written).toContain('### Unsanitized SQL query construction');
         expect(written).toContain('- Status: AI-reviewed');
@@ -1063,8 +1068,75 @@ describe('reportGenerator', () => {
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).not.toContain('- Mappings:');
         expect(written).not.toContain('- STRIDE:');
-        expect(written).toContain('- Frameworks in scope: CLEANCODE 2024-curated');
+        expect(written).toContain('- Selected framework lens: CLEANCODE 2024-curated');
+        expect(written).toContain('- Treat unselected-framework mappings as reference taxonomy for the finding, not as evidence that Owlvex scanned with every framework lens enabled.');
         expect(written).toContain('- Sources: OWASP SQL Injection Prevention Cheat Sheet');
+    });
+
+    it('does not render GraphQL titles for PII response evidence', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from([
+            'router.post("/email", async (req, res) => {',
+            '  const updated = await repositories.users.updateEmail(req.user.id, req.body.email);',
+            '  res.json({ user: updated });',
+            '});',
+        ].join('\n')));
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo'), {
+            targetLabel: 'src/routes/profile.js',
+            outputRoot: vscode.Uri.file('d:\\repo'),
+            errors: [],
+            results: [{
+                uri: vscode.Uri.file('d:\\repo\\src\\routes\\profile.js'),
+                result: buildResult({
+                    findings: [{
+                        ...buildResult().findings[0],
+                        id: 'profile-pii',
+                        line: 3,
+                        title: 'GraphQL introspection enabled in production',
+                        canonicalTitle: 'GraphQL introspection enabled in production',
+                        canonicalId: 'owlvex.issue.graphql_introspection.001',
+                        ruleCode: 'CWE-200',
+                        explanation: 'The route returns the full updated user object without an explicit response field allowlist.',
+                        fix: 'Return only safe user fields such as id and email.',
+                        evidenceContract: {
+                            issueType: 'pii-overexposure',
+                            verdict: 'confirmed',
+                            source: {
+                                kind: 'source',
+                                label: 'Repository user object',
+                                expression: 'repositories.users.updateEmail(req.user.id, email)',
+                                line: 2,
+                            },
+                            flow: [{
+                                kind: 'assignment',
+                                label: 'Updated user object',
+                                expression: 'updated',
+                                line: 2,
+                            }],
+                            sink: {
+                                kind: 'sink',
+                                label: 'API JSON response',
+                                expression: 'res.json({ user: updated })',
+                                line: 3,
+                            },
+                            guard: {
+                                status: 'missing',
+                                label: 'Response field allowlist',
+                                reason: 'The response returns the repository object without projection.',
+                            },
+                            rationale: 'A whole user object reaches the API response without a response DTO or safe field projection.',
+                            proofStatus: 'ai_plausible',
+                        },
+                    }],
+                }),
+            }],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('PII or sensitive fields over-exposed in API response');
+        expect(written).not.toContain('#### GraphQL introspection enabled in production');
+        expect(written).not.toContain('| GraphQL introspection enabled in production |');
     });
 
     it('flags low-confidence AI findings for manual review', async () => {
@@ -1282,6 +1354,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 | Likelihood | How likely exploitation is from the observed code | Exploitability estimate |
 | Risk score | Overall priority if the finding is real | Use this to prioritize fixes |
 | Evidence confidence | Rule proof or qualitative AI signal for the detection | Separate from risk score |
+| Frameworks in scope | Frameworks selected for AI grounding, mapping display, and report emphasis | Deterministic evidence rules may still identify security issues that map to other frameworks; those mappings are reference taxonomy, not proof that every framework lens was used |
 
 ## Scan Facts
 
@@ -1305,7 +1378,10 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 
 - Coverage: Normal for the current provider and runtime state
 - Knowledge sources: Fresh packs (1)
-- Frameworks in scope: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
+- Selected framework lens: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
+- Framework selection controls AI grounding, report emphasis, remediation variants, and which mapping families are expanded in detail.
+- Deterministic evidence rules still run security-first. If code evidence proves an issue, Owlvex may show canonical mappings such as CWE, OWASP, MITRE, or NIST even when that framework was not selected.
+- Treat unselected-framework mappings as reference taxonomy for the finding, not as evidence that Owlvex scanned with every framework lens enabled.
 - Project context: inline project contract
 - Errors: 0
 - Scan warnings: 0"

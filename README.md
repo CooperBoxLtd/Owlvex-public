@@ -119,6 +119,13 @@ Report confidence language must keep detection evidence separate from risk:
 - `review path finder`, `finder+verifier`, or `finder+verifier+skeptic` explains which AI passes actually ran
 - a high AI percentage is model confidence, not proof
 
+Framework selection is also explicit:
+
+- selected frameworks guide AI grounding, report emphasis, remediation variants, and expanded mapping detail
+- deterministic evidence rules still run security-first when code proves a vulnerability pattern
+- a finding may show canonical mappings such as CWE, OWASP, MITRE, or NIST even when that framework was not selected
+- those unselected-framework mappings are taxonomy references for the finding, not evidence that every framework lens was used
+
 ---
 
 ## Project layout
