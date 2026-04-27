@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.28
+
+- promote the production backend to the same dev-validated Azure image while preserving production licence enforcement
+- clarify report framework scope so selected frameworks are described as the AI/report lens, not a hard disable switch for deterministic security evidence
+- prevent PII response evidence from rendering with a GraphQL introspection title
+- update public and packaged documentation for framework-selection semantics
+
 ## 0.1.27-dev
 
 - switch the development OWASP framework lens to OWASP Top 10 2025 while leaving production on the 2021 baseline
