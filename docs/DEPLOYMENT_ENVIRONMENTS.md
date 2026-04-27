@@ -123,6 +123,9 @@ These real env files must never be committed.
 
 ## Deployment Paths
 
+The 2026-04-27 production promotion and release repair are recorded in
+[DEPLOYMENT_LOG_2026-04-27.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_LOG_2026-04-27.md).
+
 ### Dev Path
 
 For full dev environment deploys:
@@ -186,6 +189,11 @@ That path:
 4. fails loudly if schema or health checks are not correct
 
 The GitHub production workflow follows the same rule. Run `Deploy to production` manually with the exact image tag already deployed and validated in Azure `dev`; the workflow must not build a new production image from source.
+
+Because the production workflow declares `environment: production`, required deployment secrets must exist on the GitHub `production` Environment, not only as repository-level secrets. At minimum that environment needs:
+
+- `AZURE_CREDENTIALS`
+- `POSTGRES_ADMIN_PASSWORD_PROD`
 
 ## Environment Parity Rule
 

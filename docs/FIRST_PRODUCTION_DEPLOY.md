@@ -64,6 +64,11 @@ You also need three real secret values:
 - `SECRET_KEY`
 - `ADMIN_KEY`
 
+For GitHub Actions production promotion, configure the production deployment secrets on the GitHub Environment named `production`. The production workflow uses `environment: production`, so environment-level secrets override or replace repository-level availability for that job. Required environment secrets include:
+
+- `AZURE_CREDENTIALS`
+- `POSTGRES_ADMIN_PASSWORD_PROD`
+
 ## Step 1: Log Into Azure
 
 ```bash
@@ -189,6 +194,8 @@ Normal production updates:
 ```bash
 IMAGE_ONLY=1 bash infra/deploy-prod.sh
 ```
+
+For the current supported promotion path, prefer the `Deploy to production` GitHub Actions workflow with the exact image tag already validated in Azure `dev`. The 2026-04-27 promotion and workflow repair are recorded in [DEPLOYMENT_LOG_2026-04-27.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_LOG_2026-04-27.md).
 
 ## Bottom Line
 

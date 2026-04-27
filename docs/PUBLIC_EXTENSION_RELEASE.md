@@ -70,6 +70,18 @@ The public repo should only receive:
 
 It must not be used as a mirror of the full private repository.
 
+## Latest Manual Release Record
+
+The 2026-04-27 manual release published extension version `0.1.28`.
+
+- private release commit: `bfe6161`
+- public repository commit: `f44dfa3`
+- public repository: `https://github.com/CooperBoxLtd/Owlvex-public`
+- public repository asset: `releases/owlvex-0.1.28.vsix`
+- Marketplace item: `https://marketplace.visualstudio.com/items?itemName=owlvex.owlvex`
+
+The release and backend promotion details are recorded in [DEPLOYMENT_LOG_2026-04-27.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_LOG_2026-04-27.md).
+
 ## Recommended Public Repo Shape
 
 Suggested repository purpose:
