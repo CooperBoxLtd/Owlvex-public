@@ -71,3 +71,24 @@ After evaluating a generated fix:
 ## Stabilization Rule
 
 This app is the long-term repo-context benchmark target. The older demo app has been removed so repo-context work has one realistic source of truth.
+
+## External SAST Stability Plan
+
+Use an external SAST baseline, starting with CodeQL, to keep the benchmark stable over time.
+
+Goals:
+
+- confirm the intentionally unsafe routes still look unsafe to an independent scanner
+- confirm the documented safe routes do not drift into obvious SAST findings
+- catch benchmark edits that accidentally remove, weaken, or add security cases
+- compare Owlvex findings against a non-AI baseline before changing benchmark expectations
+
+Planned process:
+
+1. Restore the unsafe benchmark baseline with `npm run benchmark:reset`.
+2. Run CodeQL or another SAST scanner against `tools/benchmark-app`.
+3. Record the SAST result summary alongside Owlvex stabilization reports.
+4. Investigate any mismatch before updating `EXPECTATIONS.md` or `benchmark.expectations.json`.
+5. Treat benchmark drift as a test failure unless the expectation file is deliberately updated.
+
+This external SAST check is not the source of truth for Owlvex behavior. It is a stability guard that helps detect accidental benchmark changes and obvious false-positive or false-negative drift.

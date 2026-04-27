@@ -108,7 +108,7 @@ interface LocalActionResult {
     actions?: ChatMessageAction[];
 }
 
-type ChatActionKind = 'scanFile' | 'scanSelectedFiles' | 'scanOpenEditors' | 'scanFolder' | 'scanReport' | 'scanSummaryReport' | 'scanFullReport' | 'reviewRiskCalibration';
+type ChatActionKind = 'scanFile' | 'scanSelectedFiles' | 'scanChangedFiles' | 'scanOpenEditors' | 'scanFolder' | 'scanReport' | 'scanSummaryReport' | 'scanFullReport' | 'reviewRiskCalibration';
 
 interface ChatLocalIntent {
     action: ChatActionKind;
@@ -146,7 +146,7 @@ interface ChatState {
     activeModeHint: string;
 }
 
-type WorkingScope = 'scanFile' | 'scanSelectedFiles' | 'scanOpenEditors' | 'scanFolder';
+type WorkingScope = 'scanFile' | 'scanSelectedFiles' | 'scanChangedFiles' | 'scanOpenEditors' | 'scanFolder';
 
 function normalizeReviewedPath(filePath: string): string {
     return path.normalize(filePath).toLowerCase();
@@ -318,6 +318,7 @@ function buildDefaultChatMessages(): ChatMessage[] {
 function isWorkingScope(value: string): value is WorkingScope {
     return value === 'scanFile'
         || value === 'scanSelectedFiles'
+        || value === 'scanChangedFiles'
         || value === 'scanOpenEditors'
         || value === 'scanFolder';
 }
@@ -328,6 +329,8 @@ function getWorkingScopeLabel(scope: WorkingScope): string {
             return 'Current file';
         case 'scanSelectedFiles':
             return 'Selected files';
+        case 'scanChangedFiles':
+            return 'Changed files';
         case 'scanOpenEditors':
             return 'Open editors';
         case 'scanFolder':
@@ -449,7 +452,7 @@ function looksLikeToolHelpRequest(prompt: string): boolean {
 function buildToolUsageGuidance(): string {
     return [
         'Owlvex tool workflow:',
-        '- Use the scan scope dropdown to choose Current file, Selected files, Open editors, or Workspace, then press Scan.',
+        '- Use the scan scope dropdown to choose Current file, Changed files, Selected files, Open editors, or Workspace, then press Scan.',
         '- Use the report type dropdown to choose Summary report or Full evidence report, then press Create Report.',
         '- Summary report is the default developer view: what to fix first, confirmed or AI-reviewed issues, manual-review items, and short code evidence.',
         '- Full evidence report is for deeper review: all findings by file, confidence posture, AI pass details, mappings, remediation, coverage, warnings, and scan errors.',
@@ -553,6 +556,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                                     'Use the scan scope dropdown first, then press Scan.',
                                     '',
                                     'Current file: fastest check for the active file.',
+                                    'Changed files: scans Git staged, unstaged, and untracked source files under the selected project root.',
                                     'Selected files: focused review of files you choose.',
                                     'Open editors: checks the files you are already working in.',
                                     'Workspace: broader project scan using the selected project root.',
@@ -595,6 +599,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
     ];
     const scanActions: ChatMessageAction[] = [
         buildQuickActionAction('tool-help-scan-current-file', 'Scan current file', 'scanFile'),
+        buildQuickActionAction('tool-help-scan-changed-files', 'Scan changed files', 'scanChangedFiles'),
         buildQuickActionAction('tool-help-scan-workspace', 'Scan workspace', 'scanFolder'),
         buildQuickActionAction('tool-help-create-summary', 'Create Summary', 'scanSummaryReport'),
     ];
@@ -3238,6 +3243,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             };
         }
 
+        if (intent.action === 'scanChangedFiles') {
+            const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanChangedFiles);
+            if (result?.status === 'cancelled') {
+                return { handled: true, response: 'Changed-files scan was cancelled.', kind: 'scan' };
+            }
+            if (result?.status === 'empty') {
+                return { handled: true, response: 'No changed source files were found under the selected project root.', kind: 'scan' };
+            }
+            if (result?.status === 'failed') {
+                return {
+                    handled: true,
+                    response: `Changed-files scan failed for all files.\nFiles scanned: 0\nTotal findings: 0\nScan errors: ${result.errors.length}`,
+                    kind: 'scan',
+                };
+            }
+            if (!result?.completed) {
+                return { handled: true, response: 'Changed-files scan did not complete.', kind: 'scan' };
+            }
+            const topActionable = getTopActionableFindingResult(result.results ?? []);
+            this.lastSelectedScopePaths = (result.results ?? [])
+                .map((item: any) => item?.uri?.fsPath)
+                .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+            this.latestActionableItems = getActionableFindingResults(result.results ?? []);
+            this.latestActionableFinding = topActionable?.finding;
+            this.latestActionableTargetPath = topActionable?.targetPath;
+            const actions: ChatMessageAction[] = buildPrimaryFixAction(this.latestActionableItems);
+            actions.push(buildExplainScoreAction('explain-score-scan-changed-files-intent', result.results ?? []));
+            return {
+                handled: true,
+                response: buildMultiFileScanResponse('Changed files scan', result.completed, result.results ?? [], result.errors ?? [], topActionable),
+                kind: 'scan',
+                actions,
+            };
+        }
+
         if (intent.action === 'scanOpenEditors') {
             const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanOpenEditors);
             if (result?.status === 'cancelled') {
@@ -3502,7 +3542,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const workingScope = this.getWorkingScope();
         const editor = vscode.window.activeTextEditor;
         const snippet = this.buildActiveSnippetForFinding(finding);
-        const nearbyContext = (workingScope === 'scanOpenEditors' || workingScope === 'scanFolder') && editor
+        const nearbyContext = (workingScope === 'scanChangedFiles' || workingScope === 'scanOpenEditors' || workingScope === 'scanFolder') && editor
             ? await buildNearbyProjectContext(editor.document, finding)
             : undefined;
         const latestReportContext = buildLatestReportPromptContext(this.storage);
@@ -3575,6 +3615,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
         const isScanAction = action === 'scanFile'
             || action === 'scanSelectedFiles'
+            || action === 'scanChangedFiles'
             || action === 'scanOpenEditors'
             || action === 'scanFolder'
             || action === 'scanReport'
@@ -4084,6 +4125,58 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ? [
                             ...buildPrimaryFixAction(this.latestActionableItems),
                             buildExplainScoreAction('explain-score-selected', result.results ?? []),
+                        ]
+                        : undefined,
+                };
+            } else if (action === 'scanChangedFiles') {
+                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanChangedFiles);
+                if (result?.status === 'cancelled') {
+                    this.messages.pop();
+                    void this.persistState();
+                    this.refresh();
+                    return;
+                }
+                this.latestActionableFinding = result?.results
+                    ?.flatMap((item: any) => item.result.findings)
+                    ?.slice()
+                    ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.lastSelectedScopePaths = (result?.results ?? [])
+                    .map((item: any) => item?.uri?.fsPath)
+                    .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+                this.latestActionableTargetPath = getTopActionableFindingResult(result?.results ?? [])?.targetPath;
+                this.latestActionableItems = getActionableFindingResults(result?.results ?? []);
+                this.messages[this.messages.length - 1] = {
+                    role: 'assistant',
+                    kind: 'scan',
+                    content: result?.status === 'completed'
+                        ? [
+                            `Changed-files scan completed.`,
+                            `Files scanned: ${result.completed}`,
+                            `Total findings: ${result.totalFindings}`,
+                            summarizeEngineEvidence(result.results.flatMap((item: any) => item.result.findings)),
+                            summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
+                            ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
+                                .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                            ...this.buildProviderComparisonNotes(result.results ?? []),
+                            result.errors.length
+                                ? `Scan errors: ${result.errors.length}`
+                                : 'No scan errors were reported.',
+                        ].join('\n')
+                        : result?.status === 'failed'
+                            ? [
+                                `Changed-files scan failed for all files.`,
+                                `Files scanned: 0`,
+                                `Total findings: 0`,
+                                `Issue families: unresolved`,
+                                `Scan errors: ${result.errors.length}`,
+                            ].join('\n')
+                        : result?.status === 'empty'
+                            ? 'No changed source files were found under the selected project root.'
+                            : 'Changed-files scan was cancelled.',
+                    actions: result?.status === 'completed'
+                        ? [
+                            ...buildPrimaryFixAction(this.latestActionableItems),
+                            buildExplainScoreAction('explain-score-changed-files', result.results ?? []),
                         ]
                         : undefined,
                 };
@@ -4711,6 +4804,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return this.buildEditorContext();
             case 'scanOpenEditors':
                 return this.buildOpenEditorsContext();
+            case 'scanChangedFiles':
+                return this.buildSelectedFilesContext();
             case 'scanSelectedFiles':
                 return this.buildSelectedFilesContext();
             case 'scanFolder':
@@ -5593,6 +5688,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         </details>
         <select id="scanScopeBottom" class="rail-select" aria-label="Scan scope">
           <option value="scanFile">Current file</option>
+          <option value="scanChangedFiles">Changed files</option>
           <option value="scanSelectedFiles">Selected files</option>
           <option value="scanOpenEditors">Open editors</option>
           <option value="scanFolder" selected>Workspace</option>
@@ -5703,7 +5799,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         addAction('Start Trial', 'startTrial', false);
         addAction('Enter Licence', 'enterLicence', false);
       } else if (!state.hasLastScan) {
-        addAction(state.workingScope === 'scanFile' ? 'Scan Current File' : 'Scan Workspace', state.workingScope || 'scanFolder', true);
+        addAction('Scan ' + (state.workingScopeLabel || 'Workspace'), state.workingScope || 'scanFolder', true);
       } else {
         addAction('Summary Report', 'scanSummaryReport', true);
       }
@@ -5906,6 +6002,7 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
     const wantsScan = /\b(scan|audit|analy[sz]e|analy[sz]is|review)\b/.test(normalized);
     const wantsReport = /\b(report|summary|markdown|document)\b/.test(normalized);
     const wantsFolder = /\b(repo|repository|workspace|folder|project|codebase)\b/.test(normalized);
+    const wantsChangedFiles = /\b(changed files?|modified files?|git diff|diff|staged|unstaged|untracked|working tree|working copy)\b/.test(normalized);
     const wantsFile = /\b(file|current file|this file|selected file)\b/.test(normalized);
     const wantsCalibration = /\b(calibration|score posture|risk posture|review scores|review scoring)\b/.test(normalized);
     const explicitFile = extractFileHint(prompt);
@@ -5918,8 +6015,8 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
         return { action: 'scanReport', fileHint: explicitFile };
     }
 
-    if (wantsScan && (wantsFolder || /\bscan folder\b/.test(normalized))) {
-        return { action: 'scanFolder' };
+    if (wantsScan && wantsChangedFiles) {
+        return { action: 'scanChangedFiles' };
     }
 
     if (wantsScan && /\b(selected files|selected file|multiple files|many files|few files)\b/.test(normalized)) {
@@ -5928,6 +6025,10 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
 
     if (wantsScan && /\b(open editors|open files|opened files|open tabs|current tabs)\b/.test(normalized)) {
         return { action: 'scanOpenEditors' };
+    }
+
+    if (wantsScan && (wantsFolder || /\bscan folder\b/.test(normalized))) {
+        return { action: 'scanFolder' };
     }
 
     if (wantsScan && (wantsFile || Boolean(explicitFile))) {

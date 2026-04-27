@@ -10,7 +10,7 @@ import { SidebarProvider } from './panels/sidebarProvider';
 import { ChatViewProvider } from './panels/chatViewProvider';
 import { OWLVEX_PREVIEW_SCHEME, PreviewDocumentProvider } from './panels/previewDocumentProvider';
 import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
-import { pickScanFile, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
+import { collectChangedScannableFiles, pickScanFile, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot, ReportVariant } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
@@ -54,6 +54,16 @@ interface ScanWorkspaceCommandResult {
 
 interface ScanSelectedFilesCommandResult {
     status: 'completed' | 'cancelled' | 'empty' | 'failed';
+    files?: vscode.Uri[];
+    completed: number;
+    totalFindings: number;
+    errors: string[];
+    results: Array<{ uri: vscode.Uri; result: ScanResult }>;
+}
+
+interface ScanChangedFilesCommandResult {
+    status: 'completed' | 'cancelled' | 'empty' | 'failed';
+    root?: vscode.Uri;
     files?: vscode.Uri[];
     completed: number;
     totalFindings: number;
@@ -2532,6 +2542,109 @@ export function activate(context: vscode.ExtensionContext) {
             } catch (error: any) {
                 statusBar.showError(error.message);
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} selected-files scan failed: ${error.message}`);
+                throw error;
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.scanChangedFiles, async (requestedRoot?: vscode.Uri): Promise<ScanChangedFilesCommandResult> => {
+            const allowed = await ensureScanAllowedForSession();
+            if (!allowed) {
+                return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
+            const root = requestedRoot ?? await ensureProjectRootReady('Select the repo root Owlvex should use to find changed files.');
+            if (!root) {
+                return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
+
+            const fileUris = await collectChangedScannableFiles(root);
+            if (!fileUris.length) {
+                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No changed source files were found under ${vscode.workspace.asRelativePath(root, false) || root.fsPath}.`);
+                return { status: 'empty', root, files: [], completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
+
+            statusBar.showScanning();
+            diagnostics.clear();
+            sidebar.clear();
+
+            try {
+                const summary = await scanSelectedFiles({
+                    files: fileUris,
+                    scanEngine,
+                    diagnostics,
+                    skipConfirmation: true,
+                });
+                const enrichedResults = await annotateProviderComparisonNotes(
+                    await finalizeMultiFileResults(summary.results, `Changed files: ${fileUris.length} file(s)`),
+                );
+                const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
+                for (const item of enrichedResults) {
+                    storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
+                }
+                await persistScans();
+
+                if (enrichedResults.length) {
+                    const topResult = enrichedResults
+                        .slice()
+                        .sort((left, right) => right.result.score - left.result.score)[0];
+                    sidebar.refresh(topResult.result);
+                    statusBar.showResult(topResult.result);
+                    chatView.setLastScanTarget(`Changed files: ${enrichedResults.length} file(s)`);
+                    sessionScanCount += 1;
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
+                        scope: 'changed_files',
+                        file_count: enrichedResults.length,
+                        finding_count: totalFindings,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
+                    if (sessionScanCount === 2) {
+                        void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'changed_files' }, {
+                            registry,
+                            includeProviderModel: true,
+                            includeProject: true,
+                        });
+                    }
+                    void maybePromptUsefulnessFeedback(allowed, {
+                        scope: 'changed_files',
+                        file_count: enrichedResults.length,
+                        finding_count: totalFindings,
+                    });
+                    await persistLastReportSnapshot({
+                        targetLabel: `${enrichedResults.length} changed file(s)`,
+                        outputRoot: root,
+                        errors: summary.errors,
+                        results: enrichedResults,
+                    });
+                } else {
+                    refreshIdleStatus();
+                }
+
+                if (summary.status === 'completed' && enrichedResults.length) {
+                    vscode.window.showInformationMessage(
+                        `${PROFILE.displayLabel}: Scanned ${enrichedResults.length} changed file(s) with ${totalFindings} finding(s)${summary.errors.length ? ` (${summary.errors.length} error(s))` : ''}`
+                    );
+                } else if (summary.status === 'failed') {
+                    vscode.window.showErrorMessage(
+                        `${PROFILE.displayLabel}: Changed-files scan failed for all ${fileUris.length} file(s). ${summary.errors.length} error(s) were captured.`
+                    );
+                }
+
+                return {
+                    status: summary.status,
+                    root,
+                    files: fileUris,
+                    completed: summary.completed,
+                    totalFindings,
+                    errors: summary.errors,
+                    results: enrichedResults,
+                };
+            } catch (error: any) {
+                statusBar.showError(error.message);
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel} changed-files scan failed: ${error.message}`);
                 throw error;
             }
         })

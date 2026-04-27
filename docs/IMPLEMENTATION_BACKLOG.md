@@ -109,6 +109,44 @@ The current hybrid scanner is being formalized, not replaced. Future implementat
 
 and should support a client-side Project Context Contract that can ground AI reasoning without weakening the source-code privacy boundary.
 
+## Diff-Scoped Scanning Workstream
+
+Owlvex should add a first-class scan scope for developer working diffs. The product goal is to minimize user work by scanning the code a developer is actively changing instead of forcing a workspace scan for every security check.
+
+Planned scope options:
+
+- changed files: unstaged and staged Git changes
+- staged files: what is about to be committed
+- branch diff: current branch compared with main/upstream
+- later: selected hunks for very large files
+
+Initial implementation should scan full changed files while attaching diff metadata. Scanning only raw hunks is too narrow for security reasoning because imports, middleware, helper calls, route mounting, and policy checks often sit outside the changed lines.
+
+Report and chat output should separate:
+
+- findings touching changed lines
+- pre-existing findings in changed files
+- findings that need wider repo context
+
+This distinction matters because Owlvex should help the developer fix what they are working on without blaming them for unrelated legacy code. The default UX should make `Changed files` as easy to select as `Current file`, `Selected files`, `Open editors`, and `Workspace`.
+
+Implementation slices:
+
+1. Add a Git diff detector for unstaged, staged, and branch-base changed files.
+2. Add `Changed files` to the scan scope selector.
+3. Pass changed-line ranges and diff source into scan context.
+4. Prioritize changed-line findings in scan summaries and fix actions.
+5. Label pre-existing findings separately in reports.
+6. Add hunk-level scanning only after file-level diff scanning is stable.
+
+Acceptance criteria:
+
+- a developer can scan changed files in one action
+- reports identify which findings are introduced or touched by the diff
+- legacy findings in touched files are visible but not over-promoted as the main next action
+- AI usage is lower than workspace scans for normal development workflows
+- no backend source upload is required; Git diff analysis remains local
+
 ## Current Phase Priorities
 
 The next implementation phase should not treat language count as the main measure of product quality.

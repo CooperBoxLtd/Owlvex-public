@@ -2,6 +2,7 @@ function buildCommandIdMap(profile) {
   return {
     "owlvex.scanFile": `${profile.commandPrefix}.scanFile`,
     "owlvex.scanSelectedFiles": `${profile.commandPrefix}.scanSelectedFiles`,
+    "owlvex.scanChangedFiles": `${profile.commandPrefix}.scanChangedFiles`,
     "owlvex.scanOpenEditors": `${profile.commandPrefix}.scanOpenEditors`,
     "owlvex.scanWorkspace": `${profile.commandPrefix}.scanWorkspace`,
     "owlvex.scanWorkspaceReport": `${profile.commandPrefix}.scanWorkspaceReport`,
@@ -101,6 +102,7 @@ function buildGeneratedProfileSource(profileName, profile) {
     commands: {
       scanFile: `${profile.commandPrefix}.scanFile`,
       scanSelectedFiles: `${profile.commandPrefix}.scanSelectedFiles`,
+      scanChangedFiles: `${profile.commandPrefix}.scanChangedFiles`,
       scanOpenEditors: `${profile.commandPrefix}.scanOpenEditors`,
       scanWorkspace: `${profile.commandPrefix}.scanWorkspace`,
       scanWorkspaceReport: `${profile.commandPrefix}.scanWorkspaceReport`,

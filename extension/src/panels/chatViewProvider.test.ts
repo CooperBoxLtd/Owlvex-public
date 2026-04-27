@@ -60,6 +60,12 @@ describe('parseChatIntent', () => {
         });
     });
 
+    it('routes changed-file scan requests to changed-files scanning', () => {
+        expect(parseChatIntent('scan changed files in this repo')).toEqual({
+            action: 'scanChangedFiles',
+        });
+    });
+
     it('routes open-editors scan requests to open-editors scanning', () => {
         expect(parseChatIntent('scan open editors')).toEqual({
             action: 'scanOpenEditors',

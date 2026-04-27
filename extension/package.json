@@ -30,6 +30,10 @@
         "title": "Owlvex: Scan Selected Files"
       },
       {
+        "command": "owlvex.scanChangedFiles",
+        "title": "Owlvex: Scan Changed Files"
+      },
+      {
         "command": "owlvex.scanOpenEditors",
         "title": "Owlvex: Scan Open Editors"
       },

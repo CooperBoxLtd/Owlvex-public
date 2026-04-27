@@ -155,6 +155,16 @@ That command must remain able to:
 - evaluate those reports against the machine-readable benchmark manifests
 - fail when the current scanner behavior drifts away from the expectation files
 
+External SAST stability is a planned companion gate for `tools/benchmark-app`, starting with CodeQL:
+
+- reset `tools/benchmark-app` to the unsafe baseline before the SAST run
+- run CodeQL or an equivalent SAST scanner against the benchmark app
+- store the SAST summary beside Owlvex stabilization artifacts
+- investigate mismatches before changing benchmark expectations
+- treat unexpected SAST drift as benchmark instability unless `EXPECTATIONS.md` is deliberately updated
+
+The external SAST result is a benchmark stability guard, not the product oracle. Owlvex expectations still come from the documented benchmark contract, but CodeQL helps detect accidental benchmark edits and obvious false-positive or false-negative drift.
+
 Known failure modes already observed in these benchmarks must stay covered by regression tests, including:
 
 - false positive on safe deserialization

@@ -1,8 +1,12 @@
 import * as fs from 'fs/promises';
+import { execFile } from 'child_process';
 import * as vscode from 'vscode';
-import { collectScannableFiles, getActiveScannableEditorUri, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './workspaceScanner';
+import { collectChangedScannableFiles, collectScannableFiles, getActiveScannableEditorUri, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './workspaceScanner';
 
 jest.mock('fs/promises');
+jest.mock('child_process', () => ({
+    execFile: jest.fn(),
+}));
 
 const normalizeTestPath = (value: string) => value.replace(/\\/g, '/');
 
@@ -43,6 +47,37 @@ describe('workspaceScanner', () => {
 
         const files = await collectScannableFiles(vscode.Uri.file('d:\\repo'));
         expect(files.map(file => normalizeTestPath(file.fsPath))).toEqual(['d:/repo/src/app.js', 'd:/repo/src/util.ts']);
+    });
+
+    it('collects changed scannable files from git diff and untracked files', async () => {
+        (execFile as unknown as jest.Mock)
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/changed.js\0README.md\0src/deleted.js\0', ''))
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/new.ts\0src/changed.js\0', ''));
+        (fs.stat as jest.Mock).mockImplementation(async (filePath: string) => {
+            if (filePath.endsWith('deleted.js')) {
+                throw new Error('missing');
+            }
+            return { isFile: () => true };
+        });
+
+        const files = await collectChangedScannableFiles(vscode.Uri.file('d:\\repo'));
+
+        expect((execFile as unknown as jest.Mock).mock.calls[0][1]).toEqual([
+            '-C',
+            'd:\\repo',
+            'diff',
+            '--name-only',
+            '-z',
+            '--relative',
+            '--diff-filter=ACMRTUXB',
+            'HEAD',
+            '--',
+            '.',
+        ]);
+        expect(files.map(file => normalizeTestPath(file.fsPath))).toEqual([
+            'd:/repo/src/changed.js',
+            'd:/repo/src/new.ts',
+        ]);
     });
 
     it('counts only successful scans as completed', async () => {

@@ -16,6 +16,7 @@ export const PROFILE = {
     "commands": {
         "scanFile": "owlvex.scanFile",
         "scanSelectedFiles": "owlvex.scanSelectedFiles",
+        "scanChangedFiles": "owlvex.scanChangedFiles",
         "scanOpenEditors": "owlvex.scanOpenEditors",
         "scanWorkspace": "owlvex.scanWorkspace",
         "scanWorkspaceReport": "owlvex.scanWorkspaceReport",

@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { execFile } from 'child_process';
 import * as vscode from 'vscode';
 import { ScanEngine, ScanResult } from './scanEngine';
 import { PROFILE } from '../profile';
@@ -221,6 +222,76 @@ export async function collectScannableFiles(root: vscode.Uri, limit = 500): Prom
     }
 
     await walk(root.fsPath);
+    return files;
+}
+
+async function runGit(root: vscode.Uri, args: string[]): Promise<string[]> {
+    const stdout = await new Promise<string>((resolve, reject) => {
+        execFile('git', ['-C', root.fsPath, ...args], {
+            maxBuffer: 1024 * 1024 * 4,
+            windowsHide: true,
+        }, (error, output) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve(String(output));
+        });
+    });
+    return String(stdout)
+        .split('\0')
+        .map(item => item.trim())
+        .filter(Boolean);
+}
+
+async function existingScannableGitPath(root: vscode.Uri, relativePath: string): Promise<vscode.Uri | undefined> {
+    if (path.isAbsolute(relativePath)) return undefined;
+
+    const normalizedPath = path.normalize(relativePath);
+    if (normalizedPath === '..' || normalizedPath.startsWith(`..${path.sep}`)) {
+        return undefined;
+    }
+
+    const uri = vscode.Uri.file(path.join(root.fsPath, normalizedPath));
+    if (!isScannableSourceUri(uri)) return undefined;
+
+    try {
+        const stat = await fs.stat(uri.fsPath);
+        return stat.isFile() ? uri : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+export async function collectChangedScannableFiles(root: vscode.Uri, limit = 200): Promise<vscode.Uri[]> {
+    let changedPaths: string[] = [];
+    try {
+        changedPaths = await runGit(root, ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', 'HEAD', '--', '.']);
+    } catch {
+        try {
+            changedPaths = await runGit(root, ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', '--', '.']);
+        } catch {
+            return [];
+        }
+    }
+
+    let untrackedPaths: string[] = [];
+    try {
+        untrackedPaths = await runGit(root, ['ls-files', '--others', '--exclude-standard', '-z', '--', '.']);
+    } catch {
+        untrackedPaths = [];
+    }
+
+    const uniquePaths = [...new Set([...changedPaths, ...untrackedPaths])].slice(0, limit * 2);
+    const files: vscode.Uri[] = [];
+    for (const relativePath of uniquePaths) {
+        if (files.length >= limit) break;
+        const uri = await existingScannableGitPath(root, relativePath);
+        if (uri) {
+            files.push(uri);
+        }
+    }
+
     return files;
 }
 
