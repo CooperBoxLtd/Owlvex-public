@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.26
+
+- add a Changed files scan scope for Git staged, unstaged, and untracked source files
+- keep changed-file scans on the existing multi-file scan, report, and fix-preview workflow
+- classify CSRF middleware/helpers as guard providers instead of missing-guard sinks
+- add regression coverage for Git changed-file collection and CSRF guard implementation telemetry
+
 ## 0.1.25
 
 - consolidate post-fix verification for combined fixes into one continuation summary
