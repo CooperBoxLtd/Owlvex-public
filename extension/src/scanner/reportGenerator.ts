@@ -5,6 +5,7 @@ import { describeRulePackRuntime, getRulePackModeLabel } from '../packs/packRunt
 import { ScanResult } from './scanEngine';
 import { FolderScanSummary } from './workspaceScanner';
 import { formatFrameworkSummary } from '../frameworks/catalog';
+import { formatOwaspMappingForActiveProfile } from '../frameworks/owaspProfile';
 import { PROFILE } from '../profile';
 
 export interface ReportEntry {
@@ -65,7 +66,7 @@ function formatMappings(
 
     return ([
         ['CWE', mappings.cwe, enabled.has('CWE') || showAllSecurityMappings],
-        ['OWASP', mappings.owasp, enabled.has('OWASP') || showAllSecurityMappings],
+        ['OWASP', mappings.owasp.map(formatOwaspMappingForActiveProfile), enabled.has('OWASP') || showAllSecurityMappings],
         ['API OWASP', mappings.apiOwasp, enabled.has('OWASP') || showAllSecurityMappings],
         ['ATT&CK', mappings.attack, enabled.has('MITRE') || showAllSecurityMappings],
         ['CAPEC', mappings.capec, enabled.has('MITRE') || enabled.has('CWE') || showAllSecurityMappings],

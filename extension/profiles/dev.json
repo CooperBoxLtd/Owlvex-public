@@ -15,5 +15,6 @@
   "comparisonPanelId": "owlvexDevComparison",
   "commandPrefix": "owlvexDev",
   "apiUrl": "https://owlvexdev-api.azurewebsites.net",
+  "owaspTop10Version": "2025",
   "packagePath": "dist/owlvex-dev.vsix"
 }

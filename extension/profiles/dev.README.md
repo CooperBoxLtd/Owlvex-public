@@ -4,9 +4,9 @@ Internal Owlvex development build.
 
 ## Build
 
-- version: `0.1.24`
+- version: `0.1.27-dev`
 - target: Azure dev backend
-- focus: evidence-first scanning, safe probe verification, report clarity, and fix verification loops
+- focus: OWASP Top 10 2025 development alignment, evidence-first scanning, safe probe verification, report clarity, and fix verification loops
 
 ## Intended Use
 
@@ -16,6 +16,7 @@ Internal Owlvex development build.
 
 ## Current Engine Notes
 
+- Development builds resolve the `OWASP` framework lens to OWASP Top 10 2025. Production remains on the OWASP 2021 lens until this is validated.
 - Safe probe verification now runs before verifier escalation when a finding can be checked without side effects.
 - Probe-confirmed blocked flows skip extra AI verifier work.
 - Probe residue is reported as unresolved evidence only when canary data still reaches a risky sink.

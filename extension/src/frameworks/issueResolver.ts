@@ -4,6 +4,7 @@ import {
     getEffectiveCanonicalIssueById,
     getEffectiveIssueCatalog,
 } from './rulePackRegistry';
+import { getOwaspMappingAliasesForActiveProfile } from './owaspProfile';
 export type { CanonicalIssue, CanonicalMappings } from './issueCatalog';
 
 export interface RawFindingLike {
@@ -25,7 +26,7 @@ export interface ResolvedIssue {
 function normalizedMappings(issue: CanonicalIssue): Array<[string, string]> {
     return [
         ...issue.mappings.cwe.map(value => ['CWE', value] as [string, string]),
-        ...issue.mappings.owasp.map(value => ['OWASP', value] as [string, string]),
+        ...issue.mappings.owasp.flatMap(value => getOwaspMappingAliasesForActiveProfile(value).map(alias => ['OWASP', alias] as [string, string])),
         ...issue.mappings.apiOwasp.map(value => ['APIOWASP', value] as [string, string]),
         ...issue.mappings.attack.map(value => ['ATTACK', value] as [string, string]),
         ...issue.mappings.capec.map(value => ['CAPEC', value] as [string, string]),

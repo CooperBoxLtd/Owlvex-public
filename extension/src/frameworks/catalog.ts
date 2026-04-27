@@ -1,3 +1,5 @@
+import { getOwaspFrameworkDetails } from './owaspProfile';
+
 export interface FrameworkDefinition {
     code: string;
     name: string;
@@ -11,10 +13,10 @@ export const FRAMEWORK_CATALOG: FrameworkDefinition[] = [
     {
         code: 'OWASP',
         name: 'OWASP Top 10',
-        version: '2021',
+        version: getOwaspFrameworkDetails().version,
         category: 'security',
-        description: 'Current OWASP Top 10 web application security risks baseline.',
-        docsUrl: 'https://owasp.org/www-project-top-ten/',
+        description: getOwaspFrameworkDetails().description,
+        docsUrl: getOwaspFrameworkDetails().docsUrl,
     },
     {
         code: 'STRIDE',

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.27-dev
+
+- switch the development OWASP framework lens to OWASP Top 10 2025 while leaving production on the 2021 baseline
+- add dev prompt/report wording for OWASP 2025 categories and legacy mapping display
+- keep OWASP 2021 canonical mappings available for compatibility while accepting direct 2025 rule-code matches in dev
+
 ## 0.1.26
 
 - add a Changed files scan scope for Git staged, unstaged, and untracked source files

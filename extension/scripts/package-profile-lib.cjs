@@ -99,6 +99,7 @@ function buildGeneratedProfileSource(profileName, profile) {
     findingsViewId: profile.findingsViewId,
     chatViewId: profile.chatViewId,
     comparisonPanelId: profile.comparisonPanelId,
+    owaspTop10Version: profile.owaspTop10Version ?? "2021",
     commands: {
       scanFile: `${profile.commandPrefix}.scanFile`,
       scanSelectedFiles: `${profile.commandPrefix}.scanSelectedFiles`,

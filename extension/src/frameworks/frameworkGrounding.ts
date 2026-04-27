@@ -3,6 +3,7 @@ import { getIssueFamilyDefinition } from './issueCatalog';
 import { getGroundedCheatSheetGuidanceForIssueIds } from './remediationResolver';
 import { getEffectiveIssueCatalog } from './rulePackRegistry';
 import { resolveRuntimeDataPath } from './runtimeDataPath';
+import { getOwaspFrameworkDetails, OWASP_2025_CATEGORIES } from './owaspProfile';
 
 interface FrameworkPackFramework {
     code: string;
@@ -168,13 +169,18 @@ export function buildGroundedFrameworkPromptContext(selectedFrameworks: string[]
         if (!framework && !profile) {
             return '';
         }
+        const owaspDetails = code === 'OWASP' ? getOwaspFrameworkDetails() : undefined;
+        const owaspCategories = code === 'OWASP' && owaspDetails?.version === '2025'
+            ? `OWASP 2025 categories: ${OWASP_2025_CATEGORIES.join(' | ')}`
+            : '';
 
         return [
-            `${code}: ${(framework?.name ?? profile?.title ?? code)}${framework?.version ? ` (${framework.version})` : ''}`,
-            framework?.description ? `Description: ${framework.description}` : '',
+            `${code}: ${(framework?.name ?? profile?.title ?? code)}${owaspDetails?.version ? ` (${owaspDetails.version})` : framework?.version ? ` (${framework.version})` : ''}`,
+            owaspDetails?.description ? `Description: ${owaspDetails.description}` : framework?.description ? `Description: ${framework.description}` : '',
             profile?.purpose ? `Purpose: ${profile.purpose}` : '',
-            profile?.prompt_guidance?.length ? `Prompt guidance: ${profile.prompt_guidance.slice(0, 3).join(' | ')}` : '',
-            profile?.report_focus?.length ? `Report focus: ${profile.report_focus.slice(0, 3).join(' | ')}` : '',
+            owaspDetails?.promptGuidance.length ? `Prompt guidance: ${owaspDetails.promptGuidance.join(' | ')}` : profile?.prompt_guidance?.length ? `Prompt guidance: ${profile.prompt_guidance.slice(0, 3).join(' | ')}` : '',
+            owaspDetails?.reportFocus.length ? `Report focus: ${owaspDetails.reportFocus.join(' | ')}` : profile?.report_focus?.length ? `Report focus: ${profile.report_focus.slice(0, 3).join(' | ')}` : '',
+            owaspCategories,
             profile?.allowed_mapping_fields?.length ? `Allowed mapping fields: ${profile.allowed_mapping_fields.join(', ')}` : '',
             profile?.ai_usage_rules?.length ? `AI rules: ${profile.ai_usage_rules.slice(0, 2).join(' | ')}` : '',
         ].filter(Boolean).join('\n');

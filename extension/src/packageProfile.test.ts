@@ -31,6 +31,7 @@ describe('package profile helpers', () => {
             'comparisonPanelId',
             'commandPrefix',
             'apiUrl',
+            'owaspTop10Version',
             'packagePath',
         ]);
 
@@ -44,6 +45,8 @@ describe('package profile helpers', () => {
 
         expect(devProfile.publisher).toBe(prodProfile.publisher);
         expect(devProfile.secretPrefix).not.toBe(prodProfile.secretPrefix);
+        expect(devProfile.owaspTop10Version).toBe('2025');
+        expect(prodProfile.owaspTop10Version).toBe('2021');
     });
 
     it('rewrites commands, settings, and views for the dev profile', async () => {
@@ -78,6 +81,7 @@ describe('package profile helpers', () => {
 
         expect(source).toContain('configureProviderThrottling');
         expect(source).toContain('"configSection": "owlvexDev"');
+        expect(source).toContain('"owaspTop10Version": "2025"');
         expect(source).toContain('"chatFocus": "owlvexDev.chat.focus"');
         expect(source).toContain('"compareScans": "owlvexDev.compareScans"');
     });
