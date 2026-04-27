@@ -509,6 +509,51 @@ describe('Demo fixture regression coverage', () => {
         expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
     });
 
+    it('classifies CSRF middleware as a guard provider instead of a missing guard sink', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 0,
+                    summary: 'No findings detected.',
+                    findings: [],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\benchmark-app\\src\\middleware\\csrf.js',
+            'javascript',
+            readRepoFixture('benchmark-app', 'src', 'middleware', 'csrf.js'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.engineTelemetry?.sinkInventory.byFamily.csrf).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.sinkInventory.guarded).toBeGreaterThan(0);
+        expect(result.engineTelemetry?.sinkInventory.missingGuard).toBe(0);
+    });
+
     it('drops sensitive logging overcalls when the log payload is redacted metadata', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),
