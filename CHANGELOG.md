@@ -1,12 +1,24 @@
 # Changelog
 
+## 0.1.28
+
+- promote the production backend to the same dev-validated Azure image while preserving production licence enforcement
+- clarify report framework scope so selected frameworks are described as the AI/report lens, not a hard disable switch for deterministic security evidence
+- prevent PII response evidence from rendering with a GraphQL introspection title
+- update public and packaged documentation for framework-selection semantics
+
+## 0.1.27-dev
+
+- switch the development OWASP framework lens to OWASP Top 10 2025 while leaving production on the 2021 baseline
+- add dev prompt/report wording for OWASP 2025 categories and legacy mapping display
+- keep OWASP 2021 canonical mappings available for compatibility while accepting direct 2025 rule-code matches in dev
+
 ## 0.1.26
 
 - add a Changed files scan scope for Git staged, unstaged, and untracked source files
 - keep changed-file scans on the existing multi-file scan, report, and fix-preview workflow
 - classify CSRF middleware/helpers as guard providers instead of missing-guard sinks
 - add regression coverage for Git changed-file collection and CSRF guard implementation telemetry
-- publish the security test benchmark publicly with a path-scoped CodeQL workflow for independent SAST comparison
 
 ## 0.1.25
 

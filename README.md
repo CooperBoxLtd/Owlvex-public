@@ -4,21 +4,7 @@ Prototype VS Code extension for security scanning, AI-assisted review, and fix p
 
 ## Current Version
 
-`0.1.26`
-
-## Download
-
-- Marketplace: https://marketplace.visualstudio.com/items?itemName=owlvex.owlvex
-- VSIX: [owlvex-0.1.26.vsix](releases/owlvex-0.1.26.vsix)
-- SHA256: `0BD88F24C576802ECAAD2A851340C48BFD45313B96ACC8F79340763F7690D0B7`
-
-Install from terminal:
-
-```powershell
-code --install-extension .\releases\owlvex-0.1.26.vsix --force
-```
-
-Support: [SUPPORT.md](SUPPORT.md) or info@cooperbox.co.uk
+`0.1.28`
 
 ## Prototype Status
 
@@ -42,22 +28,6 @@ Owlvex combines:
 - report generation
 - report comparison
 - fix preview and verification flows
-
-## Security Test Benchmark
-
-This repository also publishes `security-test-benchmark/`, a deliberately vulnerable Express application used to evaluate Owlvex against a realistic codebase.
-
-This folder is test material. It contains intentionally unsafe routes and helpers so scanners can be compared against known expectations. It is not product code and must not be deployed.
-
-The benchmark is public so GitHub CodeQL can scan the same source and provide an independent SAST signal.
-
-Benchmark materials:
-
-- [security-test-benchmark/README.md](security-test-benchmark/README.md)
-- [security-test-benchmark/EXPECTATIONS.md](security-test-benchmark/EXPECTATIONS.md)
-- [security-test-benchmark/benchmark.expectations.json](security-test-benchmark/benchmark.expectations.json)
-
-CodeQL runs through `.github/workflows/codeql-benchmark.yml` and is scoped to `security-test-benchmark/`.
 
 Supported provider paths include:
 
@@ -152,7 +122,6 @@ This validates:
 Available commands:
 
 - `Owlvex: Scan Current File`
-- `Owlvex: Scan Changed Files`
 - `Owlvex: Scan Selected Files`
 - `Owlvex: Scan Open Editors`
 - `Owlvex: Scan Workspace`
@@ -222,6 +191,17 @@ From findings or chat:
 - some AI findings may still need manual review
 - deterministic and AI-backed findings do not have the same trust posture
 - report wording and comparison UX are still evolving
+
+### Framework Selection
+
+Framework selection is a scan lens, not a hard security-rule firewall.
+
+- selected frameworks guide AI grounding, report emphasis, remediation variants, and which mappings are expanded in detail
+- deterministic evidence rules still run security-first when code proves a vulnerability pattern
+- a finding may still show canonical references such as CWE, OWASP, MITRE, or NIST even if that framework was not selected
+- those unselected-framework mappings are taxonomy references for the finding, not evidence that every framework lens was used
+
+Use selected frameworks to tune how Owlvex explains and maps findings. Do not assume deselecting a framework disables core local security evidence.
 
 ### Reading Confidence
 
