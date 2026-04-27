@@ -991,6 +991,35 @@ function shouldAllowSmallStructuralRewrite(options: {
         && isStructuralSecurityFix(options.finding);
 }
 
+function isMiddlewareOnlySecurityFix(originalText: string, patchedText: string, finding: Finding): boolean {
+    const searchable = [
+        finding.title,
+        finding.canonicalTitle,
+        finding.ruleCode,
+        finding.canonicalId,
+        finding.fix,
+        finding.explanation,
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    if (!/\b(?:csrf|auth|authorization|authentication)\b/.test(searchable)) {
+        return false;
+    }
+
+    const originalRoutes = [...originalText.matchAll(/\brouter\.(?:post|put|patch|delete|get)\s*\(\s*['"`]([^'"`]+)['"`]/g)].map(match => match[1]).sort();
+    const patchedRoutes = [...patchedText.matchAll(/\brouter\.(?:post|put|patch|delete|get)\s*\(\s*['"`]([^'"`]+)['"`]/g)].map(match => match[1]).sort();
+    if (originalRoutes.join('\n') !== patchedRoutes.join('\n')) {
+        return false;
+    }
+
+    const originalRepoMembers = [...extractRepositoryMembers(originalText)].sort().join('\n');
+    const patchedRepoMembers = [...extractRepositoryMembers(patchedText)].sort().join('\n');
+    if (originalRepoMembers !== patchedRepoMembers) {
+        return false;
+    }
+
+    return /\brequireCsrf\b|\bcsrf(?:Token)?\b|\bcan[A-Z][A-Za-z0-9_$]*\s*\(|\bALLOWED_ROLES\b|\bcanAssignRole\b/.test(patchedText);
+}
+
 function extractRepositoryMembers(text: string): Set<string> {
     const members = new Set<string>();
     const pattern = /\brepositories\.([A-Za-z_$][A-Za-z0-9_$]*)\./g;
@@ -1034,7 +1063,9 @@ function validateFixPreviewContent(options: {
         originalLineCount,
         patchedLineCount,
     });
+    const allowMiddlewareOnlySecurityRewrite = isMiddlewareOnlySecurityFix(options.originalText, options.patchedText, options.finding);
     if (!allowSmallStructuralRewrite
+        && !allowMiddlewareOnlySecurityRewrite
         && totalLines >= MAX_REWRITE_LINE_THRESHOLD
         && (changedLines / totalLines) > MAX_SINGLE_FILE_REWRITE_RATIO) {
         return `Owlvex rejected the preview for ${vscode.workspace.asRelativePath(vscode.Uri.file(options.targetPath), false)} because it rewrote too much of the file for a finding-anchored fix. Ask "fix code" to regenerate a smaller patch.`;

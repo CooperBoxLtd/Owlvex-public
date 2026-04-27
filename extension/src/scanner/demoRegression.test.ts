@@ -674,8 +674,7 @@ describe('Demo fixture regression coverage', () => {
         expect(result.findings).toHaveLength(0);
         expect(result.summary).toBe('No findings detected.');
         expect(result.engineTelemetry?.sinkInventory.byFamily['object-authorization']).toBeGreaterThan(0);
-        expect(result.engineTelemetry?.safeProbes.run).toBe(1);
-        expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+        expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
     });
 
     it('drops privileged action overcalls when an admin guard protects the route', async () => {
@@ -985,6 +984,214 @@ describe('Demo fixture regression coverage', () => {
         expect(result.engineTelemetry?.sinkInventory.byFamily['pii-overexposure']).toBeGreaterThan(0);
         expect(result.engineTelemetry?.safeProbes.run).toBe(1);
         expect(result.engineTelemetry?.safeProbes.dropped).toBe(1);
+    });
+
+    it('drops GraphQL introspection claims when the file has no GraphQL runtime surface', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 5,
+                    summary: 'Possible GraphQL introspection issue.',
+                    findings: [{
+                        id: 'graphql-overcall',
+                        line: 8,
+                        severity: 'MEDIUM',
+                        framework: 'OWASP',
+                        rule_code: 'A05',
+                        title: 'GraphQL introspection enabled in production',
+                        explanation: 'The endpoint may expose schema details.',
+                        threat: 'Attackers may enumerate types.',
+                        fix: 'Disable introspection in production.',
+                        confidence: 0.8,
+                        issue_id: 'owlvex.issue.graphql_introspection_production.001',
+                        likelihood: 'MEDIUM',
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\benchmark-app\\src\\routes\\profile.js',
+            'javascript',
+            [
+                "const express = require('express');",
+                "const { requireUser } = require('../middleware/auth');",
+                "const { requireCsrf } = require('../middleware/csrf');",
+                'function createProfileRouter(repositories) {',
+                '  const router = express.Router();',
+                "  router.post('/email-safe', requireUser, requireCsrf, async (req, res) => {",
+                '    const updated = repositories.users.updateEmail(req.user.id, req.body.email);',
+                '    res.json({ user: updated });',
+                '  });',
+                '  return router;',
+                '}',
+            ].join('\n'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
+    });
+
+    it('drops field-allowlisting overcalls when a scoped response has no sensitive field signal', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 5,
+                    summary: 'Possible response overexposure.',
+                    findings: [{
+                        id: 'document-field-overcall',
+                        line: 9,
+                        severity: 'MEDIUM',
+                        framework: 'OWASP',
+                        rule_code: 'DP-002',
+                        title: 'Full document object returned without response field allowlisting',
+                        explanation: 'The route returns the whole document object.',
+                        threat: 'Sensitive fields may be exposed.',
+                        fix: 'Return an explicit DTO.',
+                        confidence: 0.82,
+                        issue_id: 'owlvex.issue.pii_overexposure.001',
+                        likelihood: 'MEDIUM',
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\benchmark-app\\src\\routes\\documents.js',
+            'javascript',
+            [
+                "const express = require('express');",
+                "const { requireUser } = require('../middleware/auth');",
+                "const { canReadDocument } = require('../policies/accessPolicy');",
+                'function createDocumentRouter(repositories) {',
+                '  const router = express.Router();',
+                "  router.get('/:documentId/safe', requireUser, async (req, res) => {",
+                '    const document = repositories.documents.findForTenant(req.params.documentId, req.user.tenantId);',
+                '    if (!canReadDocument(req.user, document)) return res.status(404).json({ error: "not_found" });',
+                '    res.json(document);',
+                '  });',
+                '  return router;',
+                '}',
+            ].join('\n'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalledTimes(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
+    });
+
+    it('keeps missing-audit claims as manual review so they do not displace primary fixes', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValueOnce({
+                content: JSON.stringify({
+                    score: 5,
+                    summary: 'Possible audit gap.',
+                    findings: [{
+                        id: 'audit-secondary',
+                        line: 6,
+                        severity: 'MEDIUM',
+                        framework: 'OWASP',
+                        rule_code: 'LOG-001',
+                        title: 'Missing audit trail for privileged role change',
+                        explanation: 'The route updates a role without an audit call.',
+                        threat: 'Privileged changes may lack traceability.',
+                        fix: 'Record actor, action, target, and outcome.',
+                        confidence: 0.8,
+                        issue_id: 'owlvex.issue.audit_gap.001',
+                        likelihood: 'MEDIUM',
+                    }],
+                    positives: [],
+                    metrics: { critical: 0, high: 0, medium: 1, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, { getActive: jest.fn(() => provider) } as any);
+        const doc = buildDocument(
+            'd:\\repo\\tools\\benchmark-app\\src\\routes\\roles.js',
+            'javascript',
+            [
+                "const express = require('express');",
+                'function createRoleRouter(repositories) {',
+                '  const router = express.Router();',
+                "  router.post('/:userId/role-unsafe', async (req, res) => {",
+                '    const updated = repositories.users.updateRole(req.params.userId, req.body.role);',
+                '    res.json({ user: updated });',
+                '  });',
+                '  return router;',
+                '}',
+            ].join('\n'),
+        );
+
+        const result = await engine.scanDocument(doc);
+
+        expect(provider.complete).toHaveBeenCalled();
+        expect(result.engineTelemetry?.safeProbes.manualReview).toBe(1);
+        expect(result.findings).toHaveLength(0);
+        expect(result.engineTelemetry?.aiFindings.finalSurvivors).toBe(0);
+        expect(result.engineTelemetry?.actionGating?.fixPreviewEligible).toBe(0);
     });
 
     it('drops verifier-supported CORS overcalls when the sink probe sees an origin allowlist', async () => {

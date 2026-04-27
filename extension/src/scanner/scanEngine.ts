@@ -1205,6 +1205,36 @@ function hasSafePiiProjection(snippet: string): boolean {
         && !/\b(?:password|passwordHash|ssn|dob|dateOfBirth|token|secret|apiKey)\s*:/i.test(snippet);
 }
 
+function hasGraphQlRuntimeSurface(code: string): boolean {
+    return /\b(?:graphql|graphQL|GraphQL|apollo|ApolloServer|express-graphql|graphqlHTTP|buildSchema|makeExecutableSchema|introspection|graphiql)\b/.test(code);
+}
+
+function isGraphQlIntrospectionFinding(finding: Finding, normalizedText: string): boolean {
+    return finding.canonicalId === 'owlvex.issue.graphql_introspection_production.001'
+        || /\bgraphql\b/i.test(normalizedText)
+        || /\bintrospection\b/i.test(normalizedText);
+}
+
+function hasSensitiveResponseFieldSignal(code: string): boolean {
+    return /\b(?:password|passwordHash|passwd|pwd|ssn|dob|dateOfBirth|birthDate|token|secret|apiKey|api_key|authorization|cookie|session|credential|creditCard|cardNumber|cvv)\b/i.test(code);
+}
+
+function hasScopedResponseAuthorization(code: string): boolean {
+    return /\b(?:findForTenant|findForOwner|findForUser|findScoped|findAuthorized)\s*\(/i.test(code)
+        || /\b(?:canRead|canAccess|authorize|isAuthorized|policy\.enforce)\w*\s*\(/i.test(code);
+}
+
+function isUnsubstantiatedPiiProjectionFinding(code: string, finding: Finding, normalizedText: string): boolean {
+    const isPiiFinding = finding.canonicalId === 'owlvex.issue.pii_overexposure.001'
+        || /\b(?:pii|personal data|sensitive fields?|field allowlist|field allowlisting|over-expos|overexpos|full .* object)\b/i.test(normalizedText);
+
+    if (!isPiiFinding) {
+        return false;
+    }
+
+    return hasScopedResponseAuthorization(code) && !hasSensitiveResponseFieldSignal(code);
+}
+
 function hasAllowlistedOutboundRequest(snippet: string): boolean {
     const hasGuard = /\b(?:isAllowedOutboundUrl|isSafeOutboundUrl|allowlistedOutboundUrl|validateOutboundUrl)\s*\(/i.test(snippet)
         || /\b(?:allowedHosts|trustedHosts|TRUSTED_HOSTS|allowlistedHosts)\s*(?:\.has|\.contains|\.Contains)\s*\(/.test(snippet);
@@ -1498,6 +1528,14 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
 
     if (finding.canonicalId === 'owlvex.issue.debug_mode_production.001') {
         return !hasDebugActivation(code);
+    }
+
+    if (isGraphQlIntrospectionFinding(finding, normalizedText) && !hasGraphQlRuntimeSurface(code)) {
+        return true;
+    }
+
+    if (isUnsubstantiatedPiiProjectionFinding(code, finding, normalizedText)) {
+        return true;
     }
 
     if (isObjectAuthorizationFinding(finding, normalizedText) && !hasObjectAuthorizationModelEvidence(code)) {
