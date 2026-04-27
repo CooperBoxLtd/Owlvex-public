@@ -33,6 +33,10 @@ function gitShow(relativePath) {
   return gitOutput(['show', `HEAD:${appRepoPath}/${relativePath}`], repoRoot);
 }
 
+function normalizeEol(value) {
+  return value.replace(/\r\n/g, '\n');
+}
+
 function walkReports(directory, found = []) {
   if (!existsSync(directory)) {
     return found;
@@ -54,7 +58,7 @@ for (const relativePath of baselineFiles) {
   const target = path.join(appRoot, relativePath);
   const baseline = gitShow(relativePath);
   const current = existsSync(target) ? readFileSync(target, 'utf8') : '';
-  if (current !== baseline) {
+  if (normalizeEol(current) !== normalizeEol(baseline)) {
     changed.push(relativePath);
     if (apply) {
       writeFileSync(target, baseline, 'utf8');
