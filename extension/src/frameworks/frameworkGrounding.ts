@@ -30,12 +30,17 @@ interface FrameworkPack {
 }
 
 let cachedFrameworkPack: FrameworkPack | undefined;
+let runtimeFrameworkPack: FrameworkPack | undefined;
 
 function normalizeFrameworkCode(value: string | undefined): string {
     return String(value ?? '').replace(/[^a-z0-9]/gi, '').toUpperCase();
 }
 
 function loadFrameworkPack(): FrameworkPack {
+    if (runtimeFrameworkPack) {
+        return runtimeFrameworkPack;
+    }
+
     if (cachedFrameworkPack) {
         return cachedFrameworkPack;
     }
@@ -46,6 +51,10 @@ function loadFrameworkPack(): FrameworkPack {
     );
     cachedFrameworkPack = JSON.parse(raw) as FrameworkPack;
     return cachedFrameworkPack;
+}
+
+export function configureFrameworkPackRuntime(artifact?: Record<string, unknown>): void {
+    runtimeFrameworkPack = artifact as FrameworkPack | undefined;
 }
 
 export function getGroundedFrameworkLabels(selectedFrameworks: string[]): string[] {
@@ -175,11 +184,11 @@ export function buildGroundedFrameworkPromptContext(selectedFrameworks: string[]
             : '';
 
         return [
-            `${code}: ${(framework?.name ?? profile?.title ?? code)}${owaspDetails?.version ? ` (${owaspDetails.version})` : framework?.version ? ` (${framework.version})` : ''}`,
-            owaspDetails?.description ? `Description: ${owaspDetails.description}` : framework?.description ? `Description: ${framework.description}` : '',
+            `${code}: ${(framework?.name ?? profile?.title ?? code)}${framework?.version ? ` (${framework.version})` : owaspDetails?.version ? ` (${owaspDetails.version})` : ''}`,
+            framework?.description ? `Description: ${framework.description}` : owaspDetails?.description ? `Description: ${owaspDetails.description}` : '',
             profile?.purpose ? `Purpose: ${profile.purpose}` : '',
-            owaspDetails?.promptGuidance.length ? `Prompt guidance: ${owaspDetails.promptGuidance.join(' | ')}` : profile?.prompt_guidance?.length ? `Prompt guidance: ${profile.prompt_guidance.slice(0, 3).join(' | ')}` : '',
-            owaspDetails?.reportFocus.length ? `Report focus: ${owaspDetails.reportFocus.join(' | ')}` : profile?.report_focus?.length ? `Report focus: ${profile.report_focus.slice(0, 3).join(' | ')}` : '',
+            profile?.prompt_guidance?.length ? `Prompt guidance: ${profile.prompt_guidance.slice(0, 3).join(' | ')}` : owaspDetails?.promptGuidance.length ? `Prompt guidance: ${owaspDetails.promptGuidance.join(' | ')}` : '',
+            profile?.report_focus?.length ? `Report focus: ${profile.report_focus.slice(0, 3).join(' | ')}` : owaspDetails?.reportFocus.length ? `Report focus: ${owaspDetails.reportFocus.join(' | ')}` : '',
             owaspCategories,
             profile?.allowed_mapping_fields?.length ? `Allowed mapping fields: ${profile.allowed_mapping_fields.join(', ')}` : '',
             profile?.ai_usage_rules?.length ? `AI rules: ${profile.ai_usage_rules.slice(0, 2).join(' | ')}` : '',

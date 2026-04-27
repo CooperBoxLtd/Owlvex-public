@@ -31,6 +31,11 @@ PACK_DEFINITIONS = {
         "relative_path": Path("remediation/owlvex-remediation-pack.v1.json"),
         "frameworks": [],
     },
+    "owlvex.framework-pack.2026.1": {
+        "pack_type": "framework-pack",
+        "relative_path": Path("frameworks/owlvex.framework-pack.2026.1.json"),
+        "frameworks": [],
+    },
     "owlvex.policy-pack.v1": {
         "pack_type": "policy-pack",
         "relative_path": Path("policies/owlvex-policy-pack.v1.json"),
