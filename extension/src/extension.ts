@@ -1568,9 +1568,18 @@ export function activate(context: vscode.ExtensionContext) {
         const fetchIfListed = async (packId: string): Promise<{ artifact?: PackArtifactResponse; source: 'fresh' | 'cached' | 'missing' }> => {
             const entry = manifestById.get(packId);
             if (!entry) {
+                const cached = rulePackClient.getCachedPack(packId, entitlement);
                 return {
-                    artifact: rulePackClient.getCachedPack(packId, entitlement),
-                    source: rulePackClient.getCachedPack(packId, entitlement) ? 'cached' : 'missing',
+                    artifact: cached,
+                    source: cached ? 'cached' : 'missing',
+                };
+            }
+
+            const cachedForCurrentManifest = rulePackClient.getCachedPackForManifest(entry, entitlement);
+            if (cachedForCurrentManifest) {
+                return {
+                    artifact: cachedForCurrentManifest,
+                    source: 'cached',
                 };
             }
 

@@ -229,6 +229,8 @@ Recommended client behavior:
 - persist only last-known-good pack artifacts and metadata needed for offline use
 - avoid persisting unnecessary derived data
 - bind cached packs to the entitlement scope they were fetched under and reject them when current entitlement no longer matches
+- after a fresh manifest is fetched, reuse the cached artifact when pack id, type, version, hash, download path, expiry, and entitlement still match the signed manifest entry
+- download a pack artifact only when the signed manifest advertises a new or changed artifact, or when no valid matching cached artifact exists
 - when online, refresh stale cached manifest metadata before treating it as current control-plane state
 - when offline, stale manifest metadata may inform degraded-mode messaging, but should not be presented as fresh state
 
@@ -330,6 +332,8 @@ By ensuring:
 - high-value grounded intelligence stays centralized and updateable
 - the client receives only versioned artifacts required for product behavior
 - integrity and entitlement control remain backend-governed
+- the VSIX carries only baseline fallback knowledge and runtime code; evolving proprietary curation should ship through signed packs first
+- richer issue, mapping, remediation, framework-profile, confidence-calibration, and suppression data can be changed or withdrawn without republishing the extension
 
 Important clarification:
 
@@ -338,6 +342,9 @@ This model protects Owlvex better than shipping everything statically, but it do
 Our moat is:
 
 - authoritative backend-served intelligence
+- rapid server-side curation and entitlement control
+- pack expiry, rotation, and replacement
+- local execution that preserves the customer code boundary
 - version control over what becomes active
 - licence-gated updates
 - data quality, pack quality, and product integration discipline

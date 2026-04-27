@@ -245,6 +245,24 @@ export class RulePackClient {
         return cached;
     }
 
+    getCachedPackForManifest(manifest: PackManifestEntry, entitlement?: PackEntitlement): PackArtifactResponse | undefined {
+        const cached = this.getCachedPack(manifest.pack_id, entitlement);
+        if (!cached) {
+            return undefined;
+        }
+
+        if (
+            cached.pack_version !== manifest.pack_version
+            || cached.pack_type !== manifest.pack_type
+            || cached.sha256 !== manifest.sha256
+            || cached.download_path !== manifest.download_path
+        ) {
+            return undefined;
+        }
+
+        return cached;
+    }
+
     async purgeCachedRulePacks(): Promise<void> {
         await this.storage.update(MANIFEST_CACHE_KEY, undefined);
 

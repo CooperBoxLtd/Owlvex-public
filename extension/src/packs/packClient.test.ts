@@ -165,6 +165,56 @@ MC4CAQAwBQYDK2VwBCIEILsMdDJI53FIJrYGKqbkgwYbqqfgRhdbuw8ulJquXsTQ
         expect(client.getCachedPack('owlvex.issue-pack.v1')?.artifact).toEqual(artifactPayload);
     });
 
+    it('reuses a cached artifact when it still matches the signed manifest entry', async () => {
+        const storage = createStorage();
+        const client = new RulePackClient(storage);
+        const artifactPayload = {
+            schema_version: 'owlvex.issue-pack.v1',
+            pack_id: 'owlvex.core-security.2026.1',
+        };
+        const artifactHash = crypto.createHash('sha256').update(stableStringify(artifactPayload)).digest('hex');
+        const manifest = {
+            schema_version: 'owlvex.rulepack.manifest.v1',
+            pack_id: 'owlvex.issue-pack.v1',
+            pack_type: 'issue-pack',
+            pack_version: 1,
+            issued_at: '2026-04-14T00:00:00Z',
+            expires_at: '2026-05-14T00:00:00Z',
+            sha256: artifactHash,
+            size_bytes: 10,
+            frameworks: [],
+            licence_scope: licenceScope,
+            download_path: '/v1/packs/owlvex.issue-pack.v1',
+            signature_algorithm: 'ed25519',
+            key_id: 'owlvex-dev-ed25519-2026-04',
+            signature: signManifest({
+                schema_version: 'owlvex.rulepack.manifest.v1',
+                pack_id: 'owlvex.issue-pack.v1',
+                pack_type: 'issue-pack',
+                pack_version: 1,
+                issued_at: '2026-04-14T00:00:00Z',
+                expires_at: '2026-05-14T00:00:00Z',
+                sha256: artifactHash,
+                size_bytes: 10,
+                frameworks: [],
+                licence_scope: licenceScope,
+                download_path: '/v1/packs/owlvex.issue-pack.v1',
+                signature_algorithm: 'ed25519',
+                key_id: 'owlvex-dev-ed25519-2026-04',
+            }),
+        };
+
+        await storage.update('owlvex.rulepacks.pack.owlvex.issue-pack.v1', {
+            ...manifest,
+            artifact: artifactPayload,
+            fetched_at: '2026-04-14T00:00:00Z',
+        });
+
+        expect(client.getCachedPackForManifest(manifest, licenceScope)?.artifact).toEqual(artifactPayload);
+        expect(client.getCachedPackForManifest({ ...manifest, pack_version: 2 }, licenceScope)).toBeUndefined();
+        expect(client.getCachedPackForManifest({ ...manifest, sha256: 'changed' }, licenceScope)).toBeUndefined();
+    });
+
     it('rejects a pack when the integrity hash does not match', async () => {
         const storage = createStorage();
         const client = new RulePackClient(storage);

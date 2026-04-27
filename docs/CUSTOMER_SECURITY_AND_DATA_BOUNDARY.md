@@ -85,6 +85,8 @@ It can receive:
 - report comparison metadata
 - pack manifest and pack artifact requests
 
+Pack requests are metadata/control-plane requests. They are used to download signed Owlvex knowledge packs such as issue definitions, mappings, remediation guidance, and framework profiles. They do not require customer source code, code snippets, ASTs, or assembled source-bearing prompts.
+
 ## What is not supposed to reach Owlvex backend
 
 The intended boundary is that the following do not reach Owlvex backend during normal scan workflows:
@@ -92,6 +94,28 @@ The intended boundary is that the following do not reach Owlvex backend during n
 - raw source code for scanning
 - local project-context contract text as normal backend prompt input
 - full assembled prompt snapshots for routine scan recording
+- source-derived ASTs or snippets for pack selection
+
+## Signed Pack Boundary
+
+Owlvex can update curated security intelligence through signed packs.
+
+The backend sends:
+
+- signed pack manifest metadata
+- hash-bound pack artifacts
+- entitlement and expiry information
+
+The extension verifies:
+
+- Ed25519 manifest signatures
+- artifact SHA256 hashes
+- pack expiry
+- licence plan and framework entitlement
+
+The extension caches valid packs locally and reuses them until the signed manifest advertises a changed artifact or the cached artifact expires or no longer matches entitlement.
+
+This protects customer code by keeping scan execution local, and protects Owlvex IP better than shipping all curated knowledge statically in the VSIX. It is not absolute secrecy: once a pack is delivered to a client machine, it can be inspected. The product control comes from entitlement, expiry, update cadence, and signed replacement.
 
 ## Trial and demo users
 
