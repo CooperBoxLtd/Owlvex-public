@@ -4,18 +4,18 @@ Prototype VS Code extension for security scanning, AI-assisted review, and fix p
 
 ## Current Version
 
-`0.1.25`
+`0.1.26`
 
 ## Download
 
 - Marketplace: https://marketplace.visualstudio.com/items?itemName=owlvex.owlvex
-- VSIX: [owlvex-0.1.25.vsix](releases/owlvex-0.1.25.vsix)
-- SHA256: `E5739FF9425BDD0E92209943AAF410639028F928AAECE6F92951B7AA1F5791A7`
+- VSIX: [owlvex-0.1.26.vsix](releases/owlvex-0.1.26.vsix)
+- SHA256: `0BD88F24C576802ECAAD2A851340C48BFD45313B96ACC8F79340763F7690D0B7`
 
 Install from terminal:
 
 ```powershell
-code --install-extension .\releases\owlvex-0.1.25.vsix --force
+code --install-extension .\releases\owlvex-0.1.26.vsix --force
 ```
 
 Support: [SUPPORT.md](SUPPORT.md) or info@cooperbox.co.uk
@@ -136,6 +136,7 @@ This validates:
 Available commands:
 
 - `Owlvex: Scan Current File`
+- `Owlvex: Scan Changed Files`
 - `Owlvex: Scan Selected Files`
 - `Owlvex: Scan Open Editors`
 - `Owlvex: Scan Workspace`
