@@ -942,7 +942,12 @@ export function extractPatchedFileContent(raw: string, originalText: string): st
     return trimmed || originalText;
 }
 
-function countChangedLines(originalText: string, patchedText: string): { changedLines: number; totalLines: number } {
+function countChangedLines(originalText: string, patchedText: string): {
+    changedLines: number;
+    originalLineCount: number;
+    patchedLineCount: number;
+    totalLines: number;
+} {
     const originalLines = originalText.split(/\r?\n/);
     const patchedLines = patchedText.split(/\r?\n/);
     const totalLines = Math.max(originalLines.length, patchedLines.length, 1);
@@ -954,7 +959,53 @@ function countChangedLines(originalText: string, patchedText: string): { changed
         }
     }
 
-    return { changedLines, totalLines };
+    return {
+        changedLines,
+        originalLineCount: originalLines.length,
+        patchedLineCount: patchedLines.length,
+        totalLines,
+    };
+}
+
+function isStructuralSecurityFix(finding: Finding): boolean {
+    const searchable = [
+        finding.title,
+        finding.canonicalTitle,
+        finding.ruleCode,
+        finding.canonicalId,
+        (finding as any).issueFamily,
+        finding.fix,
+        finding.explanation,
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    return /\b(jwt|token|signature|issuer|audience|algorithm|auth|authorization|authentication|ssrf|redirect|crypto|csrf)\b/.test(searchable);
+}
+
+function shouldAllowSmallStructuralRewrite(options: {
+    finding: Finding;
+    originalLineCount: number;
+    patchedLineCount: number;
+}): boolean {
+    return options.originalLineCount < MAX_REWRITE_LINE_THRESHOLD
+        && options.patchedLineCount <= 120
+        && isStructuralSecurityFix(options.finding);
+}
+
+function extractRepositoryMembers(text: string): Set<string> {
+    const members = new Set<string>();
+    const pattern = /\brepositories\.([A-Za-z_$][A-Za-z0-9_$]*)\./g;
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(text)) !== null) {
+        members.add(match[1]);
+    }
+    return members;
+}
+
+function findInventedRepositoryMembers(originalText: string, patchedText: string): string[] {
+    const originalMembers = extractRepositoryMembers(originalText);
+    return [...extractRepositoryMembers(patchedText)]
+        .filter(member => !originalMembers.has(member))
+        .sort();
 }
 
 function looksLikeMalformedFixResponse(raw: string): boolean {
@@ -977,9 +1028,21 @@ function validateFixPreviewContent(options: {
         return 'Owlvex could not produce a meaningful code diff. Ask "fix code" to regenerate the preview.';
     }
 
-    const { changedLines, totalLines } = countChangedLines(options.originalText, options.patchedText);
-    if (totalLines >= MAX_REWRITE_LINE_THRESHOLD && (changedLines / totalLines) > MAX_SINGLE_FILE_REWRITE_RATIO) {
+    const { changedLines, originalLineCount, patchedLineCount, totalLines } = countChangedLines(options.originalText, options.patchedText);
+    const allowSmallStructuralRewrite = shouldAllowSmallStructuralRewrite({
+        finding: options.finding,
+        originalLineCount,
+        patchedLineCount,
+    });
+    if (!allowSmallStructuralRewrite
+        && totalLines >= MAX_REWRITE_LINE_THRESHOLD
+        && (changedLines / totalLines) > MAX_SINGLE_FILE_REWRITE_RATIO) {
         return `Owlvex rejected the preview for ${vscode.workspace.asRelativePath(vscode.Uri.file(options.targetPath), false)} because it rewrote too much of the file for a finding-anchored fix. Ask "fix code" to regenerate a smaller patch.`;
+    }
+
+    const inventedRepositoryMembers = findInventedRepositoryMembers(options.originalText, options.patchedText);
+    if (inventedRepositoryMembers.length) {
+        return `Owlvex rejected the preview for ${vscode.workspace.asRelativePath(vscode.Uri.file(options.targetPath), false)} because it introduced repository APIs that do not exist in the original file: ${inventedRepositoryMembers.map(member => `repositories.${member}`).join(', ')}. Regenerate the fix without inventing new business models.`;
     }
 
     return undefined;

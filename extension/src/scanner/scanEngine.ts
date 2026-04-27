@@ -1359,6 +1359,21 @@ function hasStateChangingBrowserAction(snippet: string): boolean {
         || /\b(?:req|request)\.session\.[A-Za-z0-9_$]+\s*=/i.test(snippet);
 }
 
+function isObjectAuthorizationFinding(finding: Finding, normalizedText: string): boolean {
+    return finding.canonicalId === 'owlvex.issue.idor.001'
+        || finding.canonicalId === 'owlvex.issue.tenant_isolation_missing.001'
+        || finding.evidenceContract?.issueType === 'object-authorization'
+        || /\b(?:idor|object-level|object level|tenant isolation|tenant scope|ownership|customer record|customer ownership)\b/i.test(normalizedText);
+}
+
+function hasObjectAuthorizationModelEvidence(code: string): boolean {
+    return /\b(?:tenantId|tenant_id|ownerId|owner_id|accountId|account_id|organizationId|organization_id|orgId|org_id)\b/.test(code)
+        || /\b(?:findForTenant|findForOwner|findForUser|findScoped|findAuthorized)\s*\(/i.test(code)
+        || /\b(?:canRead|canAccess|canAssign|canApprove|authorize|isAuthorized|policy\.enforce)\w*\s*\(/i.test(code)
+        || /\b(?:ALLOWED_ROLES|accessPolicy|workflowPolicy)\b/.test(code)
+        || /\brepositories\.customers\.(?:findById|findForTenant|findForOwner|getById)\s*\(/i.test(code);
+}
+
 function lineNumberForIndex(code: string, index: number): number {
     return code.slice(0, Math.max(0, index)).split(/\r?\n/).length;
 }
@@ -1483,6 +1498,10 @@ function shouldSuppressAiFinding(code: string, finding: Finding): boolean {
 
     if (finding.canonicalId === 'owlvex.issue.debug_mode_production.001') {
         return !hasDebugActivation(code);
+    }
+
+    if (isObjectAuthorizationFinding(finding, normalizedText) && !hasObjectAuthorizationModelEvidence(code)) {
+        return true;
     }
 
     if ((finding.canonicalId === 'owlvex.issue.idor.001'
@@ -2235,7 +2254,11 @@ export class ScanEngine {
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const provider = this.registry.getActive();
-        const projectContext = await loadProjectContextInfo();
+        const projectContext = await loadProjectContextInfo({
+            targetUris: documents
+                .map(document => document.uri)
+                .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
+        });
 
         const contexts: BatchDocumentContext[] = await Promise.all(documents.map(async (document, index) => {
             const code = document.getText();
@@ -2587,7 +2610,9 @@ export class ScanEngine {
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const language = this._detectLanguage(document);
         const provider = this.registry.getActive();
-        const projectContext = await loadProjectContextInfo();
+        const projectContext = await loadProjectContextInfo({
+            targetUris: document.uri?.fsPath ? [document.uri] : undefined,
+        });
 
         const code = document.getText();
         const baseDeterministicFindings = this.deterministicScanner

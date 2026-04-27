@@ -17,6 +17,10 @@ export interface ProjectRootInfo {
     isConfigured: boolean;
 }
 
+export interface ProjectContextOptions {
+    targetUris?: vscode.Uri[];
+}
+
 function getConfiguredProjectRootPath(): string {
     return vscode.workspace.getConfiguration(PROFILE.configSection).get<string>(PROJECT_ROOT_SETTING, '').trim();
 }
@@ -43,6 +47,24 @@ async function tryResolveProjectRootUri(rootPath: string): Promise<vscode.Uri | 
     }
 
     return undefined;
+}
+
+function normalizePathForCompare(value: string): string {
+    return path.resolve(value).toLowerCase();
+}
+
+function isPathInsideRoot(filePath: string, rootPath: string): boolean {
+    const resolvedFile = normalizePathForCompare(filePath);
+    const resolvedRoot = normalizePathForCompare(rootPath);
+    return resolvedFile === resolvedRoot || resolvedFile.startsWith(`${resolvedRoot}${path.sep}`);
+}
+
+function targetUrisAreInsideRoot(targetUris: vscode.Uri[] | undefined, rootUri: vscode.Uri): boolean {
+    if (!targetUris?.length) {
+        return true;
+    }
+
+    return targetUris.every(uri => isPathInsideRoot(uri.fsPath, rootUri.fsPath));
 }
 
 export function isProjectRootConfigured(): boolean {
@@ -185,26 +207,32 @@ async function tryReadProjectContextFile(fileSetting: string): Promise<{ label: 
     }
 }
 
-export async function loadProjectContextInfo(): Promise<ProjectContextInfo> {
+export async function loadProjectContextInfo(options?: ProjectContextOptions): Promise<ProjectContextInfo> {
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     const legacyTeamContext = trimProjectContext(config.get<string>('teamContext', ''));
     const inlineProjectContext = trimProjectContext(config.get<string>('projectContext', ''));
     const projectContextFile = config.get<string>('projectContextFile', '');
     const fileContext = await tryReadProjectContextFile(projectContextFile);
     const projectRoot = await resolveProjectRootInfo();
+    const rootAppliesToTargets = !projectRoot.uri || targetUrisAreInsideRoot(options?.targetUris, projectRoot.uri);
+    const rootLabel = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.label : '';
+    const rootSummary = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.summary : '';
+    const contextSuppressed = projectRoot.isConfigured && !rootAppliesToTargets;
 
     const sections = [
-        projectRoot.summary !== 'not set' ? `Selected project root:\n${projectRoot.label}` : '',
-        legacyTeamContext ? `Legacy team/project context:\n${legacyTeamContext}` : '',
-        inlineProjectContext ? `Project context contract:\n${inlineProjectContext}` : '',
-        fileContext ? `Project context file (${fileContext.label}):\n${fileContext.content}` : '',
+        rootLabel ? `Selected project root:\n${rootLabel}` : '',
+        rootAppliesToTargets && legacyTeamContext ? `Legacy team/project context:\n${legacyTeamContext}` : '',
+        rootAppliesToTargets && inlineProjectContext ? `Project context contract:\n${inlineProjectContext}` : '',
+        rootAppliesToTargets && fileContext ? `Project context file (${fileContext.label}):\n${fileContext.content}` : '',
+        contextSuppressed ? `Project context skipped:\nThe scan target is outside the configured project root (${projectRoot.label}).` : '',
     ].filter(Boolean);
 
     const summaryParts = [
-        projectRoot.summary !== 'not set' ? `project root ${projectRoot.summary}` : '',
-        legacyTeamContext ? 'legacy inline context' : '',
-        inlineProjectContext ? 'inline project contract' : '',
-        fileContext ? `file ${fileContext.label}` : '',
+        rootSummary ? `project root ${rootSummary}` : '',
+        rootAppliesToTargets && legacyTeamContext ? 'legacy inline context' : '',
+        rootAppliesToTargets && inlineProjectContext ? 'inline project contract' : '',
+        rootAppliesToTargets && fileContext ? `file ${fileContext.label}` : '',
+        contextSuppressed ? 'configured project root skipped for out-of-root target' : '',
     ].filter(Boolean);
 
     return {

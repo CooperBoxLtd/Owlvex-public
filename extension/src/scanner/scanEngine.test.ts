@@ -3041,6 +3041,87 @@ class Demo {
         expect(result.findings[0].evidenceContract?.sink?.expression).toBe('repositories.imports.addCustomerNote(note)');
     });
 
+    it('drops customer ownership AI findings when no ownership model exists in the file', async () => {
+        const licenceMgr = {
+            getKey: jest.fn().mockResolvedValue('licence-key'),
+            validate: jest.fn().mockResolvedValue({
+                valid: true,
+                features: { frameworks: ['OWASP'] },
+            }),
+        } as any;
+        const provider = {
+            id: 'openai',
+            selectedModel: 'gpt-4o',
+            complete: jest.fn().mockResolvedValue({
+                content: JSON.stringify({
+                    score: 8,
+                    summary: 'Possible customer authorization issue.',
+                    findings: [
+                        {
+                            id: 'ai-customer-auth',
+                            line: 11,
+                            line_end: 11,
+                            severity: 'HIGH',
+                            framework: 'OWASP',
+                            rule_code: 'A01-IDOR',
+                            title: 'Possible missing authorization check before adding a note to a customer record',
+                            explanation: 'The handler accepts customerId from the client and writes a note without checking ownership.',
+                            threat: 'A user may write notes against another customer.',
+                            fix: 'Verify customer ownership before adding the note.',
+                            confidence: 0.91,
+                            issue_id: 'owlvex.issue.idor.001',
+                            evidence_contract: {
+                                source: { line: 7, expression: 'req.body.payload' },
+                                sink: { line: 11, expression: 'repositories.imports.addCustomerNote(note)' },
+                                guard: { status: 'missing', explanation: 'No customer ownership check is visible.' },
+                            },
+                        },
+                    ],
+                    positives: [],
+                    metrics: { critical: 0, high: 1, medium: 0, low: 0 },
+                }),
+                tokenCount: 42,
+            }),
+        };
+        const registry = {
+            getActive: jest.fn(() => provider),
+        } as any;
+
+        (global.fetch as jest.Mock) = jest.fn()
+            .mockResolvedValueOnce(createJsonResponse({
+                system_prompt: 'prompt-body',
+                template_id: 'prompt-1',
+            }))
+            .mockResolvedValueOnce(createJsonResponse({ scan_id: 'scan-1' }));
+
+        const engine = new ScanEngine(licenceMgr, registry);
+        const doc = {
+            languageId: 'javascript',
+            fileName: 'd:\\repo\\tools\\benchmark-app\\src\\routes\\imports.js',
+            uri: vscode.Uri.file('d:\\repo\\tools\\benchmark-app\\src\\routes\\imports.js'),
+            getText: () => `const express = require('express');
+const { requireUser, requireCsrf } = require('../middleware/auth');
+function createRouter(repositories) {
+  router.post('/customer-notes-safe', requireUser, requireCsrf, async (req, res) => {
+    const decoded = Buffer.from(req.body.payload, 'base64').toString('utf8');
+    const note = JSON.parse(decoded);
+    if (!isValidCustomerNote(note)) {
+      res.status(400).json({ error: 'invalid_import' });
+      return;
+    }
+    repositories.imports.addCustomerNote(note);
+    res.json({ imported: true });
+  });
+}`,
+        } as any;
+
+        const result = await engine.scanDocument(doc);
+
+        expect(result.findings).toHaveLength(0);
+        expect(result.engineTelemetry?.aiFindings.proposed).toBe(1);
+        expect(result.engineTelemetry?.aiFindings.afterStaticFilter).toBe(0);
+    });
+
     it('deduplicates overlapping AI findings for the same canonical issue', async () => {
         const licenceMgr = {
             getKey: jest.fn().mockResolvedValue('licence-key'),

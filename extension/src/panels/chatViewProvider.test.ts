@@ -1777,6 +1777,183 @@ describe('parseChatIntent', () => {
         );
     });
 
+    it('allows bounded structural security fixes for tiny files', async () => {
+        const targetUri = vscode.Uri.file('d:\\repo\\tools\\demo\\74-go-jwt-validation-unsafe.go');
+        const originalText = [
+            'package demo',
+            '',
+            'import (',
+            '    "net/http"',
+            '',
+            '    "github.com/golang-jwt/jwt/v5"',
+            ')',
+            '',
+            'func ParseToken(w http.ResponseWriter, r *http.Request) {',
+            '    token := r.Header.Get("Authorization")',
+            '    new(jwt.Parser).ParseUnverified(token, jwt.MapClaims{})',
+            '    w.WriteHeader(http.StatusNoContent)',
+            '}',
+        ].join('\n');
+        const replacementText = [
+            'package demo',
+            '',
+            'import (',
+            '    "errors"',
+            '    "net/http"',
+            '    "strings"',
+            '',
+            '    "github.com/golang-jwt/jwt/v5"',
+            ')',
+            '',
+            'var jwtSecret = []byte("replace-with-configured-secret")',
+            '',
+            'func ParseToken(w http.ResponseWriter, r *http.Request) {',
+            '    token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")',
+            '    claims := jwt.MapClaims{}',
+            '    parsed, err := jwt.ParseWithClaims(token, claims, func(token *jwt.Token) (interface{}, error) {',
+            '        if token.Method != jwt.SigningMethodHS256 {',
+            '            return nil, errors.New("unexpected signing method")',
+            '        }',
+            '        return jwtSecret, nil',
+            '    }, jwt.WithIssuer("owlvex"), jwt.WithAudience("demo"))',
+            '    if err != nil || !parsed.Valid {',
+            '        http.Error(w, "unauthorized", http.StatusUnauthorized)',
+            '        return',
+            '    }',
+            '    w.WriteHeader(http.StatusNoContent)',
+            '}',
+        ].join('\n');
+        const complete = jest.fn().mockResolvedValue({
+            content: `\`\`\`go\n${replacementText}\n\`\`\``,
+        });
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({
+            uri: targetUri,
+            getText: () => originalText,
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await provider.generateFixPreview({
+            id: 'finding-weak-jwt',
+            line: 11,
+            lineEnd: 11,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'JW-001',
+            title: 'Weak JWT validation',
+            explanation: 'ParseUnverified trusts token claims without signature verification.',
+            threat: 'Forged claims can be accepted.',
+            fix: 'Verify signature, issuer, audience, expiry, and accepted algorithms.',
+            confidence: 1,
+            provenance: 'deterministic',
+            likelihood: 'HIGH',
+            riskScore: 9,
+        } as any, targetUri.fsPath);
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Fix preview ready');
+        expect(finalMessage.content).not.toContain('rewrote too much of the file');
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+            'vscode.diff',
+            targetUri,
+            expect.anything(),
+            expect.stringContaining('Fix Preview - Weak JWT validation'),
+        );
+    });
+
+    it('rejects fix previews that invent repository business models', async () => {
+        const targetUri = vscode.Uri.file('d:\\repo\\tools\\benchmark-app\\src\\routes\\imports.js');
+        const originalText = [
+            "const express = require('express');",
+            "const { requireUser } = require('../middleware/auth');",
+            '',
+            'function createImportRouter(repositories) {',
+            '  const router = express.Router();',
+            "  router.post('/customer-notes-safe', requireUser, async (req, res) => {",
+            "    repositories.imports.addCustomerNote(req.body);",
+            '    res.json({ imported: true });',
+            '  });',
+            '  return router;',
+            '}',
+        ].join('\n');
+        const replacementText = [
+            "const express = require('express');",
+            "const { requireUser } = require('../middleware/auth');",
+            '',
+            'function createImportRouter(repositories) {',
+            '  const router = express.Router();',
+            "  router.post('/customer-notes-safe', requireUser, async (req, res) => {",
+            '    const customer = repositories.customers.findById(req.body.customerId);',
+            '    if (!customer) return res.status(403).json({ error: "forbidden" });',
+            '    repositories.imports.addCustomerNote(req.body);',
+            '    res.json({ imported: true });',
+            '  });',
+            '  return router;',
+            '}',
+        ].join('\n');
+        const complete = jest.fn().mockResolvedValue({
+            content: `\`\`\`javascript\n${replacementText}\n\`\`\``,
+        });
+
+        (vscode.workspace.openTextDocument as jest.Mock).mockResolvedValue({
+            uri: targetUri,
+            getText: () => originalText,
+        });
+
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        await provider.generateFixPreview({
+            id: 'finding-customer-auth',
+            line: 7,
+            lineEnd: 7,
+            severity: 'HIGH',
+            framework: 'OWASP',
+            ruleCode: 'A01-IDOR',
+            title: 'Possible missing authorization check before adding a note to a customer record',
+            explanation: 'Client supplied customerId may select another customer.',
+            threat: 'Unauthorized customer note write.',
+            fix: 'Verify customer ownership.',
+            confidence: 0.9,
+            provenance: 'ai',
+            likelihood: 'HIGH',
+            riskScore: 8,
+        } as any, targetUri.fsPath);
+
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Fix preview failed');
+        expect(finalMessage.content).toContain('introduced repository APIs');
+        expect(finalMessage.content).toContain('repositories.customers');
+        expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+            'vscode.diff',
+            expect.anything(),
+            expect.anything(),
+            expect.stringContaining('Fix Preview'),
+        );
+    });
+
     it('prefers a targeted repo module when the repo question names it', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'The benchmark app is a small Express app with paired safe and unsafe routes.' });
         (vscode.workspace.workspaceFolders as any) = [{ name: 'CodeScanner', uri: vscode.Uri.file('d:\\repo') }];
