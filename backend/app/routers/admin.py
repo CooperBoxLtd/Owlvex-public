@@ -19,6 +19,7 @@ from app.db.models import (
     AdminAuditLog,
     Comparison,
     Customer,
+    CustomerIdentity,
     CustomerNote,
     Licence,
     LicenceSeat,
@@ -775,6 +776,7 @@ async def _purge_licence_tree(db: AsyncSession, licence: Licence) -> None:
 
 
 async def _purge_customer_tree(db: AsyncSession, customer: Customer) -> int:
+    customer_email = customer.email
     result = await db.execute(select(Licence).where(Licence.customer_id == customer.id))
     licences = result.scalars().all()
     deleted_licences = 0
@@ -782,6 +784,7 @@ async def _purge_customer_tree(db: AsyncSession, customer: Customer) -> int:
         await _purge_licence_tree(db, licence)
         deleted_licences += 1
     await db.execute(delete(Customer).where(Customer.id == customer.id))
+    await db.execute(delete(CustomerIdentity).where(CustomerIdentity.email == customer_email))
     return deleted_licences
 
 

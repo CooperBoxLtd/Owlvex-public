@@ -1356,7 +1356,7 @@ async def test_trial_cannot_be_activated_twice_for_same_email(client):
 
 
 @pytest.mark.asyncio
-async def test_trial_cannot_be_reissued_after_customer_delete(client):
+async def test_trial_can_be_reissued_after_customer_delete(client):
     registration = await client.post(
         "/v1/licences/register",
         json={"email": "deleted-trial@example.com", "plan": "trial"},
@@ -1382,8 +1382,7 @@ async def test_trial_cannot_be_reissued_after_customer_delete(client):
         json={"email": "deleted-trial@example.com", "plan": "trial"},
     )
 
-    assert second_registration.status_code == 403
-    assert "already been activated" in second_registration.json()["detail"]
+    assert second_registration.status_code == 201
 
 
 @pytest.mark.asyncio
