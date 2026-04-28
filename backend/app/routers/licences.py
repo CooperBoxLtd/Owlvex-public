@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -23,6 +24,18 @@ from app.config import get_settings
 
 router = APIRouter(prefix="/v1/licences", tags=["licences"])
 settings = get_settings()
+
+
+async def _run_email_delivery(send_func, **kwargs) -> None:
+    current_settings = get_settings()
+    timeout_seconds = max(1.0, current_settings.email_delivery_timeout_seconds + 1.0)
+    try:
+        await asyncio.wait_for(
+            asyncio.to_thread(send_func, **kwargs),
+            timeout=timeout_seconds,
+        )
+    except TimeoutError as exc:
+        raise RuntimeError("Email delivery request timed out") from exc
 
 
 # ----------------------------------------------------------------
@@ -396,7 +409,8 @@ async def register(
 
     if current_settings.resend_api_key:
         try:
-            send_verification_email(
+            await _run_email_delivery(
+                send_verification_email,
                 to_email=normalized_email,
                 verification_code=verification_code,
                 plan=plan,
@@ -521,7 +535,8 @@ async def verify_email_registration(
 
     if current_settings.resend_api_key:
         try:
-            send_licence_issued_email(
+            await _run_email_delivery(
+                send_licence_issued_email,
                 to_email=licence.email,
                 team_name=licence.team_name,
                 plan=licence.plan,
