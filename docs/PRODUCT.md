@@ -120,6 +120,8 @@ Telemetry policy for launch:
 - prompt snapshots are not stored
 - raw source code is not uploaded through the control plane telemetry path
 
+The dev-only plan for richer scan/fix lifecycle observability, timings, provider/model attribution, and agent-role attribution is tracked in [DEV_OBSERVABILITY_TELEMETRY_PLAN.md](DEV_OBSERVABILITY_TELEMETRY_PLAN.md). That work must remain metadata-only and dev-gated until a separate production telemetry decision is made.
+
 ### Grounded Data Packs
 
 Owlvex's product direction is that production-grade curated intelligence lives in Azure-served signed packs and is pulled after first successful licence activation. The VSIX should carry only baseline fallback knowledge and local execution code.

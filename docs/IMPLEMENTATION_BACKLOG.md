@@ -190,6 +190,10 @@ The current phase should also make demos and trials work without engineer hand-h
 - day-to-day product work should now happen against Azure `dev`, including pricing, trial, and telemetry changes
 - early customer entry should move away from anonymous licence distribution and toward email-based registration, verification, and tracked licence issuance
 
+The next dev-only observability workstream is defined in
+[DEV_OBSERVABILITY_TELEMETRY_PLAN.md](D:/Dev/repos/CodeScanner/docs/DEV_OBSERVABILITY_TELEMETRY_PLAN.md).
+It should run on a separate branch from the finished Engine 1.0 evidence sprint and should start by measuring scan/fix lifecycle timings, provider/model attribution, agent role attribution, and failure stages without collecting source code.
+
 ## Workstream 0.88: Pricing, Trial, And Usage Metering
 
 ### Goal
