@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -243,6 +243,19 @@ async def _get_or_create_customer_identity(
     return identity
 
 
+async def _discard_orphan_customer_identity(db: AsyncSession, *, identity: CustomerIdentity, email: str) -> bool:
+    normalized_email = _normalize_email(email)
+    result = await db.execute(select(Customer.id).where(Customer.email == normalized_email))
+    if result.scalar_one_or_none():
+        return False
+
+    await db.execute(delete(CustomerIdentity).where(CustomerIdentity.email == normalized_email))
+    if identity in db:
+        db.expunge(identity)
+    await db.flush()
+    return True
+
+
 async def _deactivate_existing_plan_licences(db: AsyncSession, *, email: str, plan: str) -> None:
     email = _normalize_email(email)
     result = await db.execute(
@@ -377,6 +390,15 @@ async def register(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only free and trial registration are supported here")
 
     identity = await _get_or_create_customer_identity(db, email=normalized_email)
+    if plan == "trial" and identity.trial_activated_at and current_settings.environment != "development":
+        if await _discard_orphan_customer_identity(db, identity=identity, email=normalized_email):
+            identity = await _get_or_create_customer_identity(db, email=normalized_email)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="A trial has already been activated for this email.",
+            )
+
     if plan == "trial" and identity.trial_activated_at and current_settings.environment != "development":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

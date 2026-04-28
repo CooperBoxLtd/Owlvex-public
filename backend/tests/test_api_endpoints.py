@@ -1386,6 +1386,30 @@ async def test_trial_can_be_reissued_after_customer_delete(client):
 
 
 @pytest.mark.asyncio
+async def test_trial_registration_discards_orphan_customer_identity(client, db_session):
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO customer_identities (id, email, trial_activated_at)
+            VALUES (:id, :email, CURRENT_TIMESTAMP)
+            """
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "email": "orphan-trial@example.com",
+        },
+    )
+    await db_session.commit()
+
+    response = await client.post(
+        "/v1/licences/register",
+        json={"email": "orphan-trial@example.com", "plan": "trial"},
+    )
+
+    assert response.status_code == 201
+
+
+@pytest.mark.asyncio
 async def test_paid_licence_can_disable_telemetry(client):
     generate_response = await client.post(
         "/v1/licences/generate",
