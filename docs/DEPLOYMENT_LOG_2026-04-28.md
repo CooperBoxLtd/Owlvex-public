@@ -95,6 +95,41 @@ Final production health response:
 {"status":"ok","db":"ok","environment":"production"}
 ```
 
+Follow-up production test:
+
+- production still returned the duplicate-trial error for a user deleted before the hotfix.
+- investigation found `5` orphan `customer_identities` rows with no matching `customers` row.
+- `2` of those orphan identities still had `trial_activated_at` set and could block re-onboarding.
+- cleaned the orphan identity rows in production.
+- confirmed `orphan_identities=0` and `orphan_trial_blocks=0`.
+
+Defensive backend recovery:
+
+- commit: `1f81ca5`
+- changed `backend/app/routers/licences.py` so trial registration discards an orphan customer identity if no customer row exists for that email.
+- added regression coverage for orphan identity recovery.
+- backend API test result: `78 passed`.
+
+Deployment:
+
+- built image in ACR: `owlvexdevregistry.azurecr.io/owlvex-api:dev-20260428-orphan-recovery-1f81ca5`
+- deployed and health-checked Azure dev on that image.
+- promoted the exact same tag to production through `Deploy to production`.
+- production workflow run: `25064792040`
+- conclusion: `success`
+
+Final production Web App image:
+
+```text
+DOCKER|owlvexdevregistry.azurecr.io/owlvex-api:dev-20260428-orphan-recovery-1f81ca5
+```
+
+Final production health response:
+
+```json
+{"status":"ok","db":"ok","environment":"production"}
+```
+
 ## Licence Guard
 
 Production remained configured as:
