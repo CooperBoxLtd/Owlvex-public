@@ -216,9 +216,15 @@ interface AppliedFixVerificationOutcome {
 
 type UsageTelemetryEventName =
     | 'fix_preview_generated'
+    | 'fix_preview_started'
+    | 'fix_preview_completed'
+    | 'fix_preview_failed'
     | 'fix_preview_applied'
     | 'fix_preview_discarded'
-    | 'fix_verification_completed';
+    | 'fix_verification_completed'
+    | 'fix_applied'
+    | 'fix_discarded'
+    | 'post_fix_scan_completed';
 
 type UsageTelemetryEmitter = (eventName: UsageTelemetryEventName, metadata?: Record<string, unknown>) => void;
 const MAX_PERSISTED_MESSAGES = 40;
@@ -229,6 +235,17 @@ const MAX_SINGLE_FILE_REWRITE_RATIO = 0.75;
 const MAX_REWRITE_LINE_THRESHOLD = 20;
 const MAX_RECENT_CHAT_CONTEXT_MESSAGES = 8;
 const MAX_RECENT_CHAT_CONTEXT_CHARS = 4000;
+
+function classifyChatTelemetryError(error: any): string {
+    const message = String(error?.message ?? error ?? '').toLowerCase();
+    if (message.includes('timeout') || message.includes('timed out')) return 'timeout';
+    if (message.includes('rate limit') || message.includes('429')) return 'rate_limit';
+    if (message.includes('parse') || message.includes('json')) return 'parse';
+    if (message.includes('validation') || message.includes('invalid')) return 'validation';
+    if (message.includes('cancel')) return 'cancelled';
+    if (message.includes('provider') || message.includes('model') || message.includes('api')) return 'provider_error';
+    return 'unknown';
+}
 
 interface ImportedSymbolContext {
     specifier: string;
@@ -2154,6 +2171,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             };
         }
         this.refresh();
+        const previewStartedAt = Date.now();
+        this.emitUsageTelemetry('fix_preview_started', {
+            file_count: 1,
+            canonical_id: finding.canonicalId ?? null,
+            severity: finding.severity ?? null,
+        });
 
         try {
             const provider = this.registry.getActive();
@@ -2225,6 +2248,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 canonical_id: finding.canonicalId ?? null,
                 severity: finding.severity ?? null,
             });
+            this.emitUsageTelemetry('fix_preview_completed', {
+                outcome: 'ready',
+                file_count: 1,
+                duration_ms: Date.now() - previewStartedAt,
+                canonical_id: finding.canonicalId ?? null,
+                severity: finding.severity ?? null,
+            });
         } catch (error: any) {
             this.messages[this.messages.length - 1] = {
                 role: 'assistant',
@@ -2238,6 +2268,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.emitUsageTelemetry('fix_preview_generated', {
                 outcome: 'failed',
                 file_count: 1,
+                canonical_id: finding.canonicalId ?? null,
+                severity: finding.severity ?? null,
+            });
+            this.emitUsageTelemetry('fix_preview_failed', {
+                outcome: 'failed',
+                file_count: 1,
+                duration_ms: Date.now() - previewStartedAt,
+                error_kind: classifyChatTelemetryError(error),
                 canonical_id: finding.canonicalId ?? null,
                 severity: finding.severity ?? null,
             });
@@ -2290,6 +2328,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             };
         }
         this.refresh();
+        const previewStartedAt = Date.now();
+        const targetFileCount = new Set(validItems.map(item => normalizeReviewedPath(item.targetPath!))).size;
+        this.emitUsageTelemetry('fix_preview_started', {
+            file_count: targetFileCount,
+            finding_count: validItems.length,
+            canonical_id: validItems[0]?.finding.canonicalId ?? null,
+            severity: validItems[0]?.finding.severity ?? null,
+        });
 
         try {
             const provider = this.registry.getActive();
@@ -2398,6 +2444,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.emitUsageTelemetry('fix_preview_generated', {
                 outcome: 'ready',
                 file_count: changes.length,
+                finding_count: validItems.length,
+                canonical_id: primaryChange.finding.canonicalId ?? null,
+                severity: primaryChange.finding.severity ?? null,
+            });
+            this.emitUsageTelemetry('fix_preview_completed', {
+                outcome: 'ready',
+                file_count: changes.length,
+                finding_count: validItems.length,
+                duration_ms: Date.now() - previewStartedAt,
                 canonical_id: primaryChange.finding.canonicalId ?? null,
                 severity: primaryChange.finding.severity ?? null,
             });
@@ -2413,7 +2468,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.pendingFixPreview = undefined;
             this.emitUsageTelemetry('fix_preview_generated', {
                 outcome: 'failed',
-                file_count: validItems.length,
+                file_count: targetFileCount,
+                finding_count: validItems.length,
+                canonical_id: validItems[0]?.finding.canonicalId ?? null,
+                severity: validItems[0]?.finding.severity ?? null,
+            });
+            this.emitUsageTelemetry('fix_preview_failed', {
+                outcome: 'failed',
+                file_count: targetFileCount,
+                finding_count: validItems.length,
+                duration_ms: Date.now() - previewStartedAt,
+                error_kind: classifyChatTelemetryError(error),
                 canonical_id: validItems[0]?.finding.canonicalId ?? null,
                 severity: validItems[0]?.finding.severity ?? null,
             });
@@ -2511,6 +2576,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 canonical_id: changes[0]?.finding.canonicalId ?? null,
                 severity: changes[0]?.finding.severity ?? null,
             });
+            this.emitUsageTelemetry('fix_applied', {
+                outcome: 'applied',
+                file_count: changes.length,
+                finding_count: changes.length,
+                canonical_id: changes[0]?.finding.canonicalId ?? null,
+                severity: changes[0]?.finding.severity ?? null,
+            });
             this.pendingFixPreview = undefined;
             this.messages.push({
                 role: 'assistant',
@@ -2527,6 +2599,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     suppressMessages: true,
                 }));
             }
+            this.emitUsageTelemetry('post_fix_scan_completed', {
+                file_count: changes.length,
+                finding_count: verificationOutcomes.reduce((total, outcome) => total + (outcome.rescanned?.findings.length ?? 0), 0),
+                outcome: verificationOutcomes.every(outcome => outcome.status === 'removed_clean') ? 'clean' : 'remaining_findings',
+                canonical_id: changes[0]?.finding.canonicalId ?? null,
+                severity: changes[0]?.finding.severity ?? null,
+            });
             const continuationTargets = getCombinedFixContinuationTargets(verificationOutcomes);
             if (continuationTargets.length) {
                 this.latestActionableItems = continuationTargets.slice(0, 10);
@@ -2622,6 +2701,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.emitUsageTelemetry('fix_preview_applied', {
             outcome: 'applied',
             file_count: 1,
+            canonical_id: originalFinding.canonicalId ?? null,
+            severity: originalFinding.severity ?? null,
+        });
+        this.emitUsageTelemetry('fix_applied', {
+            outcome: 'applied',
+            file_count: 1,
+            finding_count: 1,
             canonical_id: originalFinding.canonicalId ?? null,
             severity: originalFinding.severity ?? null,
         });
@@ -2817,6 +2903,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         try {
             const scanResult = await vscode.commands.executeCommand(PROFILE.commands.scanFile, targetUri) as { status?: string; result?: ScanResult } | undefined;
             const rescanned = scanResult?.status === 'completed' ? scanResult.result : undefined;
+            this.emitUsageTelemetry('post_fix_scan_completed', {
+                file_count: 1,
+                finding_count: rescanned?.findings.length ?? 0,
+                outcome: rescanned ? 'completed' : 'incomplete',
+                canonical_id: originalFinding.canonicalId ?? null,
+                severity: originalFinding.severity ?? null,
+            });
             if (!rescanned) {
                 if (!suppressMessages) {
                     this.messages.push({
@@ -3539,6 +3632,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 kind: 'advisory',
             });
             this.emitUsageTelemetry('fix_preview_discarded', {
+                file_count: discardedPreview?.changes?.length ?? 1,
+                canonical_id: discardedPreview?.finding.canonicalId ?? null,
+                severity: discardedPreview?.finding.severity ?? null,
+            });
+            this.emitUsageTelemetry('fix_discarded', {
                 file_count: discardedPreview?.changes?.length ?? 1,
                 canonical_id: discardedPreview?.finding.canonicalId ?? null,
                 severity: discardedPreview?.finding.severity ?? null,

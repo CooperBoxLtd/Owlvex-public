@@ -294,6 +294,20 @@ interface UsageEventOptions {
 
 type ScanLifecycleScope = 'current_file' | 'selected_files' | 'changed_files' | 'open_editors' | 'workspace';
 
+const DEV_OBSERVABILITY_USAGE_EVENTS = new Set<UsageEventName>([
+    'scan_started',
+    'scan_completed',
+    'scan_failed',
+    'fix_preview_started',
+    'fix_preview_completed',
+    'fix_preview_failed',
+    'report_created',
+    'report_failed',
+    'fix_applied',
+    'fix_discarded',
+    'post_fix_scan_completed',
+]);
+
 const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
 const PENDING_REGISTRATION_KEY = `${PROFILE.storagePrefix}.pendingRegistration`;
 
@@ -696,6 +710,27 @@ function emitDevScanLifecycleEvent(
         duration_ms: Math.max(0, Date.now() - metadata.startedAt),
         agent_mode: 'finder',
         analysis_mix: 'deterministic+finder',
+    }, {
+        registry,
+        includeProviderModel: true,
+        includeProject: true,
+    });
+}
+
+function emitDevWorkflowLifecycleEvent(
+    licenceMgr: LicenceManager,
+    getApiUrl: () => string,
+    registry: ProviderRegistry,
+    eventName: Extract<UsageEventName, 'report_created' | 'report_failed'>,
+    metadata: Record<string, unknown>,
+): void {
+    if (!isDevObservabilityTelemetryEnabled(licenceMgr.getCachedInfo())) {
+        return;
+    }
+
+    void trackUsageEvent(licenceMgr, getApiUrl, eventName, {
+        telemetry_profile: 'dev_observability',
+        ...metadata,
     }, {
         registry,
         includeProviderModel: true,
@@ -1848,8 +1883,24 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const createAndOpenReport = async (snapshot: ReportSnapshot, reportVariant: ReportVariant = 'full') => {
+        const reportStartedAt = Date.now();
         const safeSnapshot = await normalizeReportSnapshot(snapshot);
-        const reportUri = await generateReportFromSnapshot(safeSnapshot.outputRoot, safeSnapshot, { variant: reportVariant });
+        let reportUri: vscode.Uri;
+        try {
+            reportUri = await generateReportFromSnapshot(safeSnapshot.outputRoot, safeSnapshot, { variant: reportVariant });
+        } catch (error: any) {
+            emitDevWorkflowLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'report_failed', {
+                status: 'failed',
+                report_variant: reportVariant,
+                target_label: safeSnapshot.targetLabel,
+                file_count: safeSnapshot.results.length,
+                finding_count: safeSnapshot.results.reduce((total, item) => total + item.result.findings.length, 0),
+                duration_ms: Date.now() - reportStartedAt,
+                stage: 'report_generation',
+                error_kind: classifyTelemetryError(error),
+            });
+            throw error;
+        }
         const reportDoc = await vscode.workspace.openTextDocument(reportUri);
         await vscode.window.showTextDocument(reportDoc, { preview: false });
 
@@ -1889,6 +1940,16 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage(
             `${PROFILE.displayLabel}: ${reportVariant === 'summary' ? 'Summary report' : 'Full evidence report'} created for ${safeSnapshot.results.length} file(s) with ${totalFindings} finding(s) using ${providerNames}/${modelNames}.${warningCount ? ` ${warningCount} warning(s) were captured.` : ''}`
         );
+        emitDevWorkflowLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'report_created', {
+            status: 'completed',
+            report_variant: reportVariant,
+            target_label: safeSnapshot.targetLabel,
+            file_count: safeSnapshot.results.length,
+            finding_count: totalFindings,
+            warning_count: warningCount,
+            average_score: averageScore,
+            duration_ms: Date.now() - reportStartedAt,
+        });
 
         return {
             reportUri,
@@ -1996,6 +2057,16 @@ export function activate(context: vscode.ExtensionContext) {
     };
 
     const emitExtensionUsageEvent = (eventName: UsageEventName, metadata: Record<string, unknown> = {}): void => {
+        if (DEV_OBSERVABILITY_USAGE_EVENTS.has(eventName)) {
+            if (!isDevObservabilityTelemetryEnabled(licenceMgr.getCachedInfo())) {
+                return;
+            }
+            metadata = {
+                telemetry_profile: 'dev_observability',
+                ...metadata,
+            };
+        }
+
         void trackUsageEvent(licenceMgr, getConfiguredApiUrl, eventName, metadata, {
             registry,
             includeProviderModel: true,
