@@ -105,3 +105,58 @@ ENVIRONMENT=production
 
 That keeps the development-only same-email trial recovery path out of production.
 
+## Customer Deletion Re-Onboarding Hotfix
+
+Later on 2026-04-28, production showed a customer re-onboarding issue:
+
+- an admin deleted a customer completely.
+- the extension was uninstalled and reinstalled cleanly.
+- the same user could not register again in production.
+
+Root cause:
+
+- customer deletion removed the `customers` row and related licence/activity data.
+- it did not remove the retained `customer_identities` row.
+- `customer_identities.trial_activated_at` continued to block fresh trial registration in production.
+
+Policy decision:
+
+- licence-only deletion must not reset trial history.
+- ban/unban must not reset trial history.
+- complete admin customer deletion means the customer identity is purged and re-onboarding is allowed.
+
+Backend fix:
+
+- commit: `4322d9e`
+- changed `backend/app/routers/admin.py` so `_purge_customer_tree` also deletes `CustomerIdentity` for the deleted email.
+- updated `backend/tests/test_api_endpoints.py` so customer deletion allows trial re-onboarding.
+
+Validation:
+
+```text
+uv run --python C:\Users\CristianBogdan\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\python.exe --with-requirements requirements-dev.txt python -m pytest tests\test_api_endpoints.py -q
+```
+
+Result:
+
+- `77 passed`
+
+Deployment:
+
+- built image in ACR: `owlvexdevregistry.azurecr.io/owlvex-api:dev-20260428-reonboard-4322d9e`
+- deployed and health-checked Azure dev on that image.
+- promoted the exact same tag to production through `Deploy to production`.
+- production workflow run: `25064052503`
+- conclusion: `success`
+
+Final production Web App image:
+
+```text
+DOCKER|owlvexdevregistry.azurecr.io/owlvex-api:dev-20260428-reonboard-4322d9e
+```
+
+Final production health response:
+
+```json
+{"status":"ok","db":"ok","environment":"production"}
+```
