@@ -88,6 +88,7 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
             "telemetry_required": is_telemetry_required(features),
             "telemetry_enabled": is_telemetry_enabled(features),
             "telemetry_opt_out": bool(features.get("telemetry_opt_out", False)),
+            "telemetry_profile": features.get("telemetry_profile", "standard"),
         },
         "usage": {
             "scans_this_month": scans_this_month,

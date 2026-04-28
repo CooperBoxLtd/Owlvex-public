@@ -10,12 +10,42 @@ from app.services.usage_service import record_usage_event
 
 router = APIRouter(prefix="/v1/usage", tags=["usage"])
 
+DEV_OBSERVABILITY_PROFILE = "dev_observability"
+
 COMMON_USAGE_METADATA_FIELDS = {
     "provider",
     "model",
     "project_id",
     "project_mode",
     "project_configured",
+}
+
+DEV_OBSERVABILITY_METADATA_FIELDS = COMMON_USAGE_METADATA_FIELDS | {
+    "telemetry_profile",
+    "scope",
+    "status",
+    "stage",
+    "error_kind",
+    "agent_mode",
+    "analysis_mix",
+    "file_count",
+    "finding_count",
+    "risk_score",
+    "risk_before",
+    "risk_after",
+    "target_removed",
+    "duration_ms",
+    "queue_ms",
+    "read_files_ms",
+    "deterministic_ms",
+    "ai_review_ms",
+    "verifier_ms",
+    "skeptic_ms",
+    "safe_probe_ms",
+    "caller_path_ms",
+    "report_ms",
+    "fix_preview_ms",
+    "post_fix_verify_ms",
 }
 
 USAGE_EVENT_METADATA_FIELDS = {
@@ -38,14 +68,49 @@ USAGE_EVENT_METADATA_FIELDS = {
     "fix_verification_completed": COMMON_USAGE_METADATA_FIELDS | {"outcome", "file_count", "canonical_id", "severity", "risk_before", "risk_after", "target_removed"},
 }
 
+DEV_OBSERVABILITY_EVENT_METADATA_FIELDS = {
+    "scan_started": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "scan_completed": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "scan_failed": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "report_created": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "report_failed": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "fix_preview_started": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "fix_preview_completed": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "fix_preview_failed": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "fix_applied": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "fix_discarded": DEV_OBSERVABILITY_METADATA_FIELDS,
+    "post_fix_scan_completed": DEV_OBSERVABILITY_METADATA_FIELDS,
+}
 
-def _sanitize_usage_metadata(event_name: str, metadata: dict) -> dict:
+
+def _resolve_allowed_usage_fields(event_name: str, metadata: dict, features: dict | None, environment: str) -> set[str]:
+    if metadata.get("telemetry_profile") == DEV_OBSERVABILITY_PROFILE and environment != "development":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="dev_observability telemetry is only accepted by the development backend.",
+        )
+
+    dev_fields = DEV_OBSERVABILITY_EVENT_METADATA_FIELDS.get(event_name)
+    if dev_fields is not None:
+        profile = (features or {}).get("telemetry_profile", "standard")
+        if environment != "development" or profile != DEV_OBSERVABILITY_PROFILE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This usage event requires a dev_observability telemetry profile.",
+            )
+        return dev_fields
+
     allowed_fields = USAGE_EVENT_METADATA_FIELDS.get(event_name)
     if not allowed_fields:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Unsupported usage event '{event_name}'.",
         )
+    return allowed_fields
+
+
+def _sanitize_usage_metadata(event_name: str, metadata: dict, features: dict | None, environment: str) -> dict:
+    allowed_fields = _resolve_allowed_usage_fields(event_name, metadata, features, environment)
 
     unknown_fields = sorted(set(metadata.keys()) - allowed_fields)
     if unknown_fields:
@@ -107,7 +172,12 @@ async def create_usage_event(
             "telemetry_disabled": True,
         }
 
-    sanitized_metadata = _sanitize_usage_metadata(body.event_name, body.metadata)
+    sanitized_metadata = _sanitize_usage_metadata(
+        body.event_name,
+        body.metadata,
+        result.get("features"),
+        settings.environment,
+    )
 
     event = await record_usage_event(
         db,

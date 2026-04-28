@@ -52,6 +52,10 @@ class CustomerTelemetryRequest(CustomerLicenceActionRequest):
     enabled: bool
 
 
+class CustomerTelemetryProfileRequest(CustomerLicenceActionRequest):
+    profile: str = Field(pattern="^(standard|dev_observability)$")
+
+
 class BanCustomerRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     email: EmailStr
@@ -1406,6 +1410,55 @@ async def update_licence_telemetry(
         "email": customer.email,
         "plan": body.plan,
         "telemetry_enabled": applied_enabled,
+        "updated": updated,
+    }
+
+
+@router.post("/licence/telemetry-profile")
+async def update_licence_telemetry_profile(
+    body: CustomerTelemetryProfileRequest,
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
+    db: AsyncSession = Depends(get_db),
+):
+    current_settings = get_settings()
+    _ensure_admin_key(x_admin_key)
+    if body.profile == "dev_observability" and current_settings.environment != "development":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="dev_observability telemetry profile is only available in development.",
+        )
+
+    customer = await _get_customer_with_licences(db, str(body.email))
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+
+    licences = _filter_customer_licences(customer, body.plan)
+    if not licences:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No licence found for this customer")
+
+    updated = 0
+    for licence in licences:
+        features = dict(licence.features or {})
+        features["telemetry_profile"] = body.profile
+        licence.features = features
+        updated += 1
+
+    await record_admin_audit_event(
+        db,
+        action="licence.telemetry_profile",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        reason=body.plan,
+        details={"telemetry_profile": body.profile, "updated": updated},
+    )
+    await db.commit()
+    return {
+        "ok": True,
+        "email": customer.email,
+        "plan": body.plan,
+        "telemetry_profile": body.profile,
         "updated": updated,
     }
 

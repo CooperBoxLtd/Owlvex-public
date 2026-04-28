@@ -1434,6 +1434,67 @@ async def test_paid_licence_can_disable_telemetry(client):
 
 
 @pytest.mark.asyncio
+async def test_admin_can_set_dev_observability_telemetry_profile_in_development(client):
+    generate_response = await client.post(
+        "/v1/licences/generate",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"team_name": "Telemetry Profile", "email": "telemetry-profile@example.com", "plan": "developer", "seats": 1},
+    )
+    assert generate_response.status_code == 201
+
+    development_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        environment="development",
+    )
+    with patch("app.routers.admin.get_settings", return_value=development_settings):
+        response = await client.post(
+            "/v1/admin/licence/telemetry-profile",
+            headers={"X-Admin-Key": "test-admin-key", "X-Admin-Actor": "ops@example.com"},
+            json={"email": "telemetry-profile@example.com", "plan": "developer", "profile": "dev_observability"},
+        )
+
+    assert response.status_code == 200
+    assert response.json()["telemetry_profile"] == "dev_observability"
+
+    lookup_response = await client.get(
+        "/v1/admin/customer",
+        params={"email": "telemetry-profile@example.com"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert lookup_response.status_code == 200
+    features = lookup_response.json()["licences"][0]["features"]
+    assert features["telemetry_profile"] == "dev_observability"
+
+
+@pytest.mark.asyncio
+async def test_admin_rejects_dev_observability_profile_outside_development(client):
+    generate_response = await client.post(
+        "/v1/licences/generate",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"team_name": "Telemetry Profile Prod", "email": "telemetry-profile-prod@example.com", "plan": "developer", "seats": 1},
+    )
+    assert generate_response.status_code == 201
+
+    production_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        environment="production",
+    )
+    with patch("app.routers.admin.get_settings", return_value=production_settings):
+        response = await client.post(
+            "/v1/admin/licence/telemetry-profile",
+            headers={"X-Admin-Key": "test-admin-key"},
+            json={"email": "telemetry-profile-prod@example.com", "plan": "developer", "profile": "dev_observability"},
+        )
+
+    assert response.status_code == 400
+    assert "only available in development" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_free_or_trial_cannot_disable_telemetry(client):
     registration = await client.post(
         "/v1/licences/register",
@@ -1581,6 +1642,128 @@ async def test_usage_event_returns_success_without_recording_when_telemetry_disa
     assert data["event_id"] is None
     assert data["telemetry_disabled"] is True
     mock_record_usage_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_usage_event_accepts_dev_observability_lifecycle_metadata_in_development(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {
+            "frameworks": ["OWASP"],
+            "telemetry_enabled": True,
+            "telemetry_profile": "dev_observability",
+        },
+        "expires_at": None,
+    }
+    development_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        environment="development",
+    )
+    with patch("app.routers.usage.validate_licence", return_value=mock_result), \
+         patch("app.routers.usage.get_settings", return_value=development_settings):
+        response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={
+                "event_name": "scan_completed",
+                "metadata": {
+                    "telemetry_profile": "dev_observability",
+                    "scope": "workspace",
+                    "status": "completed",
+                    "provider": "openai",
+                    "model": "gpt-5.4",
+                    "agent_mode": "finder",
+                    "analysis_mix": "deterministic+finder+verifier",
+                    "file_count": 12,
+                    "finding_count": 6,
+                    "duration_ms": 18420,
+                    "deterministic_ms": 220,
+                    "ai_review_ms": 14300,
+                    "verifier_ms": 2100,
+                },
+            },
+        )
+
+    assert response.status_code == 201
+    assert response.json()["event_name"] == "scan_completed"
+
+
+@pytest.mark.asyncio
+async def test_usage_event_rejects_dev_observability_lifecycle_metadata_without_profile(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {"frameworks": ["OWASP"], "telemetry_enabled": True, "telemetry_profile": "standard"},
+        "expires_at": None,
+    }
+    development_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        environment="development",
+    )
+    with patch("app.routers.usage.validate_licence", return_value=mock_result), \
+         patch("app.routers.usage.get_settings", return_value=development_settings):
+        response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={"event_name": "scan_completed", "metadata": {"scope": "workspace", "duration_ms": 100}},
+        )
+
+    assert response.status_code == 403
+    assert "requires a dev_observability" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_usage_event_rejects_dev_observability_profile_in_production(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {
+            "frameworks": ["OWASP"],
+            "telemetry_enabled": True,
+            "telemetry_profile": "dev_observability",
+        },
+        "expires_at": None,
+    }
+    production_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        environment="production",
+    )
+    with patch("app.routers.usage.validate_licence", return_value=mock_result), \
+         patch("app.routers.usage.get_settings", return_value=production_settings):
+        response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={
+                "event_name": "scan_completed",
+                "metadata": {
+                    "telemetry_profile": "dev_observability",
+                    "scope": "workspace",
+                    "duration_ms": 100,
+                },
+            },
+        )
+
+    assert response.status_code == 403
+    assert "development backend" in response.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

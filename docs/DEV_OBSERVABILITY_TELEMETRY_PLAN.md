@@ -311,6 +311,7 @@ Fix verification:
 ### Slice 1: Contract
 
 - Add `telemetry_profile` to licence features for dev-issued licences.
+- Add an admin endpoint and console toggle to set a licence profile to `standard` or `dev_observability`.
 - Add the new event names to `USAGE_EVENT_METADATA_FIELDS`.
 - Add metadata allowlists for timing, provider/model, scope, status, agent role, and failure fields.
 - Reject `dev_observability` telemetry when `ENVIRONMENT != development`.
@@ -373,4 +374,3 @@ Fix verification:
 - per-file path telemetry
 - arrays/objects in telemetry metadata
 - marketplace release
-
