@@ -62,7 +62,7 @@
     }
     a { color: var(--accent-2); }
     .app {
-      max-width: 1500px;
+      max-width: 1760px;
       margin: 0 auto;
       padding: 16px;
       display: grid;
@@ -155,13 +155,15 @@
     }
     .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(420px, 0.8fr);
+      grid-template-columns: minmax(620px, 1fr) minmax(620px, 0.95fr);
       gap: 14px;
       align-items: start;
     }
     .sticky-panel {
       position: sticky;
       top: 16px;
+      max-height: calc(100vh - 32px);
+      overflow: auto;
     }
     .table-wrap {
       overflow: auto;
@@ -223,7 +225,7 @@
       color: var(--muted);
     }
     .detail-section {
-      padding: 14px;
+      padding: 11px;
       border-top: 1px solid var(--border);
     }
     .detail-section:first-of-type { border-top: 0; }
@@ -256,6 +258,15 @@
       align-items: end;
       flex-wrap: wrap;
     }
+    .toolbar-actions.compact {
+      gap: 6px;
+      align-items: center;
+    }
+    .toolbar-actions.compact button {
+      padding: 6px 8px;
+      border-radius: 8px;
+      font-size: 12px;
+    }
     .control-actions {
       display: flex;
       gap: 8px;
@@ -286,7 +297,7 @@
     }
     .detail-hero {
       display: grid;
-      gap: 12px;
+      gap: 10px;
     }
     .detail-hero-main {
       display: flex;
@@ -303,11 +314,11 @@
       background: var(--panel-2);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 10px;
+      padding: 8px 9px;
     }
     .mini-stat strong {
       display: block;
-      font-size: 18px;
+      font-size: 16px;
       line-height: 1.1;
       margin-top: 4px;
     }
@@ -324,7 +335,7 @@
     }
     .compact-table th,
     .compact-table td {
-      padding: 7px 8px;
+      padding: 6px 7px;
       border-bottom: 1px solid var(--border);
       vertical-align: top;
       text-align: left;
@@ -338,6 +349,19 @@
     }
     .compact-table tbody tr:last-child td {
       border-bottom: 0;
+    }
+    .licence-table-shell {
+      max-height: 250px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+    }
+    .licence-table-shell .compact-table {
+      font-size: 11px;
+    }
+    .licence-table-shell .compact-table td:first-child {
+      max-width: 160px;
+      word-break: break-word;
     }
     .customer-cell {
       display: grid;
@@ -358,10 +382,23 @@
     .row > * { flex: 1; min-width: 0; }
     .row.actions > * { flex: 0 0 auto; }
     .list-box {
-      max-height: 360px;
+      max-height: 220px;
       overflow: auto;
       display: grid;
       gap: 10px;
+    }
+    .detail-collapse {
+      border-top: 1px solid var(--border);
+      padding: 0;
+    }
+    .detail-collapse > summary {
+      cursor: pointer;
+      padding: 11px;
+      color: var(--text);
+      font-weight: 600;
+    }
+    .detail-collapse-body {
+      padding: 0 11px 11px;
     }
     .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
     .small { font-size: 12px; color: var(--muted); }
@@ -436,7 +473,7 @@
     }
     @media (max-width: 1280px) {
       .layout { grid-template-columns: 1fr; }
-      .sticky-panel { position: static; }
+      .sticky-panel { position: static; max-height: none; overflow: visible; }
       .control-layout { grid-template-columns: 1fr; }
       .connection-grid { grid-template-columns: 1fr 1fr; }
       .filter-grid { grid-template-columns: 1fr 1fr; }
@@ -1264,6 +1301,9 @@
       const primaryLicence = licences[0] || null;
       const telemetryProfile = primaryLicence?.features?.telemetry_profile || 'standard';
       const telemetryProfileTone = telemetryProfile === 'dev_observability' ? 'warn' : 'ok';
+      const activeLicences = licences.filter((licence) => licence.is_active);
+      const archivedLicences = licences.filter((licence) => !licence.is_active);
+      const visibleLicences = [...activeLicences, ...archivedLicences].slice(0, 8);
 
       return `
         <div class="detail-section detail-hero">
@@ -1284,10 +1324,8 @@
             <div class="mini-stat"><div class="small">Reports</div><strong>${escapeHtml(String(summary.comparison_count || 0))}</strong></div>
             <div class="mini-stat"><div class="small">Last activity</div><strong>${escapeHtml(formatRelative(summary.last_activity_at))}</strong></div>
           </div>
-          <div class="toolbar-actions">
+          <div class="toolbar-actions compact">
             <button class="secondary" data-action="refresh-detail">Refresh</button>
-            <button class="${telemetryProfile === 'dev_observability' ? 'secondary' : 'primary'}" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="dev_observability">Apply Dev Observability</button>
-            <button class="secondary" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="standard">Use Standard Telemetry</button>
             <button class="warn" data-action="resend-verification">Resend verification</button>
             <button class="warn" data-action="revoke-licences">Revoke active</button>
             <button class="warn" data-action="rotate-licence">Rotate latest</button>
@@ -1311,57 +1349,62 @@
               <div class="mini-stat"><div class="small">Environment rule</div><strong>${environmentEl.value === 'dev' ? 'dev backend' : 'prod blocked'}</strong></div>
               <div class="mini-stat"><div class="small">Operator step</div><strong>${telemetryProfile === 'dev_observability' ? 'revalidate extension' : 'apply profile'}</strong></div>
             </div>
-            <div class="toolbar-actions">
+            <div class="toolbar-actions compact">
               <button class="${telemetryProfile === 'dev_observability' ? 'secondary' : 'primary'}" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="dev_observability">Apply Dev Observability</button>
               <button class="secondary" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="standard">Revert To Standard</button>
             </div>
           </div>
         </div>
 
-        <div class="detail-section subgrid-two">
-          <div class="stack">
-            <div class="section-heading"><h3>Account Summary</h3></div>
-            <div class="detail-grid">
-              <div class="kv"><label>Pending plan</label><div>${escapeHtml(customer.pending_plan || '--')}</div></div>
-              <div class="kv"><label>Email verified</label><div>${escapeHtml(formatDate(customer.email_verified_at))}</div></div>
-              <div class="kv"><label>Created</label><div>${escapeHtml(formatDate(customer.created_at))}</div></div>
-              <div class="kv"><label>Updated</label><div>${escapeHtml(formatDate(customer.updated_at))}</div></div>
-              <div class="kv"><label>Telemetry</label><div>${summary.telemetry_enabled ? 'Enabled' : 'Disabled on paid licence(s)'}</div></div>
-              <div class="kv"><label>Telemetry profile</label><div>${escapeHtml(primaryLicence?.features?.telemetry_profile || 'standard')}</div></div>
-              <div class="kv"><label>Ban reason</label><div>${escapeHtml(customer.ban_reason || '--')}</div></div>
+        <details class="detail-collapse">
+          <summary>Account and licence state</summary>
+          <div class="detail-collapse-body subgrid-two">
+            <div class="stack">
+              <div class="section-heading"><h3>Account Summary</h3></div>
+              <div class="detail-grid">
+                <div class="kv"><label>Pending plan</label><div>${escapeHtml(customer.pending_plan || '--')}</div></div>
+                <div class="kv"><label>Email verified</label><div>${escapeHtml(formatDate(customer.email_verified_at))}</div></div>
+                <div class="kv"><label>Created</label><div>${escapeHtml(formatDate(customer.created_at))}</div></div>
+                <div class="kv"><label>Updated</label><div>${escapeHtml(formatDate(customer.updated_at))}</div></div>
+                <div class="kv"><label>Telemetry</label><div>${summary.telemetry_enabled ? 'Enabled' : 'Disabled on paid licence(s)'}</div></div>
+                <div class="kv"><label>Ban reason</label><div>${escapeHtml(customer.ban_reason || '--')}</div></div>
+              </div>
+            </div>
+            <div class="stack">
+              <div class="section-heading"><h3>Current Licence State</h3></div>
+              <div class="detail-grid">
+                <div class="kv"><label>Verification pending</label><div>${summary.verification_pending ? 'Yes' : 'No'}</div></div>
+                <div class="kv"><label>Licence count</label><div>${escapeHtml(String(summary.licence_count || 0))}</div></div>
+                <div class="kv"><label>Primary licence</label><div class="mono small">${escapeHtml(primaryLicence?.licence_id || '--')}</div></div>
+                <div class="kv"><label>Primary expiry</label><div>${escapeHtml(formatDate(primaryLicence?.expires_at))}</div></div>
+                <div class="kv"><label>Seat usage</label><div>${escapeHtml(String(primaryLicence?.seats_used ?? 0))}/${escapeHtml(String(primaryLicence?.seats ?? 0))}</div></div>
+                <div class="kv"><label>Packs</label><div>${escapeHtml(String((primaryLicence?.industry_packs || []).length))}</div></div>
+              </div>
             </div>
           </div>
-          <div class="stack">
-            <div class="section-heading"><h3>Current Licence State</h3></div>
-            <div class="detail-grid">
-              <div class="kv"><label>Verification pending</label><div>${summary.verification_pending ? 'Yes' : 'No'}</div></div>
-              <div class="kv"><label>Licence count</label><div>${escapeHtml(String(summary.licence_count || 0))}</div></div>
-              <div class="kv"><label>Primary licence</label><div>${escapeHtml(primaryLicence?.licence_id || '--')}</div></div>
-              <div class="kv"><label>Primary expiry</label><div>${escapeHtml(formatDate(primaryLicence?.expires_at))}</div></div>
-              <div class="kv"><label>Seat usage</label><div>${escapeHtml(String(primaryLicence?.seats_used ?? 0))}/${escapeHtml(String(primaryLicence?.seats ?? 0))}</div></div>
-              <div class="kv"><label>Packs</label><div>${escapeHtml(String((primaryLicence?.industry_packs || []).length))}</div></div>
-            </div>
-          </div>
-        </div>
+        </details>
 
         <div class="detail-section stack">
-          <div class="section-heading"><h3>Licences</h3></div>
+          <div class="section-heading"><h3>Licences</h3><div class="small">${escapeHtml(String(licences.length))} total, ${escapeHtml(String(activeLicences.length))} active</div></div>
           ${licences.length ? `
-            <table class="compact-table">
-              <thead><tr><th>Plan</th><th>Status</th><th>Seats</th><th>Telemetry</th><th>Dates</th><th>Actions</th></tr></thead>
-              <tbody>
-                ${licences.map((licence) => `
-                  <tr>
-                    <td><strong>${escapeHtml(licence.plan)}</strong><div class="small mono">${escapeHtml(licence.licence_id)}</div></td>
-                    <td><div class="badge-row">${badgeHtml(licence.is_active ? 'Active' : 'Inactive', licence.is_active ? 'ok' : 'warn')}${licence.expires_at ? badgeHtml(`Expires ${formatRelative(licence.expires_at)}`, 'warn') : ''}</div></td>
-                    <td>${escapeHtml(String(licence.seats_used))}/${escapeHtml(String(licence.seats))}</td>
-                    <td><div class="badge-row">${badgeHtml(licence.features?.telemetry_profile || 'standard', licence.features?.telemetry_profile === 'dev_observability' ? 'warn' : 'ok')}</div></td>
-                    <td class="small">created ${escapeHtml(formatDate(licence.created_at))}<br />updated ${escapeHtml(formatDate(licence.updated_at))}</td>
-                    <td><div class="toolbar-actions"><button class="secondary" data-action="set-telemetry-profile" data-plan="${escapeHtml(licence.plan)}" data-profile="dev_observability">Dev obs</button><button class="secondary" data-action="set-telemetry-profile" data-plan="${escapeHtml(licence.plan)}" data-profile="standard">Standard</button><button class="warn" data-action="revoke-licence" data-plan="${escapeHtml(licence.plan)}">Revoke</button><button class="warn" data-action="rotate-licence" data-plan="${escapeHtml(licence.plan)}">Rotate</button><button class="danger" data-action="delete-licence" data-licence-id="${escapeHtml(licence.licence_id)}">Delete</button></div></td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
+            <div class="licence-table-shell">
+              <table class="compact-table">
+                <thead><tr><th>Licence</th><th>Status</th><th>Seats</th><th>Telemetry</th><th>Updated</th><th>Actions</th></tr></thead>
+                <tbody>
+                  ${visibleLicences.map((licence) => `
+                    <tr>
+                      <td><strong>${escapeHtml(licence.plan)}</strong><div class="small mono">${escapeHtml(licence.licence_id)}</div></td>
+                      <td><div class="badge-row">${badgeHtml(licence.is_active ? 'Active' : 'Inactive', licence.is_active ? 'ok' : 'warn')}${licence.expires_at ? badgeHtml(`Exp ${formatRelative(licence.expires_at)}`, 'warn') : ''}</div></td>
+                      <td>${escapeHtml(String(licence.seats_used))}/${escapeHtml(String(licence.seats))}</td>
+                      <td><div class="badge-row">${badgeHtml(licence.features?.telemetry_profile || 'standard', licence.features?.telemetry_profile === 'dev_observability' ? 'warn' : 'ok')}</div></td>
+                      <td class="small">${escapeHtml(formatRelative(licence.updated_at))}</td>
+                      <td><div class="toolbar-actions compact"><button class="warn" data-action="revoke-licence" data-plan="${escapeHtml(licence.plan)}">Revoke</button><button class="warn" data-action="rotate-licence" data-plan="${escapeHtml(licence.plan)}">Rotate</button><button class="danger" data-action="delete-licence" data-licence-id="${escapeHtml(licence.licence_id)}">Delete</button></div></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+            ${licences.length > visibleLicences.length ? `<div class="small">Showing ${escapeHtml(String(visibleLicences.length))} newest/active licences. Export JSON for the full raw licence history.</div>` : ''}
           ` : '<div class="small">No licences for this customer.</div>'}
         </div>
 
@@ -1382,16 +1425,19 @@
           </div>
         </div>
 
-        <div class="detail-section subgrid-two">
-          <div class="stack">
-            <div class="section-heading"><h3>Audit History</h3></div>
-            <div class="list-box">${auditHistory.length ? auditHistory.map((item) => `<div class="activity-card"><div><strong>${escapeHtml(item.action)}</strong></div><div class="small">${escapeHtml(item.actor || 'unknown')} - ${escapeHtml(item.environment || 'unknown')} - ${escapeHtml(formatDate(item.created_at))}</div><div class="small">${escapeHtml(item.reason || '')}</div></div>`).join('') : '<div class="small">No audit events recorded.</div>'}</div>
+        <details class="detail-collapse">
+          <summary>Audit history and lifecycle timeline</summary>
+          <div class="detail-collapse-body subgrid-two">
+            <div class="stack">
+              <div class="section-heading"><h3>Audit History</h3></div>
+              <div class="list-box">${auditHistory.length ? auditHistory.map((item) => `<div class="activity-card"><div><strong>${escapeHtml(item.action)}</strong></div><div class="small">${escapeHtml(item.actor || 'unknown')} - ${escapeHtml(item.environment || 'unknown')} - ${escapeHtml(formatDate(item.created_at))}</div><div class="small">${escapeHtml(item.reason || '')}</div></div>`).join('') : '<div class="small">No audit events recorded.</div>'}</div>
+            </div>
+            <div class="stack">
+              <div class="section-heading"><h3>Lifecycle Timeline</h3></div>
+              <div class="list-box">${timelineItems.length ? timelineItems.map((item) => `<div class="activity-card"><div><strong>${escapeHtml(item.label)}</strong></div><div class="small">${escapeHtml(formatDate(item.at))}</div><div class="small">${escapeHtml(item.detail || '')}</div></div>`).join('') : '<div class="small">No lifecycle events available.</div>'}</div>
+            </div>
           </div>
-          <div class="stack">
-            <div class="section-heading"><h3>Lifecycle Timeline</h3></div>
-            <div class="list-box">${timelineItems.length ? timelineItems.map((item) => `<div class="activity-card"><div><strong>${escapeHtml(item.label)}</strong></div><div class="small">${escapeHtml(formatDate(item.at))}</div><div class="small">${escapeHtml(item.detail || '')}</div></div>`).join('') : '<div class="small">No lifecycle events available.</div>'}</div>
-          </div>
-        </div>
+        </details>
       `;
     }
 
