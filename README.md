@@ -4,7 +4,7 @@ Prototype VS Code extension for security scanning, AI-assisted review, and fix p
 
 ## Current Version
 
-`0.1.28`
+`0.1.29`
 
 ## Prototype Status
 

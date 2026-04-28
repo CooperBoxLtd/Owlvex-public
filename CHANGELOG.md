@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.29
+
+- promote the 2026-04-28 dev-validated backend image to production
+- reduce onboarding setup friction in the extension
+- fix the registration onboarding loop
+- bound registration email delivery so failed or slow email paths do not leave the onboarding flow hanging
+- document the production deployment and public release path
+
 ## 0.1.28
 
 - promote the production backend to the same dev-validated Azure image while preserving production licence enforcement
