@@ -123,8 +123,10 @@ These real env files must never be committed.
 
 ## Deployment Paths
 
-The 2026-04-27 production promotion and release repair are recorded in
-[DEPLOYMENT_LOG_2026-04-27.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_LOG_2026-04-27.md).
+Recent production promotion logs:
+
+- [DEPLOYMENT_LOG_2026-04-28.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_LOG_2026-04-28.md)
+- [DEPLOYMENT_LOG_2026-04-27.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_LOG_2026-04-27.md)
 
 ### Dev Path
 

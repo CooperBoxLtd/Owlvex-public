@@ -72,6 +72,18 @@ It must not be used as a mirror of the full private repository.
 
 ## Latest Manual Release Record
 
+The 2026-04-28 manual release published extension version `0.1.29`.
+
+- private release commit: `1a0282c`
+- public repository commit: `1cad7de`
+- public repository: `https://github.com/CooperBoxLtd/Owlvex-public`
+- public repository asset: `releases/owlvex-0.1.29.vsix`
+- Marketplace item: `https://marketplace.visualstudio.com/items?itemName=owlvex.owlvex`
+
+The release and backend promotion details are recorded in [DEPLOYMENT_LOG_2026-04-28.md](D:/Dev/repos/CodeScanner/docs/DEPLOYMENT_LOG_2026-04-28.md).
+
+## Previous Manual Release Record
+
 The 2026-04-27 manual release published extension version `0.1.28`.
 
 - private release commit: `bfe6161`
