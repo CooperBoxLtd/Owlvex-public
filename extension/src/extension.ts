@@ -990,16 +990,16 @@ export function buildBackendConnectedNoLicenceChoices(): OnboardingActionChoice[
 export function buildRegistrationCompletionChoices(): OnboardingActionChoice[] {
     return [
         {
-            label: 'Scan Current File',
-            command: PROFILE.commands.scanFile,
+            label: 'Configure LLM',
+            command: PROFILE.commands.setupAI,
         },
         {
             label: 'Scan Workspace',
             command: PROFILE.commands.scanWorkspace,
         },
         {
-            label: 'Configure LLM',
-            command: PROFILE.commands.setupAI,
+            label: 'Scan Current File',
+            command: PROFILE.commands.scanFile,
         },
     ];
 }
@@ -1007,16 +1007,16 @@ export function buildRegistrationCompletionChoices(): OnboardingActionChoice[] {
 export function buildBackendAndLicenceReadyChoices(): OnboardingActionChoice[] {
     return [
         {
+            label: 'Configure LLM',
+            command: PROFILE.commands.setupAI,
+        },
+        {
             label: 'Scan Current File',
             command: PROFILE.commands.scanFile,
         },
         {
             label: 'Scan Workspace',
             command: PROFILE.commands.scanWorkspace,
-        },
-        {
-            label: 'Configure LLM',
-            command: PROFILE.commands.setupAI,
         },
     ];
 }
@@ -2082,19 +2082,80 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.showOnboarding, async () => {
             const projectRoot = await resolveProjectRootInfo();
+            const licenceKey = await licenceMgr.getKey().catch(() => undefined);
+            const cachedInfo = licenceMgr.getCachedInfo();
+            const provider = registry.getActive();
+            const providerConfigured = await provider.isConfigured().catch(() => false);
+
+            let licenceReady = Boolean(cachedInfo);
+            let licenceSummary = cachedInfo
+                ? buildLicenceStatusSummary(cachedInfo)
+                : licenceKey
+                    ? 'Stored key found; run Test Setup to validate it.'
+                    : 'No licence or registration yet.';
+
+            if (licenceKey && !cachedInfo) {
+                try {
+                    const info = await licenceMgr.validate(getConfiguredApiUrl());
+                    licenceReady = true;
+                    licenceSummary = buildLicenceStatusSummary(info);
+                    refreshIdleStatus();
+                    void refreshRulePackRuntime();
+                } catch (error: any) {
+                    licenceReady = false;
+                    licenceSummary = `Stored key could not be validated: ${error.message}`;
+                    if (isRevocationLikeError(error)) {
+                        licenceMgr.clearCachedInfo();
+                        await purgeRulePackState();
+                        statusBar.showUnlicensed();
+                    }
+                }
+            }
+
+            const nextStep = !licenceReady
+                ? 'Register Free, start Trial, or enter a licence key.'
+                : !providerConfigured
+                    ? 'Configure your LLM provider for AI review and fix previews.'
+                    : !projectRoot.isConfigured
+                        ? 'Select a project root if this workspace contains more than one app.'
+                        : 'Run a scan and open the Summary report.';
+
+            const actions: OnboardingActionChoice[] = [];
+            if (!licenceReady) {
+                actions.push(...buildBackendConnectedNoLicenceChoices());
+            } else {
+                if (!providerConfigured) {
+                    actions.push({
+                        label: 'Configure LLM',
+                        command: PROFILE.commands.setupAI,
+                    });
+                }
+                actions.push({
+                    label: 'Scan Changed Files',
+                    command: PROFILE.commands.scanChangedFiles,
+                });
+                actions.push({
+                    label: 'Scan Workspace',
+                    command: PROFILE.commands.scanWorkspace,
+                });
+            }
+            if (!projectRoot.isConfigured) {
+                actions.push({
+                    label: 'Select Project Root',
+                    command: PROFILE.commands.selectProjectRoot,
+                });
+            }
+
             await promptOnboardingChoices(
                 [
-                    `${PROFILE.displayLabel}: Choose how you want to start.`,
+                    `${PROFILE.displayLabel}: Onboarding status.`,
                     buildBackendConnectionSummary(getConfiguredApiUrl()),
+                    `Licence: ${licenceSummary}`,
+                    `LLM: ${providerConfigured ? `${provider.name} configured (${provider.selectedModel})` : `${provider.name} not configured`}`,
                     `Project root: ${projectRoot.summary}`,
+                    `Next step: ${nextStep}`,
                 ].join('\n'),
-                [
-                    ...buildBackendConnectedNoLicenceChoices(),
-                    {
-                        label: 'Select Project Root',
-                        command: PROFILE.commands.selectProjectRoot,
-                    },
-                ],
+                actions,
             );
         })
     );
@@ -2167,11 +2228,9 @@ export function activate(context: vscode.ExtensionContext) {
                 'Enter your company or team name (optional)',
                 'Acme',
             );
-            if (!(await ensureProjectRootReady())) {
-                return;
-            }
 
             try {
+                const projectRoot = await resolveProjectRootInfo();
                 const registration = await registerTrackedAccessRequest(getConfiguredApiUrl(), {
                     email: email.trim(),
                     plan: selectedPlan,
@@ -2190,7 +2249,8 @@ export function activate(context: vscode.ExtensionContext) {
                 void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'registration_verified', {
                     plan: selectedPlan,
                     delivery: registration.delivery,
-                    has_project_root: true,
+                    has_project_root: Boolean(projectRoot.uri),
+                    project_root_configured: projectRoot.isConfigured,
                 }, {
                     includeProject: true,
                 });

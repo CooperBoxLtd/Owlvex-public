@@ -705,14 +705,14 @@ describe('plan access helpers', () => {
             'Enter Licence',
         ]);
         expect(buildRegistrationCompletionChoices().map(item => item.label)).toEqual([
-            'Scan Current File',
-            'Scan Workspace',
             'Configure LLM',
+            'Scan Workspace',
+            'Scan Current File',
         ]);
         expect(buildBackendAndLicenceReadyChoices().map(item => item.label)).toEqual([
+            'Configure LLM',
             'Scan Current File',
             'Scan Workspace',
-            'Configure LLM',
         ]);
         expect(buildProviderConnectedChoices().map(item => item.label)).toEqual([
             'Test Trial Setup',
