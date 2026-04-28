@@ -95,6 +95,54 @@ Final production health response:
 {"status":"ok","db":"ok","environment":"production"}
 ```
 
+## Dev Observability Admin Dashboard Deployment
+
+Later on 2026-04-28, the dev backend/admin console was updated for the dev observability telemetry work.
+
+Backend/dashboard changes deployed:
+
+- admin customer detail now exposes an explicit Telemetry Profile callout.
+- operators can apply `dev_observability` or revert to `standard` from the selected customer panel.
+- metrics page now includes Dev Observability aggregates for scan, report, fix preview, fix apply/discard, post-fix scans, duration, provider/model, and failure-rate signals.
+- `metrics_dev_observability` export is available.
+- backend usage metadata allowlist accepts the new report/fix telemetry fields.
+
+Validation before deploy:
+
+```text
+uv run --python C:\Users\CristianBogdan\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\python.exe --with-requirements requirements-dev.txt python -m pytest tests\test_api_endpoints.py -q
+```
+
+Result:
+
+- `85 passed`
+
+Deployment:
+
+- branch: `dev-observability-telemetry`
+- commit: `065ad26`
+- built image in ACR: `owlvexdevregistry.azurecr.io/owlvex-api:dev-20260428-202459`
+- deployed image to Azure dev App Service: `owlvexdev-api`
+- no schema migration was required for this slice.
+
+Final dev Web App image:
+
+```text
+DOCKER|owlvexdevregistry.azurecr.io/owlvex-api:dev-20260428-202459
+```
+
+Final dev health response:
+
+```json
+{"status":"ok","db":"ok","environment":"development"}
+```
+
+Admin verification:
+
+- `GET https://owlvexdev-api.azurewebsites.net/v1/admin/app` returned `200`.
+- served HTML contains `Dev Observability` and `Apply Dev Observability`.
+- `GET /v1/admin/metrics/dev-observability?group_by=overall` returned `200` with `dev_observability` payload.
+
 Follow-up production test:
 
 - production still returned the duplicate-trial error for a user deleted before the hotfix.
