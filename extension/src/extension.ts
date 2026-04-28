@@ -258,6 +258,9 @@ function normalizeStoredReportRecord(item: StoredReportRecord): StoredReportReco
 
 type UsageEventName =
     | 'scan_run'
+    | 'scan_started'
+    | 'scan_completed'
+    | 'scan_failed'
     | 'finding_viewed'
     | 'fix_viewed'
     | 'second_scan'
@@ -271,15 +274,25 @@ type UsageEventName =
     | 'llm_model_selected'
     | 'llm_connection_configured'
     | 'fix_preview_generated'
+    | 'fix_preview_started'
+    | 'fix_preview_completed'
+    | 'fix_preview_failed'
     | 'fix_preview_applied'
     | 'fix_preview_discarded'
-    | 'fix_verification_completed';
+    | 'fix_verification_completed'
+    | 'report_created'
+    | 'report_failed'
+    | 'fix_applied'
+    | 'fix_discarded'
+    | 'post_fix_scan_completed';
 
 interface UsageEventOptions {
     registry?: ProviderRegistry;
     includeProviderModel?: boolean;
     includeProject?: boolean;
 }
+
+type ScanLifecycleScope = 'current_file' | 'selected_files' | 'changed_files' | 'open_editors' | 'workspace';
 
 const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
 const PENDING_REGISTRATION_KEY = `${PROFILE.storagePrefix}.pendingRegistration`;
@@ -636,6 +649,58 @@ async function trackUsageEvent(
     } catch (error) {
         console.debug(`${PROFILE.displayLabel}: usage event ${eventName} failed`, error);
     }
+}
+
+function isDevObservabilityTelemetryEnabled(info: LicenceInfo | null | undefined): boolean {
+    return Boolean(info?.features.telemetryEnabled && info.features.telemetryProfile === 'dev_observability');
+}
+
+function classifyTelemetryError(error: any): string {
+    const message = String(error?.message ?? error ?? '').toLowerCase();
+    if (message.includes('timeout') || message.includes('timed out')) return 'timeout';
+    if (message.includes('rate limit') || message.includes('429')) return 'rate_limit';
+    if (message.includes('parse') || message.includes('json')) return 'parse';
+    if (message.includes('validation') || message.includes('invalid')) return 'validation';
+    if (message.includes('cancel')) return 'cancelled';
+    if (message.includes('provider') || message.includes('model') || message.includes('api')) return 'provider_error';
+    return 'unknown';
+}
+
+function emitDevScanLifecycleEvent(
+    licenceMgr: LicenceManager,
+    getApiUrl: () => string,
+    registry: ProviderRegistry,
+    eventName: Extract<UsageEventName, 'scan_started' | 'scan_completed' | 'scan_failed'>,
+    metadata: {
+        scope: ScanLifecycleScope;
+        startedAt: number;
+        fileCount?: number;
+        findingCount?: number;
+        status: 'started' | 'completed' | 'failed';
+        stage?: string;
+        errorKind?: string;
+    },
+): void {
+    if (!isDevObservabilityTelemetryEnabled(licenceMgr.getCachedInfo())) {
+        return;
+    }
+
+    void trackUsageEvent(licenceMgr, getApiUrl, eventName, {
+        telemetry_profile: 'dev_observability',
+        scope: metadata.scope,
+        status: metadata.status,
+        stage: metadata.stage,
+        error_kind: metadata.errorKind,
+        file_count: metadata.fileCount,
+        finding_count: metadata.findingCount,
+        duration_ms: Math.max(0, Date.now() - metadata.startedAt),
+        agent_mode: 'finder',
+        analysis_mix: 'deterministic+finder',
+    }, {
+        registry,
+        includeProviderModel: true,
+        includeProject: true,
+    });
 }
 
 function buildFindingUsageMetadata(finding: any): Record<string, unknown> {
@@ -2579,6 +2644,13 @@ export function activate(context: vscode.ExtensionContext) {
             statusBar.showScanning();
             diagnostics.clear(editor.document.uri);
             sidebar.clear();
+            const scanStartedAt = Date.now();
+            emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_started', {
+                scope: 'current_file',
+                startedAt: scanStartedAt,
+                fileCount: 1,
+                status: 'started',
+            });
 
             try {
                 const [annotated] = await annotateProviderComparisonNotes([{
@@ -2608,6 +2680,13 @@ export function activate(context: vscode.ExtensionContext) {
                     includeProviderModel: true,
                     includeProject: true,
                 });
+                emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_completed', {
+                    scope: 'current_file',
+                    startedAt: scanStartedAt,
+                    fileCount: 1,
+                    findingCount: result.findings.length,
+                    status: 'completed',
+                });
                 if (sessionScanCount === 2) {
                     void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'file' }, {
                         registry,
@@ -2626,6 +2705,14 @@ export function activate(context: vscode.ExtensionContext) {
 
                 return { status: 'completed', uri: editor.document.uri, result };
             } catch (error: any) {
+                emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                    scope: 'current_file',
+                    startedAt: scanStartedAt,
+                    fileCount: 1,
+                    status: 'failed',
+                    stage: 'provider_call',
+                    errorKind: classifyTelemetryError(error),
+                });
                 statusBar.showError(error.message);
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} scan failed: ${error.message}`);
                 throw error;
@@ -2654,6 +2741,13 @@ export function activate(context: vscode.ExtensionContext) {
             statusBar.showScanning();
             diagnostics.clear();
             sidebar.clear();
+            const scanStartedAt = Date.now();
+            emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_started', {
+                scope: 'selected_files',
+                startedAt: scanStartedAt,
+                fileCount: fileUris.length,
+                status: 'started',
+            });
 
             try {
                 const summary = await scanSelectedFiles({
@@ -2703,6 +2797,25 @@ export function activate(context: vscode.ExtensionContext) {
                 } else {
                     refreshIdleStatus();
                 }
+                if (summary.status === 'failed') {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                        scope: 'selected_files',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: totalFindings,
+                        status: 'failed',
+                        stage: 'file_scan',
+                        errorKind: 'provider_error',
+                    });
+                } else {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_completed', {
+                        scope: 'selected_files',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: totalFindings,
+                        status: 'completed',
+                    });
+                }
 
                 if (summary.status === 'completed' && enrichedResults.length) {
                     await persistLastReportSnapshot({
@@ -2731,6 +2844,14 @@ export function activate(context: vscode.ExtensionContext) {
                     results: enrichedResults,
                 };
             } catch (error: any) {
+                emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                    scope: 'selected_files',
+                    startedAt: scanStartedAt,
+                    fileCount: fileUris.length,
+                    status: 'failed',
+                    stage: 'provider_call',
+                    errorKind: classifyTelemetryError(error),
+                });
                 statusBar.showError(error.message);
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} selected-files scan failed: ${error.message}`);
                 throw error;
@@ -2758,6 +2879,13 @@ export function activate(context: vscode.ExtensionContext) {
             statusBar.showScanning();
             diagnostics.clear();
             sidebar.clear();
+            const scanStartedAt = Date.now();
+            emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_started', {
+                scope: 'changed_files',
+                startedAt: scanStartedAt,
+                fileCount: fileUris.length,
+                status: 'started',
+            });
 
             try {
                 const summary = await scanSelectedFiles({
@@ -2813,6 +2941,25 @@ export function activate(context: vscode.ExtensionContext) {
                 } else {
                     refreshIdleStatus();
                 }
+                if (summary.status === 'failed') {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                        scope: 'changed_files',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: totalFindings,
+                        status: 'failed',
+                        stage: 'file_scan',
+                        errorKind: 'provider_error',
+                    });
+                } else {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_completed', {
+                        scope: 'changed_files',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: totalFindings,
+                        status: 'completed',
+                    });
+                }
 
                 if (summary.status === 'completed' && enrichedResults.length) {
                     vscode.window.showInformationMessage(
@@ -2834,6 +2981,14 @@ export function activate(context: vscode.ExtensionContext) {
                     results: enrichedResults,
                 };
             } catch (error: any) {
+                emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                    scope: 'changed_files',
+                    startedAt: scanStartedAt,
+                    fileCount: fileUris.length,
+                    status: 'failed',
+                    stage: 'provider_call',
+                    errorKind: classifyTelemetryError(error),
+                });
                 statusBar.showError(error.message);
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} changed-files scan failed: ${error.message}`);
                 throw error;
@@ -2856,6 +3011,13 @@ export function activate(context: vscode.ExtensionContext) {
             statusBar.showScanning();
             diagnostics.clear();
             sidebar.clear();
+            const scanStartedAt = Date.now();
+            emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_started', {
+                scope: 'open_editors',
+                startedAt: scanStartedAt,
+                fileCount: fileUris.length,
+                status: 'started',
+            });
 
             try {
                 const summary = await scanSelectedFiles({
@@ -2911,6 +3073,25 @@ export function activate(context: vscode.ExtensionContext) {
                 } else {
                     refreshIdleStatus();
                 }
+                if (summary.status === 'failed') {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                        scope: 'open_editors',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: totalFindings,
+                        status: 'failed',
+                        stage: 'file_scan',
+                        errorKind: 'provider_error',
+                    });
+                } else {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_completed', {
+                        scope: 'open_editors',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: totalFindings,
+                        status: 'completed',
+                    });
+                }
 
                 if (summary.status === 'completed' && enrichedResults.length) {
                     vscode.window.showInformationMessage(
@@ -2927,6 +3108,14 @@ export function activate(context: vscode.ExtensionContext) {
                     results: enrichedResults,
                 };
             } catch (error: any) {
+                emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                    scope: 'open_editors',
+                    startedAt: scanStartedAt,
+                    fileCount: fileUris.length,
+                    status: 'failed',
+                    stage: 'provider_call',
+                    errorKind: classifyTelemetryError(error),
+                });
                 statusBar.showError(error.message);
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} open-editors scan failed: ${error.message}`);
                 throw error;
@@ -3419,61 +3608,98 @@ export function activate(context: vscode.ExtensionContext) {
                 return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
             }
 
-            const summary = await scanFolder({
-                root,
-                scanEngine,
-                diagnostics,
-                skipConfirmation: true,
-            });
-            summary.results = await annotateProviderComparisonNotes(
-                await finalizeMultiFileResults(
-                    summary.results,
-                    `Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`,
-                ),
-            );
-
-            for (const item of summary.results) {
-                storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
-            }
-            await persistScans();
-            await persistLastReportSnapshot({
-                targetLabel: vscode.workspace.asRelativePath(root, false) || root.fsPath,
-                outputRoot: root,
-                errors: summary.errors,
-                results: summary.results,
-            });
-            chatView.setLastScanTarget(`Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`);
-            sessionScanCount += 1;
-            void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
+            const scanStartedAt = Date.now();
+            emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_started', {
                 scope: 'workspace',
-                file_count: summary.completed,
-                finding_count: summary.totalFindings,
-            }, {
-                registry,
-                includeProviderModel: true,
-                includeProject: true,
+                startedAt: scanStartedAt,
+                status: 'started',
             });
-            if (sessionScanCount === 2) {
-                void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'workspace' }, {
+
+            try {
+                const summary = await scanFolder({
+                    root,
+                    scanEngine,
+                    diagnostics,
+                    skipConfirmation: true,
+                });
+                summary.results = await annotateProviderComparisonNotes(
+                    await finalizeMultiFileResults(
+                        summary.results,
+                        `Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`,
+                    ),
+                );
+
+                for (const item of summary.results) {
+                    storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
+                }
+                await persistScans();
+                await persistLastReportSnapshot({
+                    targetLabel: vscode.workspace.asRelativePath(root, false) || root.fsPath,
+                    outputRoot: root,
+                    errors: summary.errors,
+                    results: summary.results,
+                });
+                chatView.setLastScanTarget(`Folder: ${vscode.workspace.asRelativePath(root, false) || root.fsPath}`);
+                sessionScanCount += 1;
+                void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
+                    scope: 'workspace',
+                    file_count: summary.completed,
+                    finding_count: summary.totalFindings,
+                }, {
                     registry,
                     includeProviderModel: true,
                     includeProject: true,
                 });
-            }
-            void maybePromptUsefulnessFeedback(allowed, {
-                scope: 'workspace',
-                file_count: summary.completed,
-                finding_count: summary.totalFindings,
-            });
+                if (summary.status === 'failed') {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                        scope: 'workspace',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: summary.totalFindings,
+                        status: 'failed',
+                        stage: 'file_scan',
+                        errorKind: 'provider_error',
+                    });
+                } else {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_completed', {
+                        scope: 'workspace',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: summary.totalFindings,
+                        status: 'completed',
+                    });
+                }
+                if (sessionScanCount === 2) {
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'second_scan', { scope: 'workspace' }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
+                }
+                void maybePromptUsefulnessFeedback(allowed, {
+                    scope: 'workspace',
+                    file_count: summary.completed,
+                    finding_count: summary.totalFindings,
+                });
 
-            const msg = `${PROFILE.displayLabel}: Scanned ${summary.completed} file(s) in ${root.fsPath} - ${summary.totalFindings} finding(s)`;
-            if (summary.errors.length) {
-                vscode.window.showWarningMessage(`${msg} (${summary.errors.length} error(s) - see output)`);
-            } else if (summary.completed > 0) {
-                vscode.window.showInformationMessage(msg);
-            }
+                const msg = `${PROFILE.displayLabel}: Scanned ${summary.completed} file(s) in ${root.fsPath} - ${summary.totalFindings} finding(s)`;
+                if (summary.errors.length) {
+                    vscode.window.showWarningMessage(`${msg} (${summary.errors.length} error(s) - see output)`);
+                } else if (summary.completed > 0) {
+                    vscode.window.showInformationMessage(msg);
+                }
 
-            return { root, ...summary };
+                return { root, ...summary };
+            } catch (error: any) {
+                emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                    scope: 'workspace',
+                    startedAt: scanStartedAt,
+                    status: 'failed',
+                    stage: 'provider_call',
+                    errorKind: classifyTelemetryError(error),
+                });
+                throw error;
+            }
         })
     );
 

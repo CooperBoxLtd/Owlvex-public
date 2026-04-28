@@ -331,6 +331,7 @@ describe('LicenceManager cached state', () => {
             telemetryRequired: false,
             telemetryEnabled: false,
             telemetryOptOut: true,
+            telemetryProfile: 'standard',
         },
         usage: {
             scansThisMonth: 7,
@@ -394,6 +395,7 @@ describe('LicenceManager cached state', () => {
                     telemetry_required: false,
                     telemetry_enabled: true,
                     telemetry_opt_out: true,
+                    telemetry_profile: 'dev_observability',
                 },
                 usage: {
                     scans_this_month: 4,

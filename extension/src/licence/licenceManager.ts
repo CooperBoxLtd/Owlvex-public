@@ -26,6 +26,7 @@ export interface LicenceInfo {
         telemetryRequired: boolean;
         telemetryEnabled: boolean;
         telemetryOptOut: boolean;
+        telemetryProfile: string;
     };
     usage: {
         scansThisMonth: number;
@@ -289,6 +290,7 @@ export class LicenceManager {
                 telemetryRequired: Boolean(data.features.telemetry_required),
                 telemetryEnabled: Boolean(data.features.telemetry_enabled ?? true),
                 telemetryOptOut: Boolean(data.features.telemetry_opt_out),
+                telemetryProfile: typeof data.features.telemetry_profile === 'string' ? data.features.telemetry_profile : 'standard',
             },
             usage: {
                 scansThisMonth: data.usage?.scans_this_month ?? data.usage?.scans_today ?? 0,
@@ -350,6 +352,7 @@ function restoreCachedInfo(raw: unknown): LicenceInfo | null {
         || typeof candidate.features.telemetryRequired !== 'boolean'
         || typeof candidate.features.telemetryEnabled !== 'boolean'
         || typeof candidate.features.telemetryOptOut !== 'boolean'
+        || (candidate.features.telemetryProfile !== undefined && typeof candidate.features.telemetryProfile !== 'string')
         || typeof candidate.usage.scansThisMonth !== 'number'
         || typeof candidate.usage.monthlyLimitReached !== 'boolean'
     ) {
@@ -379,6 +382,7 @@ function restoreCachedInfo(raw: unknown): LicenceInfo | null {
             telemetryRequired: candidate.features.telemetryRequired,
             telemetryEnabled: candidate.features.telemetryEnabled,
             telemetryOptOut: candidate.features.telemetryOptOut,
+            telemetryProfile: candidate.features.telemetryProfile ?? 'standard',
         },
         usage: {
             scansThisMonth: candidate.usage.scansThisMonth,

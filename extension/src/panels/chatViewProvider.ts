@@ -1948,6 +1948,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     telemetryRequired: true,
                     telemetryEnabled: true,
                     telemetryOptOut: false,
+                    telemetryProfile: 'standard',
                 },
                 usage: {
                     scansThisMonth: 0,
@@ -1977,6 +1978,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     telemetryRequired: true,
                     telemetryEnabled: true,
                     telemetryOptOut: false,
+                    telemetryProfile: 'standard',
                 },
                 usage: {
                     scansThisMonth: 0,
