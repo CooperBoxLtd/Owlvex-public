@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Email
     resend_api_key: str = ""
     from_email: str = "noreply@owlvex.io"
+    email_delivery_timeout_seconds: float = 5.0
 
     # Runtime
     environment: str = "development"

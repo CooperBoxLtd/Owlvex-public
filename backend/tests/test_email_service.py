@@ -44,7 +44,7 @@ def test_send_verification_email_posts_to_resend(monkeypatch):
     )
 
     assert captured["url"] == "https://api.resend.com/emails"
-    assert captured["timeout"] == 10
+    assert captured["timeout"] == 5.0
     assert captured["headers"]["Authorization"] == "Bearer re_test"
     assert captured["body"]["from"] == "verified-sender@example.com"
     assert captured["body"]["to"] == ["user@example.com"]
@@ -88,6 +88,35 @@ def test_send_verification_email_surfaces_resend_error_detail(monkeypatch):
         assert "HTTP 403" in message
         assert "validation_error" in message
         assert "verified domain" in message
+
+
+def test_send_verification_email_surfaces_timeout(monkeypatch):
+    settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        resend_api_key="re_test",
+        from_email="noreply@example.com",
+        environment="test",
+        email_delivery_timeout_seconds=0.25,
+    )
+    monkeypatch.setattr(email_service, "get_settings", lambda: settings)
+
+    def fake_urlopen(req, timeout=0):
+        assert timeout == 0.25
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(email_service.request, "urlopen", fake_urlopen)
+
+    try:
+        email_service.send_verification_email(
+            to_email="user@example.com",
+            verification_code="123456",
+            plan="trial",
+        )
+        assert False, "Expected send_verification_email to raise RuntimeError"
+    except RuntimeError as exc:
+        assert "timed out" in str(exc)
 
 
 def test_send_licence_issued_email_sends_activation_confirmation_without_raw_key(monkeypatch):

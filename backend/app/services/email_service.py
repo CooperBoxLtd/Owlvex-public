@@ -1,4 +1,5 @@
 import json
+import socket
 from urllib import error, request
 
 from app.config import get_settings
@@ -58,13 +59,17 @@ def _send_email(*, to_email: str, subject: str, text: str, html: str | None = No
     )
 
     try:
-        with request.urlopen(req, timeout=10) as response:
+        with request.urlopen(req, timeout=settings.email_delivery_timeout_seconds) as response:
             if response.status >= 400:
                 raise RuntimeError(f"Email delivery failed with HTTP {response.status}")
     except error.HTTPError as exc:
         raise RuntimeError(_extract_resend_error_detail(exc)) from exc
     except error.URLError as exc:
         raise RuntimeError(f"Email delivery request failed: {exc.reason}") from exc
+    except (TimeoutError, socket.timeout) as exc:
+        raise RuntimeError("Email delivery request timed out") from exc
+    except OSError as exc:
+        raise RuntimeError(f"Email delivery request failed: {exc}") from exc
 
 
 def send_verification_email(*, to_email: str, verification_code: str, plan: str) -> None:
