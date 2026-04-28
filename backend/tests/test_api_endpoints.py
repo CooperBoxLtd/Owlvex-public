@@ -1130,6 +1130,47 @@ async def test_register_licence_surfaces_email_delivery_failure(client):
 
 
 @pytest.mark.asyncio
+async def test_register_licence_persists_pending_registration_when_email_delivery_fails(client):
+    configured_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        resend_api_key="re_test",
+        from_email="verified-sender@example.com",
+        environment="production",
+    )
+
+    with patch("app.routers.licences.get_settings", return_value=configured_settings), \
+         patch("app.routers.licences.send_verification_email", side_effect=RuntimeError("Email delivery failed with HTTP 403: validation_error")):
+        response = await client.post(
+            "/v1/licences/register",
+            json={"email": "delivery-failed@example.com", "plan": "free"},
+        )
+
+    assert response.status_code == 503
+
+    export_response = await client.get(
+        "/v1/admin/metrics/export",
+        params={"dataset": "customers", "format": "json"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert export_response.status_code == 200
+    rows = export_response.json()["rows"]
+    customer = next(row for row in rows if row["email"] == "delivery-failed@example.com")
+    assert customer["pending_plan"] == "free"
+    assert customer["summary"]["verification_pending"] is True
+
+    funnel_response = await client.get(
+        "/v1/admin/metrics/export",
+        params={"dataset": "registration_funnel_events", "format": "json"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+    assert funnel_response.status_code == 200
+    funnel_rows = [row for row in funnel_response.json()["rows"] if row["email"] == "delivery-failed@example.com"]
+    assert {row["event_name"] for row in funnel_rows} == {"registration_started", "verification_delivery_failed"}
+
+
+@pytest.mark.asyncio
 async def test_register_licence_rejects_invalid_plan(client):
     response = await client.post(
         "/v1/licences/register",

@@ -3821,7 +3821,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action === 'startTrial') {
-            await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'trial');
+            const registrationResult = await vscode.commands.executeCommand<any>(PROFILE.commands.registerAccess, 'trial');
             const licenceInfo = this.licenceMgr.getCachedInfo();
             this.messages.push({
                 role: 'system',
@@ -3833,6 +3833,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ...buildPlanNextStepGuidance(licenceInfo).map(line => `- ${line}`),
                         '- Use Test Trial Setup if you want to re-check backend, licence, and LLM connectivity',
                     ].join('\n')
+                    : registrationResult?.status === 'pending'
+                        ? [
+                            `Trial registration is pending for ${registrationResult.email}.`,
+                            'Enter the verification code from the email to activate the licence.',
+                            'Use Start Trial again to resume the pending verification without re-entering your email.',
+                        ].join('\n')
+                    : registrationResult?.status === 'failed'
+                        ? [
+                            'Trial registration did not complete.',
+                            `Reason: ${registrationResult.error}`,
+                            'Use Start Trial again after the backend/email issue is resolved.',
+                        ].join('\n')
                     : [
                         'Trial onboarding:',
                         '- Register a tracked trial with your email',
@@ -3878,7 +3890,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         if (action === 'useFree') {
-            await vscode.commands.executeCommand(PROFILE.commands.registerAccess, 'free');
+            const registrationResult = await vscode.commands.executeCommand<any>(PROFILE.commands.registerAccess, 'free');
             const licenceInfo = this.licenceMgr.getCachedInfo();
             this.messages.push({
                 role: 'system',
@@ -3889,6 +3901,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         'Recommended next steps:',
                         ...buildPlanNextStepGuidance(licenceInfo).map(line => `- ${line}`),
                     ].join('\n')
+                    : registrationResult?.status === 'pending'
+                        ? [
+                            `Free registration is pending for ${registrationResult.email}.`,
+                            'Enter the verification code from the email to activate the licence.',
+                            'Use Free again to resume the pending verification without re-entering your email.',
+                        ].join('\n')
+                    : registrationResult?.status === 'failed'
+                        ? [
+                            'Free registration did not complete.',
+                            `Reason: ${registrationResult.error}`,
+                            'Use Free again after the backend/email issue is resolved.',
+                        ].join('\n')
                     : [
                         'Free onboarding:',
                         '- Register Free access with your email',

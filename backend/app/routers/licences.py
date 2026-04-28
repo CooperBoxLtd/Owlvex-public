@@ -383,21 +383,6 @@ async def register(
         datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=current_settings.email_verification_code_minutes)
     )
 
-    if current_settings.resend_api_key:
-        try:
-            send_verification_email(
-                to_email=normalized_email,
-                verification_code=verification_code,
-                plan=plan,
-            )
-        except RuntimeError as exc:
-            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    elif not current_settings.is_development:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Email verification delivery is not configured.",
-        )
-
     delivery = "email" if current_settings.resend_api_key else "development_inline"
     await record_registration_funnel_event(
         db,
@@ -407,6 +392,41 @@ async def register(
         event_name="registration_started",
         delivery=delivery,
     )
+    await db.commit()
+
+    if current_settings.resend_api_key:
+        try:
+            send_verification_email(
+                to_email=normalized_email,
+                verification_code=verification_code,
+                plan=plan,
+            )
+        except RuntimeError as exc:
+            await record_registration_funnel_event(
+                db,
+                customer_id=customer.id,
+                email=normalized_email,
+                plan=plan,
+                event_name="verification_delivery_failed",
+                delivery=delivery,
+            )
+            await db.commit()
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    elif not current_settings.is_development:
+        await record_registration_funnel_event(
+            db,
+            customer_id=customer.id,
+            email=normalized_email,
+            plan=plan,
+            event_name="verification_delivery_failed",
+            delivery=delivery,
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Email verification delivery is not configured.",
+        )
+
     await record_registration_funnel_event(
         db,
         customer_id=customer.id,

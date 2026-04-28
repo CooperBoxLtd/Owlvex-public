@@ -282,6 +282,7 @@ interface UsageEventOptions {
 }
 
 const MAX_REPO_AI_REVIEW_CANDIDATES = 3;
+const PENDING_REGISTRATION_KEY = `${PROFILE.storagePrefix}.pendingRegistration`;
 
 interface RegisterAccessResponse {
     status: 'verification_required';
@@ -297,6 +298,10 @@ interface RegisterTrackedAccessPayload {
     plan: 'free' | 'trial';
     name?: string;
     company?: string;
+}
+
+interface PendingRegistrationState extends RegisterAccessResponse {
+    updated_at: string;
 }
 
 interface VerifyRegistrationResponse {
@@ -899,6 +904,7 @@ export function buildVerificationPromptMessage(
 async function completeTrackedRegistrationVerification(
     apiUrl: string,
     initialRegistration: RegisterAccessResponse,
+    onRegistrationUpdated?: (registration: RegisterAccessResponse) => Thenable<void> | Promise<void> | void,
 ): Promise<VerifyRegistrationResponse | undefined> {
     let registration = initialRegistration;
 
@@ -922,6 +928,7 @@ async function completeTrackedRegistrationVerification(
                     email: registration.email,
                     plan: registration.plan,
                 });
+                await onRegistrationUpdated?.(registration);
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: ${buildVerificationPromptMessage(registration)}`,
                 );
@@ -953,6 +960,7 @@ async function completeTrackedRegistrationVerification(
                     email: registration.email,
                     plan: registration.plan,
                 });
+                await onRegistrationUpdated?.(registration);
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: ${buildVerificationPromptMessage(registration)}`,
                 );
@@ -2208,6 +2216,93 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
+            const savePendingRegistration = async (registration: RegisterAccessResponse): Promise<void> => {
+                await context.globalState.update(PENDING_REGISTRATION_KEY, {
+                    ...registration,
+                    updated_at: new Date().toISOString(),
+                } satisfies PendingRegistrationState);
+            };
+
+            const clearPendingRegistration = async (): Promise<void> => {
+                await context.globalState.update(PENDING_REGISTRATION_KEY, undefined);
+            };
+
+            let pendingRegistration = context.globalState.get<PendingRegistrationState>(PENDING_REGISTRATION_KEY);
+            if (pendingRegistration && pendingRegistration.plan !== selectedPlan) {
+                pendingRegistration = undefined;
+            }
+
+            if (pendingRegistration) {
+                const resumeChoice = await vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: ${pendingRegistration.plan} registration is already pending for ${pendingRegistration.email}. Enter the verification code or use a different email.`,
+                    'Enter Code',
+                    'Resend Code',
+                    'Use Different Email',
+                    'Cancel',
+                );
+
+                if (resumeChoice === 'Enter Code') {
+                    const verified = await completeTrackedRegistrationVerification(
+                        getConfiguredApiUrl(),
+                        pendingRegistration,
+                        savePendingRegistration,
+                    );
+                    if (!verified) {
+                        return { status: 'pending', email: pendingRegistration.email, plan: selectedPlan };
+                    }
+                    await licenceMgr.storeKey(verified.licence_key);
+                    await clearPendingRegistration();
+                    const info = await licenceMgr.validate(getConfiguredApiUrl());
+                    await promptOnboardingChoices(
+                        `${PROFILE.displayLabel}: ${buildRegistrationSuccessMessage(selectedPlan, verified.email, info)}`,
+                        buildRegistrationCompletionChoices(),
+                    );
+                    refreshIdleStatus();
+                    void refreshRulePackRuntime();
+                    return { status: 'completed', email: verified.email, plan: selectedPlan };
+                }
+
+                if (resumeChoice === 'Resend Code') {
+                    try {
+                        const registration = await registerTrackedAccessRequest(getConfiguredApiUrl(), {
+                            email: pendingRegistration.email,
+                            plan: pendingRegistration.plan,
+                        });
+                        await savePendingRegistration(registration);
+                        vscode.window.showInformationMessage(
+                            `${PROFILE.displayLabel}: ${buildVerificationPromptMessage(registration)}`,
+                        );
+                        const verified = await completeTrackedRegistrationVerification(
+                            getConfiguredApiUrl(),
+                            registration,
+                            savePendingRegistration,
+                        );
+                        if (!verified) {
+                            return { status: 'pending', email: registration.email, plan: selectedPlan };
+                        }
+                        await licenceMgr.storeKey(verified.licence_key);
+                        await clearPendingRegistration();
+                        const info = await licenceMgr.validate(getConfiguredApiUrl());
+                        await promptOnboardingChoices(
+                            `${PROFILE.displayLabel}: ${buildRegistrationSuccessMessage(selectedPlan, verified.email, info)}`,
+                            buildRegistrationCompletionChoices(),
+                        );
+                        refreshIdleStatus();
+                        void refreshRulePackRuntime();
+                        return { status: 'completed', email: verified.email, plan: selectedPlan };
+                    } catch (error: any) {
+                        vscode.window.showWarningMessage(`${PROFILE.displayLabel}: ${error.message}`);
+                        return { status: 'pending', email: pendingRegistration.email, plan: selectedPlan };
+                    }
+                }
+
+                if (resumeChoice !== 'Use Different Email') {
+                    return { status: 'pending', email: pendingRegistration.email, plan: selectedPlan };
+                }
+
+                await clearPendingRegistration();
+            }
+
             const email = await vscode.window.showInputBox({
                 prompt: selectedPlan === 'trial'
                     ? 'Enter your email to start a tracked 7-day Owlvex trial'
@@ -2217,7 +2312,7 @@ export function activate(context: vscode.ExtensionContext) {
                 validateInput: (value) => /\S+@\S+\.\S+/.test(value.trim()) ? undefined : 'Enter a valid email address.',
             });
             if (!email) {
-                return;
+                return { status: 'cancelled', plan: selectedPlan };
             }
 
             const name = await promptOptionalIdentityField(
@@ -2237,15 +2332,21 @@ export function activate(context: vscode.ExtensionContext) {
                     name,
                     company,
                 });
+                await savePendingRegistration(registration);
 
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: ${buildVerificationPromptMessage(registration)}`,
                 );
-                const verified = await completeTrackedRegistrationVerification(getConfiguredApiUrl(), registration);
+                const verified = await completeTrackedRegistrationVerification(
+                    getConfiguredApiUrl(),
+                    registration,
+                    savePendingRegistration,
+                );
                 if (!verified) {
-                    return;
+                    return { status: 'pending', email: registration.email, plan: selectedPlan };
                 }
                 await licenceMgr.storeKey(verified.licence_key);
+                await clearPendingRegistration();
                 void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'registration_verified', {
                     plan: selectedPlan,
                     delivery: registration.delivery,
@@ -2261,6 +2362,7 @@ export function activate(context: vscode.ExtensionContext) {
                 );
                 refreshIdleStatus();
                 void refreshRulePackRuntime();
+                return { status: 'completed', email: verified.email, plan: selectedPlan };
             } catch (error: any) {
                 if (isRevocationLikeError(error)) {
                     licenceMgr.clearCachedInfo();
@@ -2268,6 +2370,7 @@ export function activate(context: vscode.ExtensionContext) {
                 }
                 vscode.window.showWarningMessage(`${PROFILE.displayLabel}: ${error.message}`);
                 await refreshStoredKeyStatus();
+                return { status: 'failed', error: error.message, plan: selectedPlan };
             }
         })
     );
