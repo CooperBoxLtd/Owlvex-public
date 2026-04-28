@@ -1025,6 +1025,67 @@ async def test_admin_metrics_usage_supports_overall_plan_and_customer_grouping(c
 
 
 @pytest.mark.asyncio
+async def test_admin_metrics_dev_observability_summarizes_workflow_events(client, db_session):
+    generate_response = await client.post(
+        "/v1/licences/generate",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={
+            "team_name": "Dev Observability",
+            "email": "dev-observability@example.com",
+            "plan": "developer",
+            "seats": 1,
+        },
+    )
+    assert generate_response.status_code == 201
+
+    licence_id = (await db_session.execute(text("SELECT id FROM licences WHERE email = :email"), {"email": "dev-observability@example.com"})).scalar_one()
+    for event_name, metadata in (
+        ("scan_started", '{"telemetry_profile":"dev_observability","scope":"workspace","status":"started","provider":"openai","model":"gpt-5.4","file_count":2}'),
+        ("scan_completed", '{"telemetry_profile":"dev_observability","scope":"workspace","status":"completed","provider":"openai","model":"gpt-5.4","file_count":2,"finding_count":5,"duration_ms":1200}'),
+        ("fix_preview_started", '{"telemetry_profile":"dev_observability","status":"started","provider":"openai","model":"gpt-5.4","file_count":1,"finding_count":1}'),
+        ("fix_preview_failed", '{"telemetry_profile":"dev_observability","status":"failed","provider":"openai","model":"gpt-5.4","file_count":1,"finding_count":1,"duration_ms":700,"error_kind":"provider_error"}'),
+        ("report_created", '{"telemetry_profile":"dev_observability","status":"completed","provider":"openai","model":"gpt-5.4","file_count":2,"finding_count":5,"duration_ms":300,"report_variant":"summary"}'),
+        ("fix_applied", '{"telemetry_profile":"dev_observability","status":"completed","provider":"openai","model":"gpt-5.4","file_count":1,"finding_count":1}'),
+        ("post_fix_scan_completed", '{"telemetry_profile":"dev_observability","status":"completed","provider":"openai","model":"gpt-5.4","file_count":1,"finding_count":0}'),
+    ):
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO usage_events (id, licence_id, user_email, event_name, metadata)
+                VALUES (:id, :licence_id, :user_email, :event_name, :metadata)
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "licence_id": str(licence_id),
+                "user_email": "dev-observability@example.com",
+                "event_name": event_name,
+                "metadata": metadata,
+            },
+        )
+    await db_session.commit()
+
+    response = await client.get(
+        "/v1/admin/metrics/dev-observability",
+        params={"group_by": "customer"},
+        headers={"X-Admin-Key": "test-admin-key"},
+    )
+
+    assert response.status_code == 200
+    metrics = response.json()["dev_observability"]
+    assert metrics["totals"]["events"] == 7
+    assert metrics["totals"]["scans_completed"] == 1
+    assert metrics["totals"]["fix_previews_failed"] == 1
+    assert metrics["totals"]["fixes_applied"] == 1
+    assert metrics["totals"]["post_fix_scans"] == 1
+    assert metrics["totals"]["failure_rate"] > 0
+    assert metrics["rows"][0]["customer"] == "dev-observability@example.com"
+    assert metrics["rows"][0]["scan_duration_p50_ms"] == 1200
+    assert metrics["rows"][0]["fix_preview_duration_p50_ms"] == 700
+    assert metrics["rows"][0]["providers"] == {"openai": 7}
+
+
+@pytest.mark.asyncio
 async def test_register_free_licence_creates_tracked_access(client):
     response = await client.post(
         "/v1/licences/register",
@@ -1693,6 +1754,85 @@ async def test_usage_event_accepts_dev_observability_lifecycle_metadata_in_devel
 
     assert response.status_code == 201
     assert response.json()["event_name"] == "scan_completed"
+
+
+@pytest.mark.asyncio
+async def test_usage_event_accepts_dev_observability_report_and_fix_metadata(client):
+    mock_result = {
+        "valid": True,
+        "licence_id": str(uuid.uuid4()),
+        "team_name": "Test Corp",
+        "plan": "developer",
+        "seats": 1,
+        "seats_used": 1,
+        "features": {
+            "frameworks": ["OWASP"],
+            "telemetry_enabled": True,
+            "telemetry_profile": "dev_observability",
+        },
+        "expires_at": None,
+    }
+    development_settings = Settings(
+        database_url="sqlite+aiosqlite:///:memory:",
+        secret_key="test-secret-key",
+        admin_key="test-admin-key",
+        environment="development",
+    )
+    with patch("app.routers.usage.validate_licence", return_value=mock_result), \
+         patch("app.routers.usage.get_settings", return_value=development_settings):
+        report_response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={
+                "event_name": "report_created",
+                "metadata": {
+                    "telemetry_profile": "dev_observability",
+                    "status": "completed",
+                    "report_variant": "summary",
+                    "target_label": "workspace",
+                    "file_count": 3,
+                    "finding_count": 4,
+                    "warning_count": 1,
+                    "average_score": 7.2,
+                    "duration_ms": 250,
+                },
+            },
+        )
+        fix_response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={
+                "event_name": "fix_preview_completed",
+                "metadata": {
+                    "telemetry_profile": "dev_observability",
+                    "status": "completed",
+                    "outcome": "ready",
+                    "file_count": 1,
+                    "finding_count": 1,
+                    "canonical_id": "owlvex.issue.path_traversal.001",
+                    "severity": "high",
+                    "duration_ms": 900,
+                },
+            },
+        )
+        legacy_batch_preview_response = await client.post(
+            "/v1/usage/events",
+            headers={"X-Licence-Key": "owlvex_lic_validkey"},
+            json={
+                "event_name": "fix_preview_generated",
+                "metadata": {
+                    "outcome": "ready",
+                    "file_count": 2,
+                    "finding_count": 3,
+                    "canonical_id": "owlvex.issue.path_traversal.001",
+                    "severity": "high",
+                },
+            },
+        )
+
+    assert report_response.status_code == 201
+    assert fix_response.status_code == 201
+    assert legacy_batch_preview_response.status_code == 201
 
 
 @pytest.mark.asyncio

@@ -377,6 +377,27 @@
       grid-template-columns: 1fr 1fr;
       gap: 12px;
     }
+    .metrics-wide {
+      display: grid;
+      gap: 12px;
+    }
+    .telemetry-callout {
+      display: grid;
+      gap: 10px;
+      border: 1px solid rgba(108, 183, 255, 0.28);
+      background: rgba(108, 183, 255, 0.06);
+      border-radius: 11px;
+      padding: 12px;
+    }
+    .telemetry-callout strong {
+      display: block;
+      margin-bottom: 2px;
+    }
+    .telemetry-state {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
     .metrics-table {
       width: 100%;
       min-width: 0;
@@ -422,6 +443,7 @@
       .stats-grid, .metrics-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .metrics-grid { grid-template-columns: 1fr; }
       .metrics-split { grid-template-columns: 1fr; }
+      .telemetry-state { grid-template-columns: 1fr; }
       .summary-grid,
       .subgrid-two { grid-template-columns: 1fr; }
     }
@@ -658,6 +680,13 @@
               <div id="metricsUsage" class="mono small"></div>
             </div>
           </div>
+          <div class="metrics-wide">
+            <div class="kv">
+              <label>Dev Observability</label>
+              <div class="small">Applies only to licences marked <span class="mono">dev_observability</span>. Use this to measure scan/fix/report reliability, latency, provider/model mix, and failure direction.</div>
+              <div id="metricsDevObservability" class="mono small" style="margin-top:10px;"></div>
+            </div>
+          </div>
         </div>
         <div class="stack">
           <div>
@@ -666,6 +695,7 @@
               <option value="metrics_summary">metrics_summary</option>
               <option value="metrics_funnel">metrics_funnel</option>
               <option value="metrics_usage">metrics_usage</option>
+              <option value="metrics_dev_observability">metrics_dev_observability</option>
               <option value="customers">customers</option>
               <option value="licences">licences</option>
               <option value="usage_events">usage_events</option>
@@ -721,7 +751,7 @@
       filteredCustomers: [],
       selectedCustomerId: null,
       latestResponse: {},
-      metrics: { summary: {}, funnel: {}, usage: {} },
+      metrics: { summary: {}, funnel: {}, usage: {}, devObservability: {} },
       isBusy: false,
     };
 
@@ -755,6 +785,7 @@
     const metricsFunnelEl = document.getElementById('metricsFunnel');
     const metricsUsageLabelEl = document.getElementById('metricsUsageLabel');
     const metricsUsageEl = document.getElementById('metricsUsage');
+    const metricsDevObservabilityEl = document.getElementById('metricsDevObservability');
     const exportDatasetEl = document.getElementById('exportDataset');
     const exportFormatEl = document.getElementById('exportFormat');
 
@@ -1035,13 +1066,17 @@
       const summary = state.metrics.summary || {};
       const funnel = state.metrics.funnel || {};
       const usage = state.metrics.usage || {};
+      const devObservability = state.metrics.devObservability || {};
+      const devTotals = devObservability.totals || {};
       metricsSummaryGridEl.innerHTML = [
         ['Registrations', funnel.registrations_started || 0],
         ['Verifications', funnel.verification_completed || 0],
         ['Licences issued', summary.licences_issued || 0],
         ['First scans', funnel.first_scan_completed || 0],
         ['Usage events', summary.usage_event_count || 0],
-        ['Audit events', summary.admin_audit_event_count || 0],
+        ['Dev obs events', devTotals.events || 0],
+        ['Scan fail rate', formatPercent(devTotals.failure_rate || 0)],
+        ['Fixes applied', devTotals.fixes_applied || 0],
       ].map(([label, value]) => `
         <div class="stat-card">
           <div class="small">${escapeHtml(label)}</div>
@@ -1061,6 +1096,7 @@
       const groupBy = usage.group_by || metricsGroupByEl.value || 'plan';
       metricsUsageLabelEl.textContent = `Usage By ${String(groupBy).charAt(0).toUpperCase()}${String(groupBy).slice(1)}`;
       metricsUsageEl.innerHTML = renderUsageMetricsTable(usage, groupBy);
+      metricsDevObservabilityEl.innerHTML = renderDevObservabilityMetrics(devObservability, groupBy);
     }
 
     function renderMetricsTable(headers, rows) {
@@ -1121,6 +1157,69 @@
       );
     }
 
+    function formatPercent(value) {
+      const numeric = Number(value || 0);
+      return `${(numeric * 100).toFixed(1)}%`;
+    }
+
+    function formatMs(value) {
+      if (value === null || value === undefined || value === '') return '--';
+      return `${Math.round(Number(value))}ms`;
+    }
+
+    function compactCounter(value) {
+      const entries = Object.entries(value || {}).sort((left, right) => Number(right[1]) - Number(left[1])).slice(0, 3);
+      return entries.length ? entries.map(([key, count]) => `${key}:${count}`).join(', ') : '--';
+    }
+
+    function usageEventSummary(event) {
+      const metadata = event.metadata || {};
+      const parts = [];
+      if (metadata.scope) parts.push(`scope=${metadata.scope}`);
+      if (metadata.status) parts.push(`status=${metadata.status}`);
+      if (metadata.duration_ms !== undefined) parts.push(`duration=${formatMs(metadata.duration_ms)}`);
+      if (metadata.file_count !== undefined) parts.push(`files=${metadata.file_count}`);
+      if (metadata.finding_count !== undefined) parts.push(`findings=${metadata.finding_count}`);
+      if (metadata.provider || metadata.model) parts.push(`${metadata.provider || 'provider?'}/${metadata.model || 'model?'}`);
+      if (metadata.error_kind) parts.push(`error=${metadata.error_kind}`);
+      return parts.length ? parts.join(' | ') : 'No telemetry metadata.';
+    }
+
+    function renderDevObservabilityMetrics(metrics, groupBy) {
+      const rows = metrics.rows || [];
+      const totals = metrics.totals || {};
+      const cards = `
+        <div class="metrics-card-grid" style="margin-bottom:10px;">
+          <div class="stat-card"><div class="small">Events</div><strong>${escapeHtml(String(totals.events || 0))}</strong></div>
+          <div class="stat-card"><div class="small">Scan completed / failed</div><strong>${escapeHtml(String(totals.scans_completed || 0))} / ${escapeHtml(String(totals.scans_failed || 0))}</strong></div>
+          <div class="stat-card"><div class="small">Fix preview completed / failed</div><strong>${escapeHtml(String(totals.fix_previews_completed || 0))} / ${escapeHtml(String(totals.fix_previews_failed || 0))}</strong></div>
+          <div class="stat-card"><div class="small">Reports</div><strong>${escapeHtml(String(totals.reports_created || 0))}</strong></div>
+          <div class="stat-card"><div class="small">Fixes kept / discarded</div><strong>${escapeHtml(String(totals.fixes_applied || 0))} / ${escapeHtml(String(totals.fixes_discarded || 0))}</strong></div>
+          <div class="stat-card"><div class="small">Post-fix scans</div><strong>${escapeHtml(String(totals.post_fix_scans || 0))}</strong></div>
+        </div>
+      `;
+      if (!rows.length) {
+        return `${cards}<div class="small">No dev observability telemetry for the selected filters. Mark a dev licence as Dev obs, revalidate the extension, then scan/report/fix.</div>`;
+      }
+      const label = groupBy === 'customer' ? 'Customer' : groupBy === 'plan' ? 'Plan' : 'Scope';
+      return cards + renderMetricsTable(
+        [label, 'Events', 'Scans ok/fail', 'Scan p50/p95', 'Fix previews ok/fail', 'Fix p50/p95', 'Reports', 'Fixes kept/discarded', 'Failure rate', 'Provider/model', 'Errors'],
+        rows.map((row) => [
+          row.customer || row.plan || row.group || 'overall',
+          row.events || 0,
+          `${row.scans_completed || 0}/${row.scans_failed || 0}`,
+          `${formatMs(row.scan_duration_p50_ms)}/${formatMs(row.scan_duration_p95_ms)}`,
+          `${row.fix_previews_completed || 0}/${row.fix_previews_failed || 0}`,
+          `${formatMs(row.fix_preview_duration_p50_ms)}/${formatMs(row.fix_preview_duration_p95_ms)}`,
+          row.reports_created || 0,
+          `${row.fixes_applied || 0}/${row.fixes_discarded || 0}`,
+          formatPercent(row.failure_rate || 0),
+          `${compactCounter(row.providers)} | ${compactCounter(row.models)}`,
+          compactCounter(row.error_kinds),
+        ])
+      );
+    }
+
     function buildDirectoryRows(customers, selectedCustomerId) {
       return customers.map((customer) => {
         const summary = customer.summary || {};
@@ -1163,6 +1262,8 @@
       const auditHistory = customer.audit_history || [];
       const timelineItems = buildTimelineItems(customer);
       const primaryLicence = licences[0] || null;
+      const telemetryProfile = primaryLicence?.features?.telemetry_profile || 'standard';
+      const telemetryProfileTone = telemetryProfile === 'dev_observability' ? 'warn' : 'ok';
 
       return `
         <div class="detail-section detail-hero">
@@ -1185,12 +1286,35 @@
           </div>
           <div class="toolbar-actions">
             <button class="secondary" data-action="refresh-detail">Refresh</button>
+            <button class="${telemetryProfile === 'dev_observability' ? 'secondary' : 'primary'}" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="dev_observability">Apply Dev Observability</button>
+            <button class="secondary" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="standard">Use Standard Telemetry</button>
             <button class="warn" data-action="resend-verification">Resend verification</button>
             <button class="warn" data-action="revoke-licences">Revoke active</button>
             <button class="warn" data-action="rotate-licence">Rotate latest</button>
             <button class="danger" data-action="ban-customer">Ban</button>
             <button data-action="unban-customer">Unban</button>
             <button class="danger" data-action="delete-customer">Delete</button>
+          </div>
+        </div>
+
+        <div class="detail-section">
+          <div class="telemetry-callout">
+            <div class="detail-hero-main">
+              <div>
+                <strong>Telemetry Profile</strong>
+                <div class="small">Use Dev Observability only on dev licences when you want scan/fix/report timings, provider/model, scope, failures, and post-fix outcomes. The extension must revalidate or restart after changing the profile.</div>
+              </div>
+              <div class="badge-row">${badgeHtml(telemetryProfile, telemetryProfileTone)}</div>
+            </div>
+            <div class="telemetry-state">
+              <div class="mini-stat"><div class="small">Current profile</div><strong>${escapeHtml(telemetryProfile)}</strong></div>
+              <div class="mini-stat"><div class="small">Environment rule</div><strong>${environmentEl.value === 'dev' ? 'dev backend' : 'prod blocked'}</strong></div>
+              <div class="mini-stat"><div class="small">Operator step</div><strong>${telemetryProfile === 'dev_observability' ? 'revalidate extension' : 'apply profile'}</strong></div>
+            </div>
+            <div class="toolbar-actions">
+              <button class="${telemetryProfile === 'dev_observability' ? 'secondary' : 'primary'}" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="dev_observability">Apply Dev Observability</button>
+              <button class="secondary" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="standard">Revert To Standard</button>
+            </div>
           </div>
         </div>
 
@@ -1245,7 +1369,7 @@
           <div class="stack">
             <div class="section-heading"><h3>Recent Activity</h3></div>
             ${activityList('Scans', activity.recent_scans || [], (scan) => `<div class="activity-card"><div><strong>${escapeHtml(scan.file_name || 'Unnamed file')}</strong></div><div class="small">${escapeHtml(scan.language || 'unknown')} - score=${escapeHtml(String(scan.score ?? '--'))} - findings=${escapeHtml(String(scan.finding_count ?? 0))}</div><div class="small">${escapeHtml(formatDate(scan.created_at))}</div></div>`, 'No scans recorded.')}
-            ${activityList('Usage events', activity.recent_usage_events || [], (event) => `<div class="activity-card"><div><strong>${escapeHtml(event.event_name)}</strong></div><div class="small">${escapeHtml(event.user_email || customer.email)} - ${escapeHtml(formatDate(event.created_at))}</div></div>`, 'No usage events recorded.')}
+            ${activityList('Usage events', activity.recent_usage_events || [], (event) => `<div class="activity-card"><div><strong>${escapeHtml(event.event_name)}</strong> ${event.metadata?.telemetry_profile === 'dev_observability' ? badgeHtml('dev obs', 'warn') : ''}</div><div class="small">${escapeHtml(event.user_email || customer.email)} - ${escapeHtml(formatDate(event.created_at))}</div><div class="small">${escapeHtml(usageEventSummary(event))}</div></div>`, 'No usage events recorded.')}
             ${activityList('Report comparisons', activity.recent_comparisons || [], (item) => `<div class="activity-card"><div><strong>Score change ${escapeHtml(String(item.score_change ?? '--'))}</strong></div><div class="small">new=${escapeHtml(String(item.new_findings ?? 0))} - resolved=${escapeHtml(String(item.resolved_findings ?? 0))}</div><div class="small">${escapeHtml(formatDate(item.created_at))}</div></div>`, 'No comparisons recorded.')}
           </div>
           <div class="stack">
@@ -1412,14 +1536,16 @@
       setStatus('Loading metrics...');
       const params = currentMetricsParams().toString();
       const suffix = params ? `?${params}` : '';
-      const [summaryData, funnelData, usageData] = await Promise.all([
+      const [summaryData, funnelData, usageData, devObservabilityData] = await Promise.all([
         request(`/v1/admin/metrics/summary${suffix}`, { method: 'GET' }),
         request(`/v1/admin/metrics/funnel${suffix}`, { method: 'GET' }),
         request(`/v1/admin/metrics/usage${suffix}`, { method: 'GET' }),
+        request(`/v1/admin/metrics/dev-observability${suffix}`, { method: 'GET' }),
       ]);
       state.metrics.summary = summaryData.summary || {};
       state.metrics.funnel = funnelData.funnel || {};
       state.metrics.usage = usageData.usage || {};
+      state.metrics.devObservability = devObservabilityData.dev_observability || {};
       renderMetrics();
       setStatus('Metrics refreshed.');
     }

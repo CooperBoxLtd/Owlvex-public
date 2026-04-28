@@ -133,6 +133,60 @@ def _apply_date_range(query, column, *, date_from: datetime | None, date_to: dat
     return query
 
 
+def _safe_number(value) -> float | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    index = min(len(sorted_values) - 1, max(0, int(round((len(sorted_values) - 1) * percentile))))
+    return round(sorted_values[index], 2)
+
+
+def _dev_observability_empty_group(group_by: str, group_key: str, plan: str | None = None) -> dict:
+    row = {
+        "group": group_key,
+        "events": 0,
+        "scans_started": 0,
+        "scans_completed": 0,
+        "scans_failed": 0,
+        "reports_created": 0,
+        "fix_previews_started": 0,
+        "fix_previews_completed": 0,
+        "fix_previews_failed": 0,
+        "fixes_applied": 0,
+        "fixes_discarded": 0,
+        "post_fix_scans": 0,
+        "files_scanned": 0,
+        "findings": 0,
+        "scan_duration_p50_ms": None,
+        "scan_duration_p95_ms": None,
+        "fix_preview_duration_p50_ms": None,
+        "fix_preview_duration_p95_ms": None,
+        "failure_rate": 0.0,
+        "providers": {},
+        "models": {},
+        "scopes": {},
+        "error_kinds": {},
+    }
+    if group_by == "customer":
+        row["customer"] = group_key
+    if plan is not None:
+        row["plan"] = plan
+    return row
+
+
+def _increment_counter(container: dict, key: str | None) -> None:
+    normalized = key or "unknown"
+    container[normalized] = int(container.get(normalized, 0)) + 1
+
+
 def _generate_verification_code() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
@@ -770,6 +824,140 @@ async def _metrics_usage(
     }
 
 
+async def _metrics_dev_observability(
+    db: AsyncSession,
+    *,
+    date_from: datetime | None,
+    date_to: datetime | None,
+    plan: str | None,
+    group_by: str = "overall",
+) -> dict:
+    if group_by not in {"overall", "plan", "customer"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported group_by value: {group_by}")
+
+    query = (
+        select(UsageEvent, Licence.plan, func.coalesce(Customer.email, Licence.email).label("customer_email"))
+        .join(Licence, Licence.id == UsageEvent.licence_id)
+        .outerjoin(Customer, Customer.id == Licence.customer_id)
+        .where(UsageEvent.event_data["telemetry_profile"].as_string() == "dev_observability")
+    )
+    if plan:
+        query = query.where(Licence.plan == plan)
+    query = _apply_date_range(query, UsageEvent.created_at, date_from=date_from, date_to=date_to)
+
+    rows: dict[str, dict] = {}
+    scan_durations: dict[str, list[float]] = defaultdict(list)
+    fix_preview_durations: dict[str, list[float]] = defaultdict(list)
+    terminal_events = {
+        "scan_completed",
+        "scan_failed",
+        "fix_preview_completed",
+        "fix_preview_failed",
+        "report_created",
+        "report_failed",
+        "fix_applied",
+        "fix_discarded",
+    }
+    failure_events = {"scan_failed", "fix_preview_failed", "report_failed"}
+
+    result = await db.execute(query.order_by(UsageEvent.created_at.desc()))
+    for event, item_plan, customer_email in result.all():
+        if group_by == "customer":
+            group_key = customer_email or "unknown"
+        elif group_by == "plan":
+            group_key = item_plan or "unknown"
+        else:
+            group_key = "overall"
+
+        row = rows.setdefault(group_key, _dev_observability_empty_group(group_by, group_key, item_plan))
+        metadata = event.event_data or {}
+        row["events"] += 1
+        _increment_counter(row["providers"], metadata.get("provider"))
+        _increment_counter(row["models"], metadata.get("model"))
+        _increment_counter(row["scopes"], metadata.get("scope"))
+        if metadata.get("error_kind"):
+            _increment_counter(row["error_kinds"], metadata.get("error_kind"))
+
+        if event.event_name == "scan_started":
+            row["scans_started"] += 1
+        elif event.event_name == "scan_completed":
+            row["scans_completed"] += 1
+        elif event.event_name == "scan_failed":
+            row["scans_failed"] += 1
+        elif event.event_name == "report_created":
+            row["reports_created"] += 1
+        elif event.event_name == "fix_preview_started":
+            row["fix_previews_started"] += 1
+        elif event.event_name == "fix_preview_completed":
+            row["fix_previews_completed"] += 1
+        elif event.event_name == "fix_preview_failed":
+            row["fix_previews_failed"] += 1
+        elif event.event_name == "fix_applied":
+            row["fixes_applied"] += 1
+        elif event.event_name == "fix_discarded":
+            row["fixes_discarded"] += 1
+        elif event.event_name == "post_fix_scan_completed":
+            row["post_fix_scans"] += 1
+
+        file_count = _safe_number(metadata.get("file_count"))
+        finding_count = _safe_number(metadata.get("finding_count"))
+        if event.event_name in {"scan_completed", "scan_failed"} and file_count is not None:
+            row["files_scanned"] += int(file_count)
+        if event.event_name in {"scan_completed", "scan_failed", "report_created", "post_fix_scan_completed"} and finding_count is not None:
+            row["findings"] += int(finding_count)
+
+        duration_ms = _safe_number(metadata.get("duration_ms"))
+        if duration_ms is not None:
+            if event.event_name in {"scan_completed", "scan_failed"}:
+                scan_durations[group_key].append(duration_ms)
+            elif event.event_name in {"fix_preview_completed", "fix_preview_failed"}:
+                fix_preview_durations[group_key].append(duration_ms)
+
+        row["_terminal_events"] = int(row.get("_terminal_events", 0)) + (1 if event.event_name in terminal_events else 0)
+        row["_failure_events"] = int(row.get("_failure_events", 0)) + (1 if event.event_name in failure_events else 0)
+
+    for group_key, row in rows.items():
+        row["scan_duration_p50_ms"] = _percentile(scan_durations[group_key], 0.50)
+        row["scan_duration_p95_ms"] = _percentile(scan_durations[group_key], 0.95)
+        row["fix_preview_duration_p50_ms"] = _percentile(fix_preview_durations[group_key], 0.50)
+        row["fix_preview_duration_p95_ms"] = _percentile(fix_preview_durations[group_key], 0.95)
+        terminal_count = int(row.pop("_terminal_events", 0))
+        failure_count = int(row.pop("_failure_events", 0))
+        row["failure_rate"] = round(failure_count / terminal_count, 4) if terminal_count else 0.0
+
+    output_rows = list(rows.values())
+    output_rows.sort(key=lambda item: str(item.get("customer") or item.get("plan") or item.get("group") or ""))
+    totals = _dev_observability_empty_group("overall", "overall")
+    for row in output_rows:
+        for key in (
+            "events",
+            "scans_started",
+            "scans_completed",
+            "scans_failed",
+            "reports_created",
+            "fix_previews_started",
+            "fix_previews_completed",
+            "fix_previews_failed",
+            "fixes_applied",
+            "fixes_discarded",
+            "post_fix_scans",
+            "files_scanned",
+            "findings",
+        ):
+            totals[key] += int(row.get(key) or 0)
+    totals["failure_rate"] = round(
+        (totals["scans_failed"] + totals["fix_previews_failed"])
+        / max(1, totals["scans_completed"] + totals["scans_failed"] + totals["fix_previews_completed"] + totals["fix_previews_failed"]),
+        4,
+    )
+
+    return {
+        "group_by": group_by,
+        "rows": output_rows,
+        "totals": totals,
+    }
+
+
 async def _purge_licence_tree(db: AsyncSession, licence: Licence) -> None:
     await db.execute(delete(Comparison).where(Comparison.licence_id == licence.id))
     await db.execute(delete(ScanHistory).where(ScanHistory.licence_id == licence.id))
@@ -1013,11 +1201,38 @@ async def metrics_usage(
     }
 
 
+@router.get("/metrics/dev-observability")
+async def metrics_dev_observability(
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    date_from: str | None = Query(default=None),
+    date_to: str | None = Query(default=None),
+    plan: str | None = Query(default=None, pattern="^(free|trial|developer|team|enterprise)$"),
+    group_by: str = Query(default="overall", pattern="^(overall|plan|customer)$"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    start = _parse_date_filter(date_from)
+    end = _parse_date_filter(date_to, inclusive_end=True)
+    return {
+        "date_from": start.isoformat() if start else None,
+        "date_to": end.isoformat() if end else None,
+        "plan": plan,
+        "group_by": group_by,
+        "dev_observability": await _metrics_dev_observability(
+            db,
+            date_from=start,
+            date_to=end,
+            plan=plan,
+            group_by=group_by,
+        ),
+    }
+
+
 @router.get("/metrics/export")
 async def export_metrics(
     x_admin_key: str = Header(..., alias="X-Admin-Key"),
     x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
-    dataset: str = Query(pattern="^(customers|licences|usage_events|registration_funnel_events|scan_history|comparisons|customer_notes|admin_audit_log|metrics_summary|metrics_funnel|metrics_usage)$"),
+    dataset: str = Query(pattern="^(customers|licences|usage_events|registration_funnel_events|scan_history|comparisons|customer_notes|admin_audit_log|metrics_summary|metrics_funnel|metrics_usage|metrics_dev_observability)$"),
     format: str = Query(default="json", pattern="^(json|csv)$"),
     date_from: str | None = Query(default=None),
     date_to: str | None = Query(default=None),
@@ -1036,6 +1251,9 @@ async def export_metrics(
     elif dataset == "metrics_usage":
         usage_payload = await _metrics_usage(db, date_from=start, date_to=end, plan=plan, group_by=group_by)
         payload = usage_payload["rows"] or [usage_payload["totals"]]
+    elif dataset == "metrics_dev_observability":
+        dev_payload = await _metrics_dev_observability(db, date_from=start, date_to=end, plan=plan, group_by=group_by)
+        payload = dev_payload["rows"] or [dev_payload["totals"]]
     else:
         query_map = {
             "customers": select(Customer).options(selectinload(Customer.licences)).order_by(Customer.created_at.desc()),

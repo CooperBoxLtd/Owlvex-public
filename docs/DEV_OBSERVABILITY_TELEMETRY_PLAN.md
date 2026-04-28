@@ -348,6 +348,24 @@ Fix verification:
   - failure count
   - failure rate
 
+Implemented dashboard surface:
+
+- Customer detail now has a **Telemetry Profile** callout.
+- Operators can apply **Dev Observability** or revert to **Standard** from the selected customer.
+- The callout explains the practical rule: this is for dev licences only, and the extension must revalidate or restart after the profile changes.
+- Metrics now include a **Dev Observability** section with scan, report, fix-preview, fix-apply, post-fix scan, duration, provider/model, and failure-rate aggregates.
+- Metrics export now supports `metrics_dev_observability`.
+
+Practical operator workflow:
+
+1. Open the dev admin console.
+2. Select the customer/licence.
+3. Click **Apply Dev Observability**.
+4. In VS Code, revalidate/restart the dev extension so the cached licence receives `telemetry_profile=dev_observability`.
+5. Run normal workflows: scan, create report, preview fix, keep/discard fix.
+6. Open **Metrics** and refresh. Use **Group by customer** when validating one test account, or **Group by plan/provider exports** for broader analysis.
+7. Revert to **Standard** when done.
+
 ## Acceptance Criteria
 
 - Dev licences can be marked with `telemetry_profile=dev_observability`.
