@@ -1301,6 +1301,8 @@
       const primaryLicence = licences[0] || null;
       const telemetryProfile = primaryLicence?.features?.telemetry_profile || 'standard';
       const telemetryProfileTone = telemetryProfile === 'dev_observability' ? 'warn' : 'ok';
+      const isDevEnvironment = environmentEl.value === 'dev';
+      const devObservabilityDisabled = isDevEnvironment ? '' : ' disabled title="Dev Observability can only be applied from the dev backend."';
       const activeLicences = licences.filter((licence) => licence.is_active);
       const archivedLicences = licences.filter((licence) => !licence.is_active);
       const visibleLicences = [...activeLicences, ...archivedLicences].slice(0, 8);
@@ -1346,11 +1348,11 @@
             </div>
             <div class="telemetry-state">
               <div class="mini-stat"><div class="small">Current profile</div><strong>${escapeHtml(telemetryProfile)}</strong></div>
-              <div class="mini-stat"><div class="small">Environment rule</div><strong>${environmentEl.value === 'dev' ? 'dev backend' : 'prod blocked'}</strong></div>
-              <div class="mini-stat"><div class="small">Operator step</div><strong>${telemetryProfile === 'dev_observability' ? 'revalidate extension' : 'apply profile'}</strong></div>
+              <div class="mini-stat"><div class="small">Environment rule</div><strong>${isDevEnvironment ? 'dev backend' : 'prod blocked'}</strong></div>
+              <div class="mini-stat"><div class="small">Operator step</div><strong>${isDevEnvironment ? (telemetryProfile === 'dev_observability' ? 'revalidate extension' : 'apply profile') : 'use dev environment'}</strong></div>
             </div>
             <div class="toolbar-actions compact">
-              <button class="${telemetryProfile === 'dev_observability' ? 'secondary' : 'primary'}" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="dev_observability">Apply Dev Observability</button>
+              <button class="${telemetryProfile === 'dev_observability' ? 'secondary' : 'primary'}" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="dev_observability"${devObservabilityDisabled}>Apply Dev Observability</button>
               <button class="secondary" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="standard">Revert To Standard</button>
             </div>
           </div>
