@@ -1530,7 +1530,7 @@ async def test_admin_can_set_dev_observability_telemetry_profile_in_development(
 
 
 @pytest.mark.asyncio
-async def test_admin_rejects_dev_observability_profile_outside_development(client):
+async def test_admin_can_set_full_telemetry_profile_outside_development(client):
     generate_response = await client.post(
         "/v1/licences/generate",
         headers={"X-Admin-Key": "test-admin-key"},
@@ -1551,8 +1551,8 @@ async def test_admin_rejects_dev_observability_profile_outside_development(clien
             json={"email": "telemetry-profile-prod@example.com", "plan": "developer", "profile": "dev_observability"},
         )
 
-    assert response.status_code == 400
-    assert "only available in development" in response.json()["detail"]
+    assert response.status_code == 200
+    assert response.json()["telemetry_profile"] == "dev_observability"
 
 
 @pytest.mark.asyncio

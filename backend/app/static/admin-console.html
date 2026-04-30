@@ -1301,8 +1301,7 @@
       const primaryLicence = licences[0] || null;
       const telemetryProfile = primaryLicence?.features?.telemetry_profile || 'standard';
       const telemetryProfileTone = telemetryProfile === 'dev_observability' ? 'warn' : 'ok';
-      const isDevEnvironment = environmentEl.value === 'dev';
-      const devObservabilityDisabled = isDevEnvironment ? '' : ' disabled title="Dev Observability can only be applied from the dev backend."';
+      const telemetryProfileLabel = telemetryProfile === 'dev_observability' ? 'full' : 'standard';
       const activeLicences = licences.filter((licence) => licence.is_active);
       const archivedLicences = licences.filter((licence) => !licence.is_active);
       const visibleLicences = [...activeLicences, ...archivedLicences].slice(0, 8);
@@ -1342,17 +1341,17 @@
             <div class="detail-hero-main">
               <div>
                 <strong>Telemetry Profile</strong>
-                <div class="small">Use Dev Observability only on dev licences when you want scan/fix/report timings, provider/model, scope, failures, and post-fix outcomes. The extension must revalidate or restart after changing the profile.</div>
+                <div class="small">Use Full telemetry when you want scan/fix/report timings, provider/model, scope, failures, and post-fix outcomes. The extension must revalidate or restart after changing the profile.</div>
               </div>
-              <div class="badge-row">${badgeHtml(telemetryProfile, telemetryProfileTone)}</div>
+              <div class="badge-row">${badgeHtml(telemetryProfileLabel, telemetryProfileTone)}</div>
             </div>
             <div class="telemetry-state">
-              <div class="mini-stat"><div class="small">Current profile</div><strong>${escapeHtml(telemetryProfile)}</strong></div>
-              <div class="mini-stat"><div class="small">Environment rule</div><strong>${isDevEnvironment ? 'dev backend' : 'prod blocked'}</strong></div>
-              <div class="mini-stat"><div class="small">Operator step</div><strong>${isDevEnvironment ? (telemetryProfile === 'dev_observability' ? 'revalidate extension' : 'apply profile') : 'use dev environment'}</strong></div>
+              <div class="mini-stat"><div class="small">Current profile</div><strong>${escapeHtml(telemetryProfileLabel)}</strong></div>
+              <div class="mini-stat"><div class="small">Environment rule</div><strong>admin controlled</strong></div>
+              <div class="mini-stat"><div class="small">Operator step</div><strong>${telemetryProfile === 'dev_observability' ? 'revalidate extension' : 'apply full profile'}</strong></div>
             </div>
             <div class="toolbar-actions compact">
-              <button class="${telemetryProfile === 'dev_observability' ? 'secondary' : 'primary'}" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="dev_observability"${devObservabilityDisabled}>Apply Dev Observability</button>
+              <button class="${telemetryProfile === 'dev_observability' ? 'secondary' : 'primary'}" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="dev_observability">Apply Full Telemetry</button>
               <button class="secondary" data-action="set-telemetry-profile" data-plan="${escapeHtml(primaryLicence?.plan || '')}" data-profile="standard">Revert To Standard</button>
             </div>
           </div>

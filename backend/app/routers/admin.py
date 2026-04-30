@@ -1639,13 +1639,7 @@ async def update_licence_telemetry_profile(
     x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
     db: AsyncSession = Depends(get_db),
 ):
-    current_settings = get_settings()
     _ensure_admin_key(x_admin_key)
-    if body.profile == "dev_observability" and current_settings.environment != "development":
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="dev_observability telemetry profile is only available in development.",
-        )
 
     customer = await _get_customer_with_licences(db, str(body.email))
     if not customer:

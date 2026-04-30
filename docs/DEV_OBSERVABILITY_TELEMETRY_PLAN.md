@@ -50,19 +50,18 @@ The repo already has the required basic shape:
   - `registration_verified`
   - provider/model selection events
 
-The next step is to make this richer, more explicit, and dev-profile gated.
+The next step is to make this richer, more explicit, and profile gated.
 
-## Dev-Only Boundary
+## Profile Boundary
 
-Initial implementation must be dev only:
+Initial implementation was dev only, but the product decision changed after the admin workflow proved too restrictive. Operators must be able to flip a licence between standard and full telemetry from either dev or prod admin when customer support or product validation needs deeper signal.
 
-- package: `Owlvex Dev`
-- backend: Azure dev
-- environment: `ENVIRONMENT=development`
-- telemetry profile: `dev_observability`
-- production behaviour: unchanged unless later promoted deliberately
+Current boundary:
 
-Production should either ignore dev-only fields or reject dev-only profile use until a separate product decision is made.
+- telemetry profile value: `dev_observability` for compatibility with existing extension/backend logic
+- UI label: **Full telemetry**
+- operator control: admin console can apply or revert the profile in both dev and prod
+- user workflow: the extension must revalidate or restart after the profile changes
 
 ## Telemetry Profiles
 
@@ -84,7 +83,7 @@ Rules:
 - free/trial can still require standard telemetry.
 - paid licences can still opt out of optional product telemetry.
 - dev observability is an additional profile, not a replacement for plan semantics.
-- `dev_observability` should only be honoured when the backend environment is `development`.
+- `dev_observability` is honoured when an admin explicitly applies it to a licence.
 
 ## Event Names
 
@@ -314,7 +313,7 @@ Fix verification:
 - Add an admin endpoint and console toggle to set a licence profile to `standard` or `dev_observability`.
 - Add the new event names to `USAGE_EVENT_METADATA_FIELDS`.
 - Add metadata allowlists for timing, provider/model, scope, status, agent role, and failure fields.
-- Reject `dev_observability` telemetry when `ENVIRONMENT != development`.
+- Allow admin-controlled `dev_observability` profile changes in both dev and prod.
 - Keep metadata scalar-only.
 - Add tests for accepted and rejected dev telemetry.
 
@@ -351,17 +350,17 @@ Fix verification:
 Implemented dashboard surface:
 
 - Customer detail now has a **Telemetry Profile** callout.
-- Operators can apply **Dev Observability** or revert to **Standard** from the selected customer.
-- The callout explains the practical rule: this is for dev licences only, and the extension must revalidate or restart after the profile changes.
+- Operators can apply **Full telemetry** or revert to **Standard** from the selected customer.
+- The callout explains the practical rule: the extension must revalidate or restart after the profile changes.
 - Metrics now include a **Dev Observability** section with scan, report, fix-preview, fix-apply, post-fix scan, duration, provider/model, and failure-rate aggregates.
 - Metrics export now supports `metrics_dev_observability`.
 
 Practical operator workflow:
 
-1. Open the dev admin console.
+1. Open the admin console for the target environment.
 2. Select the customer/licence.
-3. Click **Apply Dev Observability**.
-4. In VS Code, revalidate/restart the dev extension so the cached licence receives `telemetry_profile=dev_observability`.
+3. Click **Apply Full Telemetry**.
+4. In VS Code, revalidate/restart the extension so the cached licence receives `telemetry_profile=dev_observability`.
 5. Run normal workflows: scan, create report, preview fix, keep/discard fix.
 6. Open **Metrics** and refresh. Use **Group by customer** when validating one test account, or **Group by plan/provider exports** for broader analysis.
 7. Revert to **Standard** when done.
