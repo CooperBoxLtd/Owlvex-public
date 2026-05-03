@@ -20,6 +20,7 @@ Both live inside the selected Owlvex project root. Neither is uploaded to the Ow
 - Do not let design context upgrade a finding to deterministic proof.
 - Do not silently run arbitrary scripts.
 - Do not send customer source or drift scripts to the Owlvex backend.
+- Do not let Drift Checks block scan completion, clean status, fix application, or post-fix verification.
 
 ## Project Layout
 
@@ -105,7 +106,7 @@ Drift results should be reported as:
 - `timed_out`
 - `not_approved`
 
-Drift failures should block a "fully clean" post-fix result even when the original finding is gone.
+Drift failures are report evidence only. They should be visible in scan and post-fix reports, but they must not block a "clean" security result when security findings are gone.
 
 ## Execution Safety
 
@@ -162,7 +163,7 @@ Status: implemented as a non-executing parser/loader. Owlvex now reads the Drift
 - Execute checks locally with timeout and output caps.
 - Run selected checks after scan and after keep-fix verification.
 
-Status: runner skeleton implemented and wired into scan orchestration in non-blocking mode. Owlvex can execute validated ready checks locally after approval, persist approval per Drift Box declaration, enforce timeouts, cap output, and return structured pass/fail/timeout/not-approved results. Post-fix blocking is still pending.
+Status: runner skeleton implemented and wired into scan orchestration in non-blocking mode. Owlvex can execute validated ready checks locally after approval, persist approval per Drift Box declaration, enforce timeouts, cap output, and return structured pass/fail/timeout/not-approved results. Drift execution is report-only and must remain non-blocking.
 
 ### Slice 5: Reporting
 
@@ -173,13 +174,13 @@ Status: runner skeleton implemented and wired into scan orchestration in non-blo
 
 Status: partially implemented for Drift Box visibility. Scan results now carry Drift Box metadata and non-blocking run results. Summary/full reports show configured checks, invalid declarations, disabled checks, out-of-scope checks, and pass/fail/timeout/not-approved runtime outcomes.
 
-### Slice 6: Fix Flow
+### Slice 6: Fix Flow Report Context
 
 - After keep-fix, verify:
   - original finding cleared
   - touched files rescanned
-  - applicable drift checks passed
-- If drift fails, the fix state is "security finding cleared, drift unresolved".
+  - applicable drift checks report pass/fail status
+- If drift fails, the fix state remains driven by security verification. The report should say "security finding cleared; drift check failed" without blocking the security clean result.
 
 ## First Implementation Decision
 

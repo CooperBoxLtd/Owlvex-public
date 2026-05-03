@@ -743,6 +743,7 @@ function buildDefaultDriftInvariantsContent(): string {
         '# Owlvex Drift Invariants',
         '',
         'Use this file to document behavior that must not drift during AI-assisted fixes.',
+        'Drift checks are report-only signals. They should produce clear pass/fail output, but they do not block scan completion, fix application, or security-clean status.',
         '',
         'Examples:',
         '',
