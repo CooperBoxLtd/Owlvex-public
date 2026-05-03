@@ -478,6 +478,8 @@ function collectOpenEditorUris(): vscode.Uri[] {
 }
 
 const DEFAULT_PROJECT_CONTEXT_RELATIVE_PATH = '.owlvex/project-context.md';
+const DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR = '.owlvex/design';
+const DEFAULT_DRIFT_BOX_RELATIVE_DIR = '.owlvex/drift';
 
 function buildDefaultProjectContextContent(): string {
     return [
@@ -663,6 +665,157 @@ async function trackUsageEvent(
     } catch (error) {
         console.debug(`${PROFILE.displayLabel}: usage event ${eventName} failed`, error);
     }
+}
+
+function buildDefaultDesignSystemContent(): string {
+    return [
+        '# Owlvex Design Context',
+        '',
+        'Use this folder to describe what the system is intended to do so Owlvex can ground AI-assisted review in project intent.',
+        '',
+        'Recommended sections:',
+        '',
+        '- product purpose',
+        '- important actors and roles',
+        '- sensitive assets and data',
+        '- trust boundaries',
+        '- critical workflows',
+        '- data ownership rules',
+        '- authorization model',
+        '',
+        'Design context is especially useful when STRIDE is selected because STRIDE depends on assets, actors, boundaries, and intended flows.',
+    ].join('\n');
+}
+
+function buildDefaultStrideNotesContent(): string {
+    return [
+        '# STRIDE Notes',
+        '',
+        'Use this file to capture STRIDE-specific assumptions for Owlvex.',
+        '',
+        '## Spoofing',
+        '',
+        '- Which identities can act in the system?',
+        '- Where are authentication boundaries?',
+        '',
+        '## Tampering',
+        '',
+        '- Which requests mutate state?',
+        '- Which inputs must be signed, validated, or policy checked?',
+        '',
+        '## Repudiation',
+        '',
+        '- Which actions require audit trails?',
+        '',
+        '## Information Disclosure',
+        '',
+        '- Which data must be tenant, customer, or role scoped?',
+        '',
+        '## Denial Of Service',
+        '',
+        '- Which workflows are resource-sensitive?',
+        '',
+        '## Elevation Of Privilege',
+        '',
+        '- Which role or permission changes require stronger controls?',
+    ].join('\n');
+}
+
+function buildDefaultDriftConfigContent(): string {
+    return JSON.stringify({
+        version: 1,
+        checks: [
+            {
+                id: 'example-contract-check',
+                label: 'Example contract check',
+                command: 'node .owlvex/drift/scripts/example-contract-check.mjs',
+                frameworks: ['STRIDE', 'OWASP'],
+                scope: ['scan', 'post-fix'],
+                timeoutSeconds: 30,
+                enabled: false,
+            },
+        ],
+    }, null, 2);
+}
+
+function buildDefaultDriftInvariantsContent(): string {
+    return [
+        '# Owlvex Drift Invariants',
+        '',
+        'Use this file to document behavior that must not drift during AI-assisted fixes.',
+        '',
+        'Examples:',
+        '',
+        '- Login must still reject disabled users.',
+        '- Tenant-scoped reads must not return another tenant\'s data.',
+        '- Refund approval must still write an audit record.',
+        '- Import routes must preserve the documented payload shape.',
+    ].join('\n');
+}
+
+function buildDefaultDriftScriptContent(): string {
+    return [
+        "console.log('Example Owlvex drift check is disabled by default.');",
+        "console.log('Replace this script with a repo-owned check and set enabled=true in owlvex-drift.json.');",
+        'process.exit(0);',
+    ].join('\n');
+}
+
+async function writeFileIfMissing(uri: vscode.Uri, content: string): Promise<boolean> {
+    try {
+        await vscode.workspace.fs.stat(uri);
+        return false;
+    } catch {
+        await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(uri.fsPath)));
+        await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
+        return true;
+    }
+}
+
+async function openOrCreateDesignContext(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
+    const projectRoot = await resolveProjectRootInfo();
+    if (!projectRoot.uri) {
+        const document = await vscode.workspace.openTextDocument({
+            language: 'markdown',
+            content: buildDefaultDesignSystemContent(),
+        });
+        await vscode.window.showTextDocument(document, { preview: false });
+        return { uri: document.uri, created: true };
+    }
+
+    const designDir = path.join(projectRoot.uri.fsPath, DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR);
+    const systemUri = vscode.Uri.file(path.join(designDir, 'system.md'));
+    const strideUri = vscode.Uri.file(path.join(designDir, 'stride-notes.md'));
+    const created = await writeFileIfMissing(systemUri, buildDefaultDesignSystemContent());
+    await writeFileIfMissing(strideUri, buildDefaultStrideNotesContent());
+
+    const document = await vscode.workspace.openTextDocument(systemUri);
+    await vscode.window.showTextDocument(document, { preview: false });
+    return { uri: systemUri, created, relativePath: vscode.workspace.asRelativePath(systemUri, false) };
+}
+
+async function openOrCreateDriftBox(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
+    const projectRoot = await resolveProjectRootInfo();
+    if (!projectRoot.uri) {
+        const document = await vscode.workspace.openTextDocument({
+            language: 'json',
+            content: buildDefaultDriftConfigContent(),
+        });
+        await vscode.window.showTextDocument(document, { preview: false });
+        return { uri: document.uri, created: true };
+    }
+
+    const driftDir = path.join(projectRoot.uri.fsPath, DEFAULT_DRIFT_BOX_RELATIVE_DIR);
+    const configUri = vscode.Uri.file(path.join(driftDir, 'owlvex-drift.json'));
+    const invariantsUri = vscode.Uri.file(path.join(driftDir, 'invariants.md'));
+    const scriptUri = vscode.Uri.file(path.join(driftDir, 'scripts', 'example-contract-check.mjs'));
+    const created = await writeFileIfMissing(configUri, buildDefaultDriftConfigContent());
+    await writeFileIfMissing(invariantsUri, buildDefaultDriftInvariantsContent());
+    await writeFileIfMissing(scriptUri, buildDefaultDriftScriptContent());
+
+    const document = await vscode.workspace.openTextDocument(configUri);
+    await vscode.window.showTextDocument(document, { preview: false });
+    return { uri: configUri, created, relativePath: vscode.workspace.asRelativePath(configUri, false) };
 }
 
 function isDevObservabilityTelemetryEnabled(info: LicenceInfo | null | undefined): boolean {
@@ -3569,6 +3722,40 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: Opened an untitled project context document. Save it into the repo to reuse it automatically.`,
+                );
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.openDesignContext, async () => {
+            const result = await openOrCreateDesignContext();
+            if (result.relativePath) {
+                vscode.window.showInformationMessage(
+                    result.created
+                        ? `${PROFILE.displayLabel}: Created design context at ${result.relativePath}`
+                        : `${PROFILE.displayLabel}: Opened design context at ${result.relativePath}`,
+                );
+            } else {
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: Opened an untitled design context document. Save it inside .owlvex/design to reuse it in scans.`,
+                );
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.openDriftBox, async () => {
+            const result = await openOrCreateDriftBox();
+            if (result.relativePath) {
+                vscode.window.showInformationMessage(
+                    result.created
+                        ? `${PROFILE.displayLabel}: Created drift box at ${result.relativePath}`
+                        : `${PROFILE.displayLabel}: Opened drift box at ${result.relativePath}`,
+                );
+            } else {
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: Opened an untitled drift configuration. Save it inside .owlvex/drift before using it in scans.`,
                 );
             }
         })

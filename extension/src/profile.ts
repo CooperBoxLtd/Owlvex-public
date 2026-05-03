@@ -29,6 +29,8 @@ export const PROFILE = {
         "configureBackend": "owlvex.configureBackend",
         "removeAIConnection": "owlvex.removeAIConnection",
         "openProjectContext": "owlvex.openProjectContext",
+        "openDesignContext": "owlvex.openDesignContext",
+        "openDriftBox": "owlvex.openDriftBox",
         "testAI": "owlvex.testAIConnection",
         "testTrialSetup": "owlvex.testTrialSetup",
         "showOnboarding": "owlvex.showOnboarding",

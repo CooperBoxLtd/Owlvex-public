@@ -7,6 +7,7 @@ describe('project root helpers', () => {
         (vscode.workspace.workspaceFolders as any).length = 0;
         (vscode.workspace.fs.stat as jest.Mock).mockResolvedValue({ type: vscode.FileType.Directory });
         (vscode.workspace.fs.readFile as jest.Mock).mockReset();
+        (vscode.workspace.fs.readDirectory as jest.Mock).mockReset();
     });
 
     it('uses the configured project root summary when one is stored', () => {
@@ -82,5 +83,47 @@ describe('project root helpers', () => {
         expect(context.summary).toContain('project root D:\\repo\\tools\\benchmark-app');
         expect(context.summary).toContain('inline project contract');
         expect(context.combined).toContain('Benchmark app only context.');
+    });
+
+    it('loads bounded design context from the selected project root and prioritizes STRIDE files', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'projectRoot') {
+                    return 'D:\\repo\\tools\\benchmark-app';
+                }
+                if (key === 'projectContext' || key === 'projectContextFile' || key === 'teamContext') {
+                    return '';
+                }
+                return defaultValue;
+            }),
+        });
+        (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath.replace('D:\\repo\\tools\\benchmark-app\\', ''));
+        (vscode.workspace.fs.readDirectory as jest.Mock).mockResolvedValue([
+            ['system.md', vscode.FileType.File],
+            ['stride-notes.md', vscode.FileType.File],
+            ['ignore.json', vscode.FileType.File],
+            ['nested', vscode.FileType.Directory],
+        ]);
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            if (uri.fsPath.endsWith('stride-notes.md')) {
+                return Buffer.from('Trust boundary: browser to API.');
+            }
+            if (uri.fsPath.endsWith('system.md')) {
+                return Buffer.from('System purpose: support portal.');
+            }
+            return Buffer.from('');
+        });
+
+        const context = await loadProjectContextInfo({
+            selectedFrameworks: ['STRIDE'],
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+
+        expect(context.summary).toContain('design context 2 files');
+        expect(context.combined).toContain('Design context:');
+        expect(context.combined.indexOf('stride-notes.md')).toBeLessThan(context.combined.indexOf('system.md'));
+        expect(context.combined).toContain('Trust boundary: browser to API.');
+        expect(context.combined).toContain('System purpose: support portal.');
+        expect(context.combined).not.toContain('ignore.json');
     });
 });

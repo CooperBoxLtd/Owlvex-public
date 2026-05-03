@@ -2296,6 +2296,7 @@ export class ScanEngine {
             targetUris: documents
                 .map(document => document.uri)
                 .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
+            selectedFrameworks: frameworks,
         });
 
         const contexts: BatchDocumentContext[] = await Promise.all(documents.map(async (document, index) => {
@@ -2650,6 +2651,7 @@ export class ScanEngine {
         const provider = this.registry.getActive();
         const projectContext = await loadProjectContextInfo({
             targetUris: document.uri?.fsPath ? [document.uri] : undefined,
+            selectedFrameworks: frameworks,
         });
 
         const code = document.getText();

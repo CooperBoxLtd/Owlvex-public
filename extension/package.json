@@ -78,6 +78,14 @@
         "title": "Owlvex: Open Project Context"
       },
       {
+        "command": "owlvex.openDesignContext",
+        "title": "Owlvex: Open Design Context"
+      },
+      {
+        "command": "owlvex.openDriftBox",
+        "title": "Owlvex: Open Drift Box"
+      },
+      {
         "command": "owlvex.testAIConnection",
         "title": "Owlvex: Test AI Connection"
       },
