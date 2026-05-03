@@ -162,6 +162,8 @@ Status: implemented as a non-executing parser/loader. Owlvex now reads the Drift
 - Execute checks locally with timeout and output caps.
 - Run selected checks after scan and after keep-fix verification.
 
+Status: runner skeleton implemented. Owlvex can execute validated ready checks locally after approval, persist approval per Drift Box declaration, enforce timeouts, cap output, and return structured pass/fail/timeout/not-approved results. Scan and post-fix orchestration are still pending.
+
 ### Slice 5: Reporting
 
 - Add a Design/Drift section to summary and full reports.
