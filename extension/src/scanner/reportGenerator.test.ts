@@ -1080,6 +1080,16 @@ describe('reportGenerator', () => {
                             reason: 'Command contains shell chaining, pipes, redirects, or backticks.',
                         }],
                     },
+                    driftResults: [{
+                        id: 'api-contract',
+                        label: 'API contract still holds',
+                        command: 'node .owlvex/drift/scripts/api-contract.mjs',
+                        status: 'passed',
+                        exitCode: 0,
+                        durationMs: 42,
+                        stdout: 'contract ok',
+                        stderr: '',
+                    }],
                 }),
             }],
         });
@@ -1090,6 +1100,8 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Drift checks: ready 1 | invalid 1 | disabled 0 | out of scope 0');
         expect(written).toContain('- ready: api-contract (API contract still holds) | frameworks STRIDE | scope scan | 30s');
         expect(written).toContain('- invalid: unsafe (Unsafe command) | all frameworks | scope scan | 30s | Command contains shell chaining, pipes, redirects, or backticks.');
+        expect(written).toContain('- Drift run: passed 1 | failed 0 | timed out 0 | not approved 0 | skipped 0');
+        expect(written).toContain('- passed: api-contract (API contract still holds) | 42ms | exit 0 | stdout: contract ok');
         expect(written).toContain('- Scan warnings: 0');
     });
 
@@ -1377,6 +1389,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
 - Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
 - Drift Box: not checked
+- Drift run: not run
 
 ## Fix First
 
@@ -1415,6 +1428,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
 - Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
 - Drift Box: not checked
+- Drift run: not run
 
 ## AI Usage
 
@@ -1433,6 +1447,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Treat unselected-framework mappings as reference taxonomy for the finding, not as evidence that Owlvex scanned with every framework lens enabled.
 - Project context: inline project contract
 - Drift Box: not checked
+- Drift run: not run
 - Errors: 0
 - Scan warnings: 0"
 `);

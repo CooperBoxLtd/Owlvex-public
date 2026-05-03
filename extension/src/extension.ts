@@ -1524,7 +1524,7 @@ export function activate(context: vscode.ExtensionContext) {
     let usefulnessFeedbackPrompted = false;
     const limitHitEventKeys = new Set<string>();
     const registry = new ProviderRegistry();
-    const scanEngine = new ScanEngine(licenceMgr, registry);
+    const scanEngine = new ScanEngine(licenceMgr, registry, context.workspaceState);
     const rulePackClient = new RulePackClient(context.workspaceState);
     let currentRulePackContext: RulePackRuntimeContext = {
         mode: 'bundled',

@@ -23,6 +23,8 @@ import { PROFILE } from '../profile';
 import { getProjectContextSummaryFromConfig, loadProjectContextInfo } from '../projectContext';
 import { loadDriftBoxConfig } from '../driftBox';
 import type { DriftBoxLoadResult } from '../driftBox';
+import { runDriftChecks } from '../driftRunner';
+import type { DriftApprovalStorage, DriftRunResult } from '../driftRunner';
 
 export interface Finding {
     id: string;
@@ -152,6 +154,7 @@ export interface ScanResult {
     providerComparisonNotes?: string[];
     providerDisagreementProofs?: ProviderDisagreementProof[];
     driftBox?: DriftBoxScanContext;
+    driftResults?: DriftRunResult[];
     engineTelemetry?: EngineTelemetry;
     aiUsage?: {
         requestCount: number;
@@ -2129,7 +2132,32 @@ export class ScanEngine {
     constructor(
         private readonly licenceMgr: LicenceManager,
         private readonly registry: ProviderRegistry,
+        private readonly driftApprovalStorage?: DriftApprovalStorage,
     ) {}
+
+    private async _runDriftChecksIfAvailable(driftBox: DriftBoxLoadResult): Promise<DriftRunResult[]> {
+        if (!driftBox.found || !driftBox.projectRoot || !driftBox.readyChecks.length) {
+            return [];
+        }
+
+        try {
+            return await runDriftChecks(driftBox, {
+                projectRoot: driftBox.projectRoot,
+                storage: this.driftApprovalStorage,
+            });
+        } catch (error: any) {
+            return driftBox.readyChecks.map(check => ({
+                id: check.id,
+                label: check.label,
+                command: check.command,
+                status: 'failed',
+                durationMs: 0,
+                stdout: '',
+                stderr: '',
+                reason: `Drift Box runner failed: ${error.message}`,
+            }));
+        }
+    }
 
     private async _buildRelatedProbeContext(document: vscode.TextDocument, code: string): Promise<string> {
         const snippets: string[] = [];
@@ -2343,6 +2371,7 @@ export class ScanEngine {
             scope: 'scan',
         });
         const driftBoxContext = toDriftBoxScanContext(driftBox);
+        const driftResults = await this._runDriftChecksIfAvailable(driftBox);
 
         const contexts: BatchDocumentContext[] = await Promise.all(documents.map(async (document, index) => {
             const code = document.getText();
@@ -2385,6 +2414,7 @@ export class ScanEngine {
                     projectContext.summary,
                     context.localSinkEvidence,
                     driftBoxContext,
+                    driftResults,
                 ),
             );
         }
@@ -2412,6 +2442,7 @@ export class ScanEngine {
                     projectContext.summary,
                     context.localSinkEvidence,
                     driftBoxContext,
+                    driftResults,
                 ),
             );
         }
@@ -2440,6 +2471,7 @@ export class ScanEngine {
                     projectContext.summary,
                     context.localSinkEvidence,
                     driftBoxContext,
+                    driftResults,
                 ),
             );
         }
@@ -2457,6 +2489,7 @@ export class ScanEngine {
                     projectContext.summary,
                     context.localSinkEvidence,
                     driftBoxContext,
+                    driftResults,
                 ),
             );
         }
@@ -2686,6 +2719,7 @@ export class ScanEngine {
                 provider: provider.id,
                 warnings: filteredWarnings,
                 driftBox: driftBoxContext,
+                driftResults,
                 engineTelemetry,
                 aiUsage,
             };
@@ -2709,6 +2743,7 @@ export class ScanEngine {
             scope: 'scan',
         });
         const driftBoxContext = toDriftBoxScanContext(driftBox);
+        const driftResults = await this._runDriftChecksIfAvailable(driftBox);
 
         const code = document.getText();
         const baseDeterministicFindings = this.deterministicScanner
@@ -2735,6 +2770,7 @@ export class ScanEngine {
                 projectContext.summary,
                 localSinkEvidence,
                 driftBoxContext,
+                driftResults,
             );
         }
 
@@ -2747,6 +2783,7 @@ export class ScanEngine {
                 projectContext.summary,
                 localSinkEvidence,
                 driftBoxContext,
+                driftResults,
             );
         }
 
@@ -2769,6 +2806,7 @@ export class ScanEngine {
                 projectContext.summary,
                 localSinkEvidence,
                 driftBoxContext,
+                driftResults,
             );
         }
         const systemPrompt = promptContext.systemPrompt;
@@ -2817,6 +2855,7 @@ export class ScanEngine {
                 projectContext.summary,
                 localSinkEvidence,
                 driftBoxContext,
+                driftResults,
             );
         }
 
@@ -2833,6 +2872,7 @@ export class ScanEngine {
                 projectContext.summary,
                 localSinkEvidence,
                 driftBoxContext,
+                driftResults,
             );
         }
 
@@ -2940,6 +2980,7 @@ export class ScanEngine {
             provider: provider.id,
             warnings,
             driftBox: driftBoxContext,
+            driftResults,
             engineTelemetry,
             aiUsage,
         };
@@ -3062,6 +3103,7 @@ export class ScanEngine {
         projectContextSummary?: string,
         localSinkEvidence: LocalSinkEvidence[] = [],
         driftBox?: DriftBoxScanContext,
+        driftResults?: DriftRunResult[],
     ): ScanResult {
         const metrics = buildMetrics(deterministicFindings);
         const score = calculateScoreFromFindings(deterministicFindings);
@@ -3086,6 +3128,7 @@ export class ScanEngine {
             provider: provider.id,
             warnings: [warning],
             driftBox,
+            driftResults,
             engineTelemetry: buildEngineTelemetry({
                 localSinkEvidence,
                 proposedAiFindings: 0,

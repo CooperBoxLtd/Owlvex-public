@@ -29,6 +29,7 @@ export interface DriftBoxParseResult {
 export interface DriftBoxLoadResult extends DriftBoxParseResult {
     found: boolean;
     configPath?: string;
+    projectRoot?: string;
 }
 
 export interface DriftBoxParseOptions {
@@ -322,6 +323,16 @@ export async function loadDriftBoxConfig(options?: DriftBoxLoadOptions): Promise
             summary: 'no drift box',
         };
     }
+    if (!(raw instanceof Uint8Array)) {
+        return {
+            found: false,
+            version: 0,
+            checks: [],
+            readyChecks: [],
+            warnings: [],
+            summary: 'no drift box',
+        };
+    }
 
     const parsed = parseDriftBoxConfig(Buffer.from(raw).toString('utf8'), {
         projectRoot: projectRoot.uri.fsPath,
@@ -332,6 +343,7 @@ export async function loadDriftBoxConfig(options?: DriftBoxLoadOptions): Promise
     return {
         found: true,
         configPath: vscode.workspace.asRelativePath(configUri, false),
+        projectRoot: projectRoot.uri.fsPath,
         ...parsed,
     };
 }

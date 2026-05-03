@@ -1155,6 +1155,68 @@ function buildDriftBoxReportLines(results: ReportSnapshot['results']): string[] 
     return lines;
 }
 
+function collectDriftRunResults(results: Array<{ result: ScanResult }>): NonNullable<ScanResult['driftResults']> {
+    const seen = new Set<string>();
+    const driftResults: NonNullable<ScanResult['driftResults']> = [];
+    for (const item of results) {
+        for (const result of item.result.driftResults ?? []) {
+            const key = [
+                result.id,
+                result.status,
+                result.exitCode ?? '',
+                result.reason ?? '',
+                result.stdout,
+                result.stderr,
+            ].join('::');
+            if (!seen.has(key)) {
+                seen.add(key);
+                driftResults.push(result);
+            }
+        }
+    }
+    return driftResults;
+}
+
+function buildDriftRunLabel(results: Array<{ result: ScanResult }>): string {
+    const driftResults = collectDriftRunResults(results);
+    if (!driftResults.length) {
+        return 'not run';
+    }
+
+    const count = (status: string) => driftResults.filter(result => result.status === status).length;
+    return [
+        `passed ${count('passed')}`,
+        `failed ${count('failed')}`,
+        `timed out ${count('timed_out')}`,
+        `not approved ${count('not_approved')}`,
+        `skipped ${count('skipped')}`,
+    ].join(' | ');
+}
+
+function buildDriftRunReportLines(results: Array<{ result: ScanResult }>): string[] {
+    const driftResults = collectDriftRunResults(results);
+    if (!driftResults.length) {
+        return ['- Drift run: not run'];
+    }
+
+    return [
+        `- Drift run: ${buildDriftRunLabel(results)}`,
+        ...driftResults.slice(0, 10).map(result => {
+            const details = [
+                `${result.durationMs}ms`,
+                typeof result.exitCode !== 'undefined' ? `exit ${result.exitCode ?? 'n/a'}` : '',
+                result.reason ? result.reason : '',
+            ].filter(Boolean).join(' | ');
+            const output = [
+                result.stdout ? `stdout: ${result.stdout.trim().slice(0, 180)}` : '',
+                result.stderr ? `stderr: ${result.stderr.trim().slice(0, 180)}` : '',
+            ].filter(Boolean).join(' | ');
+            return `  - ${result.status}: ${result.id} (${result.label})${details ? ` | ${details}` : ''}${output ? ` | ${output}` : ''}`;
+        }),
+        ...(driftResults.length > 10 ? [`  - ${driftResults.length - 10} additional drift result(s) omitted from report detail.`] : []),
+    ];
+}
+
 function buildConfidencePostureLine(
     findings: ScanResult['findings'],
 ): string {
@@ -1479,6 +1541,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             `- Proof posture: ${summarizeProofPosture(allFindings)}`,
             ...buildEngineTelemetryLines(engineTelemetry),
             `- Drift Box: ${buildDriftBoxLabel(snapshot.results)}`,
+            `- Drift run: ${buildDriftRunLabel(snapshot.results)}`,
             `- Files scanned: ${snapshot.results.length}`,
             `- Total findings: ${totalFindings}`,
             `- Manual-review findings: ${manualReviewAiCount}`,
@@ -1515,6 +1578,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push('## Drift Box');
             lines.push('');
             lines.push(...summaryDriftLines);
+            lines.push(...buildDriftRunReportLines(snapshot.results));
             lines.push('');
         }
 
@@ -1552,6 +1616,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Proof posture: ${summarizeProofPosture(allFindings)}`,
         ...buildEngineTelemetryLines(engineTelemetry),
         `- Drift Box: ${buildDriftBoxLabel(snapshot.results)}`,
+        `- Drift run: ${buildDriftRunLabel(snapshot.results)}`,
         '',
         '## Fix First',
         '',
@@ -1569,6 +1634,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Proof posture: ${summarizeProofPosture(allFindings)}`,
         ...buildEngineTelemetryLines(engineTelemetry),
         `- Drift Box: ${buildDriftBoxLabel(snapshot.results)}`,
+        `- Drift run: ${buildDriftRunLabel(snapshot.results)}`,
         '',
         '## AI Usage',
         '',
@@ -1587,6 +1653,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         ...buildFrameworkScopeLines(snapshot.results),
         `- Project context: ${buildProjectContextLabel(projectContextSummary)}`,
         ...buildDriftBoxReportLines(snapshot.results),
+        ...buildDriftRunReportLines(snapshot.results),
         `- Errors: ${snapshot.errors.length}`,
         `- Scan warnings: ${warnings.length}`,
         '',
@@ -1637,6 +1704,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Proof posture: ${summarizeProofPosture(item.result.findings, item.file)}`);
             lines.push(...buildEngineTelemetryLines(item.result.engineTelemetry));
             lines.push(`- Drift Box: ${item.result.driftBox?.summary ?? 'not checked'}`);
+            lines.push(`- Drift run: ${item.result.driftResults?.length ? buildDriftRunLabel([item]) : 'not run'}`);
             lines.push(`- Manual review: ${item.result.findings.filter(finding => needsManualReview(finding)).length} AI finding(s) needing review`);
             lines.push('');
 
@@ -1645,6 +1713,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Coverage: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal for this file'}`);
                 lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
                 lines.push(`- Drift Box: ${item.result.driftBox?.summary ?? 'not checked'}`);
+                lines.push(`- Drift run: ${item.result.driftResults?.length ? buildDriftRunLabel([item]) : 'not run'}`);
                 lines.push('');
                 continue;
             }
@@ -1664,6 +1733,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             }
             lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
             lines.push(`- Drift Box: ${item.result.driftBox?.summary ?? 'not checked'}`);
+            lines.push(`- Drift run: ${item.result.driftResults?.length ? buildDriftRunLabel([item]) : 'not run'}`);
             lines.push(`- Knowledge sources: ${buildKnowledgeSourceDetail(item.packContext)}`);
             lines.push('');
             lines.push('| Finding | What drives the score | Evidence confidence |');
