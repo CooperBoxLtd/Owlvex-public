@@ -154,6 +154,8 @@ Expected behavior:
 - Validate schema, path safety, frameworks, scopes, and timeout.
 - Report invalid checks as skipped, not executed.
 
+Status: implemented as a non-executing parser/loader. Owlvex now reads the Drift Box from the selected project root, validates declared checks, filters by framework and lifecycle scope, and rejects unsafe command shapes or scripts outside `.owlvex/drift/scripts`.
+
 ### Slice 4: Drift Runner
 
 - Add approval prompt and persisted approval state.
