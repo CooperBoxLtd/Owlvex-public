@@ -169,6 +169,8 @@ Status: implemented as a non-executing parser/loader. Owlvex now reads the Drift
 - Show drift check status and failure output summary.
 - Show when STRIDE ran without design context.
 
+Status: partially implemented for Drift Box visibility. Scan results now carry non-executing Drift Box metadata, and summary/full reports show configured checks, invalid declarations, disabled checks, and out-of-scope checks. Runtime pass/fail output remains pending until the runner slice exists.
+
 ### Slice 6: Fix Flow
 
 - After keep-fix, verify:

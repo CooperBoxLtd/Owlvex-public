@@ -21,6 +21,8 @@ import type { LocalSinkEvidence, SafeExploitProbeResult, SafeProbeTelemetry } fr
 import type { RulePackRuntimeContext } from '../packs/packRuntime';
 import { PROFILE } from '../profile';
 import { getProjectContextSummaryFromConfig, loadProjectContextInfo } from '../projectContext';
+import { loadDriftBoxConfig } from '../driftBox';
+import type { DriftBoxLoadResult } from '../driftBox';
 
 export interface Finding {
     id: string;
@@ -149,12 +151,29 @@ export interface ScanResult {
     warnings: string[];
     providerComparisonNotes?: string[];
     providerDisagreementProofs?: ProviderDisagreementProof[];
+    driftBox?: DriftBoxScanContext;
     engineTelemetry?: EngineTelemetry;
     aiUsage?: {
         requestCount: number;
         totalTokens: number;
     };
     packContext?: RulePackRuntimeContext;
+}
+
+export interface DriftBoxScanContext {
+    found: boolean;
+    configPath?: string;
+    summary: string;
+    warnings: string[];
+    checks: Array<{
+        id: string;
+        label: string;
+        status: 'ready' | 'disabled' | 'invalid' | 'out_of_scope';
+        frameworks: string[];
+        scope: Array<'scan' | 'fix-preview' | 'post-fix'>;
+        timeoutSeconds: number;
+        reason?: string;
+    }>;
 }
 
 export interface ProviderDisagreementProof {
@@ -483,6 +502,24 @@ function enrichFindingRisk(finding: Finding): Finding {
         corroboration: finding.corroboration ?? (finding.provenance === 'deterministic' ? 'PROVEN' : 'UNVERIFIED'),
         likelihood,
         riskScore: computeFindingRiskScore(finding.severity, likelihood),
+    };
+}
+
+function toDriftBoxScanContext(driftBox: DriftBoxLoadResult): DriftBoxScanContext {
+    return {
+        found: driftBox.found,
+        configPath: driftBox.configPath,
+        summary: driftBox.summary,
+        warnings: driftBox.warnings,
+        checks: driftBox.checks.map(check => ({
+            id: check.id,
+            label: check.label,
+            status: check.status,
+            frameworks: check.frameworks,
+            scope: check.scope,
+            timeoutSeconds: check.timeoutSeconds,
+            reason: check.reason,
+        })),
     };
 }
 
@@ -2298,6 +2335,14 @@ export class ScanEngine {
                 .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
             selectedFrameworks: frameworks,
         });
+        const driftBox = await loadDriftBoxConfig({
+            targetUris: documents
+                .map(document => document.uri)
+                .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
+            selectedFrameworks: frameworks,
+            scope: 'scan',
+        });
+        const driftBoxContext = toDriftBoxScanContext(driftBox);
 
         const contexts: BatchDocumentContext[] = await Promise.all(documents.map(async (document, index) => {
             const code = document.getText();
@@ -2334,12 +2379,13 @@ export class ScanEngine {
         if (!licenceKey) {
             return contexts.map(context =>
                 this._buildDeterministicOnlyResult(
-                context.deterministicFindings,
-                'Owlvex backend unavailable: no licence key configured. Returning deterministic-only results.',
-                provider,
-                projectContext.summary,
-                context.localSinkEvidence,
-            ),
+                    context.deterministicFindings,
+                    'Owlvex backend unavailable: no licence key configured. Returning deterministic-only results.',
+                    provider,
+                    projectContext.summary,
+                    context.localSinkEvidence,
+                    driftBoxContext,
+                ),
             );
         }
 
@@ -2365,6 +2411,7 @@ export class ScanEngine {
                     provider,
                     projectContext.summary,
                     context.localSinkEvidence,
+                    driftBoxContext,
                 ),
             );
         }
@@ -2392,6 +2439,7 @@ export class ScanEngine {
                     provider,
                     projectContext.summary,
                     context.localSinkEvidence,
+                    driftBoxContext,
                 ),
             );
         }
@@ -2408,6 +2456,7 @@ export class ScanEngine {
                     provider,
                     projectContext.summary,
                     context.localSinkEvidence,
+                    driftBoxContext,
                 ),
             );
         }
@@ -2636,6 +2685,7 @@ export class ScanEngine {
                 model: provider.selectedModel,
                 provider: provider.id,
                 warnings: filteredWarnings,
+                driftBox: driftBoxContext,
                 engineTelemetry,
                 aiUsage,
             };
@@ -2653,6 +2703,12 @@ export class ScanEngine {
             targetUris: document.uri?.fsPath ? [document.uri] : undefined,
             selectedFrameworks: frameworks,
         });
+        const driftBox = await loadDriftBoxConfig({
+            targetUris: document.uri?.fsPath ? [document.uri] : undefined,
+            selectedFrameworks: frameworks,
+            scope: 'scan',
+        });
+        const driftBoxContext = toDriftBoxScanContext(driftBox);
 
         const code = document.getText();
         const baseDeterministicFindings = this.deterministicScanner
@@ -2678,6 +2734,7 @@ export class ScanEngine {
                 provider,
                 projectContext.summary,
                 localSinkEvidence,
+                driftBoxContext,
             );
         }
 
@@ -2689,6 +2746,7 @@ export class ScanEngine {
                 provider,
                 projectContext.summary,
                 localSinkEvidence,
+                driftBoxContext,
             );
         }
 
@@ -2710,6 +2768,7 @@ export class ScanEngine {
                 provider,
                 projectContext.summary,
                 localSinkEvidence,
+                driftBoxContext,
             );
         }
         const systemPrompt = promptContext.systemPrompt;
@@ -2757,6 +2816,7 @@ export class ScanEngine {
                 provider,
                 projectContext.summary,
                 localSinkEvidence,
+                driftBoxContext,
             );
         }
 
@@ -2772,6 +2832,7 @@ export class ScanEngine {
                 provider,
                 projectContext.summary,
                 localSinkEvidence,
+                driftBoxContext,
             );
         }
 
@@ -2878,6 +2939,7 @@ export class ScanEngine {
             model: provider.selectedModel,
             provider: provider.id,
             warnings,
+            driftBox: driftBoxContext,
             engineTelemetry,
             aiUsage,
         };
@@ -2999,6 +3061,7 @@ export class ScanEngine {
         provider: { id: string; selectedModel: string },
         projectContextSummary?: string,
         localSinkEvidence: LocalSinkEvidence[] = [],
+        driftBox?: DriftBoxScanContext,
     ): ScanResult {
         const metrics = buildMetrics(deterministicFindings);
         const score = calculateScoreFromFindings(deterministicFindings);
@@ -3022,6 +3085,7 @@ export class ScanEngine {
             model: `${provider.selectedModel} (deterministic-only)`,
             provider: provider.id,
             warnings: [warning],
+            driftBox,
             engineTelemetry: buildEngineTelemetry({
                 localSinkEvidence,
                 proposedAiFindings: 0,

@@ -1046,6 +1046,53 @@ describe('reportGenerator', () => {
         expect(written).toContain('## Findings By File');
     });
 
+    it('renders configured Drift Box checks without treating them as scan warnings', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo'), {
+            targetLabel: 'src/probes/example.js',
+            outputRoot: vscode.Uri.file('d:\\repo'),
+            errors: [],
+            results: [{
+                uri: vscode.Uri.file('d:\\repo\\src\\probes\\example.js'),
+                result: buildResult({
+                    warnings: [],
+                    driftBox: {
+                        found: true,
+                        configPath: '.owlvex\\drift\\owlvex-drift.json',
+                        summary: 'drift box 1 ready | 1 invalid | 1 warning',
+                        warnings: ['Drift check unsafe: Command contains shell chaining, pipes, redirects, or backticks.'],
+                        checks: [{
+                            id: 'api-contract',
+                            label: 'API contract still holds',
+                            status: 'ready',
+                            frameworks: ['STRIDE'],
+                            scope: ['scan'],
+                            timeoutSeconds: 30,
+                        }, {
+                            id: 'unsafe',
+                            label: 'Unsafe command',
+                            status: 'invalid',
+                            frameworks: [],
+                            scope: ['scan'],
+                            timeoutSeconds: 30,
+                            reason: 'Command contains shell chaining, pipes, redirects, or backticks.',
+                        }],
+                    },
+                }),
+            }],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Drift Box: drift box 1 ready | 1 invalid | 1 warning (.owlvex\\drift\\owlvex-drift.json)');
+        expect(written).toContain('- Drift config: `.owlvex\\drift\\owlvex-drift.json`');
+        expect(written).toContain('- Drift checks: ready 1 | invalid 1 | disabled 0 | out of scope 0');
+        expect(written).toContain('- ready: api-contract (API contract still holds) | frameworks STRIDE | scope scan | 30s');
+        expect(written).toContain('- invalid: unsafe (Unsafe command) | all frameworks | scope scan | 30s | Command contains shell chaining, pipes, redirects, or backticks.');
+        expect(written).toContain('- Scan warnings: 0');
+    });
+
     it('filters mappings and STRIDE to the frameworks selected for the scan', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
@@ -1329,6 +1376,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Confidence posture: 1 cross-checked
 - Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
 - Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
+- Drift Box: not checked
 
 ## Fix First
 
@@ -1366,6 +1414,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Confidence posture: 1 cross-checked
 - Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
 - Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
+- Drift Box: not checked
 
 ## AI Usage
 
@@ -1383,6 +1432,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Deterministic evidence rules still run security-first. If code evidence proves an issue, Owlvex may show canonical mappings such as CWE, OWASP, MITRE, or NIST even when that framework was not selected.
 - Treat unselected-framework mappings as reference taxonomy for the finding, not as evidence that Owlvex scanned with every framework lens enabled.
 - Project context: inline project contract
+- Drift Box: not checked
 - Errors: 0
 - Scan warnings: 0"
 `);
