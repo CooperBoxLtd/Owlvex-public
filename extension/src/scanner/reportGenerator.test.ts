@@ -1105,6 +1105,46 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Scan warnings: 0');
     });
 
+    it('renders design context files and STRIDE missing-context notes', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo'), {
+            targetLabel: 'src/probes/example.js',
+            outputRoot: vscode.Uri.file('d:\\repo'),
+            errors: [],
+            results: [{
+                uri: vscode.Uri.file('d:\\repo\\src\\probes\\example.js'),
+                result: buildResult({
+                    designContext: {
+                        loaded: true,
+                        files: ['.owlvex/design/stride-notes.md', '.owlvex/design/system.md'],
+                        strideSelected: true,
+                        missingForStride: false,
+                    },
+                }),
+            }, {
+                uri: vscode.Uri.file('d:\\repo\\src\\probes\\other.js'),
+                result: buildResult({
+                    findings: [],
+                    score: 0,
+                    metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                    designContext: {
+                        loaded: false,
+                        files: [],
+                        strideSelected: true,
+                        missingForStride: true,
+                    },
+                }),
+            }],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Design context: loaded 2 files (.owlvex/design/stride-notes.md, .owlvex/design/system.md)');
+        expect(written).toContain('- Used: `.owlvex/design/stride-notes.md`');
+        expect(written).toContain('- STRIDE design note: STRIDE was selected, but no `.owlvex/design` markdown or text context was loaded.');
+    });
+
     it('filters mappings and STRIDE to the frameworks selected for the scan', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
@@ -1388,6 +1428,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Confidence posture: 1 cross-checked
 - Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
 - Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
+- Design context: not checked
 - Drift Box: not checked
 - Drift run: not run
 
@@ -1427,6 +1468,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Confidence posture: 1 cross-checked
 - Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
 - Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
+- Design context: not checked
 - Drift Box: not checked
 - Drift run: not run
 
@@ -1446,6 +1488,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Deterministic evidence rules still run security-first. If code evidence proves an issue, Owlvex may show canonical mappings such as CWE, OWASP, MITRE, or NIST even when that framework was not selected.
 - Treat unselected-framework mappings as reference taxonomy for the finding, not as evidence that Owlvex scanned with every framework lens enabled.
 - Project context: inline project contract
+- Design context: not checked
 - Drift Box: not checked
 - Drift run: not run
 - Errors: 0

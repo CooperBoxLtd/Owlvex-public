@@ -120,10 +120,43 @@ describe('project root helpers', () => {
         });
 
         expect(context.summary).toContain('design context 2 files');
+        expect(context.designContext).toEqual({
+            loaded: true,
+            files: ['.owlvex\\design\\stride-notes.md', '.owlvex\\design\\system.md'],
+            strideSelected: true,
+            missingForStride: false,
+        });
         expect(context.combined).toContain('Design context:');
         expect(context.combined.indexOf('stride-notes.md')).toBeLessThan(context.combined.indexOf('system.md'));
         expect(context.combined).toContain('Trust boundary: browser to API.');
         expect(context.combined).toContain('System purpose: support portal.');
         expect(context.combined).not.toContain('ignore.json');
+    });
+
+    it('marks STRIDE design context as missing when no design files are loaded', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'projectRoot') {
+                    return 'D:\\repo\\tools\\benchmark-app';
+                }
+                if (key === 'projectContext' || key === 'projectContextFile' || key === 'teamContext') {
+                    return '';
+                }
+                return defaultValue;
+            }),
+        });
+        (vscode.workspace.fs.readDirectory as jest.Mock).mockRejectedValue(new Error('missing'));
+
+        const context = await loadProjectContextInfo({
+            selectedFrameworks: ['STRIDE'],
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+
+        expect(context.designContext).toEqual({
+            loaded: false,
+            files: [],
+            strideSelected: true,
+            missingForStride: true,
+        });
     });
 });

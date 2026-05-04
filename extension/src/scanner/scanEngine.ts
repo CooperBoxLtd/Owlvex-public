@@ -144,6 +144,12 @@ export interface ScanResult {
     summary: string;
     findings: Finding[];
     projectContextSummary?: string;
+    designContext?: {
+        loaded: boolean;
+        files: string[];
+        strideSelected: boolean;
+        missingForStride: boolean;
+    };
     frameworks?: string[];
     positives: string[];
     metrics: { critical: number; high: number; medium: number; low: number };
@@ -2415,6 +2421,7 @@ export class ScanEngine {
                     context.localSinkEvidence,
                     driftBoxContext,
                     driftResults,
+                    projectContext.designContext,
                 ),
             );
         }
@@ -2443,6 +2450,7 @@ export class ScanEngine {
                     context.localSinkEvidence,
                     driftBoxContext,
                     driftResults,
+                    projectContext.designContext,
                 ),
             );
         }
@@ -2472,6 +2480,7 @@ export class ScanEngine {
                     context.localSinkEvidence,
                     driftBoxContext,
                     driftResults,
+                    projectContext.designContext,
                 ),
             );
         }
@@ -2490,6 +2499,7 @@ export class ScanEngine {
                     context.localSinkEvidence,
                     driftBoxContext,
                     driftResults,
+                    projectContext.designContext,
                 ),
             );
         }
@@ -2711,6 +2721,7 @@ export class ScanEngine {
                 summary,
                 findings: allFindings,
                 projectContextSummary: projectContext.summary,
+                designContext: projectContext.designContext,
                 frameworks,
                 positives: entry.parsed.positives,
                 metrics: mergedMetrics,
@@ -2771,6 +2782,7 @@ export class ScanEngine {
                 localSinkEvidence,
                 driftBoxContext,
                 driftResults,
+                projectContext.designContext,
             );
         }
 
@@ -2784,6 +2796,7 @@ export class ScanEngine {
                 localSinkEvidence,
                 driftBoxContext,
                 driftResults,
+                projectContext.designContext,
             );
         }
 
@@ -2807,6 +2820,7 @@ export class ScanEngine {
                 localSinkEvidence,
                 driftBoxContext,
                 driftResults,
+                projectContext.designContext,
             );
         }
         const systemPrompt = promptContext.systemPrompt;
@@ -2856,6 +2870,7 @@ export class ScanEngine {
                 localSinkEvidence,
                 driftBoxContext,
                 driftResults,
+                projectContext.designContext,
             );
         }
 
@@ -2873,6 +2888,7 @@ export class ScanEngine {
                 localSinkEvidence,
                 driftBoxContext,
                 driftResults,
+                projectContext.designContext,
             );
         }
 
@@ -2972,6 +2988,7 @@ export class ScanEngine {
             summary,
             findings: allFindings,
             projectContextSummary: projectContext.summary,
+            designContext: projectContext.designContext,
             frameworks,
             positives: parsed.positives,
             metrics: mergedMetrics,
@@ -3104,6 +3121,7 @@ export class ScanEngine {
         localSinkEvidence: LocalSinkEvidence[] = [],
         driftBox?: DriftBoxScanContext,
         driftResults?: DriftRunResult[],
+        designContext?: ScanResult['designContext'],
     ): ScanResult {
         const metrics = buildMetrics(deterministicFindings);
         const score = calculateScoreFromFindings(deterministicFindings);
@@ -3120,6 +3138,7 @@ export class ScanEngine {
             summary,
             findings: deterministicFindings,
             projectContextSummary: projectContextSummary ?? getProjectContextSummaryFromConfig(),
+            designContext,
             frameworks: vscode.workspace.getConfiguration(PROFILE.configSection).get<string[]>('frameworks', ['OWASP']),
             positives: [],
             metrics,

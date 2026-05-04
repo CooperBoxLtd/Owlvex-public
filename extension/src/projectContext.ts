@@ -12,6 +12,12 @@ const DEFAULT_DESIGN_CONTEXT_DIR = '.owlvex/design';
 export interface ProjectContextInfo {
     combined: string;
     summary: string;
+    designContext?: {
+        loaded: boolean;
+        files: string[];
+        strideSelected: boolean;
+        missingForStride: boolean;
+    };
 }
 
 export interface ProjectRootInfo {
@@ -315,6 +321,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     const designContext = rootAppliesToTargets
         ? await tryReadDesignContextDirectory(projectRoot.uri, options?.selectedFrameworks)
         : undefined;
+    const strideSelected = frameworkSelected(options?.selectedFrameworks, 'STRIDE');
     const rootLabel = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.label : '';
     const rootSummary = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.summary : '';
     const contextSuppressed = projectRoot.isConfigured && !rootAppliesToTargets;
@@ -340,5 +347,11 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     return {
         combined: sections.join('\n\n'),
         summary: summaryParts.length ? summaryParts.join(' | ') : 'none',
+        designContext: {
+            loaded: Boolean(designContext),
+            files: designContext?.labels ?? [],
+            strideSelected,
+            missingForStride: rootAppliesToTargets && strideSelected && !designContext,
+        },
     };
 }

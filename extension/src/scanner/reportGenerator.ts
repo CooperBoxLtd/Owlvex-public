@@ -1082,6 +1082,64 @@ function buildProjectContextLabel(summary: string): string {
     return summary;
 }
 
+function collectDesignContext(results: Array<{ result: ScanResult }>): NonNullable<ScanResult['designContext']>[] {
+    const seen = new Set<string>();
+    const contexts: NonNullable<ScanResult['designContext']>[] = [];
+    for (const item of results) {
+        const design = item.result.designContext;
+        if (!design) {
+            continue;
+        }
+        const key = JSON.stringify({
+            loaded: design.loaded,
+            files: design.files,
+            strideSelected: design.strideSelected,
+            missingForStride: design.missingForStride,
+        });
+        if (!seen.has(key)) {
+            seen.add(key);
+            contexts.push(design);
+        }
+    }
+    return contexts;
+}
+
+function buildDesignContextLabel(results: Array<{ result: ScanResult }>): string {
+    const contexts = collectDesignContext(results);
+    if (!contexts.length) {
+        return 'not checked';
+    }
+    if (contexts.some(context => context.loaded)) {
+        const files = [...new Set(contexts.flatMap(context => context.files))];
+        return files.length
+            ? `loaded ${files.length} file${files.length === 1 ? '' : 's'} (${files.join(', ')})`
+            : 'loaded';
+    }
+    if (contexts.some(context => context.missingForStride)) {
+        return 'missing while STRIDE selected';
+    }
+    return 'none';
+}
+
+function buildDesignContextReportLines(results: Array<{ result: ScanResult }>): string[] {
+    const contexts = collectDesignContext(results);
+    if (!contexts.length) {
+        return ['- Design context: not checked'];
+    }
+
+    const files = [...new Set(contexts.flatMap(context => context.files))];
+    const lines = [`- Design context: ${buildDesignContextLabel(results)}`];
+    if (files.length) {
+        for (const file of files.slice(0, 8)) {
+            lines.push(`  - Used: \`${file}\``);
+        }
+    }
+    if (contexts.some(context => context.missingForStride)) {
+        lines.push('- STRIDE design note: STRIDE was selected, but no `.owlvex/design` markdown or text context was loaded. STRIDE review has limited architecture/trust-boundary grounding.');
+    }
+    return lines;
+}
+
 function collectDriftBoxes(results: ReportSnapshot['results']): NonNullable<ScanResult['driftBox']>[] {
     const seen = new Set<string>();
     const boxes: NonNullable<ScanResult['driftBox']>[] = [];
@@ -1540,6 +1598,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
             `- Proof posture: ${summarizeProofPosture(allFindings)}`,
             ...buildEngineTelemetryLines(engineTelemetry),
+            `- Design context: ${buildDesignContextLabel(snapshot.results)}`,
             `- Drift Box: ${buildDriftBoxLabel(snapshot.results)}`,
             `- Drift run: ${buildDriftRunLabel(snapshot.results)}`,
             `- Files scanned: ${snapshot.results.length}`,
@@ -1615,6 +1674,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
         `- Proof posture: ${summarizeProofPosture(allFindings)}`,
         ...buildEngineTelemetryLines(engineTelemetry),
+        `- Design context: ${buildDesignContextLabel(snapshot.results)}`,
         `- Drift Box: ${buildDriftBoxLabel(snapshot.results)}`,
         `- Drift run: ${buildDriftRunLabel(snapshot.results)}`,
         '',
@@ -1633,6 +1693,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Engine evidence: ${summarizeEngineEvidence(allFindings)}`,
         `- Proof posture: ${summarizeProofPosture(allFindings)}`,
         ...buildEngineTelemetryLines(engineTelemetry),
+        `- Design context: ${buildDesignContextLabel(snapshot.results)}`,
         `- Drift Box: ${buildDriftBoxLabel(snapshot.results)}`,
         `- Drift run: ${buildDriftRunLabel(snapshot.results)}`,
         '',
@@ -1652,6 +1713,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Knowledge sources: ${packCoverageSummary}`,
         ...buildFrameworkScopeLines(snapshot.results),
         `- Project context: ${buildProjectContextLabel(projectContextSummary)}`,
+        ...buildDesignContextReportLines(snapshot.results),
         ...buildDriftBoxReportLines(snapshot.results),
         ...buildDriftRunReportLines(snapshot.results),
         `- Errors: ${snapshot.errors.length}`,
@@ -1703,6 +1765,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Engine evidence: ${summarizeEngineEvidence(item.result.findings)}`);
             lines.push(`- Proof posture: ${summarizeProofPosture(item.result.findings, item.file)}`);
             lines.push(...buildEngineTelemetryLines(item.result.engineTelemetry));
+            lines.push(`- Design context: ${item.result.designContext ? buildDesignContextLabel([item]) : 'not checked'}`);
             lines.push(`- Drift Box: ${item.result.driftBox?.summary ?? 'not checked'}`);
             lines.push(`- Drift run: ${item.result.driftResults?.length ? buildDriftRunLabel([item]) : 'not run'}`);
             lines.push(`- Manual review: ${item.result.findings.filter(finding => needsManualReview(finding)).length} AI finding(s) needing review`);
@@ -1712,6 +1775,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Summary: ${summarizeFileResult(item.result)}`);
                 lines.push(`- Coverage: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal for this file'}`);
                 lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
+                lines.push(`- Design context: ${item.result.designContext ? buildDesignContextLabel([item]) : 'not checked'}`);
                 lines.push(`- Drift Box: ${item.result.driftBox?.summary ?? 'not checked'}`);
                 lines.push(`- Drift run: ${item.result.driftResults?.length ? buildDriftRunLabel([item]) : 'not run'}`);
                 lines.push('');
@@ -1732,6 +1796,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push('- AI review: not used for the final finding set in this file');
             }
             lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
+            lines.push(`- Design context: ${item.result.designContext ? buildDesignContextLabel([item]) : 'not checked'}`);
             lines.push(`- Drift Box: ${item.result.driftBox?.summary ?? 'not checked'}`);
             lines.push(`- Drift run: ${item.result.driftResults?.length ? buildDriftRunLabel([item]) : 'not run'}`);
             lines.push(`- Knowledge sources: ${buildKnowledgeSourceDetail(item.packContext)}`);

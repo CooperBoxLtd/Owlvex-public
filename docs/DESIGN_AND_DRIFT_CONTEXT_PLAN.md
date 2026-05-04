@@ -172,7 +172,7 @@ Status: runner skeleton implemented and wired into scan orchestration in non-blo
 - Show drift check status and failure output summary.
 - Show when STRIDE ran without design context.
 
-Status: partially implemented for Drift Box visibility. Scan results now carry Drift Box metadata and non-blocking run results. Summary/full reports show configured checks, invalid declarations, disabled checks, out-of-scope checks, and pass/fail/timeout/not-approved runtime outcomes.
+Status: implemented for Design Context and Drift Box visibility. Scan results carry design metadata, Drift Box metadata, and non-blocking run results. Summary/full reports show design files used, STRIDE-without-design warnings, configured drift checks, invalid declarations, disabled checks, out-of-scope checks, and pass/fail/timeout/not-approved runtime outcomes.
 
 ### Slice 6: Fix Flow Report Context
 
