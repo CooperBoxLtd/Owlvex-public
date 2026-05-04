@@ -64,7 +64,26 @@ describe('drift box config parser', () => {
         ]), { projectRoot, scope: 'scan' });
 
         expect(parsed.checks[0].status).toBe('invalid');
-        expect(parsed.checks[0].reason).toContain('.owlvex/drift/scripts');
+        expect(parsed.checks[0].reason).toContain('configured Drift scripts folder');
+    });
+
+    it('accepts scripts from a configured Drift scripts folder', () => {
+        const parsed = parseDriftBoxConfig(config([
+            {
+                id: 'custom-script',
+                label: 'Custom script',
+                command: 'node check-auth-flow.mjs',
+            },
+        ]), {
+            projectRoot,
+            scriptsRoot: 'quality\\drift-scripts',
+            scope: 'scan',
+        });
+
+        expect(parsed.warnings).toEqual([]);
+        expect(parsed.readyChecks).toHaveLength(1);
+        expect(parsed.readyChecks[0].scriptPath).toBe(path.resolve(projectRoot, 'quality\\drift-scripts\\check-auth-flow.mjs'));
+        expect(parsed.readyChecks[0].command).toContain(path.resolve(projectRoot, 'quality\\drift-scripts\\check-auth-flow.mjs'));
     });
 
     it('filters checks by scope and selected frameworks without making them invalid', () => {
@@ -163,5 +182,35 @@ describe('drift box config loader', () => {
         expect(loaded.found).toBe(false);
         expect(loaded.summary).toBe('no drift box');
         expect(loaded.readyChecks).toHaveLength(0);
+    });
+
+    it('loads a configured Drift Box file and scripts folder', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'projectRoot') return projectRoot;
+                if (key === 'driftBoxFile') return 'quality\\owlvex-drift.json';
+                if (key === 'driftScriptsRoot') return 'quality\\scripts';
+                return defaultValue;
+            }),
+        });
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from(config([
+            {
+                id: 'custom-contract',
+                label: 'Custom contract',
+                command: 'node check-contract.mjs',
+            },
+        ])));
+
+        const loaded = await loadDriftBoxConfig({
+            scope: 'scan',
+            targetUris: [vscode.Uri.file(`${projectRoot}\\src\\server.js`)],
+        });
+
+        expect(loaded.found).toBe(true);
+        expect(loaded.configPath).toBe('quality\\owlvex-drift.json');
+        expect(loaded.readyChecks[0].scriptPath).toBe(path.resolve(projectRoot, 'quality\\scripts\\check-contract.mjs'));
+        expect(vscode.workspace.fs.readFile).toHaveBeenCalledWith(expect.objectContaining({
+            fsPath: path.join(projectRoot, 'quality', 'owlvex-drift.json'),
+        }));
     });
 });

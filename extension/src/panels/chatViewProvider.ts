@@ -482,8 +482,8 @@ function buildToolUsageGuidance(): string {
         '- Generated reports are written at the project/workspace report root, not inside source subfolders.',
         '- Compare reports should be used after rescanning; Owlvex orders reports by generation time so Before is the earlier report and After is the later report.',
         '- Provider throttle guidance appears only when a scan sees a 429 or rate-limit warning.',
-        '- Design Box lives under .owlvex/design and gives Owlvex architecture, role, data-flow, trust-boundary, and STRIDE context. It guides reasoning but does not prove findings by itself.',
-        '- Drift Box lives under .owlvex/drift and runs repository-owned checks locally after approval. Drift results are report-only pass/fail and never block scan completion, fixes, post-fix verification, or security-clean status.',
+        '- Design Box points to a local design file, with .owlvex/design as the default fallback. It gives Owlvex architecture, role, data-flow, trust-boundary, and STRIDE context, but does not prove findings by itself.',
+        '- Drift Box points to a local JSON config and scripts folder, with .owlvex/drift as the default fallback. It runs repository-owned checks locally after approval; results are report-only pass/fail and never block scan completion, fixes, post-fix verification, or security-clean status.',
         '- When users ask how to use Owlvex, give the next concrete click/action and explain which report or scan scope fits their goal.',
     ].join('\n');
 }
@@ -539,7 +539,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                         'Design Box:',
                         '',
                         'Use it to give Owlvex architecture context: actors, roles, trust boundaries, data flows, ownership rules, and STRIDE notes.',
-                        'Files live under `.owlvex/design` inside the selected project root.',
+                        'The Design Box can point to a local markdown/text file; `.owlvex/design` remains the default fallback inside the selected project root.',
                         'When STRIDE is selected, Owlvex prioritizes STRIDE and trust-boundary files for repo-aware AI context.',
                         'Design context can guide reasoning and remediation constraints, but it does not prove findings by itself.',
                         '',
@@ -550,7 +550,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                             'Drift Box:',
                             '',
                             'Use it for repository-owned scripts that say whether important behavior still passes after scans or fixes.',
-                            'Config lives at `.owlvex/drift/owlvex-drift.json`; scripts must live under `.owlvex/drift/scripts`.',
+                            'The Drift Box points to a local JSON config and a scripts folder; `.owlvex/drift/owlvex-drift.json` and `.owlvex/drift/scripts` are only the default fallback.',
                             'Owlvex validates declarations, asks before first run, executes locally with timeout/output caps, and reports pass/fail.',
                             'Drift is report-only. It does not block scan completion, fix application, post-fix verification, or security-clean status.',
                             '',
@@ -4328,7 +4328,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await vscode.commands.executeCommand(PROFILE.commands.openDesignContext);
             this.messages.push({
                 role: 'system',
-                content: 'Opened Design Context. Add architecture, trust-boundary, role, data-flow, ownership, and STRIDE notes under .owlvex/design; Owlvex uses them as context, not proof.',
+                content: 'Opened Design Context. Add architecture, trust-boundary, role, data-flow, ownership, and STRIDE notes in the configured Design Box file; Owlvex uses them as context, not proof.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4340,7 +4340,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await vscode.commands.executeCommand(PROFILE.commands.openDriftBox);
             this.messages.push({
                 role: 'system',
-                content: 'Opened Drift Box. Drift checks run locally after approval and report pass/fail only; they do not block scans, fixes, post-fix verification, or security-clean status.',
+                content: 'Opened Drift Box. Configure the Drift Box JSON and scripts folder for this project. Drift checks run locally after approval and report pass/fail only; they do not block scans, fixes, post-fix verification, or security-clean status.',
                 kind: 'advisory',
             });
             void this.persistState();

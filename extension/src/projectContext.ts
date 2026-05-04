@@ -8,6 +8,7 @@ const MAX_DESIGN_FILE_CHARS = 3000;
 const MAX_DESIGN_FILES = 8;
 const PROJECT_ROOT_SETTING = 'projectRoot';
 const DEFAULT_DESIGN_CONTEXT_DIR = '.owlvex/design';
+const DESIGN_CONTEXT_FILE_SETTING = 'designContextFile';
 
 export interface ProjectContextInfo {
     combined: string;
@@ -169,6 +170,7 @@ export function getProjectContextSummaryFromConfig(): string {
         legacyTeamContext ? 'legacy inline context' : '',
         inlineProjectContext ? 'inline project contract' : '',
         projectContextFile ? `file ${projectContextFile}` : '',
+        config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '').trim() ? `design file ${config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '').trim()}` : '',
     ].filter(Boolean);
 
     return summaryParts.length ? summaryParts.join(' | ') : 'none';
@@ -277,6 +279,47 @@ async function tryReadDesignContextDirectory(
     };
 }
 
+function resolveConfiguredPath(value: string, projectRoot?: vscode.Uri): string | undefined {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return undefined;
+    }
+    if (path.isAbsolute(trimmed)) {
+        return trimmed;
+    }
+    if (projectRoot) {
+        return path.join(projectRoot.fsPath, trimmed);
+    }
+    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+    return workspaceFolder ? path.join(workspaceFolder.uri.fsPath, trimmed) : undefined;
+}
+
+async function tryReadDesignContextFile(
+    fileSetting: string,
+    rootUri: vscode.Uri | undefined,
+): Promise<{ labels: string[]; content: string } | undefined> {
+    const fsPath = resolveConfiguredPath(fileSetting, rootUri);
+    if (!fsPath || !/\.(md|txt)$/i.test(fsPath)) {
+        return undefined;
+    }
+
+    try {
+        const fileUri = vscode.Uri.file(fsPath);
+        const raw = await vscode.workspace.fs.readFile(fileUri);
+        const content = trimDesignContext(Buffer.from(raw).toString('utf8'));
+        if (!content) {
+            return undefined;
+        }
+        const label = vscode.workspace.asRelativePath(fileUri, false);
+        return {
+            labels: [label],
+            content: `Design context file (${label}):\n${content}`,
+        };
+    } catch {
+        return undefined;
+    }
+}
+
 async function tryReadProjectContextFile(fileSetting: string): Promise<{ label: string; content: string } | undefined> {
     const trimmed = fileSetting.trim();
     if (!trimmed) {
@@ -315,11 +358,13 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     const legacyTeamContext = trimProjectContext(config.get<string>('teamContext', ''));
     const inlineProjectContext = trimProjectContext(config.get<string>('projectContext', ''));
     const projectContextFile = config.get<string>('projectContextFile', '');
+    const designContextFile = config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '');
     const fileContext = await tryReadProjectContextFile(projectContextFile);
     const projectRoot = await resolveProjectRootInfo();
     const rootAppliesToTargets = !projectRoot.uri || targetUrisAreInsideRoot(options?.targetUris, projectRoot.uri);
     const designContext = rootAppliesToTargets
-        ? await tryReadDesignContextDirectory(projectRoot.uri, options?.selectedFrameworks)
+        ? (await tryReadDesignContextFile(designContextFile, projectRoot.uri)
+            ?? await tryReadDesignContextDirectory(projectRoot.uri, options?.selectedFrameworks))
         : undefined;
     const strideSelected = frameworkSelected(options?.selectedFrameworks, 'STRIDE');
     const rootLabel = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.label : '';

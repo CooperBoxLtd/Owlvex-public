@@ -133,6 +133,41 @@ describe('project root helpers', () => {
         expect(context.combined).not.toContain('ignore.json');
     });
 
+    it('loads a configured Design Box file before the default design folder', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'projectRoot') {
+                    return 'D:\\repo\\tools\\benchmark-app';
+                }
+                if (key === 'designContextFile') {
+                    return 'docs\\security-design.md';
+                }
+                if (key === 'projectContext' || key === 'projectContextFile' || key === 'teamContext') {
+                    return '';
+                }
+                return defaultValue;
+            }),
+        });
+        (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath.replace('D:\\repo\\tools\\benchmark-app\\', ''));
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('Design file: customer ownership lives in policy.js.'));
+
+        const context = await loadProjectContextInfo({
+            selectedFrameworks: ['STRIDE'],
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+
+        expect(context.summary).toContain('design context 1 file');
+        expect(context.designContext).toEqual({
+            loaded: true,
+            files: ['docs\\security-design.md'],
+            strideSelected: true,
+            missingForStride: false,
+        });
+        expect(context.combined).toContain('Design context file (docs\\security-design.md)');
+        expect(context.combined).toContain('customer ownership lives in policy.js');
+        expect(vscode.workspace.fs.readDirectory).not.toHaveBeenCalled();
+    });
+
     it('marks STRIDE design context as missing when no design files are loaded', async () => {
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
             get: jest.fn((key: string, defaultValue?: any) => {

@@ -267,6 +267,21 @@
           "default": "",
           "description": "Optional local file path to a project context contract document used to ground AI scans and remediation prompts"
         },
+        "owlvex.designContextFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional local file path to the Design Box context document used to ground architecture, STRIDE, trust-boundary, role, and data-flow reasoning"
+        },
+        "owlvex.driftBoxFile": {
+          "type": "string",
+          "default": "",
+          "description": "Optional local file path to the Drift Box JSON config. Defaults to .owlvex/drift/owlvex-drift.json under the selected project root"
+        },
+        "owlvex.driftScriptsRoot": {
+          "type": "string",
+          "default": "",
+          "description": "Optional local folder that contains Drift Box scripts. Defaults to .owlvex/drift/scripts under the selected project root"
+        },
         "owlvex.projectRoot": {
           "type": "string",
           "default": "",

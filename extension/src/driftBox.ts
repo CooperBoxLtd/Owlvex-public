@@ -1,5 +1,6 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { PROFILE } from './profile';
 import { resolveProjectRootInfo } from './projectContext';
 
 export type DriftCheckScope = 'scan' | 'fix-preview' | 'post-fix';
@@ -34,6 +35,7 @@ export interface DriftBoxLoadResult extends DriftBoxParseResult {
 
 export interface DriftBoxParseOptions {
     projectRoot: string;
+    scriptsRoot?: string;
     selectedFrameworks?: string[];
     scope?: DriftCheckScope;
 }
@@ -52,6 +54,8 @@ const VALID_SCOPES = new Set<DriftCheckScope>(['scan', 'fix-preview', 'post-fix'
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
 const DISALLOWED_COMMAND_TOKENS = /(\|\||&&|[|;`<>])/;
 const DRIFT_CONFIG_RELATIVE_PATH = path.join('.owlvex', 'drift', 'owlvex-drift.json');
+const DRIFT_BOX_FILE_SETTING = 'driftBoxFile';
+const DRIFT_SCRIPTS_ROOT_SETTING = 'driftScriptsRoot';
 
 function asObject(value: unknown): Record<string, unknown> | undefined {
     return value && typeof value === 'object' && !Array.isArray(value)
@@ -140,7 +144,12 @@ function unquote(value: string): string {
     return trimmed;
 }
 
-function extractDriftScriptPath(command: string, projectRoot: string): { scriptPath?: string; reason?: string } {
+function resolveConfiguredPath(value: string, projectRoot: string): string {
+    const trimmed = value.trim();
+    return path.isAbsolute(trimmed) ? trimmed : path.resolve(projectRoot, trimmed);
+}
+
+function extractDriftScriptPath(command: string, projectRoot: string, scriptsRoot?: string): { scriptPath?: string; normalizedCommand?: string; reason?: string } {
     if (!command || command.length > 400) {
         return { reason: 'Command is empty or too long.' };
     }
@@ -148,22 +157,36 @@ function extractDriftScriptPath(command: string, projectRoot: string): { scriptP
         return { reason: 'Command contains shell chaining, pipes, redirects, or backticks.' };
     }
 
-    const parts = command.match(/"[^"]+"|'[^']+'|\S+/g)?.map(unquote) ?? [];
-    const scriptArg = parts.find(part => /(^|[\\/])\.owlvex[\\/]drift[\\/]scripts[\\/]/i.test(part));
+    const rawParts = command.match(/"[^"]+"|'[^']+'|\S+/g) ?? [];
+    const parts = rawParts.map(unquote);
+    const scriptArg = parts.find(part =>
+        /(^|[\\/])\.owlvex[\\/]drift[\\/]scripts[\\/]/i.test(part)
+        || /\.(?:mjs|cjs|js|ts|py|ps1|sh|cmd|bat)$/i.test(part)
+    );
     if (!scriptArg) {
-        return { reason: 'Command must reference a script under .owlvex/drift/scripts.' };
+        return { reason: 'Command must reference a script under the configured Drift scripts folder.' };
     }
 
+    const configuredScriptsRoot = scriptsRoot?.trim()
+        ? resolveConfiguredPath(scriptsRoot, projectRoot)
+        : path.resolve(projectRoot, '.owlvex', 'drift', 'scripts');
     const scriptPath = path.isAbsolute(scriptArg)
         ? scriptArg
-        : path.resolve(projectRoot, scriptArg);
+        : scriptArg.includes('/') || scriptArg.includes('\\') || scriptArg.startsWith('.')
+        ? path.resolve(projectRoot, scriptArg)
+        : path.resolve(configuredScriptsRoot, scriptArg);
     const rootPath = path.resolve(projectRoot);
-    const driftScriptsPath = path.resolve(projectRoot, '.owlvex', 'drift', 'scripts');
+    const driftScriptsPath = path.resolve(configuredScriptsRoot);
     if (!isInside(rootPath, scriptPath) || !isInside(driftScriptsPath, scriptPath)) {
-        return { reason: 'Command script must stay inside the selected project root and .owlvex/drift/scripts.' };
+        return { reason: 'Command script must stay inside the selected project root and configured Drift scripts folder.' };
     }
 
-    return { scriptPath };
+    const rawScriptArg = rawParts[parts.indexOf(scriptArg)] ?? scriptArg;
+    const quotedScriptPath = scriptPath.includes(' ') ? `"${scriptPath}"` : scriptPath;
+    return {
+        scriptPath,
+        normalizedCommand: command.replace(rawScriptArg, quotedScriptPath),
+    };
 }
 
 export function parseDriftBoxConfig(raw: string, options: DriftBoxParseOptions): DriftBoxParseResult {
@@ -229,6 +252,7 @@ export function parseDriftBoxConfig(raw: string, options: DriftBoxParseOptions):
         let status: DriftCheckStatus = 'ready';
         let reason: string | undefined;
         let scriptPath: string | undefined;
+        let normalizedCommand = command;
 
         if (!id || !SAFE_ID_PATTERN.test(id)) {
             status = 'invalid';
@@ -246,19 +270,20 @@ export function parseDriftBoxConfig(raw: string, options: DriftBoxParseOptions):
             status = 'out_of_scope';
             reason = 'Check does not match the selected frameworks.';
         } else {
-            const extracted = extractDriftScriptPath(command, options.projectRoot);
+            const extracted = extractDriftScriptPath(command, options.projectRoot, options.scriptsRoot);
             if (!extracted.scriptPath) {
                 status = 'invalid';
                 reason = extracted.reason;
             } else {
                 scriptPath = extracted.scriptPath;
+                normalizedCommand = extracted.normalizedCommand ?? command;
             }
         }
 
         return {
             id: id || `invalid-${index + 1}`,
             label: label || `Invalid check ${index + 1}`,
-            command,
+            command: normalizedCommand,
             frameworks,
             scope,
             timeoutSeconds,
@@ -308,7 +333,12 @@ export async function loadDriftBoxConfig(options?: DriftBoxLoadOptions): Promise
         };
     }
 
-    const configPath = path.join(projectRoot.uri.fsPath, DRIFT_CONFIG_RELATIVE_PATH);
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    const configuredConfigPath = config.get<string>(DRIFT_BOX_FILE_SETTING, '').trim();
+    const configuredScriptsRoot = config.get<string>(DRIFT_SCRIPTS_ROOT_SETTING, '').trim();
+    const configPath = configuredConfigPath
+        ? resolveConfiguredPath(configuredConfigPath, projectRoot.uri.fsPath)
+        : path.join(projectRoot.uri.fsPath, DRIFT_CONFIG_RELATIVE_PATH);
     const configUri = vscode.Uri.file(configPath);
     let raw: Uint8Array;
     try {
@@ -336,6 +366,7 @@ export async function loadDriftBoxConfig(options?: DriftBoxLoadOptions): Promise
 
     const parsed = parseDriftBoxConfig(Buffer.from(raw).toString('utf8'), {
         projectRoot: projectRoot.uri.fsPath,
+        scriptsRoot: configuredScriptsRoot || undefined,
         selectedFrameworks: options?.selectedFrameworks,
         scope: options?.scope,
     });

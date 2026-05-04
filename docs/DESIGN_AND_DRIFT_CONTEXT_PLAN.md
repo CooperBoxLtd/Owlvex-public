@@ -43,9 +43,17 @@ Recommended layout:
       check-api-contracts.mjs
 ```
 
+The layout above is only the default. Each developer or repository may point Owlvex to different locations:
+
+- `owlvex.designContextFile` points to the Design Box file Owlvex should load.
+- `owlvex.driftBoxFile` points to the Drift Box JSON config.
+- `owlvex.driftScriptsRoot` points to the folder that contains scripts referenced by the Drift Box config.
+
+Relative paths are resolved inside the selected Owlvex project root. Absolute paths are allowed only as local user/workspace configuration and are never uploaded to the Owlvex backend.
+
 ## Design Context
 
-Design Context tells Owlvex what the code is meant to do.
+Design Context tells Owlvex what the code is meant to do. It can be a single file selected by the user, or the default `.owlvex/design` folder when no file is configured.
 
 Useful content:
 
@@ -78,7 +86,7 @@ Design Context must not:
 
 ## Drift Checks
 
-Drift Checks are local scripts owned by the repository. They verify that important behavior has not drifted after scanning or fixing.
+Drift Checks are local scripts owned by the repository. They verify that important behavior has not drifted after scanning or fixing. The Drift Box points to a config file and a scripts folder; users are not forced to keep these under `.owlvex` as long as the paths stay inside the selected project root.
 
 Example `owlvex-drift.json`:
 
@@ -89,7 +97,7 @@ Example `owlvex-drift.json`:
     {
       "id": "auth-flow",
       "label": "Authentication flow still works",
-      "command": "node .owlvex/drift/scripts/check-auth-flow.mjs",
+      "command": "node check-auth-flow.mjs",
       "frameworks": ["STRIDE", "OWASP"],
       "scope": ["scan", "fix-preview", "post-fix"],
       "timeoutSeconds": 30
@@ -116,8 +124,8 @@ Rules:
 
 - Require explicit approval before first run.
 - Show command, path, and project root before execution.
-- Only run commands declared inside `.owlvex/drift/owlvex-drift.json`.
-- Only run scripts inside the selected project root.
+- Only run commands declared inside the configured Drift Box file.
+- Only run scripts inside the selected project root and configured Drift scripts folder.
 - Apply a timeout to every check.
 - Cap stdout/stderr captured into reports.
 - Do not run scripts from dependencies, downloaded packs, temp folders, or paths outside the root.

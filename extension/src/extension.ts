@@ -480,6 +480,9 @@ function collectOpenEditorUris(): vscode.Uri[] {
 const DEFAULT_PROJECT_CONTEXT_RELATIVE_PATH = '.owlvex/project-context.md';
 const DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR = '.owlvex/design';
 const DEFAULT_DRIFT_BOX_RELATIVE_DIR = '.owlvex/drift';
+const DESIGN_CONTEXT_FILE_SETTING = 'designContextFile';
+const DRIFT_BOX_FILE_SETTING = 'driftBoxFile';
+const DRIFT_SCRIPTS_ROOT_SETTING = 'driftScriptsRoot';
 
 function buildDefaultProjectContextContent(): string {
     return [
@@ -773,6 +776,18 @@ async function writeFileIfMissing(uri: vscode.Uri, content: string): Promise<boo
     }
 }
 
+function resolveUserConfiguredPath(value: string, projectRoot: vscode.Uri): string {
+    return path.isAbsolute(value) ? value : path.join(projectRoot.fsPath, value);
+}
+
+async function persistWorkspaceSetting(key: string, value: string): Promise<void> {
+    await vscode.workspace.getConfiguration(PROFILE.configSection).update(
+        key,
+        value,
+        vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global,
+    );
+}
+
 async function openOrCreateDesignContext(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
     const projectRoot = await resolveProjectRootInfo();
     if (!projectRoot.uri) {
@@ -784,11 +799,34 @@ async function openOrCreateDesignContext(): Promise<{ uri: vscode.Uri; created: 
         return { uri: document.uri, created: true };
     }
 
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    let configuredFile = config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '').trim();
+    if (!configuredFile) {
+        const selected = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            title: 'Select Owlvex Design Box file',
+            openLabel: 'Use As Design Box',
+            defaultUri: vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR)),
+            filters: { 'Design context': ['md', 'txt'] },
+        });
+        if (selected?.[0]) {
+            configuredFile = vscode.workspace.asRelativePath(selected[0], false);
+            await persistWorkspaceSetting(DESIGN_CONTEXT_FILE_SETTING, configuredFile);
+        }
+    }
+
     const designDir = path.join(projectRoot.uri.fsPath, DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR);
-    const systemUri = vscode.Uri.file(path.join(designDir, 'system.md'));
+    const systemUri = vscode.Uri.file(configuredFile
+        ? resolveUserConfiguredPath(configuredFile, projectRoot.uri)
+        : path.join(designDir, 'system.md'));
     const strideUri = vscode.Uri.file(path.join(designDir, 'stride-notes.md'));
     const created = await writeFileIfMissing(systemUri, buildDefaultDesignSystemContent());
-    await writeFileIfMissing(strideUri, buildDefaultStrideNotesContent());
+    if (!configuredFile) {
+        await persistWorkspaceSetting(DESIGN_CONTEXT_FILE_SETTING, vscode.workspace.asRelativePath(systemUri, false));
+        await writeFileIfMissing(strideUri, buildDefaultStrideNotesContent());
+    }
 
     const document = await vscode.workspace.openTextDocument(systemUri);
     await vscode.window.showTextDocument(document, { preview: false });
@@ -806,17 +844,59 @@ async function openOrCreateDriftBox(): Promise<{ uri: vscode.Uri; created: boole
         return { uri: document.uri, created: true };
     }
 
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    let configuredFile = config.get<string>(DRIFT_BOX_FILE_SETTING, '').trim();
+    let configuredScriptsRoot = config.get<string>(DRIFT_SCRIPTS_ROOT_SETTING, '').trim();
+    if (!configuredFile) {
+        const selected = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            title: 'Select Owlvex Drift Box config',
+            openLabel: 'Use As Drift Box',
+            defaultUri: vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_DRIFT_BOX_RELATIVE_DIR)),
+            filters: { 'Drift config': ['json'] },
+        });
+        if (selected?.[0]) {
+            configuredFile = vscode.workspace.asRelativePath(selected[0], false);
+            await persistWorkspaceSetting(DRIFT_BOX_FILE_SETTING, configuredFile);
+        }
+    }
+
+    if (configuredFile && !configuredScriptsRoot) {
+        const configDir = path.dirname(resolveUserConfiguredPath(configuredFile, projectRoot.uri));
+        const selectedScripts = await vscode.window.showOpenDialog({
+            canSelectFiles: false,
+            canSelectFolders: true,
+            canSelectMany: false,
+            title: 'Select Owlvex Drift scripts folder',
+            openLabel: 'Use As Drift Scripts Folder',
+            defaultUri: vscode.Uri.file(path.join(configDir, 'scripts')),
+        });
+        const scriptsUri = selectedScripts?.[0] ?? vscode.Uri.file(path.join(configDir, 'scripts'));
+        configuredScriptsRoot = vscode.workspace.asRelativePath(scriptsUri, false);
+        await persistWorkspaceSetting(DRIFT_SCRIPTS_ROOT_SETTING, configuredScriptsRoot);
+    }
+
     const driftDir = path.join(projectRoot.uri.fsPath, DEFAULT_DRIFT_BOX_RELATIVE_DIR);
     const configUri = vscode.Uri.file(path.join(driftDir, 'owlvex-drift.json'));
-    const invariantsUri = vscode.Uri.file(path.join(driftDir, 'invariants.md'));
-    const scriptUri = vscode.Uri.file(path.join(driftDir, 'scripts', 'example-contract-check.mjs'));
-    const created = await writeFileIfMissing(configUri, buildDefaultDriftConfigContent());
+    const targetConfigUri = vscode.Uri.file(configuredFile
+        ? resolveUserConfiguredPath(configuredFile, projectRoot.uri)
+        : configUri.fsPath);
+    const scriptsRoot = configuredScriptsRoot
+        ? resolveUserConfiguredPath(configuredScriptsRoot, projectRoot.uri)
+        : path.join(path.dirname(targetConfigUri.fsPath), 'scripts');
+    const invariantsUri = vscode.Uri.file(path.join(path.dirname(targetConfigUri.fsPath), 'invariants.md'));
+    const scriptUri = vscode.Uri.file(path.join(scriptsRoot, 'example-contract-check.mjs'));
+    const created = await writeFileIfMissing(targetConfigUri, buildDefaultDriftConfigContent());
+    await persistWorkspaceSetting(DRIFT_BOX_FILE_SETTING, vscode.workspace.asRelativePath(targetConfigUri, false));
+    await persistWorkspaceSetting(DRIFT_SCRIPTS_ROOT_SETTING, vscode.workspace.asRelativePath(vscode.Uri.file(scriptsRoot), false));
     await writeFileIfMissing(invariantsUri, buildDefaultDriftInvariantsContent());
     await writeFileIfMissing(scriptUri, buildDefaultDriftScriptContent());
 
-    const document = await vscode.workspace.openTextDocument(configUri);
+    const document = await vscode.workspace.openTextDocument(targetConfigUri);
     await vscode.window.showTextDocument(document, { preview: false });
-    return { uri: configUri, created, relativePath: vscode.workspace.asRelativePath(configUri, false) };
+    return { uri: targetConfigUri, created, relativePath: vscode.workspace.asRelativePath(targetConfigUri, false) };
 }
 
 function isDevObservabilityTelemetryEnabled(info: LicenceInfo | null | undefined): boolean {

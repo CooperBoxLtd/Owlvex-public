@@ -2824,7 +2824,7 @@ describe('parseChatIntent', () => {
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.openDesignContext);
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Opened Design Context.');
-        expect(finalMessage.content).toContain('.owlvex/design');
+        expect(finalMessage.content).toContain('configured Design Box file');
         expect(finalMessage.content).toContain('context, not proof');
     });
 
