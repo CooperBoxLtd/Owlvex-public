@@ -1105,6 +1105,43 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Scan warnings: 0');
     });
 
+    it('omits Drift Box report text when the box has no enabled checks', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo'), {
+            targetLabel: 'src/probes/example.js',
+            outputRoot: vscode.Uri.file('d:\\repo'),
+            errors: [],
+            results: [{
+                uri: vscode.Uri.file('d:\\repo\\src\\probes\\example.js'),
+                result: buildResult({
+                    warnings: [],
+                    driftBox: {
+                        found: true,
+                        configPath: '.owlvex\\drift\\owlvex-drift.json',
+                        summary: 'drift box 0 ready | 1 disabled',
+                        warnings: [],
+                        checks: [{
+                            id: 'api-contract',
+                            label: 'API contract still holds',
+                            status: 'disabled',
+                            frameworks: ['STRIDE'],
+                            scope: ['scan'],
+                            timeoutSeconds: 30,
+                        }],
+                    },
+                    driftResults: [],
+                }),
+            }],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).not.toContain('Drift Box');
+        expect(written).not.toContain('Drift run');
+        expect(written).not.toContain('drift box 0 ready | 1 disabled');
+    });
+
     it('renders design context files and STRIDE missing-context notes', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
@@ -1429,8 +1466,6 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
 - Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
 - Design context: not checked
-- Drift Box: not checked
-- Drift run: not run
 
 ## Fix First
 
@@ -1469,8 +1504,6 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Engine evidence: Structured contracts: 1/1 | confirmed: 1 | missing guards: 1 | deterministic gaps: 0 | AI without contract: 0
 - Proof posture: static proven: 0 | AI plausible: 1 | counter-evidence: 0 | unproven extras: 0
 - Design context: not checked
-- Drift Box: not checked
-- Drift run: not run
 
 ## AI Usage
 
@@ -1489,8 +1522,6 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Treat unselected-framework mappings as reference taxonomy for the finding, not as evidence that Owlvex scanned with every framework lens enabled.
 - Project context: inline project contract
 - Design context: not checked
-- Drift Box: not checked
-- Drift run: not run
 - Errors: 0
 - Scan warnings: 0"
 `);
