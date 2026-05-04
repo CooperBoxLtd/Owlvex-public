@@ -51,8 +51,8 @@ describe('workspaceScanner', () => {
 
     it('collects changed scannable files from git diff and untracked files', async () => {
         (execFile as unknown as jest.Mock)
-            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/changed.js\0README.md\0src/deleted.js\0', ''))
-            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/new.ts\0src/changed.js\0', ''));
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/changed.js\0README.md\0src/deleted.js\0package.json\0package-lock.json\0', ''))
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/new.ts\0src/changed.js\0scripts/electron-dev-launch.mjs\0', ''));
         (fs.stat as jest.Mock).mockImplementation(async (filePath: string) => {
             if (filePath.endsWith('deleted.js')) {
                 throw new Error('missing');
@@ -76,7 +76,9 @@ describe('workspaceScanner', () => {
         ]);
         expect(files.map(file => normalizeTestPath(file.fsPath))).toEqual([
             'd:/repo/src/changed.js',
+            'd:/repo/package.json',
             'd:/repo/src/new.ts',
+            'd:/repo/scripts/electron-dev-launch.mjs',
         ]);
     });
 

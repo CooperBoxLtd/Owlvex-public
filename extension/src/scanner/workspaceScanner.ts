@@ -12,10 +12,15 @@ type ScanDirent = {
 };
 
 const SUPPORTED_EXTENSIONS = new Set([
-    '.ts', '.tsx', '.js', '.jsx',
+    '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
+    '.mts', '.cts',
     '.py', '.java', '.cs', '.go',
     '.rs', '.php', '.rb', '.cpp',
     '.c', '.h',
+]);
+
+const SUPPORTED_MANIFEST_FILES = new Set([
+    'package.json',
 ]);
 
 const EXCLUDED_DIRS = new Set([
@@ -126,7 +131,12 @@ async function sleep(ms: number): Promise<void> {
 }
 
 function isScannableSourceUri(uri: vscode.Uri | undefined): uri is vscode.Uri {
-    return Boolean(uri?.fsPath && SUPPORTED_EXTENSIONS.has(path.extname(uri.fsPath).toLowerCase()));
+    if (!uri?.fsPath) {
+        return false;
+    }
+    const basename = path.basename(uri.fsPath).toLowerCase();
+    return SUPPORTED_MANIFEST_FILES.has(basename)
+        || SUPPORTED_EXTENSIONS.has(path.extname(uri.fsPath).toLowerCase());
 }
 
 export function getActiveScannableEditorUri(): vscode.Uri | undefined {
