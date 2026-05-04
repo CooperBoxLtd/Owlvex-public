@@ -1,4 +1,6 @@
 import * as path from 'path';
+import * as fs from 'fs';
+import * as os from 'os';
 import * as vscode from 'vscode';
 import { loadDriftBoxConfig, parseDriftBoxConfig } from './driftBox';
 
@@ -15,6 +17,10 @@ describe('drift box config parser', () => {
         (vscode.workspace.fs.stat as jest.Mock).mockResolvedValue({ type: vscode.FileType.Directory });
         (vscode.workspace.fs.readFile as jest.Mock).mockReset();
         (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath);
+    });
+
+    afterEach(() => {
+        jest.restoreAllMocks();
     });
 
     it('accepts a safe script command inside the Drift Box scripts directory', () => {
@@ -84,6 +90,47 @@ describe('drift box config parser', () => {
         expect(parsed.readyChecks).toHaveLength(1);
         expect(parsed.readyChecks[0].scriptPath).toBe(path.resolve(projectRoot, 'quality\\drift-scripts\\check-auth-flow.mjs'));
         expect(parsed.readyChecks[0].command).toContain(path.resolve(projectRoot, 'quality\\drift-scripts\\check-auth-flow.mjs'));
+    });
+
+    it('accepts a package validation script when package.json defines it', () => {
+        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'owlvex-drift-'));
+        fs.writeFileSync(path.join(tempRoot, 'package.json'), JSON.stringify({
+            scripts: {
+                validate: 'npm run build && npm run test',
+            },
+        }), 'utf8');
+
+        const parsed = parseDriftBoxConfig(config([
+            {
+                id: 'app-validation',
+                label: 'App validation',
+                command: 'npm run validate',
+                scope: ['scan', 'post-fix'],
+            },
+        ]), { projectRoot: tempRoot, scope: 'scan' });
+
+        expect(parsed.warnings).toEqual([]);
+        expect(parsed.readyChecks).toHaveLength(1);
+        expect(parsed.readyChecks[0].commandKind).toBe('package-script');
+        expect(parsed.readyChecks[0].command).toBe('npm run validate');
+        expect(parsed.readyChecks[0].scriptPath).toBeUndefined();
+    });
+
+    it('rejects package validation scripts that are not defined in package.json', () => {
+        const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'owlvex-drift-'));
+        fs.writeFileSync(path.join(tempRoot, 'package.json'), JSON.stringify({ scripts: {} }), 'utf8');
+
+        const parsed = parseDriftBoxConfig(config([
+            {
+                id: 'missing-validation',
+                label: 'Missing validation',
+                command: 'npm run validate',
+            },
+        ]), { projectRoot: tempRoot, scope: 'scan' });
+
+        expect(parsed.readyChecks).toHaveLength(0);
+        expect(parsed.checks[0].status).toBe('invalid');
+        expect(parsed.checks[0].reason).toContain('scripts.validate');
     });
 
     it('filters checks by scope without treating frameworks as execution routing', () => {

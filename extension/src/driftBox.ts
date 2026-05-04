@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 import { PROFILE } from './profile';
 import { resolveProjectRootInfo } from './projectContext';
@@ -14,6 +15,7 @@ export interface DriftCheckDefinition {
     scope: DriftCheckScope[];
     timeoutSeconds: number;
     enabled: boolean;
+    commandKind?: 'script' | 'package-script';
     scriptPath?: string;
     status: DriftCheckStatus;
     reason?: string;
@@ -56,6 +58,7 @@ const MAX_TIMEOUT_SECONDS = 120;
 const MAX_CHECKS = 50;
 const VALID_SCOPES = new Set<DriftCheckScope>(['scan', 'fix-preview', 'post-fix']);
 const SAFE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,79}$/;
+const SAFE_PACKAGE_SCRIPT_PATTERN = /^[A-Za-z0-9][A-Za-z0-9:._-]{0,79}$/;
 const DISALLOWED_COMMAND_TOKENS = /(\|\||&&|[|;`<>])/;
 const DRIFT_CONFIG_RELATIVE_PATH = path.join('.owlvex', 'drift', 'owlvex-drift.json');
 const DRIFT_BOX_FILE_SETTING = 'driftBoxFile';
@@ -184,6 +187,41 @@ function extractDriftScriptPath(command: string, projectRoot: string, scriptsRoo
     };
 }
 
+function validatePackageScriptCommand(command: string, projectRoot: string): { normalizedCommand?: string; reason?: string } {
+    if (!command || command.length > 400) {
+        return { reason: 'Command is empty or too long.' };
+    }
+    if (DISALLOWED_COMMAND_TOKENS.test(command)) {
+        return { reason: 'Command contains shell chaining, pipes, redirects, or backticks.' };
+    }
+
+    const parts = command.match(/"[^"]+"|'[^']+'|\S+/g)?.map(unquote) ?? [];
+    if (parts.length !== 3 || parts[0] !== 'npm' || parts[1] !== 'run') {
+        return { reason: 'Package script commands must use the form npm run <script>.' };
+    }
+
+    const scriptName = parts[2];
+    if (!SAFE_PACKAGE_SCRIPT_PATTERN.test(scriptName)) {
+        return { reason: 'Package script name contains unsupported characters.' };
+    }
+
+    const packageJsonPath = path.join(projectRoot, 'package.json');
+    if (!fs.existsSync(packageJsonPath)) {
+        return { reason: 'Package script command requires package.json in the selected project root.' };
+    }
+
+    try {
+        const manifest = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+        if (!manifest?.scripts || typeof manifest.scripts[scriptName] !== 'string') {
+            return { reason: `package.json does not define scripts.${scriptName}.` };
+        }
+    } catch (error: any) {
+        return { reason: `Could not read package.json scripts: ${error.message}` };
+    }
+
+    return { normalizedCommand: `npm run ${scriptName}` };
+}
+
 export function parseDriftBoxConfig(raw: string, options: DriftBoxParseOptions): DriftBoxParseResult {
     const warnings: string[] = [];
     let parsed: unknown;
@@ -247,6 +285,7 @@ export function parseDriftBoxConfig(raw: string, options: DriftBoxParseOptions):
         let status: DriftCheckStatus = 'ready';
         let reason: string | undefined;
         let scriptPath: string | undefined;
+        let commandKind: DriftCheckDefinition['commandKind'];
         let normalizedCommand = command;
 
         if (!id || !SAFE_ID_PATTERN.test(id)) {
@@ -262,12 +301,16 @@ export function parseDriftBoxConfig(raw: string, options: DriftBoxParseOptions):
             status = 'out_of_scope';
             reason = `Check does not apply to ${options.scope}.`;
         } else {
-            const extracted = extractDriftScriptPath(command, options.projectRoot, options.scriptsRoot);
-            if (!extracted.scriptPath) {
+            const packageScript = /^npm\s+run\s+/i.test(command);
+            const extracted = packageScript
+                ? validatePackageScriptCommand(command, options.projectRoot)
+                : extractDriftScriptPath(command, options.projectRoot, options.scriptsRoot);
+            if (!extracted.normalizedCommand && !('scriptPath' in extracted && extracted.scriptPath)) {
                 status = 'invalid';
                 reason = extracted.reason;
             } else {
-                scriptPath = extracted.scriptPath;
+                commandKind = packageScript ? 'package-script' : 'script';
+                scriptPath = (extracted as { scriptPath?: string }).scriptPath;
                 normalizedCommand = extracted.normalizedCommand ?? command;
             }
         }
@@ -280,6 +323,7 @@ export function parseDriftBoxConfig(raw: string, options: DriftBoxParseOptions):
             scope,
             timeoutSeconds,
             enabled,
+            commandKind,
             scriptPath,
             status,
             reason,

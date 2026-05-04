@@ -138,6 +138,35 @@ describe('drift runner', () => {
         });
     });
 
+    it('runs approved package validation scripts', async () => {
+        const driftBox = buildDriftBox();
+        driftBox.readyChecks[0] = {
+            ...driftBox.readyChecks[0],
+            id: 'app-validation',
+            label: 'App validation',
+            command: 'npm run validate',
+            commandKind: 'package-script',
+            scriptPath: undefined,
+        };
+        mockChildProcess(0, 'validation ok');
+
+        const results = await runDriftChecks(driftBox, {
+            projectRoot,
+            requireApproval: false,
+        });
+
+        expect(spawn).toHaveBeenCalledWith('npm', ['run', 'validate'], {
+            cwd: projectRoot,
+            shell: false,
+            windowsHide: true,
+        });
+        expect(results[0]).toMatchObject({
+            id: 'app-validation',
+            status: 'passed',
+            stdout: 'validation ok',
+        });
+    });
+
     it('skips ready checks if the validated script path is missing or unsafe', async () => {
         const driftBox = buildDriftBox();
         driftBox.readyChecks[0] = {

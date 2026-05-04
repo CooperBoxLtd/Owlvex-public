@@ -123,6 +123,13 @@ function validateRunnableCheck(check: DriftCheckDefinition, projectRoot: string)
     if (check.status !== 'ready') {
         return `Check is ${check.status}.`;
     }
+    if (check.commandKind === 'package-script') {
+        const parts = splitCommand(check.command);
+        if (parts.length !== 3 || parts[0] !== 'npm' || parts[1] !== 'run') {
+            return 'Package script command must use the form npm run <script>.';
+        }
+        return undefined;
+    }
     if (!check.scriptPath) {
         return 'Validated script path is missing.';
     }
