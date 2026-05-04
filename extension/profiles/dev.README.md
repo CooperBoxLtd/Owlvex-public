@@ -16,7 +16,7 @@ This dev build is also where we validate TDD Box, Design Box, and Drift Box befo
 
 ## Current Version
 
-`0.1.37-dev`
+`{{PACKAGE_VERSION}}`
 
 ## Build Target
 

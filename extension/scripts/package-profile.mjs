@@ -3,7 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import packageProfileLib from "./package-profile-lib.cjs";
 
-const { buildGeneratedProfileSource, rewriteManifestForProfile } = packageProfileLib;
+const { buildGeneratedProfileSource, renderProfileReadme, rewriteManifestForProfile } = packageProfileLib;
 
 const profileName = process.argv[2];
 
@@ -31,7 +31,7 @@ const originalReadmeText = hadOriginalReadme ? fs.readFileSync(readmePath, "utf8
 let manifest = JSON.parse(originalManifestText);
 const profile = JSON.parse(fs.readFileSync(profilePath, "utf8"));
 const prodProfile = JSON.parse(fs.readFileSync(path.join(extensionRoot, "profiles", "prod.json"), "utf8"));
-const profileReadmeText = fs.existsSync(profileReadmePath) ? fs.readFileSync(profileReadmePath, "utf8") : originalReadmeText;
+const rawProfileReadmeText = fs.existsSync(profileReadmePath) ? fs.readFileSync(profileReadmePath, "utf8") : originalReadmeText;
 
 if (manifest.name !== prodProfile.name || !originalProfileSource.includes(`"profileName": "prod"`)) {
   console.error("Packaging must start from the checked-in prod baseline. Restore extension/package.json and src/profile.ts, then retry.");
@@ -48,6 +48,7 @@ manifest.publisher = profile.publisher;
 manifest.contributes.configuration.title = profile.displayName;
 manifest = rewriteManifestForProfile(manifest, profile);
 const generatedProfileSource = buildGeneratedProfileSource(profileName, profile);
+const profileReadmeText = renderProfileReadme(rawProfileReadmeText, manifest.version);
 
 let exitCode = 0;
 try {

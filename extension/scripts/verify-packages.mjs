@@ -55,6 +55,14 @@ for (const expected of expectedPackages) {
   assertEqual(packageJson.publisher, expected.publisher, `${expected.label} publisher`);
   assertEqual(packageJson.version, manifest.version, `${expected.label} version`);
 
+  const readme = readVsixFile(expected.file, 'extension/README.md');
+  if (readme.includes('{{PACKAGE_VERSION}}')) {
+    throw new Error(`${expected.label} README still contains an unreplaced version placeholder`);
+  }
+  if (!readme.includes(`\`${manifest.version}\``)) {
+    throw new Error(`${expected.label} README does not contain the packaged version ${manifest.version}`);
+  }
+
   const profileSource = readVsixFile(expected.file, 'extension/out/profile.js');
   if (!profileSource.includes(`profileName: "${expected.profileName}"`) && !profileSource.includes(`"profileName": "${expected.profileName}"`)) {
     throw new Error(`${expected.label} package profile source does not contain profileName ${expected.profileName}`);
@@ -62,4 +70,3 @@ for (const expected of expectedPackages) {
 
   console.log(`Verified ${expected.label} package: ${packageJson.name} ${packageJson.version}`);
 }
-

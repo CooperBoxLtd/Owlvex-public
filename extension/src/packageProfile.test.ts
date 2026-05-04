@@ -85,4 +85,13 @@ describe('package profile helpers', () => {
         expect(source).toContain('"chatFocus": "owlvexDev.chat.focus"');
         expect(source).toContain('"compareScans": "owlvexDev.compareScans"');
     });
+
+    it('renders profile readmes with the packaged version', async () => {
+        const { renderProfileReadme } = loadPackagingHelpers();
+
+        const rendered = renderProfileReadme('## Current Version\n\n`{{PACKAGE_VERSION}}`\n', '0.1.37');
+
+        expect(rendered).toContain('`0.1.37`');
+        expect(rendered).not.toContain('{{PACKAGE_VERSION}}');
+    });
 });

@@ -937,7 +937,7 @@ async function openOrCreateDesignContext(): Promise<{ uri: vscode.Uri; created: 
     return { uri: systemUri, created, relativePath: vscode.workspace.asRelativePath(systemUri, false) };
 }
 
-async function openOrCreateDriftBox(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
+async function openOrCreateDriftBox(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string; enabledSettingSaved?: boolean }> {
     const projectRoot = await resolveProjectRootInfo();
     if (!projectRoot.uri) {
         const document = await vscode.workspace.openTextDocument({
@@ -997,10 +997,16 @@ async function openOrCreateDriftBox(): Promise<{ uri: vscode.Uri; created: boole
     await persistWorkspaceSetting(DRIFT_SCRIPTS_ROOT_SETTING, vscode.workspace.asRelativePath(vscode.Uri.file(scriptsRoot), false));
     await writeFileIfMissing(invariantsUri, buildDefaultDriftInvariantsContent());
     await writeFileIfMissing(scriptUri, buildDefaultDriftScriptContent());
+    const enabledSettingSaved = await tryPersistWorkspaceBooleanSetting('driftBoxEnabled', true);
 
     const document = await vscode.workspace.openTextDocument(targetConfigUri);
     await vscode.window.showTextDocument(document, { preview: false });
-    return { uri: targetConfigUri, created, relativePath: vscode.workspace.asRelativePath(targetConfigUri, false) };
+    return {
+        uri: targetConfigUri,
+        created,
+        relativePath: vscode.workspace.asRelativePath(targetConfigUri, false),
+        enabledSettingSaved,
+    };
 }
 
 function isDevObservabilityTelemetryEnabled(info: LicenceInfo | null | undefined): boolean {
@@ -3985,10 +3991,13 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(PROFILE.commands.openDriftBox, async () => {
             const result = await openOrCreateDriftBox();
             if (result.relativePath) {
+                const savedNote = result.enabledSettingSaved === false
+                    ? ' The Drift file is configured and will be used by default; reinstall the latest build if the scan profile toggle is not visible.'
+                    : '';
                 vscode.window.showInformationMessage(
                     result.created
-                        ? `${PROFILE.displayLabel}: Created drift box at ${result.relativePath}`
-                        : `${PROFILE.displayLabel}: Opened drift box at ${result.relativePath}`,
+                        ? `${PROFILE.displayLabel}: Created drift box at ${result.relativePath} and enabled it for scans.${savedNote}`
+                        : `${PROFILE.displayLabel}: Opened drift box at ${result.relativePath} and enabled it for scans.${savedNote}`,
                 );
             } else {
                 vscode.window.showInformationMessage(

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.38
+
+- fix Drift Box setup so opening/configuring it enables the box for scans
+- stamp packaged README versions from the extension manifest instead of hardcoded text
+- verify packaged VSIX files contain the correct README version
+
 ## 0.1.29
 
 - promote the 2026-04-28 dev-validated backend image to production

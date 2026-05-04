@@ -141,8 +141,14 @@ function buildGeneratedProfileSource(profileName, profile) {
   }, null, 4)} as const;\n`;
 }
 
+function renderProfileReadme(readmeText, manifestVersion) {
+  return String(readmeText)
+    .replace(/\{\{PACKAGE_VERSION\}\}/g, manifestVersion);
+}
+
 module.exports = {
   buildCommandIdMap,
   rewriteManifestForProfile,
   buildGeneratedProfileSource,
+  renderProfileReadme,
 };

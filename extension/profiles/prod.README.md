@@ -12,7 +12,7 @@ Use it to find useful security signals early, preview fixes, and validate whethe
 
 ## Current Version
 
-`0.1.37`
+`{{PACKAGE_VERSION}}`
 
 ## What To Expect
 
