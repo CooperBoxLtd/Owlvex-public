@@ -165,7 +165,7 @@ export function getProjectContextSummaryFromConfig(): string {
     const legacyTeamContext = trimProjectContext(config.get<string>('teamContext', ''));
     const inlineProjectContext = trimProjectContext(config.get<string>('projectContext', ''));
     const projectContextFile = config.get<string>('projectContextFile', '').trim();
-    const tddBoxEnabled = config.get<boolean>(TDD_BOX_ENABLED_SETTING, false);
+    const tddBoxEnabled = config.get<boolean>(TDD_BOX_ENABLED_SETTING, Boolean(projectContextFile));
     const projectRoot = getProjectRootSummaryFromConfig();
 
     const summaryParts = [
@@ -494,7 +494,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     const legacyTeamContext = trimProjectContext(config.get<string>('teamContext', ''));
     const inlineProjectContext = trimProjectContext(config.get<string>('projectContext', ''));
     const projectContextFile = config.get<string>('projectContextFile', '');
-    const tddBoxEnabled = config.get<boolean>(TDD_BOX_ENABLED_SETTING, false);
+    const tddBoxEnabled = config.get<boolean>(TDD_BOX_ENABLED_SETTING, Boolean(projectContextFile.trim()));
     const designContextFile = config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '');
     const projectRoot = await resolveProjectRootInfo();
     const fileContext = tddBoxEnabled ? await tryReadProjectContextFile(projectContextFile, projectRoot.uri) : '';

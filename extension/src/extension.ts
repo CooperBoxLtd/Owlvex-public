@@ -552,7 +552,7 @@ async function openOrCreateProjectContext(): Promise<{ uri: vscode.Uri; created:
     return { uri: targetUri, created, relativePath: normalizedRelative };
 }
 
-async function openOrCreateTddBox(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
+async function openOrCreateTddBox(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string; enabledSettingSaved?: boolean }> {
     const projectRoot = await resolveProjectRootInfo();
     if (!projectRoot.uri) {
         const document = await vscode.workspace.openTextDocument({
@@ -589,13 +589,11 @@ async function openOrCreateTddBox(): Promise<{ uri: vscode.Uri; created: boolean
     const normalizedRelative = vscode.workspace.asRelativePath(targetUri, false);
 
     await persistWorkspaceSetting(PROJECT_CONTEXT_FILE_SETTING, normalizedRelative);
-    await vscode.workspace
-        .getConfiguration(PROFILE.configSection)
-        .update(TDD_BOX_ENABLED_SETTING, true, getFrameworkConfigurationTarget());
+    const enabledSettingSaved = await tryPersistWorkspaceBooleanSetting(TDD_BOX_ENABLED_SETTING, true);
 
     const document = await vscode.workspace.openTextDocument(targetUri);
     await vscode.window.showTextDocument(document, { preview: false });
-    return { uri: targetUri, created, relativePath: normalizedRelative };
+    return { uri: targetUri, created, relativePath: normalizedRelative, enabledSettingSaved };
 }
 
 function getFrameworkConfigurationTarget(): vscode.ConfigurationTarget {
@@ -869,6 +867,19 @@ async function persistWorkspaceSetting(key: string, value: string): Promise<void
         value,
         vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global,
     );
+}
+
+async function tryPersistWorkspaceBooleanSetting(key: string, value: boolean): Promise<boolean> {
+    try {
+        await vscode.workspace.getConfiguration(PROFILE.configSection).update(
+            key,
+            value,
+            vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global,
+        );
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 async function openOrCreateDesignContext(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
@@ -3931,10 +3942,13 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(PROFILE.commands.openTddBox, async () => {
             const result = await openOrCreateTddBox();
             if (result.relativePath) {
+                const savedNote = result.enabledSettingSaved === false
+                    ? ' The TDD file is configured and will be used by default; reinstall the latest build if the scan profile toggle is not visible.'
+                    : '';
                 vscode.window.showInformationMessage(
                     result.created
-                        ? `${PROFILE.displayLabel}: Created TDD Box at ${result.relativePath} and enabled it for scans`
-                        : `${PROFILE.displayLabel}: Opened TDD Box at ${result.relativePath} and enabled it for scans`,
+                        ? `${PROFILE.displayLabel}: Created TDD Box at ${result.relativePath} and enabled it for scans.${savedNote}`
+                        : `${PROFILE.displayLabel}: Opened TDD Box at ${result.relativePath} and enabled it for scans.${savedNote}`,
                 );
             } else {
                 vscode.window.showInformationMessage(
