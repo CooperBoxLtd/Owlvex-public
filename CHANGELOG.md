@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.38
+
+- fix Drift Box setup so configuring it enables the box for scans
+- stamp packaged README versions from the extension manifest during packaging
+- verify packaged VSIX files contain the correct README version before release
+
 ## 0.1.37
 
 - add TDD Box grounding for local Markdown/text product behavior context
