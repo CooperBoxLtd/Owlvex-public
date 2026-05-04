@@ -725,19 +725,26 @@ function buildDefaultStrideNotesContent(): string {
 }
 
 function buildDefaultDriftConfigContent(): string {
-    return JSON.stringify({
-        version: 1,
-        checks: [
-            {
-                id: 'example-contract-check',
-                label: 'Example contract check',
-                command: 'node .owlvex/drift/scripts/example-contract-check.mjs',
-                scope: ['scan', 'post-fix'],
-                timeoutSeconds: 30,
-                enabled: false,
-            },
-        ],
-    }, null, 2);
+    return [
+        '{',
+        '  "version": 1,',
+        '  "_notes": [',
+        '    "Drift Box is for project-owned behavior, contract, smoke, or workflow checks.",',
+        '    "Use the validation command that belongs to this project stack: npm run validate, python -m pytest, dotnet test, mvn test, gradle test, go test ./..., cargo test, or a script under .owlvex/drift/scripts.",',
+        '    "Commands are local, report-only, and must not duplicate OWASP, STRIDE, CodeQL, Semgrep, or other security scanning."',
+        '  ],',
+        '  "checks": [',
+        '    {',
+        '      "id": "example-contract-check",',
+        '      "label": "Example contract check",',
+        '      "command": "node .owlvex/drift/scripts/example-contract-check.mjs",',
+        '      "scope": ["scan", "post-fix"],',
+        '      "timeoutSeconds": 30,',
+        '      "enabled": false',
+        '    }',
+        '  ]',
+        '}',
+    ].join('\n');
 }
 
 function buildDefaultDriftInvariantsContent(): string {
@@ -747,6 +754,8 @@ function buildDefaultDriftInvariantsContent(): string {
         'Use this file to document behavior that must not drift during AI-assisted fixes.',
         'Drift checks are report-only signals. They should produce clear pass/fail output, but they do not block scan completion, fix application, or security-clean status.',
         'Drift checks are custom behavior checks, not OWASP, STRIDE, CodeQL, Semgrep, or duplicate security scans.',
+        'Use the validation command that belongs to the project stack. For example: `npm run validate`, `python -m pytest`, `dotnet test`, `mvn test`, `gradle test`, `go test ./...`, `cargo test`, or a script under `.owlvex/drift/scripts`.',
+        'Keep commands explicit and local. Do not use shell chaining, pipes, redirects, or hidden network/deployment side effects.',
         '',
         'Examples:',
         '',
