@@ -36,6 +36,10 @@ export interface DriftBoxLoadResult extends DriftBoxParseResult {
 export interface DriftBoxParseOptions {
     projectRoot: string;
     scriptsRoot?: string;
+    /**
+     * Legacy compatibility only. Drift checks are custom behavior checks and
+     * are no longer routed by selected security frameworks.
+     */
     selectedFrameworks?: string[];
     scope?: DriftCheckScope;
 }
@@ -91,15 +95,6 @@ function normalizeTimeout(value: unknown): number {
         ? value
         : DEFAULT_TIMEOUT_SECONDS;
     return Math.max(MIN_TIMEOUT_SECONDS, Math.min(MAX_TIMEOUT_SECONDS, Math.round(numeric)));
-}
-
-function isFrameworkMatch(checkFrameworks: string[], selectedFrameworks: string[] | undefined): boolean {
-    if (!checkFrameworks.length || !selectedFrameworks?.length) {
-        return true;
-    }
-
-    const selected = new Set(selectedFrameworks.map(item => item.toLowerCase()));
-    return checkFrameworks.some(item => selected.has(item.toLowerCase()));
 }
 
 function isInside(parentPath: string, candidatePath: string): boolean {
@@ -266,9 +261,6 @@ export function parseDriftBoxConfig(raw: string, options: DriftBoxParseOptions):
         } else if (options.scope && !scope.includes(options.scope)) {
             status = 'out_of_scope';
             reason = `Check does not apply to ${options.scope}.`;
-        } else if (!isFrameworkMatch(frameworks, options.selectedFrameworks)) {
-            status = 'out_of_scope';
-            reason = 'Check does not match the selected frameworks.';
         } else {
             const extracted = extractDriftScriptPath(command, options.projectRoot, options.scriptsRoot);
             if (!extracted.scriptPath) {

@@ -1098,8 +1098,8 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Drift Box: drift box 1 ready | 1 invalid | 1 warning (.owlvex\\drift\\owlvex-drift.json)');
         expect(written).toContain('- Drift config: `.owlvex\\drift\\owlvex-drift.json`');
         expect(written).toContain('- Drift checks: ready 1 | invalid 1 | disabled 0 | out of scope 0');
-        expect(written).toContain('- ready: api-contract (API contract still holds) | frameworks STRIDE | scope scan | 30s');
-        expect(written).toContain('- invalid: unsafe (Unsafe command) | all frameworks | scope scan | 30s | Command contains shell chaining, pipes, redirects, or backticks.');
+        expect(written).toContain('- ready: api-contract (API contract still holds) | legacy tags STRIDE | scope scan | 30s');
+        expect(written).toContain('- invalid: unsafe (Unsafe command) | custom behavior check | scope scan | 30s | Command contains shell chaining, pipes, redirects, or backticks.');
         expect(written).toContain('- Drift run: passed 1 | failed 0 | timed out 0 | not approved 0 | skipped 0');
         expect(written).toContain('- passed: api-contract (API contract still holds) | 42ms | exit 0 | stdout: contract ok');
         expect(written).toContain('- Scan warnings: 0');

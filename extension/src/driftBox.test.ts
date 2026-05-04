@@ -86,7 +86,7 @@ describe('drift box config parser', () => {
         expect(parsed.readyChecks[0].command).toContain(path.resolve(projectRoot, 'quality\\drift-scripts\\check-auth-flow.mjs'));
     });
 
-    it('filters checks by scope and selected frameworks without making them invalid', () => {
+    it('filters checks by scope without treating frameworks as execution routing', () => {
         const parsed = parseDriftBoxConfig(config([
             {
                 id: 'clean-code-contract',
@@ -95,14 +95,22 @@ describe('drift box config parser', () => {
                 frameworks: ['Clean Code'],
                 scope: ['post-fix'],
             },
+            {
+                id: 'auth-behavior',
+                label: 'Auth behavior',
+                command: 'node .owlvex/drift/scripts/auth-behavior.mjs',
+                frameworks: ['Clean Code'],
+                scope: ['scan'],
+            },
         ]), {
             projectRoot,
             selectedFrameworks: ['STRIDE'],
             scope: 'scan',
         });
 
-        expect(parsed.readyChecks).toHaveLength(0);
+        expect(parsed.readyChecks).toHaveLength(1);
         expect(parsed.checks[0].status).toBe('out_of_scope');
+        expect(parsed.checks[1].status).toBe('ready');
     });
 
     it('defaults timeout, scope, and enabled state conservatively', () => {

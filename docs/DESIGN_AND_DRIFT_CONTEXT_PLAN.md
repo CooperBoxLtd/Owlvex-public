@@ -3,7 +3,7 @@
 Owlvex needs two project-local context surfaces that help the scanner reason about intent without changing the deterministic truth boundary:
 
 - **Design Context**: architecture, trust boundaries, roles, assets, data flows, and system invariants.
-- **Drift Checks**: developer-owned scripts that prove important behavior still works after scans, fixes, or AI-assisted code changes.
+- **Drift Checks**: developer-owned behavior, contract, smoke, or workflow scripts that prove important behavior still works after scans, fixes, or AI-assisted code changes.
 
 Both live inside the selected Owlvex project root. Neither is uploaded to the Owlvex backend as source code. Design context may be included in local AI prompts when AI scanning is enabled. Drift checks execute locally only after explicit user consent.
 
@@ -21,6 +21,7 @@ Both live inside the selected Owlvex project root. Neither is uploaded to the Ow
 - Do not silently run arbitrary scripts.
 - Do not send customer source or drift scripts to the Owlvex backend.
 - Do not let Drift Checks block scan completion, clean status, fix application, or post-fix verification.
+- Do not use Drift Checks as another OWASP/SAST/security scanner. Owlvex scanning handles security findings; Drift checks preserve product behavior.
 
 ## Project Layout
 
@@ -88,6 +89,8 @@ Design Context must not:
 
 Drift Checks are local scripts owned by the repository. They verify that important behavior has not drifted after scanning or fixing. The Drift Box points to a config file and a scripts folder; users are not forced to keep these under `.owlvex` as long as the paths stay inside the selected project root.
 
+Drift checks should be custom behavior checks such as login flow, tenant isolation, refund audit behavior, API contracts, smoke tests, or generated-fix invariants. They should not be OWASP, CodeQL, Semgrep, or duplicate vulnerability scans.
+
 Example `owlvex-drift.json`:
 
 ```json
@@ -98,7 +101,6 @@ Example `owlvex-drift.json`:
       "id": "auth-flow",
       "label": "Authentication flow still works",
       "command": "node check-auth-flow.mjs",
-      "frameworks": ["STRIDE", "OWASP"],
       "scope": ["scan", "fix-preview", "post-fix"],
       "timeoutSeconds": 30
     }
@@ -138,9 +140,9 @@ Framework selection changes interpretation, not deterministic truth.
 Expected behavior:
 
 - STRIDE selected: load design context, especially `stride-notes.md`, trust boundaries, roles, and data flows.
-- OWASP selected: drift checks tagged `OWASP` may run when drift checks are enabled.
-- Clean Code selected: behavior-preservation drift checks may run when tagged.
-- CWE/NIST/PCI selected: use mappings and tagged checks, but do not pretend these are independent scan engines.
+- Drift checks are framework-independent custom behavior checks.
+- Existing `frameworks` fields in older Drift Box configs are treated as legacy/report metadata, not as execution routing.
+- Scope controls when a check runs: `scan`, `fix-preview`, or `post-fix`.
 
 ## Implementation Slices
 
@@ -160,10 +162,10 @@ Expected behavior:
 ### Slice 3: Drift Config Parser
 
 - Parse `.owlvex/drift/owlvex-drift.json`.
-- Validate schema, path safety, frameworks, scopes, and timeout.
+- Validate schema, path safety, behavior-check scope, and timeout.
 - Report invalid checks as skipped, not executed.
 
-Status: implemented as a non-executing parser/loader. Owlvex now reads the Drift Box from the selected project root, validates declared checks, filters by framework and lifecycle scope, and rejects unsafe command shapes or scripts outside `.owlvex/drift/scripts`.
+Status: implemented as a parser/loader for custom behavior checks. Owlvex now reads the Drift Box from the selected project root, validates declared checks, filters by lifecycle scope, preserves legacy framework tags as metadata only, and rejects unsafe command shapes or scripts outside the configured scripts folder.
 
 ### Slice 4: Drift Runner
 

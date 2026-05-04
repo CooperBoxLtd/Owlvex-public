@@ -690,6 +690,7 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Drift Box:');
         expect(finalMessage.content).toContain('`.owlvex/drift/owlvex-drift.json`');
+        expect(finalMessage.content).toContain('Do not put OWASP, CodeQL, Semgrep, or duplicate security scans in Drift Box.');
         expect(finalMessage.content).toContain('does not block scan completion');
         expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['openDriftBox', 'scanFolder']);
     });
@@ -2851,7 +2852,8 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Opened Drift Box.');
         expect(finalMessage.content).toContain('report pass/fail only');
-        expect(finalMessage.content).toContain('do not block scans');
+        expect(finalMessage.content).toContain('custom behavior/contract scripts');
+        expect(finalMessage.content).toContain('or block scans');
     });
 
     it('can open a review diff from an action that targets a scanned file path', async () => {

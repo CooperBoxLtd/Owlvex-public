@@ -483,7 +483,7 @@ function buildToolUsageGuidance(): string {
         '- Compare reports should be used after rescanning; Owlvex orders reports by generation time so Before is the earlier report and After is the later report.',
         '- Provider throttle guidance appears only when a scan sees a 429 or rate-limit warning.',
         '- Design Box points to a local design file, with .owlvex/design as the default fallback. It gives Owlvex architecture, role, data-flow, trust-boundary, and STRIDE context, but does not prove findings by itself.',
-        '- Drift Box points to a local JSON config and scripts folder, with .owlvex/drift as the default fallback. It runs repository-owned checks locally after approval; results are report-only pass/fail and never block scan completion, fixes, post-fix verification, or security-clean status.',
+        '- Drift Box points to a local JSON config and scripts folder, with .owlvex/drift as the default fallback. It runs repository-owned behavior checks locally after approval; results are report-only pass/fail and never duplicate Owlvex security scanning or block scan completion, fixes, post-fix verification, or security-clean status.',
         '- When users ask how to use Owlvex, give the next concrete click/action and explain which report or scan scope fits their goal.',
     ].join('\n');
 }
@@ -549,9 +549,10 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                         ? [
                             'Drift Box:',
                             '',
-                            'Use it for repository-owned scripts that say whether important behavior still passes after scans or fixes.',
+                            'Use it for repository-owned behavior, contract, smoke, or workflow scripts that say whether important behavior still passes after scans or fixes.',
                             'The Drift Box points to a local JSON config and a scripts folder; `.owlvex/drift/owlvex-drift.json` and `.owlvex/drift/scripts` are only the default fallback.',
                             'Owlvex validates declarations, asks before first run, executes locally with timeout/output caps, and reports pass/fail.',
+                            'Do not put OWASP, CodeQL, Semgrep, or duplicate security scans in Drift Box. Owlvex security scanning runs separately.',
                             'Drift is report-only. It does not block scan completion, fix application, post-fix verification, or security-clean status.',
                             '',
                             'Next step: Open Drift Box, enable a check, then run a scan.',
@@ -4340,7 +4341,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await vscode.commands.executeCommand(PROFILE.commands.openDriftBox);
             this.messages.push({
                 role: 'system',
-                content: 'Opened Drift Box. Configure the Drift Box JSON and scripts folder for this project. Drift checks run locally after approval and report pass/fail only; they do not block scans, fixes, post-fix verification, or security-clean status.',
+                content: 'Opened Drift Box. Configure custom behavior/contract scripts for this project. Drift checks run locally after approval and report pass/fail only; they do not duplicate Owlvex security scanning or block scans, fixes, post-fix verification, or security-clean status.',
                 kind: 'advisory',
             });
             void this.persistState();

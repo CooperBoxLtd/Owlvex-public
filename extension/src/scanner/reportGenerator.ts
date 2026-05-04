@@ -1212,7 +1212,7 @@ function buildDriftBoxReportLines(results: Array<{ result: ScanResult }>): strin
         lines.push(`- Drift checks: ready ${ready} | invalid ${invalid} | disabled ${disabled} | out of scope ${outOfScope}`);
         for (const check of box.checks.slice(0, 10)) {
             const tags = [
-                check.frameworks.length ? `frameworks ${check.frameworks.join(', ')}` : 'all frameworks',
+                check.frameworks.length ? `legacy tags ${check.frameworks.join(', ')}` : 'custom behavior check',
                 `scope ${check.scope.join(', ')}`,
                 `${check.timeoutSeconds}s`,
             ].join(' | ');
