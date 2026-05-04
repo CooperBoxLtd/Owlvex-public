@@ -2,7 +2,7 @@
   "name": "owlvex",
   "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
-  "version": "0.1.34",
+  "version": "0.1.35",
   "publisher": "owlvex",
   "repository": {
     "type": "git",
@@ -76,6 +76,10 @@
       {
         "command": "owlvex.openProjectContext",
         "title": "Owlvex: Open Project Context"
+      },
+      {
+        "command": "owlvex.openTddBox",
+        "title": "Owlvex: Open TDD Box"
       },
       {
         "command": "owlvex.openDesignContext",
@@ -267,6 +271,11 @@
           "default": "",
           "description": "Optional local file path to a project context contract document used to ground AI scans and remediation prompts"
         },
+        "owlvex.tddBoxEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include the configured local TDD/project context file during scans. This is workflow context, not a security framework."
+        },
         "owlvex.designContextFile": {
           "type": "string",
           "default": "",
@@ -281,6 +290,11 @@
           "type": "string",
           "default": "",
           "description": "Optional local folder that contains Drift Box scripts. Defaults to .owlvex/drift/scripts under the selected project root"
+        },
+        "owlvex.driftBoxEnabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Run configured Drift Box behavior checks during scans and post-fix verification. Drift Box is report-only and is not a security framework."
         },
         "owlvex.projectRoot": {
           "type": "string",

@@ -478,9 +478,12 @@ function collectOpenEditorUris(): vscode.Uri[] {
 }
 
 const DEFAULT_PROJECT_CONTEXT_RELATIVE_PATH = '.owlvex/project-context.md';
+const DEFAULT_TDD_BOX_RELATIVE_PATH = '.owlvex/tdd/project-tdd.md';
 const DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR = '.owlvex/design';
 const DEFAULT_DRIFT_BOX_RELATIVE_DIR = '.owlvex/drift';
 const DESIGN_CONTEXT_FILE_SETTING = 'designContextFile';
+const PROJECT_CONTEXT_FILE_SETTING = 'projectContextFile';
+const TDD_BOX_ENABLED_SETTING = 'tddBoxEnabled';
 const DRIFT_BOX_FILE_SETTING = 'driftBoxFile';
 const DRIFT_SCRIPTS_ROOT_SETTING = 'driftScriptsRoot';
 
@@ -543,6 +546,52 @@ async function openOrCreateProjectContext(): Promise<{ uri: vscode.Uri; created:
     if (!configuredFile || configuredFile !== normalizedRelative) {
         await persistProviderSetting('projectContextFile', normalizedRelative);
     }
+
+    const document = await vscode.workspace.openTextDocument(targetUri);
+    await vscode.window.showTextDocument(document, { preview: false });
+    return { uri: targetUri, created, relativePath: normalizedRelative };
+}
+
+async function openOrCreateTddBox(): Promise<{ uri: vscode.Uri; created: boolean; relativePath?: string }> {
+    const projectRoot = await resolveProjectRootInfo();
+    if (!projectRoot.uri) {
+        const document = await vscode.workspace.openTextDocument({
+            language: 'markdown',
+            content: buildDefaultTddBoxContent(),
+        });
+        await vscode.window.showTextDocument(document, { preview: false });
+        return { uri: document.uri, created: true };
+    }
+
+    const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+    let configuredFile = config.get<string>(PROJECT_CONTEXT_FILE_SETTING, '').trim();
+    if (!configuredFile) {
+        const selected = await vscode.window.showOpenDialog({
+            canSelectFiles: true,
+            canSelectFolders: false,
+            canSelectMany: false,
+            title: 'Select Owlvex TDD Box file',
+            openLabel: 'Use As TDD Box',
+            defaultUri: vscode.Uri.file(projectRoot.uri.fsPath),
+            filters: { 'TDD context': ['md', 'txt'] },
+        });
+        if (selected?.[0]) {
+            configuredFile = vscode.workspace.asRelativePath(selected[0], false);
+            await persistWorkspaceSetting(PROJECT_CONTEXT_FILE_SETTING, configuredFile);
+        }
+    }
+
+    const targetFsPath = configuredFile
+        ? resolveUserConfiguredPath(configuredFile, projectRoot.uri)
+        : path.join(projectRoot.uri.fsPath, DEFAULT_TDD_BOX_RELATIVE_PATH);
+    const targetUri = vscode.Uri.file(targetFsPath);
+    const created = await writeFileIfMissing(targetUri, buildDefaultTddBoxContent());
+    const normalizedRelative = vscode.workspace.asRelativePath(targetUri, false);
+
+    await persistWorkspaceSetting(PROJECT_CONTEXT_FILE_SETTING, normalizedRelative);
+    await vscode.workspace
+        .getConfiguration(PROFILE.configSection)
+        .update(TDD_BOX_ENABLED_SETTING, true, getFrameworkConfigurationTarget());
 
     const document = await vscode.workspace.openTextDocument(targetUri);
     await vscode.window.showTextDocument(document, { preview: false });
@@ -687,6 +736,31 @@ function buildDefaultDesignSystemContent(): string {
         '- authorization model',
         '',
         'Design context is especially useful when STRIDE is selected because STRIDE depends on assets, actors, boundaries, and intended flows.',
+    ].join('\n');
+}
+
+function buildDefaultTddBoxContent(): string {
+    return [
+        '# Owlvex TDD Box',
+        '',
+        'Use this file to ground Owlvex scans and fixes in the expected product behavior.',
+        '',
+        'This is local LLM grounding context, not a security framework and not a Drift Box script.',
+        '',
+        'Include:',
+        '',
+        '- canonical entrypoints',
+        '- core user journeys',
+        '- behavior that must not change',
+        '- protocol or API contracts',
+        '- expected validation rules',
+        '- architecture boundaries that generated fixes must preserve',
+        '',
+        'Example:',
+        '',
+        '- Encoding and decoding Morse must remain deterministic.',
+        '- Electron preload must expose only named IPC methods.',
+        '- Session transport states must keep their documented UI labels.',
     ].join('\n');
 }
 
@@ -2894,6 +2968,8 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.selectFrameworks, async () => {
             const currentSelection = config.get<string[]>('frameworks', ['OWASP', 'STRIDE']);
+            const currentTddBoxEnabled = config.get<boolean>('tddBoxEnabled', false);
+            const currentDriftBoxEnabled = config.get<boolean>('driftBoxEnabled', false);
             let allowedFrameworks = licenceMgr.getCachedInfo()?.features.frameworks;
             if (!allowedFrameworks?.length) {
                 try {
@@ -2911,32 +2987,66 @@ export function activate(context: vscode.ExtensionContext) {
             }
 
             const picked = await vscode.window.showQuickPick(
-                availableFrameworks.map(item => ({
-                    label: item.code,
-                    description: `${item.name} ${item.version}`,
-                    detail: item.description,
-                    picked: currentSelection.includes(item.code),
+                [
+                    ...availableFrameworks.map(item => ({
+                        label: item.code,
+                        description: `${item.name} ${item.version}`,
+                        detail: item.description,
+                        picked: currentSelection.includes(item.code),
+                        code: item.code,
+                        driftBox: false,
+                    })),
+                    {
+                        label: 'Workflow context and checks',
+                        kind: vscode.QuickPickItemKind.Separator,
+                    },
+                    {
+                        label: 'TDD Box context',
+                        description: 'local spec/TDD context, not a security framework',
+                        detail: 'Includes the configured projectContextFile in scan prompts so Owlvex understands expected behavior, product rules, and implementation constraints.',
+                        picked: currentTddBoxEnabled,
+                        tddBox: true,
+                    },
+                    {
+                        label: 'Drift Box behavior checks',
+                        description: 'report-only, not a security framework',
+                        detail: 'Runs configured project-owned validation scripts such as npm run validate, pytest, dotnet test, mvn test, go test, cargo test, or Drift scripts.',
+                        picked: currentDriftBoxEnabled,
+                        driftBox: true,
+                    },
+                ].map(item => ({
+                    ...item,
                 })),
                 {
                     canPickMany: true,
-                    placeHolder: 'Select one or more frameworks for Owlvex scans and reports',
-                    title: 'Owlvex Framework Selection',
+                    placeHolder: 'Select scan frameworks and optional Drift Box behavior checks',
+                    title: 'Owlvex Scan Profile',
                 },
             );
 
             if (!picked) return;
-            if (!picked.length) {
-                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Select at least one framework.`);
+            const selectedCodes = picked
+                .filter(item => !('kind' in item) && !(item as any).driftBox && (item as any).code)
+                .map(item => String((item as any).code));
+            const tddBoxEnabled = picked.some(item => !('kind' in item) && (item as any).tddBox);
+            const driftBoxEnabled = picked.some(item => !('kind' in item) && (item as any).driftBox);
+            if (!selectedCodes.length) {
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Select at least one security framework. Drift Box can run alongside scan frameworks, but it is not a framework.`);
                 return;
             }
 
-            const selectedCodes = picked.map(item => item.label);
             await vscode.workspace
                 .getConfiguration(PROFILE.configSection)
                 .update('frameworks', selectedCodes, getFrameworkConfigurationTarget());
+            await vscode.workspace
+                .getConfiguration(PROFILE.configSection)
+                .update('tddBoxEnabled', tddBoxEnabled, getFrameworkConfigurationTarget());
+            await vscode.workspace
+                .getConfiguration(PROFILE.configSection)
+                .update('driftBoxEnabled', driftBoxEnabled, getFrameworkConfigurationTarget());
 
             vscode.window.showInformationMessage(
-                `${PROFILE.displayLabel}: Frameworks set to ${formatFrameworkSummary(selectedCodes)}`
+                `${PROFILE.displayLabel}: Frameworks set to ${formatFrameworkSummary(selectedCodes)}${tddBoxEnabled ? '; TDD Box context enabled' : '; TDD Box context disabled'}${driftBoxEnabled ? '; Drift Box behavior checks enabled' : '; Drift Box behavior checks disabled'}`
             );
         })
     );
@@ -3812,6 +3922,23 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
                 vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: Opened an untitled project context document. Save it into the repo to reuse it automatically.`,
+                );
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.openTddBox, async () => {
+            const result = await openOrCreateTddBox();
+            if (result.relativePath) {
+                vscode.window.showInformationMessage(
+                    result.created
+                        ? `${PROFILE.displayLabel}: Created TDD Box at ${result.relativePath} and enabled it for scans`
+                        : `${PROFILE.displayLabel}: Opened TDD Box at ${result.relativePath} and enabled it for scans`,
+                );
+            } else {
+                vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: Opened an untitled TDD Box document. Save it into the repo and configure it as the TDD Box to reuse it in scans.`,
                 );
             }
         })

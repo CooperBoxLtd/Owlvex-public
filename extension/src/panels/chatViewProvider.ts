@@ -5437,13 +5437,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     private buildScanContext(scope: WorkingScope): EditorContext {
         const frameworks = this.getFrameworks();
         const severity = this.getSeverityThreshold();
+        const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+        const tddBoxEnabled = config.get<boolean>('tddBoxEnabled', false);
+        const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', false);
         const projectContextSummary = getProjectContextSummaryFromConfig();
 
         return {
-            summary: `Active scan profile: scope=${getWorkingScopeLabel(scope)}, frameworks=${frameworks.join(', ') || 'none'}, severity threshold=${severity}`,
+            summary: `Active scan profile: scope=${getWorkingScopeLabel(scope)}, frameworks=${frameworks.join(', ') || 'none'}, severity threshold=${severity}, TDD Box=${tddBoxEnabled ? 'enabled' : 'disabled'}, Drift Box=${driftBoxEnabled ? 'enabled' : 'disabled'}`,
             promptContext: [
                 `Working scope: ${getWorkingScopeLabel(scope)}`,
                 `Security frameworks in scope: ${frameworks.join(', ') || 'none configured'}`,
+                `TDD Box context: ${tddBoxEnabled ? 'enabled' : 'disabled'}`,
+                `Drift Box behavior checks: ${driftBoxEnabled ? 'enabled' : 'disabled'}`,
                 `Severity threshold: ${severity}`,
                 projectContextSummary !== 'none'
                     ? `Project context contract available: ${projectContextSummary}`

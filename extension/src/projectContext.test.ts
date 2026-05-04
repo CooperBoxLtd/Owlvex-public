@@ -85,6 +85,55 @@ describe('project root helpers', () => {
         expect(context.combined).toContain('Benchmark app only context.');
     });
 
+    it('loads the configured TDD Box file only when enabled', async () => {
+        const configGet = jest.fn((key: string, defaultValue?: any) => {
+            if (key === 'projectRoot') {
+                return 'D:\\repo\\tools\\benchmark-app';
+            }
+            if (key === 'projectContextFile') {
+                return 'docs\\app.tdd.md';
+            }
+            if (key === 'tddBoxEnabled') {
+                return false;
+            }
+            if (key === 'projectContext' || key === 'teamContext') {
+                return '';
+            }
+            return defaultValue;
+        });
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({ get: configGet });
+        (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath.replace('D:\\repo\\tools\\benchmark-app\\', ''));
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('TDD: preserve Morse packet format.'));
+
+        const disabledContext = await loadProjectContextInfo({
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+        expect(disabledContext.summary).not.toContain('TDD file');
+        expect(disabledContext.combined).not.toContain('Morse packet format');
+
+        configGet.mockImplementation((key: string, defaultValue?: any) => {
+            if (key === 'projectRoot') {
+                return 'D:\\repo\\tools\\benchmark-app';
+            }
+            if (key === 'projectContextFile') {
+                return 'docs\\app.tdd.md';
+            }
+            if (key === 'tddBoxEnabled') {
+                return true;
+            }
+            if (key === 'projectContext' || key === 'teamContext') {
+                return '';
+            }
+            return defaultValue;
+        });
+
+        const enabledContext = await loadProjectContextInfo({
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+        expect(enabledContext.summary).toContain('TDD file docs\\app.tdd.md');
+        expect(enabledContext.combined).toContain('TDD: preserve Morse packet format.');
+    });
+
     it('loads bounded design context from the selected project root and prioritizes STRIDE files', async () => {
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
             get: jest.fn((key: string, defaultValue?: any) => {

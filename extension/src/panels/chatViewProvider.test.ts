@@ -2799,8 +2799,8 @@ describe('parseChatIntent', () => {
 
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.openProjectContext);
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
-        expect(finalMessage.content).toContain('Project context is ready:');
-        expect(finalMessage.content).toContain('.owlvex/project-context.md');
+        expect(finalMessage.content).toContain('Opened project context.');
+        expect(finalMessage.content).toContain('Save or configure it locally');
     });
 
     it('runs the design context quick action and explains its role', async () => {

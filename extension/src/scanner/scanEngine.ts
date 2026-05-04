@@ -532,6 +532,17 @@ function toDriftBoxScanContext(driftBox: DriftBoxLoadResult): DriftBoxScanContex
     };
 }
 
+function disabledDriftBoxContext(): DriftBoxLoadResult {
+    return {
+        found: false,
+        version: 1,
+        checks: [],
+        readyChecks: [],
+        warnings: [],
+        summary: 'drift box disabled',
+    };
+}
+
 function normalizeProofStatus(value: unknown): EvidenceProofStatus | undefined {
     const normalized = String(value ?? '').trim();
     return ['static_proven', 'ai_plausible', 'counter_evidence_found', 'unproven_extra'].includes(normalized)
@@ -2361,6 +2372,7 @@ export class ScanEngine {
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
+        const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', false);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const provider = this.registry.getActive();
         const projectContext = await loadProjectContextInfo({
@@ -2369,13 +2381,15 @@ export class ScanEngine {
                 .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
             selectedFrameworks: frameworks,
         });
-        const driftBox = await loadDriftBoxConfig({
-            targetUris: documents
-                .map(document => document.uri)
-                .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
-            selectedFrameworks: frameworks,
-            scope: 'scan',
-        });
+        const driftBox = driftBoxEnabled
+            ? await loadDriftBoxConfig({
+                targetUris: documents
+                    .map(document => document.uri)
+                    .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
+                selectedFrameworks: frameworks,
+                scope: 'scan',
+            })
+            : disabledDriftBoxContext();
         const driftBoxContext = toDriftBoxScanContext(driftBox);
         const driftResults = await this._runDriftChecksIfAvailable(driftBox);
 
@@ -2741,6 +2755,7 @@ export class ScanEngine {
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
+        const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', false);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const language = this._detectLanguage(document);
         const provider = this.registry.getActive();
@@ -2748,11 +2763,13 @@ export class ScanEngine {
             targetUris: document.uri?.fsPath ? [document.uri] : undefined,
             selectedFrameworks: frameworks,
         });
-        const driftBox = await loadDriftBoxConfig({
-            targetUris: document.uri?.fsPath ? [document.uri] : undefined,
-            selectedFrameworks: frameworks,
-            scope: 'scan',
-        });
+        const driftBox = driftBoxEnabled
+            ? await loadDriftBoxConfig({
+                targetUris: document.uri?.fsPath ? [document.uri] : undefined,
+                selectedFrameworks: frameworks,
+                scope: 'scan',
+            })
+            : disabledDriftBoxContext();
         const driftBoxContext = toDriftBoxScanContext(driftBox);
         const driftResults = await this._runDriftChecksIfAvailable(driftBox);
 

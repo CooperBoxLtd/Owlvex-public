@@ -10,6 +10,7 @@ const MAX_DESIGN_FILES = 8;
 const PROJECT_ROOT_SETTING = 'projectRoot';
 const DEFAULT_DESIGN_CONTEXT_DIR = '.owlvex/design';
 const DESIGN_CONTEXT_FILE_SETTING = 'designContextFile';
+const TDD_BOX_ENABLED_SETTING = 'tddBoxEnabled';
 
 export interface ProjectContextInfo {
     combined: string;
@@ -164,13 +165,14 @@ export function getProjectContextSummaryFromConfig(): string {
     const legacyTeamContext = trimProjectContext(config.get<string>('teamContext', ''));
     const inlineProjectContext = trimProjectContext(config.get<string>('projectContext', ''));
     const projectContextFile = config.get<string>('projectContextFile', '').trim();
+    const tddBoxEnabled = config.get<boolean>(TDD_BOX_ENABLED_SETTING, false);
     const projectRoot = getProjectRootSummaryFromConfig();
 
     const summaryParts = [
         projectRoot !== 'not set' ? `project root ${projectRoot}` : '',
         legacyTeamContext ? 'legacy inline context' : '',
         inlineProjectContext ? 'inline project contract' : '',
-        projectContextFile ? `file ${projectContextFile}` : '',
+        tddBoxEnabled && projectContextFile ? `TDD file ${projectContextFile}` : '',
         config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '').trim() ? `design file ${config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '').trim()}` : '',
     ].filter(Boolean);
 
@@ -453,17 +455,18 @@ async function tryReadDesignContextFile(
     }
 }
 
-async function tryReadProjectContextFile(fileSetting: string): Promise<{ label: string; content: string } | undefined> {
+async function tryReadProjectContextFile(fileSetting: string, projectRoot?: vscode.Uri): Promise<{ label: string; content: string } | undefined> {
     const trimmed = fileSetting.trim();
     if (!trimmed) {
         return undefined;
     }
 
-    const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     const fsPath = path.isAbsolute(trimmed)
         ? trimmed
-        : workspaceFolder
-        ? path.join(workspaceFolder.uri.fsPath, trimmed)
+        : projectRoot
+        ? path.join(projectRoot.fsPath, trimmed)
+        : vscode.workspace.workspaceFolders?.[0]
+        ? path.join(vscode.workspace.workspaceFolders[0].uri.fsPath, trimmed)
         : undefined;
 
     if (!fsPath) {
@@ -491,9 +494,10 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     const legacyTeamContext = trimProjectContext(config.get<string>('teamContext', ''));
     const inlineProjectContext = trimProjectContext(config.get<string>('projectContext', ''));
     const projectContextFile = config.get<string>('projectContextFile', '');
+    const tddBoxEnabled = config.get<boolean>(TDD_BOX_ENABLED_SETTING, false);
     const designContextFile = config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '');
-    const fileContext = await tryReadProjectContextFile(projectContextFile);
     const projectRoot = await resolveProjectRootInfo();
+    const fileContext = tddBoxEnabled ? await tryReadProjectContextFile(projectContextFile, projectRoot.uri) : '';
     const rootAppliesToTargets = !projectRoot.uri || targetUrisAreInsideRoot(options?.targetUris, projectRoot.uri);
     const designContext = rootAppliesToTargets
         ? (await tryReadDesignContextFile(designContextFile, projectRoot.uri)
@@ -508,7 +512,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
         rootLabel ? `Selected project root:\n${rootLabel}` : '',
         rootAppliesToTargets && legacyTeamContext ? `Legacy team/project context:\n${legacyTeamContext}` : '',
         rootAppliesToTargets && inlineProjectContext ? `Project context contract:\n${inlineProjectContext}` : '',
-        rootAppliesToTargets && fileContext ? `Project context file (${fileContext.label}):\n${fileContext.content}` : '',
+        rootAppliesToTargets && fileContext ? `TDD Box context file (${fileContext.label}):\n${fileContext.content}` : '',
         rootAppliesToTargets && designContext ? `Design context:\n${designContext.content}` : '',
         contextSuppressed ? `Project context skipped:\nThe scan target is outside the configured project root (${projectRoot.label}).` : '',
     ].filter(Boolean);
@@ -517,7 +521,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
         rootSummary ? `project root ${rootSummary}` : '',
         rootAppliesToTargets && legacyTeamContext ? 'legacy inline context' : '',
         rootAppliesToTargets && inlineProjectContext ? 'inline project contract' : '',
-        rootAppliesToTargets && fileContext ? `file ${fileContext.label}` : '',
+        rootAppliesToTargets && fileContext ? `TDD file ${fileContext.label}` : '',
         rootAppliesToTargets && designContext ? `design context ${designContext.labels.length} file${designContext.labels.length === 1 ? '' : 's'}` : '',
         contextSuppressed ? 'configured project root skipped for out-of-root target' : '',
     ].filter(Boolean);
