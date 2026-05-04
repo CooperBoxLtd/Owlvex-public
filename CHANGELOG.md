@@ -2,18 +2,9 @@
 
 ## 0.1.38
 
-- fix Drift Box setup so configuring it enables the box for scans
-- stamp packaged README versions from the extension manifest during packaging
-- verify packaged VSIX files contain the correct README version before release
-
-## 0.1.37
-
-- add TDD Box grounding for local Markdown/text product behavior context
-- add Design Box and Drift Box workflow documentation to the extension details
-- keep configured TDD and Drift boxes active unless explicitly disabled
-- run Drift Box package validation commands such as `npm run validate`
-- fix Windows Drift Box execution for npm package scripts
-- clarify prototype/evaluation status in the packaged extension README
+- fix Drift Box setup so opening/configuring it enables the box for scans
+- stamp packaged README versions from the extension manifest instead of hardcoded text
+- verify packaged VSIX files contain the correct README version
 
 ## 0.1.29
 

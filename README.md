@@ -1,50 +1,43 @@
 # Owlvex
 
-Prototype VS Code extension for security scanning, AI-assisted review, and fix preview workflows.
+Owlvex is a VS Code extension for security scanning, AI-assisted review, evidence reports, and previewed code fixes.
+
+It is built for developers who want to catch useful security issues while they are still working in the editor, not after code has already moved downstream.
+
+## Prototype Notice
+
+Owlvex is currently a prototype/evaluation product.
+
+Use it to find useful security signals early, preview fixes, and validate whether the workflow helps your development process. Do not treat Owlvex output as a final security sign-off. Validate important findings, fixes, and reports before relying on them.
 
 ## Current Version
 
-`0.1.38`
+`{{PACKAGE_VERSION}}`
 
-## Download
+## What To Expect
 
-- Marketplace: https://marketplace.visualstudio.com/items?itemName=owlvex.owlvex
-- VSIX: [owlvex-0.1.38.vsix](releases/owlvex-0.1.38.vsix)
-- SHA256: `3CC2090768D27F6CCE87CEC94CF67166DC83C588EE8AB2B93A2C2DBE769B6612`
+Use it with these expectations:
 
-Install from terminal:
+- validate important findings before relying on them
+- expect scan quality and speed to vary by provider/model
+- expect some UI and report wording to keep changing
+- treat AI-backed results as scoped evidence, not absolute proof
 
-```powershell
-code --install-extension .\releases\owlvex-0.1.38.vsix --force
-```
-
-Support: [SUPPORT.md](SUPPORT.md) or info@cooperbox.co.uk
-
-## Prototype Status
-
-Owlvex is not a finished commercial product yet.
-
-Current expectations:
-
-- use it as a prototype / evaluation build
-- expect rough edges and ongoing UI or backend changes
-- verify important findings manually before acting on them
-- expect some model-specific variation in scan quality, latency, and coverage
-
-## What It Does
+## What Owlvex Does
 
 Owlvex combines:
 
-- deterministic local checks
-- safe probe verification for selected sink-driven findings
-- AI-assisted targeted review
-- repo-context reasoning for some workflows
-- TDD/spec grounding context
-- Design Box architecture context
-- Drift Box report-only behavior checks
-- report generation
+- local deterministic checks
+- sink and guard discovery
+- safe probe verification for selected issues
+- repo-context AI review
+- optional TDD/spec grounding
+- optional design/context grounding
+- optional project-owned drift checks
+- summary and full evidence reports
 - report comparison
-- fix preview and verification flows
+- previewed code fixes
+- post-fix verification loops
 
 Supported provider paths include:
 
@@ -57,20 +50,22 @@ Supported provider paths include:
 - Ollama
 - custom OpenAI-compatible endpoints
 
-## Model Guidance
+## First 5 Minutes
 
-Best results so far have come from:
+The fastest useful path is:
 
-- GPT-5.4
-- GPT-5.4 Mini
+1. Install Owlvex.
+2. Open the Owlvex activity view.
+3. Choose `Use Free`, `Start Trial`, or `Enter Licence Key`.
+4. Select your project root.
+5. Configure an LLM provider.
+6. Run a small scan: current file, selected files, or changed files.
+7. Create a summary report.
+8. Open one finding and preview a fix.
 
-If you are evaluating Owlvex for the first time, start with one of those models before comparing other providers or smaller models.
+For daily development, prefer changed-file or selected-file scans. Use workspace scans for baselines, release checks, or deeper review.
 
 ## Installation
-
-### Download From GitHub
-
-If Owlvex is being distributed through a public GitHub repository, download the latest production `.vsix` from that repository's `Releases` page.
 
 ### Install From VSIX
 
@@ -78,25 +73,17 @@ If Owlvex is being distributed through a public GitHub repository, download the 
 2. Open the Extensions view.
 3. Open the Extensions `...` menu.
 4. Choose `Install from VSIX...`.
-5. Select the production Owlvex VSIX.
+5. Select the Owlvex VSIX.
 
-## First Run
+### Open Owlvex
 
-Owlvex now opens with a first-run checklist in the chat panel when setup is incomplete. The goal is to make the first minute concrete:
-
-- confirm access with `Use Free`, `Start Trial`, or `Enter Licence`
-- confirm the current workspace/project context
-- configure an LLM provider when you want AI review and fix previews
-- run the first scan
-- create a summary report after scan results exist
-
-### 1. Open Owlvex
-
-Use the Owlvex activity bar icon or run:
+Use the Owlvex activity bar icon, or run:
 
 - `Owlvex: Open AI Chat`
 
-### 2. Choose Access
+## Setup
+
+### 1. Licence Or Access
 
 Owlvex supports:
 
@@ -106,9 +93,26 @@ Owlvex supports:
 
 Free and trial onboarding are email-based.
 
-### 3. Configure Your LLM
+### 2. Project Root
 
-Run:
+Set the project root so Owlvex knows the active app boundary.
+
+This controls:
+
+- workspace scans
+- repo context
+- changed-file scans
+- report output
+- Design Box resolution
+- Drift Box resolution
+
+Command:
+
+- `Owlvex: Select Project Root`
+
+### 3. LLM Provider
+
+Command:
 
 - `Owlvex: Setup AI Connection`
 
@@ -120,132 +124,253 @@ For Azure AI Foundry you need:
 
 For other providers, enter the provider-specific model and key details when prompted.
 
-### 4. Check Setup
+### 4. Test Setup
+
+Command:
+
+- `Owlvex: Test Trial Setup`
+
+This checks:
+
+- backend connectivity
+- licence/access state
+- LLM/provider connectivity
+
+## Scan Scopes
+
+Owlvex supports several scan scopes:
+
+- current file
+- selected files
+- changed files
+- open editors
+- workspace
+
+Use changed-file scanning when you want fast review of work in progress. Owlvex uses Git when available. If Git is unavailable, use selected files or current file.
+
+Commands:
+
+- `Owlvex: Scan Current File`
+- `Owlvex: Scan Selected Files`
+- `Owlvex: Scan Changed Files`
+- `Owlvex: Scan Open Editors`
+- `Owlvex: Scan Workspace`
+
+## Reports
+
+Owlvex can create:
+
+- Summary Report
+- Full Evidence Report
+
+The summary report is for daily developer use. It focuses on what to fix first, confidence posture, proof posture, and remaining work.
+
+The full evidence report includes deeper scoring detail, framework mappings, AI review detail, sink/probe evidence, provider status, and audit context.
+
+Command:
+
+- `Owlvex: Create Report`
+
+## Fix Preview Workflow
+
+Owlvex does not directly overwrite code when a fix is generated.
+
+The intended flow is:
+
+1. Scan code.
+2. Open a finding.
+3. Choose `Preview fix`.
+4. Review the side-by-side diff.
+5. Choose `Keep fix` or `Discard fix`.
+6. Owlvex verifies the changed files.
+7. If findings remain, Owlvex creates a continuation queue.
+
+The fix loop should continue until:
+
+- findings are verified clean
+- the user cancels
+- a finding is explicitly left for manual review
+
+Owlvex should reject broad or unanchored patches when a fix rewrites too much of a file for the selected finding.
+
+## TDD Box
+
+TDD Box lets you point Owlvex at a local Markdown or text file that describes expected product behavior.
+
+Use it for:
+
+- test-driven design notes
+- product behavior that must not change
+- API or protocol contracts
+- acceptance criteria
+- important implementation boundaries
+
+TDD Box is local grounding context for scan and fix reasoning. It is not a security framework and it does not run scripts.
+
+Supported file types:
+
+- Markdown
+- text
+
+Setting:
+
+- `owlvex.projectContextFile`
+- `owlvex.tddBoxEnabled`
+
+Command:
+
+- `Owlvex: Open TDD Box`
+
+## Design Box
+
+Design Box lets you point Owlvex at a local design/context file so scans can understand intended system behavior.
+
+Supported file types:
+
+- Markdown
+- text
+- DOCX
+- PDF, best-effort text extraction
+
+Good Design Box inputs include:
+
+- architecture documents
+- threat models
+- product workflows
+- security assumptions
+- trust-boundary notes
+- API design notes
+- data-flow documentation
+
+Owlvex uses this as reference context during scans, especially when reviewing architecture, STRIDE, trust boundaries, roles, and data flows.
+
+Design Box content is treated as project reference material, not as instructions to the model. The design file is read locally and included in scan context only when configured.
+
+Setting:
+
+- `owlvex.designContextFile`
+
+Command:
+
+- `Owlvex: Open Design Context`
+
+## Drift Box
+
+Drift Box is for project-owned behavior checks.
+
+Use it for scripts that tell you whether important behavior still works after scans or AI-assisted fixes.
+
+Good Drift Box checks include:
+
+- API contract checks
+- smoke tests
+- login or auth-flow checks
+- tenant-isolation checks
+- refund/workflow checks
+- generated-fix invariant checks
+
+Do not use Drift Box for duplicate OWASP, CodeQL, Semgrep, or general SAST scans. Owlvex security scanning runs separately.
+
+Drift Box behavior:
+
+- runs local scripts only after user approval/configuration
+- reports pass/fail/skipped/error
+- does not block scans
+- does not block fixes
+- does not change security-clean status
+- appears in reports only when configured and enabled
+
+Settings:
+
+- `owlvex.driftBoxFile`
+- `owlvex.driftScriptsRoot`
+
+Command:
+
+- `Owlvex: Open Drift Box`
+
+## Framework Selection
+
+Framework selection is a scan lens, not a hard security-rule firewall.
+
+Selected frameworks guide:
+
+- AI grounding
+- report emphasis
+- remediation wording
+- expanded mapping detail
+
+Deterministic local evidence still runs security-first when code proves a vulnerability pattern.
+
+A finding may still show canonical references such as CWE, OWASP, MITRE, NIST, PCI DSS, STRIDE, or Clean Code even if that framework was not selected. Those references are taxonomy mappings for the finding, not proof that every framework lens was active.
+
+## Reading Confidence
+
+Owlvex separates risk from evidence confidence.
+
+- `Confirmed by rule` means deterministic code evidence proved the issue.
+- `Validated by AI review` means an AI finder result was supported by verifier or skeptic review.
+- `Finder-only AI review` means the finder reported the issue, but verifier/skeptic were not triggered or unavailable.
+- `Finder high confidence, not independently verified` means the raw AI score is high, but still finder-only.
+- `AI signal High (96% final)` is model confidence, not deterministic proof.
+- `review path finder`, `finder+verifier`, or `finder+verifier+skeptic` shows which AI passes ran.
+
+For important changes, validate AI-backed findings against the code.
+
+## Safe Probe Verification
+
+Safe probes are narrow, side-effect-blocked checks used for selected sink-driven findings.
+
+They can help answer:
+
+- can controlled input reach a risky sink?
+- is there a recognized guard in the path?
+- did a fix block the risky path?
+
+Safe probes do not replace dynamic testing, penetration testing, or full runtime validation.
+
+## Provider And Throttling Notes
+
+Model speed and reliability depend on provider limits.
+
+Azure AI Foundry may be paced by default because previous testing showed real 429 rate-limit behavior. Other providers normally run looser unless configured otherwise.
+
+If a provider returns 429s, configure throttling:
+
+- `Owlvex: Configure Provider Throttling`
+
+## Data And Backend Boundary
+
+Owlvex is designed so local code analysis and fix preview happen in the extension.
+
+The backend is used for:
+
+- licence/access state
+- onboarding/account workflows
+- usage metadata
+- report/comparison metadata where enabled
+- signed rule/remediation pack delivery where available and entitled
+
+Customer source code should not be sent to the Owlvex Azure backend for normal scanning. LLM provider requests depend on the provider you configure.
+
+## Troubleshooting
+
+### Setup Loops Or Access Problems
 
 Run:
 
 - `Owlvex: Test Trial Setup`
 
-This validates:
+Check:
 
-- backend connectivity
-- licence state
-- LLM/provider connectivity
+- backend URL
+- licence/access state
+- email used for registration
+- whether the extension is dev or production
 
-## Basic Usage
+### Provider/Model Does Not Stick
 
-### Scan
-
-Available commands:
-
-- `Owlvex: Scan Current File`
-- `Owlvex: Scan Selected Files`
-- `Owlvex: Scan Open Editors`
-- `Owlvex: Scan Workspace`
-
-### Create A Report
-
-Run:
-
-- `Owlvex: Create Report`
-
-### Compare Reports
-
-Run:
-
-- `Owlvex: Compare Reports`
-
-### AI Chat
-
-Use the Owlvex chat panel to:
-
-- ask follow-up questions
-- discuss findings
-- switch providers and models
-- trigger scans
-- open fix previews
-
-### Fix Preview
-
-From findings or chat:
-
-- choose `Preview fix`
-- review the generated diff
-- use `Keep fix` to apply it
-- Owlvex then rescans to verify the reviewed finding outcome
-
-## Known Limitations
-
-### Product / Platform
-
-- this is still a prototype
-- some flows are still optimized for evaluation rather than polished customer UX
-- report comparison depends on stored scan metadata and can fail on older reports created before comparison-safe IDs were stored
-
-### Safe Probe Verification
-
-- probe checks are side-effect blocked and only inspect whether canary input reaches an intercepted sink
-- probe support is intentionally narrow and does not replace full dynamic testing
-- unresolved probe residue means Owlvex found evidence that dangerous input can still reach a risky operation
-- blocked probe evidence can reduce unnecessary verifier calls, but it should still be read as scoped evidence
-
-### AI / Model Behavior
-
-- results can vary materially by provider and model
-- slower or more expensive models can change scan time a lot
-- some scans may reduce AI coverage after throttling or rate-limit pressure
-- verifier / skeptic coverage can be truncated when corroboration budgets are exceeded
-
-### Azure AI Foundry
-
-- the current Azure AI Foundry path is built around Azure OpenAI-style deployment endpoints
-- deployment names are user/environment specific and must exist in Azure before use
-- Anthropic / Claude partner-model support is not fully productized through the same Foundry path yet
-
-### Findings / Reports
-
-- some findings may be correct but mislabeled
-- some AI findings may still need manual review
-- deterministic and AI-backed findings do not have the same trust posture
-- report wording and comparison UX are still evolving
-
-### Framework Selection
-
-Framework selection is a scan lens, not a hard security-rule firewall.
-
-- selected frameworks guide AI grounding, report emphasis, remediation variants, and which mappings are expanded in detail
-- deterministic evidence rules still run security-first when code proves a vulnerability pattern
-- a finding may still show canonical references such as CWE, OWASP, MITRE, or NIST even if that framework was not selected
-- those unselected-framework mappings are taxonomy references for the finding, not evidence that every framework lens was used
-
-Use selected frameworks to tune how Owlvex explains and maps findings. Do not assume deselecting a framework disables core local security evidence.
-
-### Reading Confidence
-
-Owlvex separates risk from evidence confidence.
-
-- `Confirmed by rule` means deterministic code evidence proved the issue.
-- `Validated by AI review` means an AI finder result was also supported by verifier or skeptic review.
-- `Finder-only AI review` means the finder reported the issue, but verifier and skeptic were not triggered or were unavailable.
-- `Finder high confidence, not independently verified` means the raw AI score is high, but it is still finder-only.
-- `AI signal High (96% final)` is model confidence, not proof.
-- `review path finder`, `finder+verifier`, or `finder+verifier+skeptic` shows which AI passes actually ran.
-
-For important changes, validate AI-backed findings against the code before relying on them.
-
-## Trust Boundary
-
-Owlvex is intended to keep:
-
-- deterministic scanning local
-- editor-side findings and fix preview logic local
-- backend traffic focused on licence, usage, scan metadata, and comparison metadata
-
-## Troubleshooting
-
-### The provider/model switch does not seem to stick
-
-Check for workspace-level VS Code settings overriding:
+Check workspace-level VS Code settings overriding:
 
 - `owlvex.provider`
 - `owlvex.foundry.model`
@@ -253,50 +378,62 @@ Check for workspace-level VS Code settings overriding:
 
 Workspace settings override global settings.
 
-### Azure AI Foundry connection fails
+### Azure AI Foundry Fails
 
 Check:
 
 - endpoint URL
 - deployment name
 - API key
-- whether the deployment actually exists in Azure
+- whether the deployment exists in Azure
 
-### Scan comparison fails
-
-Possible reasons:
-
-- one of the selected reports is too old and does not contain usable stored scan IDs
-- backend/control-plane availability issue
-- licence does not allow comparison
-
-### Scans are slow
+### Scans Are Slow
 
 Common causes:
 
+- large workspace scope
 - model latency
-- throttling or retry behavior
+- provider throttling
 - repo-context AI passes
-- large candidate sets causing extra corroboration work
+- verifier/skeptic escalation
+- large candidate sets
+
+Use current-file, selected-file, or changed-file scans for faster feedback.
+
+### Fix Preview Is Rejected
+
+Owlvex may reject a fix if the generated patch rewrites too much code for a finding-anchored remediation.
+
+Try:
+
+- regenerate diff
+- scan current file
+- ask for a smaller finding-anchored fix
 
 ## Recommended Evaluation Workflow
 
 1. Install the VSIX.
 2. Open Owlvex.
-3. Choose `Use Free`, `Start Trial`, or `Enter Licence Key`.
-4. Configure the LLM connection.
-5. Run `Owlvex: Test Trial Setup`.
-6. Scan a small demo file first.
-7. Create a report.
-8. Try a second scan and compare reports.
-9. Open one finding and test the `Fix code` preview flow.
+3. Choose access: free, trial, or licence.
+4. Select project root.
+5. Configure provider/model.
+6. Scan one current file.
+7. Create a summary report.
+8. Preview a fix.
+9. Keep or discard the fix.
+10. Review post-fix verification.
+11. Try changed-file scanning during normal development.
+12. Optionally configure Design Box and Drift Box for deeper project-specific review.
 
 ## Feedback
 
 If a result looks wrong, collect:
 
-- the report file
-- provider and model used
-- whether scan warnings mention throttling or partial AI coverage
-- the file or repo scope scanned
+- report file
+- provider/model used
+- scan scope
+- selected frameworks
+- Design Box file type if used
+- Drift Box result if used
+- scan warnings
 - the exact action that failed
