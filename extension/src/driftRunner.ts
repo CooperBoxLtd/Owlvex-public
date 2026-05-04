@@ -48,6 +48,19 @@ function splitCommand(command: string): string[] {
     return command.match(/"[^"]+"|'[^']+'|\S+/g)?.map(unquote) ?? [];
 }
 
+function resolveExecutableForPlatform(executable: string): string {
+    if (process.platform !== 'win32') {
+        return executable;
+    }
+
+    const lower = executable.toLowerCase();
+    if (['npm', 'npx', 'pnpm', 'yarn'].includes(lower)) {
+        return `${executable}.cmd`;
+    }
+
+    return executable;
+}
+
 function isInside(parentPath: string, candidatePath: string): boolean {
     const parent = path.resolve(parentPath).toLowerCase();
     const candidate = path.resolve(candidatePath).toLowerCase();
@@ -162,7 +175,7 @@ async function runOneCheck(check: DriftCheckDefinition, options: RunDriftChecksO
     }
 
     const commandParts = splitCommand(check.command);
-    const executable = commandParts[0];
+    const executable = resolveExecutableForPlatform(commandParts[0]);
     const args = commandParts.slice(1);
     const outputLimitBytes = options.outputLimitBytes ?? DEFAULT_OUTPUT_LIMIT_BYTES;
     const startedAt = Date.now();

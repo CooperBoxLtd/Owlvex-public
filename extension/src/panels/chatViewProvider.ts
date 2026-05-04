@@ -5438,8 +5438,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const frameworks = this.getFrameworks();
         const severity = this.getSeverityThreshold();
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
-        const tddBoxEnabled = config.get<boolean>('tddBoxEnabled', false);
-        const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', false);
+        const configuredTddFile = config.get<string>('projectContextFile', '').trim();
+        const configuredDriftFile = config.get<string>('driftBoxFile', '').trim();
+        const tddBoxEnabled = config.get<boolean>('tddBoxEnabled', Boolean(configuredTddFile));
+        const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', Boolean(configuredDriftFile));
         const projectContextSummary = getProjectContextSummaryFromConfig();
 
         return {

@@ -602,6 +602,16 @@ function getFrameworkConfigurationTarget(): vscode.ConfigurationTarget {
         : vscode.ConfigurationTarget.Global;
 }
 
+function getEffectiveTddBoxEnabled(config: vscode.WorkspaceConfiguration): boolean {
+    const configuredTddFile = config.get<string>(PROJECT_CONTEXT_FILE_SETTING, '').trim();
+    return config.get<boolean>(TDD_BOX_ENABLED_SETTING, Boolean(configuredTddFile));
+}
+
+function getEffectiveDriftBoxEnabled(config: vscode.WorkspaceConfiguration): boolean {
+    const configuredDriftFile = config.get<string>(DRIFT_BOX_FILE_SETTING, '').trim();
+    return config.get<boolean>('driftBoxEnabled', Boolean(configuredDriftFile));
+}
+
 function normalizeServiceUrl(value: string): string {
     return value.trim().replace(/\/+$/, '');
 }
@@ -2979,8 +2989,8 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.selectFrameworks, async () => {
             const currentSelection = config.get<string[]>('frameworks', ['OWASP', 'STRIDE']);
-            const currentTddBoxEnabled = config.get<boolean>('tddBoxEnabled', false);
-            const currentDriftBoxEnabled = config.get<boolean>('driftBoxEnabled', false);
+            const currentTddBoxEnabled = getEffectiveTddBoxEnabled(config);
+            const currentDriftBoxEnabled = getEffectiveDriftBoxEnabled(config);
             let allowedFrameworks = licenceMgr.getCachedInfo()?.features.frameworks;
             if (!allowedFrameworks?.length) {
                 try {
@@ -3049,12 +3059,8 @@ export function activate(context: vscode.ExtensionContext) {
             await vscode.workspace
                 .getConfiguration(PROFILE.configSection)
                 .update('frameworks', selectedCodes, getFrameworkConfigurationTarget());
-            await vscode.workspace
-                .getConfiguration(PROFILE.configSection)
-                .update('tddBoxEnabled', tddBoxEnabled, getFrameworkConfigurationTarget());
-            await vscode.workspace
-                .getConfiguration(PROFILE.configSection)
-                .update('driftBoxEnabled', driftBoxEnabled, getFrameworkConfigurationTarget());
+            await tryPersistWorkspaceBooleanSetting(TDD_BOX_ENABLED_SETTING, tddBoxEnabled);
+            await tryPersistWorkspaceBooleanSetting('driftBoxEnabled', driftBoxEnabled);
 
             vscode.window.showInformationMessage(
                 `${PROFILE.displayLabel}: Frameworks set to ${formatFrameworkSummary(selectedCodes)}${tddBoxEnabled ? '; TDD Box context enabled' : '; TDD Box context disabled'}${driftBoxEnabled ? '; Drift Box behavior checks enabled' : '; Drift Box behavior checks disabled'}`

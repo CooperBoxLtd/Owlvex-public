@@ -543,6 +543,11 @@ function disabledDriftBoxContext(): DriftBoxLoadResult {
     };
 }
 
+function isDriftBoxEffectivelyEnabled(config: vscode.WorkspaceConfiguration): boolean {
+    const configuredDriftFile = config.get<string>('driftBoxFile', '').trim();
+    return config.get<boolean>('driftBoxEnabled', Boolean(configuredDriftFile));
+}
+
 function normalizeProofStatus(value: unknown): EvidenceProofStatus | undefined {
     const normalized = String(value ?? '').trim();
     return ['static_proven', 'ai_plausible', 'counter_evidence_found', 'unproven_extra'].includes(normalized)
@@ -2372,7 +2377,7 @@ export class ScanEngine {
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
-        const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', false);
+        const driftBoxEnabled = isDriftBoxEffectivelyEnabled(config);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const provider = this.registry.getActive();
         const projectContext = await loadProjectContextInfo({
@@ -2755,7 +2760,7 @@ export class ScanEngine {
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
-        const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', false);
+        const driftBoxEnabled = isDriftBoxEffectivelyEnabled(config);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const language = this._detectLanguage(document);
         const provider = this.registry.getActive();

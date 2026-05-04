@@ -155,7 +155,7 @@ describe('drift runner', () => {
             requireApproval: false,
         });
 
-        expect(spawn).toHaveBeenCalledWith('npm', ['run', 'validate'], {
+        expect(spawn).toHaveBeenCalledWith(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'validate'], {
             cwd: projectRoot,
             shell: false,
             windowsHide: true,
