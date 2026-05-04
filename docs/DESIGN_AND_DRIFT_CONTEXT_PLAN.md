@@ -182,6 +182,8 @@ Status: implemented for Design Context and Drift Box visibility. Scan results ca
   - applicable drift checks report pass/fail status
 - If drift fails, the fix state remains driven by security verification. The report should say "security finding cleared; drift check failed" without blocking the security clean result.
 
+Status: implemented in post-fix chat verification. After Keep fix, Owlvex includes Drift Box pass/fail/timeout/not-approved status in the verification message when drift results are available. Drift failures are explicitly labelled report-only and do not change scan completion, fix application, post-fix verification, continuation queue, or security-clean status.
+
 ## First Implementation Decision
 
 Start with Design Context loading before Drift execution. It improves context quality immediately and does not introduce local script execution risk.

@@ -2427,6 +2427,17 @@ describe('parseChatIntent', () => {
                         provider: 'test-provider',
                         warnings: [],
                         summary: 'No findings detected.',
+                        driftResults: [{
+                            id: 'auth-contract',
+                            label: 'Auth contract',
+                            command: 'node .owlvex/drift/scripts/auth-contract.mjs',
+                            status: 'failed',
+                            exitCode: 1,
+                            durationMs: 25,
+                            stdout: '',
+                            stderr: 'expected role guard to remain unchanged',
+                            reason: 'Contract check failed after the fix.',
+                        }],
                     },
                 };
             }
@@ -2521,6 +2532,9 @@ describe('parseChatIntent', () => {
         expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Post-fix verification complete for 2 updated files.');
         expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Reviewed findings cleared: 2/2.');
         expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('No continuation findings were reported for the touched files.');
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Drift Box post-fix: 0 passed | 1 failed | 0 timed out | 0 skipped | 0 not approved.');
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Drift Box is report-only: these results do not block scan completion, fix application, post-fix verification, or security-clean status.');
+        expect((provider as any).messages.map((message: any) => message.content).join('\n')).toContain('Security verification remains finding-driven; review Drift Box failures as behavior-preservation signals.');
     });
 
     it('summarizes continuation after a combined fix when any verified file still has findings', async () => {

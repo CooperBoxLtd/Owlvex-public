@@ -1662,6 +1662,8 @@ function buildTargetRemovedVerificationMessage(targetUri: vscode.Uri, rescanned:
         lines.push(buildCleanScanScopeNote(rescanned));
     }
 
+    lines.push(...buildPostFixDriftSummaryLines(rescanned.driftResults));
+
     return lines.filter(Boolean).join('\n');
 }
 
@@ -1697,6 +1699,76 @@ function buildFixVerificationProbeNote(originalFinding: Finding, matchingFinding
     }
 
     return `Fix verification probe: inconclusive for ${postFixProbe.family}. ${postFixProbe.reason}`;
+}
+
+type DriftRunResultForMessage = NonNullable<ScanResult['driftResults']>[number];
+
+function driftStatusRank(status: DriftRunResultForMessage['status']): number {
+    switch (status) {
+        case 'failed':
+        case 'timed_out':
+            return 4;
+        case 'not_approved':
+            return 3;
+        case 'skipped':
+            return 2;
+        case 'passed':
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+function collectUniqueDriftResults(results: Array<DriftRunResultForMessage | undefined>): DriftRunResultForMessage[] {
+    const byCheck = new Map<string, DriftRunResultForMessage>();
+    for (const result of results) {
+        if (!result) {
+            continue;
+        }
+        const key = result.id || result.command || result.label;
+        const existing = byCheck.get(key);
+        if (!existing || driftStatusRank(result.status) > driftStatusRank(existing.status)) {
+            byCheck.set(key, result);
+        }
+    }
+
+    return Array.from(byCheck.values()).sort((left, right) => driftStatusRank(right.status) - driftStatusRank(left.status));
+}
+
+function buildPostFixDriftSummaryLines(results?: ScanResult['driftResults']): string[] {
+    const driftResults = collectUniqueDriftResults(results ?? []);
+    if (!driftResults.length) {
+        return [];
+    }
+
+    const count = (status: DriftRunResultForMessage['status']) => driftResults.filter(result => result.status === status).length;
+    const passed = count('passed');
+    const failed = count('failed');
+    const timedOut = count('timed_out');
+    const skipped = count('skipped');
+    const notApproved = count('not_approved');
+    const nonPassing = driftResults.filter(result => result.status !== 'passed');
+    const lines = [
+        `Drift Box post-fix: ${passed} passed | ${failed} failed | ${timedOut} timed out | ${skipped} skipped | ${notApproved} not approved.`,
+        'Drift Box is report-only: these results do not block scan completion, fix application, post-fix verification, or security-clean status.',
+    ];
+
+    if (nonPassing.length) {
+        lines.push('Security verification remains finding-driven; review Drift Box failures as behavior-preservation signals.');
+        for (const result of nonPassing.slice(0, 3)) {
+            const reason = result.reason || result.stderr || result.stdout || `exit ${result.exitCode ?? 'n/a'}`;
+            lines.push(`- Drift ${result.status}: ${result.label || result.id} - ${reason.replace(/\s+/g, ' ').slice(0, 220)}`);
+        }
+        if (nonPassing.length > 3) {
+            lines.push(`- ${nonPassing.length - 3} additional non-passing drift check(s) omitted from chat detail.`);
+        }
+    }
+
+    return lines;
+}
+
+function buildCombinedPostFixDriftSummaryLines(outcomes: AppliedFixVerificationOutcome[]): string[] {
+    return buildPostFixDriftSummaryLines(outcomes.flatMap(outcome => outcome.rescanned?.driftResults ?? []));
 }
 
 function buildCombinedFixContinuationMessage(outcomes: AppliedFixVerificationOutcome[]): string | undefined {
@@ -1758,6 +1830,7 @@ function buildCombinedFixVerificationMessage(outcomes: AppliedFixVerificationOut
         `Reviewed findings cleared: ${reviewedCleared.length}/${outcomes.length}.`,
         `Files clean after verification: ${clean.length}/${outcomes.length}.`,
         'Scope note: reviewed findings are the issues this diff targeted; files are only clean when their post-fix verification scan has zero remaining findings.',
+        ...buildCombinedPostFixDriftSummaryLines(outcomes),
     ];
 
     if (unresolved.length) {
@@ -2823,6 +2896,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         content: [
                             `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
                             buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                            ...buildPostFixDriftSummaryLines(rescanned.driftResults),
                             'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
                         ].filter(Boolean).join('\n'),
                         kind: 'advisory',
@@ -2849,6 +2923,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         content: [
                             `Verification complete: the finding is still present after the kept fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
                             buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                            ...buildPostFixDriftSummaryLines(rescanned.driftResults),
                             'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
                         ].filter(Boolean).join('\n'),
                         kind: 'advisory',
@@ -3031,6 +3106,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         content: [
                             `Verification complete: the finding still exists, but its risk dropped from ${originalFinding.riskScore ?? 'n/a'}/10 to ${matchingFinding.riskScore ?? 'n/a'}/10. File risk is now ${rescanned.score.toFixed(1)}/10.`,
                             buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                            ...buildPostFixDriftSummaryLines(rescanned.driftResults),
                             'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
                         ].filter(Boolean).join('\n'),
                         kind: 'advisory',
@@ -3060,6 +3136,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         content: [
                             `Verification complete: the finding is still present after the kept fix. File risk is ${rescanned.score.toFixed(1)}/10.`,
                             buildFixVerificationProbeNote(originalFinding, matchingFinding),
+                            ...buildPostFixDriftSummaryLines(rescanned.driftResults),
                             'Fix continuation required before moving on. Regenerate the diff for this finding and verify again.',
                         ].filter(Boolean).join('\n'),
                         kind: 'advisory',
