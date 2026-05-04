@@ -461,7 +461,7 @@ function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions):
 function looksLikeToolHelpRequest(prompt: string): boolean {
     return (
         /\b(how|what|where|when|which|explain|help|guide|use|using|start|setup|configure|onboard|next|now|stuck)\b/i.test(prompt)
-        && /\b(owlvex|tool|scan|scanner|report|summary report|full evidence|confidence|manual review|fix first|fix code|compare reports?|create report|workspace|selected files|open editors|licen[cs]e|llm|provider|model|first run|first use|install)\b/i.test(prompt)
+        && /\b(owlvex|tool|scan|scanner|report|summary report|full evidence|confidence|manual review|fix first|fix code|compare reports?|create report|workspace|selected files|open editors|licen[cs]e|llm|provider|model|first run|first use|install|design box|design context|drift box|drift checks?|drift scripts?|stride context|trust boundaries)\b/i.test(prompt)
     )
         || /\b(what now|what next|next step|guide me|getting started|where do i start|what should i click|what should i do first)\b/i.test(prompt);
 }
@@ -482,6 +482,8 @@ function buildToolUsageGuidance(): string {
         '- Generated reports are written at the project/workspace report root, not inside source subfolders.',
         '- Compare reports should be used after rescanning; Owlvex orders reports by generation time so Before is the earlier report and After is the later report.',
         '- Provider throttle guidance appears only when a scan sees a 429 or rate-limit warning.',
+        '- Design Box lives under .owlvex/design and gives Owlvex architecture, role, data-flow, trust-boundary, and STRIDE context. It guides reasoning but does not prove findings by itself.',
+        '- Drift Box lives under .owlvex/drift and runs repository-owned checks locally after approval. Drift results are report-only pass/fail and never block scan completion, fixes, post-fix verification, or security-clean status.',
         '- When users ask how to use Owlvex, give the next concrete click/action and explain which report or scan scope fits their goal.',
     ].join('\n');
 }
@@ -494,6 +496,8 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
     const confidenceFocused = /\b(confidence|manual review|confirmed|ai-reviewed|validated|static rule|finder|verifier|skeptic)\b/i.test(prompt);
     const fixFocused = /\b(fix|fix code|preview|keep fix|discard|remediate)\b/i.test(prompt);
     const compareFocused = /\b(compare|before|after|baseline|current|increase|decrease|regression)\b/i.test(prompt);
+    const designFocused = /\b(design box|design context|architecture|trust boundar(?:y|ies)|stride context|stride notes|data flow|roles?|permissions?)\b/i.test(prompt);
+    const driftFocused = /\b(drift box|drift checks?|drift scripts?|invariants?|contract checks?|report-only|pass\/fail|pass fail)\b/i.test(prompt);
 
     const lines = onboardingFocused
         ? [
@@ -530,7 +534,29 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                     '',
                     'Owlvex orders reports by generation time: earlier report is Before, later report is After. That prevents false increase/decrease direction if reports are selected backwards.',
                 ]
-                : confidenceFocused
+                : designFocused
+                    ? [
+                        'Design Box:',
+                        '',
+                        'Use it to give Owlvex architecture context: actors, roles, trust boundaries, data flows, ownership rules, and STRIDE notes.',
+                        'Files live under `.owlvex/design` inside the selected project root.',
+                        'When STRIDE is selected, Owlvex prioritizes STRIDE and trust-boundary files for repo-aware AI context.',
+                        'Design context can guide reasoning and remediation constraints, but it does not prove findings by itself.',
+                        '',
+                        'Next step: Open Design Context, add system/trust-boundary notes, then rescan.',
+                    ]
+                    : driftFocused
+                        ? [
+                            'Drift Box:',
+                            '',
+                            'Use it for repository-owned scripts that say whether important behavior still passes after scans or fixes.',
+                            'Config lives at `.owlvex/drift/owlvex-drift.json`; scripts must live under `.owlvex/drift/scripts`.',
+                            'Owlvex validates declarations, asks before first run, executes locally with timeout/output caps, and reports pass/fail.',
+                            'Drift is report-only. It does not block scan completion, fix application, post-fix verification, or security-clean status.',
+                            '',
+                            'Next step: Open Drift Box, enable a check, then run a scan.',
+                        ]
+                        : confidenceFocused
                     ? [
                         'How to read confidence:',
                         '',
@@ -620,6 +646,15 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
         buildQuickActionAction('tool-help-scan-workspace', 'Scan workspace', 'scanFolder'),
         buildQuickActionAction('tool-help-create-summary', 'Create Summary', 'scanSummaryReport'),
     ];
+    const designActions: ChatMessageAction[] = [
+        buildQuickActionAction('tool-help-open-design-context', 'Open Design Context', 'openDesignContext'),
+        buildQuickActionAction('tool-help-select-project-root', 'Select Project Root', 'selectProjectRoot'),
+        buildQuickActionAction('tool-help-scan-workspace', 'Scan workspace', 'scanFolder'),
+    ];
+    const driftActions: ChatMessageAction[] = [
+        buildQuickActionAction('tool-help-open-drift-box', 'Open Drift Box', 'openDriftBox'),
+        buildQuickActionAction('tool-help-scan-workspace', 'Scan workspace', 'scanFolder'),
+    ];
 
     return {
         content: lines.join('\n'),
@@ -629,9 +664,13 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                 ? setupActions
                 : reportFocused
                     ? reportActions
-                    : scanFocused
-                        ? scanActions
-                        : undefined,
+                    : designFocused
+                        ? designActions
+                        : driftFocused
+                            ? driftActions
+                            : scanFocused
+                                ? scanActions
+                                : undefined,
     };
 }
 
@@ -667,7 +706,7 @@ function buildProviderModelLabel(result: ScanResult): string {
 }
 
 function buildCleanScanScopeNote(result: ScanResult): string {
-    return `Clean result scope: no findings were reported by ${buildProviderModelLabel(result)} for this scan; treat that as provider/model evidence, not a guarantee that no vulnerability exists.`;
+    return `Clean result scope: no findings were reported by ${buildProviderModelLabel(result)} for the file(s) scanned in this action. This does not clear findings from earlier multi-file continuation queues unless those files were scanned too.`;
 }
 
 function summarizeEngineEvidence(findings: Finding[]): string {
@@ -1718,6 +1757,7 @@ function buildCombinedFixVerificationMessage(outcomes: AppliedFixVerificationOut
         `Post-fix verification complete for ${outcomes.length} updated file${outcomes.length === 1 ? '' : 's'}.`,
         `Reviewed findings cleared: ${reviewedCleared.length}/${outcomes.length}.`,
         `Files clean after verification: ${clean.length}/${outcomes.length}.`,
+        'Scope note: reviewed findings are the issues this diff targeted; files are only clean when their post-fix verification scan has zero remaining findings.',
     ];
 
     if (unresolved.length) {
@@ -4207,6 +4247,30 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'openDesignContext') {
+            await vscode.commands.executeCommand(PROFILE.commands.openDesignContext);
+            this.messages.push({
+                role: 'system',
+                content: 'Opened Design Context. Add architecture, trust-boundary, role, data-flow, ownership, and STRIDE notes under .owlvex/design; Owlvex uses them as context, not proof.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'openDriftBox') {
+            await vscode.commands.executeCommand(PROFILE.commands.openDriftBox);
+            this.messages.push({
+                role: 'system',
+                content: 'Opened Drift Box. Drift checks run locally after approval and report pass/fail only; they do not block scans, fixes, post-fix verification, or security-clean status.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'selectProjectRoot') {
             await vscode.commands.executeCommand(PROFILE.commands.selectProjectRoot);
             const projectRoot = getProjectRootSummaryFromConfig();
@@ -4556,6 +4620,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ]
                         : undefined,
                 };
+            } else if (/\s/.test(action)) {
+                await this.handleUserMessage(action);
+                return;
             } else {
                 this.messages[this.messages.length - 1] = {
                     role: 'assistant',

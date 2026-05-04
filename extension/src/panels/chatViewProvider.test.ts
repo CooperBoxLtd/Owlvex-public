@@ -636,6 +636,64 @@ describe('parseChatIntent', () => {
         expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['showOnboarding', 'setupAI', 'scanFolder']);
     });
 
+    it('answers design box questions locally with context guidance', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'This should not run.' });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+            validate: async () => { throw new Error('No licence manager configured.'); },
+        } as any);
+
+        await (provider as any).handleUserMessage('how do I use design box for STRIDE context?');
+
+        expect(complete).not.toHaveBeenCalled();
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Design Box:');
+        expect(finalMessage.content).toContain('`.owlvex/design`');
+        expect(finalMessage.content).toContain('does not prove findings by itself');
+        expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['openDesignContext', 'selectProjectRoot', 'scanFolder']);
+    });
+
+    it('answers drift box questions locally with report-only guidance', async () => {
+        const complete = jest.fn().mockResolvedValue({ content: 'This should not run.' });
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any, {
+            getKey: async () => undefined,
+            getCachedInfo: () => null,
+            validate: async () => { throw new Error('No licence manager configured.'); },
+        } as any);
+
+        await (provider as any).handleUserMessage('what is drift box and does it block fixes?');
+
+        expect(complete).not.toHaveBeenCalled();
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Drift Box:');
+        expect(finalMessage.content).toContain('`.owlvex/drift/owlvex-drift.json`');
+        expect(finalMessage.content).toContain('does not block scan completion');
+        expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['openDriftBox', 'scanFolder']);
+    });
+
     it('answers confidence and manual-review questions locally', async () => {
         const complete = jest.fn().mockResolvedValue({ content: 'This should not run.' });
         const provider = new ChatViewProvider({
@@ -929,6 +987,30 @@ describe('parseChatIntent', () => {
         expect(finalMessage.actions).not.toEqual(expect.arrayContaining([
             expect.objectContaining({ label: 'Preview fix', kind: 'generateFixPreview' }),
         ]));
+    });
+
+    it('routes natural-language investigation quick actions through chat', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        const prompt = 'Explain why this finding is not Fix First yet: Missing audit trail for privileged action.';
+        const handleUserMessage = jest
+            .spyOn(provider as any, 'handleUserMessage')
+            .mockResolvedValue(undefined);
+
+        await (provider as any).handleQuickAction(prompt);
+
+        expect(handleUserMessage).toHaveBeenCalledWith(prompt);
     });
 
     it('keeps a single scan-level Preview fix action for the latest scan results', async () => {
@@ -2582,6 +2664,7 @@ describe('parseChatIntent', () => {
         const contents = (provider as any).messages.map((message: any) => message.content).join('\n');
         expect(contents).toContain('Post-fix verification complete for 2 updated files.');
         expect(contents).toContain('Reviewed findings cleared: 1/2.');
+        expect(contents).toContain('Scope note: reviewed findings are the issues this diff targeted; files are only clean when their post-fix verification scan has zero remaining findings.');
         expect(contents).toContain('Fix continuation required across 1 verified file before moving on.');
         expect(contents).toContain('Next fix target: Server-side request forgery through untrusted destination (8/10 risk) in d:\\repo\\src\\two.js at line 2.');
         expect(contents).toContain('Target still present with lower risk: Server-side request forgery through untrusted destination in d:\\repo\\src\\two.js (8/10 risk).');
@@ -2703,6 +2786,58 @@ describe('parseChatIntent', () => {
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
         expect(finalMessage.content).toContain('Project context is ready:');
         expect(finalMessage.content).toContain('.owlvex/project-context.md');
+    });
+
+    it('runs the design context quick action and explains its role', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+                isConfigured: async () => true,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+
+        await (provider as any).handleQuickAction('openDesignContext');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.openDesignContext);
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Opened Design Context.');
+        expect(finalMessage.content).toContain('.owlvex/design');
+        expect(finalMessage.content).toContain('context, not proof');
+    });
+
+    it('runs the drift box quick action and explains report-only behavior', async () => {
+        const provider = new ChatViewProvider({
+            getActive: () => ({
+                id: 'test-provider',
+                name: 'Test Provider',
+                selectedModel: 'owlvex-test-model',
+                complete: jest.fn(),
+                isConfigured: async () => true,
+            }),
+            allProviders: () => [],
+        } as any, {
+            get: jest.fn((_key: string, defaultValue?: unknown) => defaultValue),
+            update: jest.fn(),
+        } as any);
+
+        (vscode.commands.executeCommand as jest.Mock).mockResolvedValue(undefined);
+
+        await (provider as any).handleQuickAction('openDriftBox');
+
+        expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.openDriftBox);
+        const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
+        expect(finalMessage.content).toContain('Opened Drift Box.');
+        expect(finalMessage.content).toContain('report pass/fail only');
+        expect(finalMessage.content).toContain('do not block scans');
     });
 
     it('can open a review diff from an action that targets a scanned file path', async () => {
