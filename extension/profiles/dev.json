@@ -1,7 +1,7 @@
 {
   "name": "owlvex-dev",
   "displayName": "Owlvex Dev",
-  "description": "Internal Owlvex development build wired to the Azure dev control plane",
+  "description": "Internal Owlvex development build for validating onboarding, Design Box, Drift Box, scans, reports, and fix preview workflows",
   "publisher": "owlvex",
   "statusBarLabel": "Owlvex Dev",
   "activityBarIcon": "media/owlvex-dev.svg",

@@ -1,6 +1,12 @@
 # Owlvex Dev
 
-Internal Owlvex development build.
+Internal Owlvex development build for validating the full developer workflow before production packaging.
+
+Use this build to test the path a new user should experience:
+
+`install -> register/access -> select project root -> configure provider -> scan -> report -> preview fix -> verify -> continue`
+
+This dev build is also where we validate Design Box and Drift Box before releasing them to production.
 
 ## Current Version
 
@@ -12,7 +18,7 @@ Internal Owlvex development build.
 - config section: `owlvexDev`
 - backend: Azure dev control plane
 - OWASP lens: OWASP Top 10 2025
-- purpose: internal validation before production packaging
+- purpose: internal validation of onboarding, scan quality, reports, Design Box, Drift Box, and fix preview behavior before production packaging
 
 ## Current Validation Focus
 
