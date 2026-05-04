@@ -48,17 +48,18 @@ function splitCommand(command: string): string[] {
     return command.match(/"[^"]+"|'[^']+'|\S+/g)?.map(unquote) ?? [];
 }
 
-function resolveExecutableForPlatform(executable: string): string {
-    if (process.platform !== 'win32') {
-        return executable;
+function buildSpawnInvocation(check: DriftCheckDefinition, commandParts: string[]): { executable: string; args: string[] } {
+    if (process.platform === 'win32' && check.commandKind === 'package-script') {
+        return {
+            executable: 'cmd.exe',
+            args: ['/d', '/s', '/c', commandParts.join(' ')],
+        };
     }
 
-    const lower = executable.toLowerCase();
-    if (['npm', 'npx', 'pnpm', 'yarn'].includes(lower)) {
-        return `${executable}.cmd`;
-    }
-
-    return executable;
+    return {
+        executable: commandParts[0],
+        args: commandParts.slice(1),
+    };
 }
 
 function isInside(parentPath: string, candidatePath: string): boolean {
@@ -175,8 +176,7 @@ async function runOneCheck(check: DriftCheckDefinition, options: RunDriftChecksO
     }
 
     const commandParts = splitCommand(check.command);
-    const executable = resolveExecutableForPlatform(commandParts[0]);
-    const args = commandParts.slice(1);
+    const { executable, args } = buildSpawnInvocation(check, commandParts);
     const outputLimitBytes = options.outputLimitBytes ?? DEFAULT_OUTPUT_LIMIT_BYTES;
     const startedAt = Date.now();
 
@@ -184,12 +184,6 @@ async function runOneCheck(check: DriftCheckDefinition, options: RunDriftChecksO
         let stdout = '';
         let stderr = '';
         let settled = false;
-        const child = spawn(executable, args, {
-            cwd: options.projectRoot,
-            shell: false,
-            windowsHide: true,
-        });
-
         const finish = (status: DriftRunStatus, exitCode: number | null | undefined, reason?: string) => {
             if (settled) {
                 return;
@@ -207,6 +201,18 @@ async function runOneCheck(check: DriftCheckDefinition, options: RunDriftChecksO
                 reason,
             });
         };
+
+        let child: ReturnType<typeof spawn>;
+        try {
+            child = spawn(executable, args, {
+                cwd: options.projectRoot,
+                shell: false,
+                windowsHide: true,
+            });
+        } catch (error: any) {
+            finish('failed', null, error.message);
+            return;
+        }
 
         const timeout = setTimeout(() => {
             child.kill();

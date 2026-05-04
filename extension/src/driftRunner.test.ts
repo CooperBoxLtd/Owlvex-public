@@ -155,7 +155,9 @@ describe('drift runner', () => {
             requireApproval: false,
         });
 
-        expect(spawn).toHaveBeenCalledWith(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['run', 'validate'], {
+        const expectedExecutable = process.platform === 'win32' ? 'cmd.exe' : 'npm';
+        const expectedArgs = process.platform === 'win32' ? ['/d', '/s', '/c', 'npm run validate'] : ['run', 'validate'];
+        expect(spawn).toHaveBeenCalledWith(expectedExecutable, expectedArgs, {
             cwd: projectRoot,
             shell: false,
             windowsHide: true,
