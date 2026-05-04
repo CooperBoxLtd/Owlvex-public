@@ -809,7 +809,7 @@ async function openOrCreateDesignContext(): Promise<{ uri: vscode.Uri; created: 
             title: 'Select Owlvex Design Box file',
             openLabel: 'Use As Design Box',
             defaultUri: vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR)),
-            filters: { 'Design context': ['md', 'txt'] },
+            filters: { 'Design context': ['md', 'txt', 'docx', 'pdf'] },
         });
         if (selected?.[0]) {
             configuredFile = vscode.workspace.asRelativePath(selected[0], false);

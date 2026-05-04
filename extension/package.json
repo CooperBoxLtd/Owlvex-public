@@ -270,7 +270,7 @@
         "owlvex.designContextFile": {
           "type": "string",
           "default": "",
-          "description": "Optional local file path to the Design Box context document used to ground architecture, STRIDE, trust-boundary, role, and data-flow reasoning"
+          "description": "Optional local file path to the Design Box context document used to ground architecture, STRIDE, trust-boundary, role, and data-flow reasoning. Supports markdown/text, DOCX, and best-effort PDF text extraction"
         },
         "owlvex.driftBoxFile": {
           "type": "string",

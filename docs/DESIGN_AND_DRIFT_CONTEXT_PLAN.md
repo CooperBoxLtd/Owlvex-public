@@ -45,7 +45,7 @@ Recommended layout:
 
 The layout above is only the default. Each developer or repository may point Owlvex to different locations:
 
-- `owlvex.designContextFile` points to the Design Box file Owlvex should load.
+- `owlvex.designContextFile` points to the Design Box file Owlvex should load. Markdown/text, DOCX, and best-effort PDF text extraction are supported.
 - `owlvex.driftBoxFile` points to the Drift Box JSON config.
 - `owlvex.driftScriptsRoot` points to the folder that contains scripts referenced by the Drift Box config.
 
@@ -53,7 +53,7 @@ Relative paths are resolved inside the selected Owlvex project root. Absolute pa
 
 ## Design Context
 
-Design Context tells Owlvex what the code is meant to do. It can be a single file selected by the user, or the default `.owlvex/design` folder when no file is configured.
+Design Context tells Owlvex what the code is meant to do. It can be a single file selected by the user, or the default `.owlvex/design` folder when no file is configured. In practice, teams often keep this in Word or PDF; Owlvex extracts text locally from DOCX and PDF files before adding it to scan context.
 
 Useful content:
 

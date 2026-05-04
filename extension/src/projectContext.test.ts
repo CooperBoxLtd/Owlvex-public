@@ -168,6 +168,74 @@ describe('project root helpers', () => {
         expect(vscode.workspace.fs.readDirectory).not.toHaveBeenCalled();
     });
 
+    it('extracts text from a configured DOCX Design Box file', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'projectRoot') {
+                    return 'D:\\repo\\tools\\benchmark-app';
+                }
+                if (key === 'designContextFile') {
+                    return 'docs\\security-design.docx';
+                }
+                if (key === 'projectContext' || key === 'projectContextFile' || key === 'teamContext') {
+                    return '';
+                }
+                return defaultValue;
+            }),
+        });
+        (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath.replace('D:\\repo\\tools\\benchmark-app\\', ''));
+
+        const xml = '<w:document><w:body><w:p><w:r><w:t>Trust boundary: browser to API.</w:t></w:r></w:p></w:body></w:document>';
+        const fileName = Buffer.from('word/document.xml', 'utf8');
+        const data = Buffer.from(xml, 'utf8');
+        const header = Buffer.alloc(30);
+        header.writeUInt32LE(0x04034b50, 0);
+        header.writeUInt16LE(0, 8);
+        header.writeUInt32LE(data.length, 18);
+        header.writeUInt32LE(data.length, 22);
+        header.writeUInt16LE(fileName.length, 26);
+        header.writeUInt16LE(0, 28);
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.concat([header, fileName, data]));
+
+        const context = await loadProjectContextInfo({
+            selectedFrameworks: ['STRIDE'],
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+
+        expect(context.designContext?.loaded).toBe(true);
+        expect(context.designContext?.files).toEqual(['docs\\security-design.docx']);
+        expect(context.combined).toContain('Trust boundary: browser to API.');
+        expect(vscode.workspace.fs.readDirectory).not.toHaveBeenCalled();
+    });
+
+    it('extracts simple text from a configured PDF Design Box file', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'projectRoot') {
+                    return 'D:\\repo\\tools\\benchmark-app';
+                }
+                if (key === 'designContextFile') {
+                    return 'docs\\security-design.pdf';
+                }
+                if (key === 'projectContext' || key === 'projectContextFile' || key === 'teamContext') {
+                    return '';
+                }
+                return defaultValue;
+            }),
+        });
+        (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath.replace('D:\\repo\\tools\\benchmark-app\\', ''));
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('%PDF\nBT\n(Trust boundary browser to API) Tj\nET\n%%EOF', 'latin1'));
+
+        const context = await loadProjectContextInfo({
+            selectedFrameworks: ['STRIDE'],
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+
+        expect(context.designContext?.loaded).toBe(true);
+        expect(context.designContext?.files).toEqual(['docs\\security-design.pdf']);
+        expect(context.combined).toContain('Trust boundary browser to API');
+    });
+
     it('marks STRIDE design context as missing when no design files are loaded', async () => {
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
             get: jest.fn((key: string, defaultValue?: any) => {

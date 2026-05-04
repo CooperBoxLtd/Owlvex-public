@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { inflateRawSync, inflateSync } from 'zlib';
 import * as vscode from 'vscode';
 import { PROFILE } from './profile';
 
@@ -198,6 +199,138 @@ function trimDesignContext(value: string): string {
         : trimmed;
 }
 
+function stripXmlTags(value: string): string {
+    return value
+        .replace(/<w:tab\/>/g, '\t')
+        .replace(/<w:br\/>/g, '\n')
+        .replace(/<\/w:p>/g, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&amp;/g, '&')
+        .replace(/&quot;/g, '"')
+        .replace(/&apos;/g, "'")
+        .replace(/\s+\n/g, '\n')
+        .replace(/[ \t]{2,}/g, ' ')
+        .trim();
+}
+
+function readUInt16(buffer: Buffer, offset: number): number {
+    return offset + 2 <= buffer.length ? buffer.readUInt16LE(offset) : 0;
+}
+
+function readUInt32(buffer: Buffer, offset: number): number {
+    return offset + 4 <= buffer.length ? buffer.readUInt32LE(offset) : 0;
+}
+
+function extractZipEntry(buffer: Buffer, entryName: string): Buffer | undefined {
+    let offset = 0;
+    while (offset + 30 < buffer.length) {
+        const signature = readUInt32(buffer, offset);
+        if (signature !== 0x04034b50) {
+            offset += 1;
+            continue;
+        }
+
+        const compression = readUInt16(buffer, offset + 8);
+        const compressedSize = readUInt32(buffer, offset + 18);
+        const fileNameLength = readUInt16(buffer, offset + 26);
+        const extraLength = readUInt16(buffer, offset + 28);
+        const nameStart = offset + 30;
+        const dataStart = nameStart + fileNameLength + extraLength;
+        const fileName = buffer.subarray(nameStart, nameStart + fileNameLength).toString('utf8');
+        const dataEnd = compressedSize ? dataStart + compressedSize : dataStart;
+
+        if (fileName === entryName && dataStart <= buffer.length && dataEnd <= buffer.length) {
+            const compressed = buffer.subarray(dataStart, dataEnd);
+            if (compression === 0) {
+                return compressed;
+            }
+            if (compression === 8) {
+                return inflateRawSync(compressed);
+            }
+            return undefined;
+        }
+
+        offset = Math.max(dataEnd, offset + 30 + fileNameLength + extraLength);
+    }
+
+    return undefined;
+}
+
+function extractDocxText(buffer: Buffer): string {
+    const documentXml = extractZipEntry(buffer, 'word/document.xml');
+    if (!documentXml) {
+        return '';
+    }
+    return stripXmlTags(documentXml.toString('utf8'));
+}
+
+function decodePdfStringLiteral(value: string): string {
+    return value
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\n')
+        .replace(/\\t/g, '\t')
+        .replace(/\\([\\()])/g, '$1')
+        .replace(/\\\d{1,3}/g, ' ');
+}
+
+function decodePdfHexString(value: string): string {
+    const clean = value.replace(/[^0-9A-Fa-f]/g, '');
+    const even = clean.length % 2 === 0 ? clean : `${clean}0`;
+    const bytes: number[] = [];
+    for (let index = 0; index < even.length; index += 2) {
+        bytes.push(parseInt(even.slice(index, index + 2), 16));
+    }
+    return Buffer.from(bytes).toString('utf8').replace(/\0/g, '');
+}
+
+function extractPdfText(buffer: Buffer): string {
+    const latin = buffer.toString('latin1');
+    const chunks: string[] = [];
+    const streamPattern = /<<(.*?)>>\s*stream\r?\n?([\s\S]*?)\r?\n?endstream/g;
+    let streamMatch: RegExpExecArray | null;
+    while ((streamMatch = streamPattern.exec(latin))) {
+        const dictionary = streamMatch[1];
+        const raw = Buffer.from(streamMatch[2], 'latin1');
+        let text = '';
+        try {
+            text = /\/FlateDecode/i.test(dictionary)
+                ? inflateSync(raw).toString('latin1')
+                : raw.toString('latin1');
+        } catch {
+            text = raw.toString('latin1');
+        }
+        chunks.push(text);
+    }
+
+    if (!chunks.length) {
+        chunks.push(latin);
+    }
+
+    const decoded: string[] = [];
+    const text = chunks.join('\n');
+    for (const match of text.matchAll(/\((?:\\.|[^\\)]){2,}\)\s*T[Jj]/g)) {
+        decoded.push(decodePdfStringLiteral(match[0].replace(/\)\s*T[Jj]$/, '').slice(1)));
+    }
+    for (const match of text.matchAll(/<([0-9A-Fa-f\s]{4,})>\s*T[Jj]/g)) {
+        decoded.push(decodePdfHexString(match[1]));
+    }
+
+    return decoded.join('\n').replace(/[^\S\r\n]{2,}/g, ' ').trim();
+}
+
+function extractDesignContextContent(filePath: string, raw: Buffer): string {
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext === '.docx') {
+        return extractDocxText(raw);
+    }
+    if (ext === '.pdf') {
+        return extractPdfText(raw);
+    }
+    return raw.toString('utf8');
+}
+
 function frameworkSelected(frameworks: string[] | undefined, name: string): boolean {
     return Boolean(frameworks?.some(item => item.toLowerCase() === name.toLowerCase()));
 }
@@ -299,14 +432,14 @@ async function tryReadDesignContextFile(
     rootUri: vscode.Uri | undefined,
 ): Promise<{ labels: string[]; content: string } | undefined> {
     const fsPath = resolveConfiguredPath(fileSetting, rootUri);
-    if (!fsPath || !/\.(md|txt)$/i.test(fsPath)) {
+    if (!fsPath || !/\.(md|txt|docx|pdf)$/i.test(fsPath)) {
         return undefined;
     }
 
     try {
         const fileUri = vscode.Uri.file(fsPath);
         const raw = await vscode.workspace.fs.readFile(fileUri);
-        const content = trimDesignContext(Buffer.from(raw).toString('utf8'));
+        const content = trimDesignContext(extractDesignContextContent(fsPath, Buffer.from(raw)));
         if (!content) {
             return undefined;
         }
