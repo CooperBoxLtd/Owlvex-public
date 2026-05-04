@@ -4,13 +4,17 @@ Owlvex is a VS Code extension for security scanning, AI-assisted review, evidenc
 
 It is built for developers who want to catch useful security issues while they are still working in the editor, not after code has already moved downstream.
 
+## Prototype Notice
+
+Owlvex is currently a prototype/evaluation product.
+
+Use it to find useful security signals early, preview fixes, and validate whether the workflow helps your development process. Do not treat Owlvex output as a final security sign-off. Validate important findings, fixes, and reports before relying on them.
+
 ## Current Version
 
-`0.1.30`
+`0.1.37`
 
-## Prototype Status
-
-Owlvex is still a prototype/evaluation product.
+## What To Expect
 
 Use it with these expectations:
 
@@ -27,6 +31,7 @@ Owlvex combines:
 - sink and guard discovery
 - safe probe verification for selected issues
 - repo-context AI review
+- optional TDD/spec grounding
 - optional design/context grounding
 - optional project-owned drift checks
 - summary and full evidence reports
@@ -187,6 +192,34 @@ The fix loop should continue until:
 - a finding is explicitly left for manual review
 
 Owlvex should reject broad or unanchored patches when a fix rewrites too much of a file for the selected finding.
+
+## TDD Box
+
+TDD Box lets you point Owlvex at a local Markdown or text file that describes expected product behavior.
+
+Use it for:
+
+- test-driven design notes
+- product behavior that must not change
+- API or protocol contracts
+- acceptance criteria
+- important implementation boundaries
+
+TDD Box is local grounding context for scan and fix reasoning. It is not a security framework and it does not run scripts.
+
+Supported file types:
+
+- Markdown
+- text
+
+Setting:
+
+- `owlvex.projectContextFile`
+- `owlvex.tddBoxEnabled`
+
+Command:
+
+- `Owlvex: Open TDD Box`
 
 ## Design Box
 

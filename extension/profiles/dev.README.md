@@ -2,15 +2,21 @@
 
 Internal Owlvex development build for validating the full developer workflow before production packaging.
 
+## Prototype Notice
+
+Owlvex is currently a prototype/evaluation product.
+
+This dev build is for validating behavior before production release. Do not treat scan output as a final security sign-off; validate important findings, fixes, and reports before relying on them.
+
 Use this build to test the path a new user should experience:
 
 `install -> register/access -> select project root -> configure provider -> scan -> report -> preview fix -> verify -> continue`
 
-This dev build is also where we validate Design Box and Drift Box before releasing them to production.
+This dev build is also where we validate TDD Box, Design Box, and Drift Box before releasing them to production.
 
 ## Current Version
 
-`0.1.30-dev`
+`0.1.37-dev`
 
 ## Build Target
 
@@ -18,7 +24,7 @@ This dev build is also where we validate Design Box and Drift Box before releasi
 - config section: `owlvexDev`
 - backend: Azure dev control plane
 - OWASP lens: OWASP Top 10 2025
-- purpose: internal validation of onboarding, scan quality, reports, Design Box, Drift Box, and fix preview behavior before production packaging
+- purpose: internal validation of onboarding, scan quality, reports, TDD Box, Design Box, Drift Box, and fix preview behavior before production packaging
 
 ## Current Validation Focus
 
@@ -27,6 +33,7 @@ Use this build to validate:
 - first-run onboarding
 - project-root selection
 - changed-file and selected-file scanning
+- TDD Box grounding
 - Design Box context loading
 - Drift Box behavior checks
 - report clarity
@@ -47,6 +54,32 @@ Use this build to validate:
 8. Run a changed-file scan.
 9. Create a summary report.
 10. Preview a fix and verify the post-fix continuation message.
+
+## TDD Box Test Path
+
+TDD Box should load a selected local Markdown or text file and include it as scan/fix grounding context.
+
+Test file types:
+
+- `.md`
+- `.txt`
+
+Expected behavior:
+
+- selected files are stored in `owlvexDev.projectContextFile`
+- configured TDD files are treated as enabled by default unless explicitly disabled
+- the Scan Profile picker keeps TDD Box ticked when a file is configured
+- reports/chat context show the TDD file when it is active
+- TDD Box does not run scripts and is not presented as a security framework
+
+Settings:
+
+- `owlvexDev.projectContextFile`
+- `owlvexDev.tddBoxEnabled`
+
+Command:
+
+- `Owlvex Dev: Open TDD Box`
 
 ## Design Box Test Path
 
