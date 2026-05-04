@@ -2994,9 +2994,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand(PROFILE.commands.selectFrameworks, async () => {
-            const currentSelection = config.get<string[]>('frameworks', ['OWASP', 'STRIDE']);
-            const currentTddBoxEnabled = getEffectiveTddBoxEnabled(config);
-            const currentDriftBoxEnabled = getEffectiveDriftBoxEnabled(config);
+            const profileConfig = vscode.workspace.getConfiguration(PROFILE.configSection);
+            const currentSelection = profileConfig.get<string[]>('frameworks', ['OWASP', 'STRIDE']);
+            const currentTddBoxEnabled = getEffectiveTddBoxEnabled(profileConfig);
+            const currentDriftBoxEnabled = getEffectiveDriftBoxEnabled(profileConfig);
             let allowedFrameworks = licenceMgr.getCachedInfo()?.features.frameworks;
             if (!allowedFrameworks?.length) {
                 try {
