@@ -2,65 +2,176 @@
 
 Internal Owlvex development build.
 
-## Build
+## Current Version
 
-- version: `0.1.27-dev`
-- target: Azure dev backend
-- focus: OWASP Top 10 2025 development alignment, evidence-first scanning, safe probe verification, report clarity, and fix verification loops
+`0.1.30-dev`
 
-## Intended Use
+## Build Target
 
-- internal testing
-- integration checks against the Azure dev control plane
-- UI, scanning, onboarding, and workflow validation
+- extension id: `owlvex.owlvex-dev`
+- config section: `owlvexDev`
+- backend: Azure dev control plane
+- OWASP lens: OWASP Top 10 2025
+- purpose: internal validation before production packaging
 
-## Current Engine Notes
+## Current Validation Focus
 
-- Development builds resolve the `OWASP` framework lens to OWASP Top 10 2025. Production remains on the OWASP 2021 lens until this is validated.
-- Safe probe verification now runs before verifier escalation when a finding can be checked without side effects.
-- Probe-confirmed blocked flows skip extra AI verifier work.
-- Probe residue is reported as unresolved evidence only when canary data still reaches a risky sink.
-- Fix verification should continue until all findings on changed files are resolved or explicitly left for manual review.
+Use this build to validate:
 
-## Notes
+- first-run onboarding
+- project-root selection
+- changed-file and selected-file scanning
+- Design Box context loading
+- Drift Box behavior checks
+- report clarity
+- fix preview guardrails
+- post-fix continuation queues
+- provider throttling behavior
+- safe probe and sink evidence
 
-- this build is not intended as customer-facing documentation
-- behavior can change quickly between builds
-- dev and prod may differ in backend wiring, seed data, and feature validation state
-- if both `Owlvex` and `Owlvex Dev` are installed in the same VS Code instance, status bar indicators and activity views can be misread as a single environment; verify which extension view is active before interpreting licence or provider state
-
-## Internal Workflow
+## First-Run Test Path
 
 1. Install the dev VSIX.
-2. Open the Owlvex activity view.
-3. Configure a supported provider if needed.
-4. Run scans, create reports, compare reports, and exercise fix preview flows.
-5. Record bugs with:
-   - provider/model used
-   - exact command or UI flow
-   - report file when relevant
-   - scan warnings or throttling notes
+2. Open the Owlvex Dev activity view.
+3. Confirm the extension clearly shows dev status.
+4. Register access or enter a dev licence.
+5. Configure provider/model.
+6. Select project root.
+7. Run a current-file scan.
+8. Run a changed-file scan.
+9. Create a summary report.
+10. Preview a fix and verify the post-fix continuation message.
 
-## Report Confidence Checks
+## Design Box Test Path
 
-When validating reports, check that AI evidence language does not overstate the result:
+Design Box should load a local context file and include it as scan reference material.
 
-- finder-only findings must not be described as `Validated by AI review`
-- finder-only findings should show `review path finder`
-- raw confidence should be visible as `AI signal <band> (<percent> final)`
-- `Validated by AI review` should only appear when verifier or skeptic evidence exists
-- high AI confidence is model confidence, not deterministic proof
+Test file types:
+
+- `.md`
+- `.txt`
+- `.docx`
+- `.pdf`
+
+Expected behavior:
+
+- unsupported files are rejected or ignored with a warning
+- extracted design context is bounded as reference context, not model instructions
+- reports state whether design context was used
+- STRIDE and architecture-heavy reviews use the design context to reason about trust boundaries, roles, and data flows
+
+Setting:
+
+- `owlvexDev.designContextFile`
+
+Command:
+
+- `Owlvex Dev: Open Design Context`
+
+## Drift Box Test Path
+
+Drift Box is for project-owned behavior, contract, smoke, and workflow scripts.
+
+It must not be positioned as:
+
+- OWASP scanning
+- CodeQL scanning
+- Semgrep scanning
+- duplicate SAST
+
+Expected behavior:
+
+- scripts run only when configured and enabled
+- scope controls when checks run: `scan`, `fix-preview`, `post-fix`
+- legacy `frameworks` fields are metadata only
+- reports show Drift Box only when configured and enabled
+- output is pass/fail/skipped/error
+- drift failures do not block scans, fixes, post-fix verification, or security-clean status
+
+Settings:
+
+- `owlvexDev.driftBoxFile`
+- `owlvexDev.driftScriptsRoot`
+
+Command:
+
+- `Owlvex Dev: Open Drift Box`
+
+## Report Checks
+
+When validating reports, check:
+
+- Summary Report is useful without opening the full evidence report.
+- Full Evidence Report contains proof posture and source/sink/probe detail.
+- Design context appears only when configured.
+- Drift results appear only when configured and enabled.
+- AI confidence does not read as deterministic proof.
+- Finder-only findings do not say `Validated by AI review`.
+- `Validated by AI review` appears only when verifier or skeptic evidence exists.
+- Provider/model and throttling warnings are visible where relevant.
+
+## Fix Preview Checks
+
+When validating fix preview:
+
+- generated patches should stay finding-anchored
+- broad rewrites should be rejected
+- fixes should not invent unsupported business models
+- Keep Fix should trigger verification
+- unresolved post-fix findings should appear in one continuation queue
+- continuation should proceed until clean, cancelled, or left for manual review
 
 ## Framework Selection Checks
 
-When testing framework selection:
+Selected frameworks should guide:
 
-- selected frameworks should guide AI grounding, report emphasis, remediation variants, and expanded mapping detail
-- deterministic scanner rules should still run security-first when code evidence proves an issue
-- reports should explain why canonical mappings such as CWE, OWASP, MITRE, or NIST can appear even when those frameworks were not selected
-- unselected-framework mappings should read as taxonomy references, not as proof that all framework lenses were active
-- issue titles must follow the evidence contract; for example PII response evidence must not render as a GraphQL introspection finding
+- grounding
+- explanation
+- remediation wording
+- expanded mapping detail
 
-## Reminder
+They should not disable core deterministic security evidence.
 
-If you need customer-facing install/use/limitations guidance, use the production package documentation instead.
+Canonical references such as CWE, OWASP, MITRE, NIST, PCI DSS, STRIDE, and Clean Code may still appear as taxonomy mappings.
+
+## Provider Checks
+
+When testing providers, record:
+
+- provider
+- model
+- scan scope
+- throttling warnings
+- 429s or retries
+- elapsed time
+- report path
+
+Azure AI Foundry may be paced by default. Other providers should run loose unless configured or rate-limited.
+
+## Dev/Prod Coexistence Warning
+
+If both Owlvex and Owlvex Dev are installed in the same VS Code instance:
+
+- verify which activity view is active
+- verify the status bar label
+- verify the backend URL
+- verify the config section
+- avoid interpreting dev and prod licence/provider state as the same environment
+
+## Bug Report Template
+
+Collect:
+
+- dev VSIX version
+- commit SHA
+- backend URL
+- provider/model
+- project root
+- scan scope
+- selected frameworks
+- report file
+- Design Box file type if used
+- Drift Box config if used
+- exact action clicked
+- expected result
+- actual result
