@@ -4,7 +4,21 @@ Prototype VS Code extension for security scanning, AI-assisted review, and fix p
 
 ## Current Version
 
-`0.1.29`
+`0.1.37`
+
+## Download
+
+- Marketplace: https://marketplace.visualstudio.com/items?itemName=owlvex.owlvex
+- VSIX: [owlvex-0.1.37.vsix](releases/owlvex-0.1.37.vsix)
+- SHA256: `10E5EB0B12ADE068DBF15DF9B5EA795FEABA8F058074D533A4E0582CB6E315CD`
+
+Install from terminal:
+
+```powershell
+code --install-extension .\releases\owlvex-0.1.37.vsix --force
+```
+
+Support: [SUPPORT.md](SUPPORT.md) or info@cooperbox.co.uk
 
 ## Prototype Status
 
@@ -25,6 +39,9 @@ Owlvex combines:
 - safe probe verification for selected sink-driven findings
 - AI-assisted targeted review
 - repo-context reasoning for some workflows
+- TDD/spec grounding context
+- Design Box architecture context
+- Drift Box report-only behavior checks
 - report generation
 - report comparison
 - fix preview and verification flows

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.37
+
+- add TDD Box grounding for local Markdown/text product behavior context
+- add Design Box and Drift Box workflow documentation to the extension details
+- keep configured TDD and Drift boxes active unless explicitly disabled
+- run Drift Box package validation commands such as `npm run validate`
+- fix Windows Drift Box execution for npm package scripts
+- clarify prototype/evaluation status in the packaged extension README
+
 ## 0.1.29
 
 - promote the 2026-04-28 dev-validated backend image to production
