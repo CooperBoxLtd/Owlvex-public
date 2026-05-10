@@ -250,6 +250,14 @@ export interface EngineTelemetry {
 export interface ScanDocumentOptions {
     forceDeterministicOnly?: boolean;
     deterministicOnlyReason?: string;
+    driftBoxContext?: DriftBoxScanContext;
+    driftResults?: DriftRunResult[];
+}
+
+export interface SharedDriftScanContext {
+    driftBox: DriftBoxLoadResult;
+    driftBoxContext: DriftBoxScanContext;
+    driftResults: DriftRunResult[];
 }
 
 interface PromptContext {
@@ -2181,6 +2189,22 @@ export class ScanEngine {
         }
     }
 
+    async prepareSharedDriftScanContext(targetUris: vscode.Uri[] | undefined, scope: 'scan' | 'post-fix' = 'scan'): Promise<SharedDriftScanContext> {
+        const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+        const driftBoxEnabled = isDriftBoxEffectivelyEnabled(config);
+        const frameworks = config.get<string[]>('frameworks', ['OWASP']);
+        const driftBox = driftBoxEnabled
+            ? await loadDriftBoxConfig({
+                targetUris,
+                selectedFrameworks: frameworks,
+                scope,
+            })
+            : disabledDriftBoxContext();
+        const driftBoxContext = toDriftBoxScanContext(driftBox);
+        const driftResults = await this._runDriftChecksIfAvailable(driftBox);
+        return { driftBox, driftBoxContext, driftResults };
+    }
+
     private async _buildRelatedProbeContext(document: vscode.TextDocument, code: string): Promise<string> {
         const snippets: string[] = [];
         const seen = new Set<string>();
@@ -2369,15 +2393,17 @@ export class ScanEngine {
         return { findings: enriched, telemetry };
     }
 
-    async scanDocumentsBatch(documents: vscode.TextDocument[]): Promise<ScanResult[]> {
+    async scanDocumentsBatch(documents: vscode.TextDocument[], options?: { sharedDrift?: SharedDriftScanContext }): Promise<ScanResult[]> {
         if (documents.length <= 1) {
-            return Promise.all(documents.map(document => this.scanDocument(document)));
+            return Promise.all(documents.map(document => this.scanDocument(document, options?.sharedDrift ? {
+                driftBoxContext: options.sharedDrift.driftBoxContext,
+                driftResults: options.sharedDrift.driftResults,
+            } : undefined)));
         }
 
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
-        const driftBoxEnabled = isDriftBoxEffectivelyEnabled(config);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const provider = this.registry.getActive();
         const projectContext = await loadProjectContextInfo({
@@ -2386,17 +2412,14 @@ export class ScanEngine {
                 .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
             selectedFrameworks: frameworks,
         });
-        const driftBox = driftBoxEnabled
-            ? await loadDriftBoxConfig({
-                targetUris: documents
-                    .map(document => document.uri)
-                    .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
-                selectedFrameworks: frameworks,
-                scope: 'scan',
-            })
-            : disabledDriftBoxContext();
-        const driftBoxContext = toDriftBoxScanContext(driftBox);
-        const driftResults = await this._runDriftChecksIfAvailable(driftBox);
+        const sharedDrift = options?.sharedDrift ?? await this.prepareSharedDriftScanContext(
+            documents
+                .map(document => document.uri)
+                .filter((uri): uri is vscode.Uri => Boolean(uri?.fsPath)),
+            'scan',
+        );
+        const driftBoxContext = sharedDrift.driftBoxContext;
+        const driftResults = sharedDrift.driftResults;
 
         const contexts: BatchDocumentContext[] = await Promise.all(documents.map(async (document, index) => {
             const code = document.getText();
@@ -2760,7 +2783,6 @@ export class ScanEngine {
         const config = vscode.workspace.getConfiguration(PROFILE.configSection);
         const apiUrl = config.get<string>('apiUrl') ?? PROFILE.defaultApiUrl;
         const frameworks = config.get<string[]>('frameworks', ['OWASP']);
-        const driftBoxEnabled = isDriftBoxEffectivelyEnabled(config);
         const severityThreshold = config.get<string>('severityThreshold', 'MEDIUM');
         const language = this._detectLanguage(document);
         const provider = this.registry.getActive();
@@ -2768,15 +2790,14 @@ export class ScanEngine {
             targetUris: document.uri?.fsPath ? [document.uri] : undefined,
             selectedFrameworks: frameworks,
         });
-        const driftBox = driftBoxEnabled
-            ? await loadDriftBoxConfig({
-                targetUris: document.uri?.fsPath ? [document.uri] : undefined,
-                selectedFrameworks: frameworks,
-                scope: 'scan',
-            })
-            : disabledDriftBoxContext();
-        const driftBoxContext = toDriftBoxScanContext(driftBox);
-        const driftResults = await this._runDriftChecksIfAvailable(driftBox);
+        const sharedDrift = options?.driftBoxContext && options?.driftResults
+            ? {
+                driftBoxContext: options.driftBoxContext,
+                driftResults: options.driftResults,
+            }
+            : await this.prepareSharedDriftScanContext(document.uri?.fsPath ? [document.uri] : undefined, 'scan');
+        const driftBoxContext = sharedDrift.driftBoxContext;
+        const driftResults = sharedDrift.driftResults;
 
         const code = document.getText();
         const baseDeterministicFindings = this.deterministicScanner

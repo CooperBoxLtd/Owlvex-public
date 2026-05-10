@@ -10,7 +10,7 @@ import { SidebarProvider } from './panels/sidebarProvider';
 import { ChatViewProvider } from './panels/chatViewProvider';
 import { OWLVEX_PREVIEW_SCHEME, PreviewDocumentProvider } from './panels/previewDocumentProvider';
 import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
-import { collectChangedScannableFiles, pickScanFile, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
+import { ChangedFileSkip, collectChangedScannableFilesDetailed, pickScanFile, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot, ReportVariant } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { configureFrameworkPackRuntime } from './frameworks/frameworkGrounding';
@@ -67,6 +67,8 @@ interface ScanChangedFilesCommandResult {
     status: 'completed' | 'cancelled' | 'empty' | 'failed';
     root?: vscode.Uri;
     files?: vscode.Uri[];
+    gitChangedCount?: number;
+    skipped?: ChangedFileSkip[];
     completed: number;
     totalFindings: number;
     errors: string[];
@@ -3318,10 +3320,24 @@ export function activate(context: vscode.ExtensionContext) {
                 return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
             }
 
-            const fileUris = await collectChangedScannableFiles(root);
+            const changedFiles = await collectChangedScannableFilesDetailed(root);
+            const fileUris = changedFiles.files;
             if (!fileUris.length) {
-                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No changed source files were found under ${vscode.workspace.asRelativePath(root, false) || root.fsPath}.`);
-                return { status: 'empty', root, files: [], completed: 0, totalFindings: 0, errors: [], results: [] };
+                const skippedSummary = changedFiles.skipped.length
+                    ? ` ${changedFiles.skipped.length} changed file(s) were skipped because they are not supported source files.`
+                    : '';
+                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No changed source files were found under ${vscode.workspace.asRelativePath(root, false) || root.fsPath}.${skippedSummary}`);
+                return {
+                    status: 'empty',
+                    root,
+                    files: [],
+                    gitChangedCount: changedFiles.gitChangedPaths.length,
+                    skipped: changedFiles.skipped,
+                    completed: 0,
+                    totalFindings: 0,
+                    errors: [],
+                    results: [],
+                };
             }
 
             statusBar.showScanning();
@@ -3362,6 +3378,8 @@ export function activate(context: vscode.ExtensionContext) {
                     void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
                         scope: 'changed_files',
                         file_count: enrichedResults.length,
+                        git_changed_count: changedFiles.gitChangedPaths.length,
+                        skipped_count: changedFiles.skipped.length,
                         finding_count: totalFindings,
                     }, {
                         registry,
@@ -3381,7 +3399,9 @@ export function activate(context: vscode.ExtensionContext) {
                         finding_count: totalFindings,
                     });
                     await persistLastReportSnapshot({
-                        targetLabel: `${enrichedResults.length} changed file(s)`,
+                        targetLabel: changedFiles.skipped.length
+                            ? `${enrichedResults.length} changed source file(s), ${changedFiles.skipped.length} skipped`
+                            : `${enrichedResults.length} changed source file(s)`,
                         outputRoot: root,
                         errors: summary.errors,
                         results: enrichedResults,
@@ -3423,6 +3443,8 @@ export function activate(context: vscode.ExtensionContext) {
                     status: summary.status,
                     root,
                     files: fileUris,
+                    gitChangedCount: changedFiles.gitChangedPaths.length,
+                    skipped: changedFiles.skipped,
                     completed: summary.completed,
                     totalFindings,
                     errors: summary.errors,

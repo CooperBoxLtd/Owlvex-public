@@ -71,6 +71,17 @@ interface BatchRequestBudgetPlan {
 
 type ScanPacingMode = 'workspace' | 'interactive';
 
+export interface ChangedFileSkip {
+    path: string;
+    reason: string;
+}
+
+export interface ChangedScannableFilesResult {
+    files: vscode.Uri[];
+    gitChangedPaths: string[];
+    skipped: ChangedFileSkip[];
+}
+
 function getProactiveSpacingMs(
     profile: ProviderRateBudgetProfile | undefined,
 ): number {
@@ -273,7 +284,30 @@ async function existingScannableGitPath(root: vscode.Uri, relativePath: string):
     }
 }
 
-export async function collectChangedScannableFiles(root: vscode.Uri, limit = 200): Promise<vscode.Uri[]> {
+function getUnsupportedChangedFileReason(relativePath: string): string {
+    const basename = path.basename(relativePath).toLowerCase();
+    const extension = path.extname(relativePath).toLowerCase();
+
+    if (basename === 'package-lock.json' || basename === 'pnpm-lock.yaml' || basename === 'yarn.lock') {
+        return 'lockfile; dependency/supply-chain scanning is separate from source scanning';
+    }
+
+    if (basename === '.gitignore' || basename === '.gitattributes') {
+        return 'Git metadata; not scanned as application source';
+    }
+
+    if (extension === '.md' || extension === '.txt' || extension === '.pdf' || extension === '.docx') {
+        return 'documentation/context file; use TDD Box or Design Box when it should ground a scan';
+    }
+
+    if (extension === '.json' || extension === '.yaml' || extension === '.yml' || extension === '.toml') {
+        return 'configuration file; not currently scanned as source';
+    }
+
+    return 'unsupported file type for source scanning';
+}
+
+export async function collectChangedScannableFilesDetailed(root: vscode.Uri, limit = 200): Promise<ChangedScannableFilesResult> {
     let changedPaths: string[] = [];
     try {
         changedPaths = await runGit(root, ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', 'HEAD', '--', '.']);
@@ -281,7 +315,7 @@ export async function collectChangedScannableFiles(root: vscode.Uri, limit = 200
         try {
             changedPaths = await runGit(root, ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', '--', '.']);
         } catch {
-            return [];
+            return { files: [], gitChangedPaths: [], skipped: [] };
         }
     }
 
@@ -294,15 +328,26 @@ export async function collectChangedScannableFiles(root: vscode.Uri, limit = 200
 
     const uniquePaths = [...new Set([...changedPaths, ...untrackedPaths])].slice(0, limit * 2);
     const files: vscode.Uri[] = [];
+    const skipped: ChangedFileSkip[] = [];
     for (const relativePath of uniquePaths) {
         if (files.length >= limit) break;
         const uri = await existingScannableGitPath(root, relativePath);
         if (uri) {
             files.push(uri);
+        } else {
+            skipped.push({
+                path: relativePath,
+                reason: getUnsupportedChangedFileReason(relativePath),
+            });
         }
     }
 
-    return files;
+    return { files, gitChangedPaths: uniquePaths, skipped };
+}
+
+export async function collectChangedScannableFiles(root: vscode.Uri, limit = 200): Promise<vscode.Uri[]> {
+    const result = await collectChangedScannableFilesDetailed(root, limit);
+    return result.files;
 }
 
 export interface FolderScanFileResult {
@@ -408,6 +453,9 @@ async function scanUris(options: {
     const model = modelSettingKey ? config.get<string>(modelSettingKey) : undefined;
     const batchBudgetPlan = planBatchRequestBudget(files.length, provider, model, options.pacingMode);
     let proactiveBudgetUntil = 0;
+    const sharedDrift = typeof (options.scanEngine as any).prepareSharedDriftScanContext === 'function'
+        ? await (options.scanEngine as any).prepareSharedDriftScanContext(files, 'scan')
+        : undefined;
 
     if (batchBudgetPlan.proactiveSpacingMs > 0 && files.length > 1) {
         proactiveBudgetUntil = Date.now() + batchBudgetPlan.proactiveSpacingMs;
@@ -454,8 +502,15 @@ async function scanUris(options: {
                     const batchUris = shouldBatch ? remainingFiles.slice(0, AI_BATCH_SIZE) : [uri];
                     const documents = await Promise.all(batchUris.map(batchUri => vscode.workspace.openTextDocument(batchUri)));
                     const batchResults: ScanResult[] = shouldBatch
-                        ? await (options.scanEngine as any).scanDocumentsBatch(documents)
-                        : [await options.scanEngine.scanDocument(documents[0])];
+                        ? sharedDrift
+                            ? await (options.scanEngine as any).scanDocumentsBatch(documents, { sharedDrift })
+                            : await (options.scanEngine as any).scanDocumentsBatch(documents)
+                        : [sharedDrift
+                            ? await options.scanEngine.scanDocument(documents[0], {
+                                driftBoxContext: sharedDrift.driftBoxContext,
+                                driftResults: sharedDrift.driftResults,
+                            })
+                            : await options.scanEngine.scanDocument(documents[0])];
 
                     for (let batchIndex = 0; batchIndex < batchResults.length; batchIndex += 1) {
                         let batchResult = batchResults[batchIndex];
@@ -464,7 +519,10 @@ async function scanUris(options: {
 
                         if (shouldBatch && isDeterministicOnlyCleanResult(batchResult)) {
                             try {
-                                const retryResult = await options.scanEngine.scanDocument(batchDoc);
+                                const retryResult = await options.scanEngine.scanDocument(batchDoc, sharedDrift ? {
+                                    driftBoxContext: sharedDrift.driftBoxContext,
+                                    driftResults: sharedDrift.driftResults,
+                                } : undefined);
                                 if (!/\(deterministic-only\)/i.test(retryResult.model) || retryResult.findings.length > 0) {
                                     batchResult = {
                                         ...retryResult,

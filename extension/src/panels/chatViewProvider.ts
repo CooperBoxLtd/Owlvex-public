@@ -813,6 +813,7 @@ function buildMultiFileScanResponse(
     errors: unknown[],
     topActionable?: { finding: Finding; targetPath?: string },
     reportPath?: string,
+    extraLines: string[] = [],
 ): string {
     const findings = results.flatMap(item => item.result.findings ?? []);
     const warnings = results.reduce((total, item) => total + (item.result.warnings?.length ?? 0), 0);
@@ -832,9 +833,35 @@ function buildMultiFileScanResponse(
         ...buildGroundedRemediationHighlights(findings).map((line, index) => `Remediation ${index + 1}: ${line}`),
         topActionable ? `Next step: Preview fix opens a side-by-side diff for ${path.basename(topActionable.targetPath ?? 'the top finding file')}.` : '',
         reportPath ? `Report: ${reportPath}` : '',
+        ...extraLines,
         warnings ? `Scan warnings: ${warnings}` : 'No scan warnings were reported.',
         errors.length ? `Scan errors: ${errors.length}` : 'No scan errors were reported.',
     ].filter(Boolean).join('\n');
+}
+
+function buildChangedFilesSkipLines(result: any): string[] {
+    const gitChangedCount = Number(result?.gitChangedCount ?? 0);
+    const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
+    if (!gitChangedCount && !skipped.length) {
+        return [];
+    }
+
+    const lines = [
+        `Git changed files detected: ${gitChangedCount || result.completed + skipped.length}`,
+        `Skipped changed files: ${skipped.length}`,
+    ];
+
+    for (const item of skipped.slice(0, 5)) {
+        const filePath = typeof item?.path === 'string' ? item.path : 'unknown';
+        const reason = typeof item?.reason === 'string' ? item.reason : 'not scanned';
+        lines.push(`Skipped: ${filePath} - ${reason}`);
+    }
+
+    if (skipped.length > 5) {
+        lines.push(`Skipped: ${skipped.length - 5} more file(s) not shown.`);
+    }
+
+    return lines;
 }
 
 function buildCalibrationRecords(results: Array<{ uri: vscode.Uri; result: ScanResult }>): StoredScanRecord[] {
@@ -3556,7 +3583,15 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return { handled: true, response: 'Changed-files scan was cancelled.', kind: 'scan' };
             }
             if (result?.status === 'empty') {
-                return { handled: true, response: 'No changed source files were found under the selected project root.', kind: 'scan' };
+                const skipLines = buildChangedFilesSkipLines(result);
+                return {
+                    handled: true,
+                    response: [
+                        'No changed source files were found under the selected project root.',
+                        ...skipLines,
+                    ].join('\n'),
+                    kind: 'scan',
+                };
             }
             if (result?.status === 'failed') {
                 return {
@@ -3579,7 +3614,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             actions.push(buildExplainScoreAction('explain-score-scan-changed-files-intent', result.results ?? []));
             return {
                 handled: true,
-                response: buildMultiFileScanResponse('Changed files scan', result.completed, result.results ?? [], result.errors ?? [], topActionable),
+                response: buildMultiFileScanResponse('Changed files scan', result.completed, result.results ?? [], result.errors ?? [], topActionable, undefined, buildChangedFilesSkipLines(result)),
                 kind: 'scan',
                 actions,
             };

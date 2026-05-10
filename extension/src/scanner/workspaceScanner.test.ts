@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import * as vscode from 'vscode';
-import { collectChangedScannableFiles, collectScannableFiles, getActiveScannableEditorUri, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './workspaceScanner';
+import { collectChangedScannableFiles, collectChangedScannableFilesDetailed, collectScannableFiles, getActiveScannableEditorUri, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './workspaceScanner';
 
 jest.mock('fs/promises');
 jest.mock('child_process', () => ({
@@ -82,6 +82,46 @@ describe('workspaceScanner', () => {
         ]);
     });
 
+    it('reports changed files skipped because they are not source scan targets', async () => {
+        (execFile as unknown as jest.Mock)
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/app.js\0APP_IMPROVEMENT_RECOMMENDATIONS.md\0.owlvex/drift/owlvex-drift.json\0package-lock.json\0.gitignore\0', ''))
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/new.ts\0', ''));
+        (fs.stat as jest.Mock).mockResolvedValue({ isFile: () => true });
+
+        const result = await collectChangedScannableFilesDetailed(vscode.Uri.file('d:\\repo'));
+
+        expect(result.files.map(file => normalizeTestPath(file.fsPath))).toEqual([
+            'd:/repo/src/app.js',
+            'd:/repo/src/new.ts',
+        ]);
+        expect(result.gitChangedPaths).toEqual([
+            'src/app.js',
+            'APP_IMPROVEMENT_RECOMMENDATIONS.md',
+            '.owlvex/drift/owlvex-drift.json',
+            'package-lock.json',
+            '.gitignore',
+            'src/new.ts',
+        ]);
+        expect(result.skipped).toEqual([
+            {
+                path: 'APP_IMPROVEMENT_RECOMMENDATIONS.md',
+                reason: 'documentation/context file; use TDD Box or Design Box when it should ground a scan',
+            },
+            {
+                path: '.owlvex/drift/owlvex-drift.json',
+                reason: 'configuration file; not currently scanned as source',
+            },
+            {
+                path: 'package-lock.json',
+                reason: 'lockfile; dependency/supply-chain scanning is separate from source scanning',
+            },
+            {
+                path: '.gitignore',
+                reason: 'Git metadata; not scanned as application source',
+            },
+        ]);
+    });
+
     it('counts only successful scans as completed', async () => {
         (fs.readdir as jest.Mock).mockImplementation(async (currentPath: string) => {
             if (currentPath.endsWith('repo')) {
@@ -124,6 +164,84 @@ describe('workspaceScanner', () => {
         expect(summary.errors).toEqual(['bad.js: provider timeout']);
         expect(summary.results).toHaveLength(1);
         expect(summary.totalFindings).toBe(1);
+    });
+
+    it('prepares Drift Box once for a multi-file scan and reuses it for each batch', async () => {
+        const files = [
+            vscode.Uri.file('d:\\repo\\src\\one.js'),
+            vscode.Uri.file('d:\\repo\\src\\two.js'),
+            vscode.Uri.file('d:\\repo\\src\\three.js'),
+            vscode.Uri.file('d:\\repo\\src\\four.js'),
+        ];
+        const sharedDrift = {
+            driftBoxContext: {
+                found: true,
+                summary: 'drift box 1 ready',
+                warnings: [],
+                checks: [],
+            },
+            driftResults: [{
+                id: 'validate',
+                label: 'validate',
+                command: 'npm run validate',
+                status: 'passed',
+                exitCode: 0,
+                durationMs: 100,
+                stdout: 'ok',
+                stderr: '',
+            }],
+        };
+        const scanEngine = {
+            prepareSharedDriftScanContext: jest.fn().mockResolvedValue(sharedDrift),
+            scanDocumentsBatch: jest.fn(async (documents: any[], options: any) => documents.map((document: any) => ({
+                scanId: `scan-${document.fileName}`,
+                score: 0,
+                summary: 'clean',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                durationMs: 10,
+                model: 'owlvex-test-model',
+                provider: 'test-provider',
+                warnings: [],
+                driftBox: options.sharedDrift.driftBoxContext,
+                driftResults: options.sharedDrift.driftResults,
+            }))),
+            scanDocument: jest.fn(async (document: any, options: any) => ({
+                scanId: `scan-${document.fileName}`,
+                score: 0,
+                summary: 'clean',
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                durationMs: 10,
+                model: 'owlvex-test-model',
+                provider: 'test-provider',
+                warnings: [],
+                driftBox: options.driftBoxContext,
+                driftResults: options.driftResults,
+            })),
+        };
+        const diagnostics = { applyFindings: jest.fn() };
+
+        const summary = await scanSelectedFiles({
+            files,
+            scanEngine: scanEngine as any,
+            diagnostics,
+            skipConfirmation: true,
+        });
+
+        expect(scanEngine.prepareSharedDriftScanContext).toHaveBeenCalledTimes(1);
+        expect(scanEngine.prepareSharedDriftScanContext).toHaveBeenCalledWith(files, 'scan');
+        expect(scanEngine.scanDocumentsBatch).toHaveBeenCalledTimes(1);
+        expect(scanEngine.scanDocument).toHaveBeenCalledTimes(1);
+        expect(scanEngine.scanDocumentsBatch.mock.calls[0][1]).toEqual({ sharedDrift });
+        expect(scanEngine.scanDocument.mock.calls[0][1]).toEqual({
+            driftBoxContext: sharedDrift.driftBoxContext,
+            driftResults: sharedDrift.driftResults,
+        });
+        expect(summary.results).toHaveLength(4);
+        expect(summary.results.every(item => item.result.driftResults === sharedDrift.driftResults)).toBe(true);
     });
 
     it('returns failed status when every selected file errors', async () => {

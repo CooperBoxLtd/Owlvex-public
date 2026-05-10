@@ -1103,6 +1103,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('- Drift run: passed 1 | failed 0 | timed out 0 | not approved 0 | skipped 0');
         expect(written).toContain('- passed: api-contract (API contract still holds) | 42ms | exit 0 | stdout: contract ok');
         expect(written).toContain('- Scan warnings: 0');
+        expect(written.match(/- Drift run: passed 1 \| failed 0 \| timed out 0 \| not approved 0 \| skipped 0/g)).toHaveLength(3);
     });
 
     it('omits Drift Box report text when the box has no enabled checks', async () => {

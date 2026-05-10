@@ -109,6 +109,56 @@ The current hybrid scanner is being formalized, not replaced. Future implementat
 
 and should support a client-side Project Context Contract that can ground AI reasoning without weakening the source-code privacy boundary.
 
+## Product 80/20 Priorities
+
+This is the current "80 percent of value for 20 percent of effort" shortlist. It is a product-priority note, not a release checklist. Use it when deciding what to improve next without expanding scope unnecessarily.
+
+1. Tighten onboarding funnel telemetry.
+   - Capture exact failure step, not just that onboarding failed.
+   - This is the fastest path to understanding why users do not reach first value.
+
+2. Make changed-files scan the default daily path.
+   - Most developers care about what they are editing now, not a full workspace rescan.
+   - This reduces friction and makes Owlvex feel useful earlier.
+
+3. Strengthen deterministic coverage for the top issue families.
+   - Prioritize SSRF, SQL injection, command injection, path traversal, access control, CSRF, JWT validation, sensitive logging, and hardcoded secret patterns.
+   - This gives the largest false-positive reduction per unit of effort.
+
+4. Show proof posture in plain language.
+   - Keep the distinction obvious: `proven`, `AI-reviewed`, `manual review`.
+   - Trust improves when users can immediately tell what Owlvex knows versus suspects.
+
+5. Suppress fix generation when evidence is weak.
+   - Especially for authorization or business-rule findings where the model starts inventing missing domain concepts.
+   - Weak evidence should route to review, not automatic fix suggestions.
+
+6. Show evidence snippets for every meaningful finding.
+   - Surface source, sink, guard, and missing-check context directly in the report or finding detail.
+   - This shortens the time from detection to user trust.
+
+7. Separate internal/test usage from real customer telemetry.
+   - Founder testing, local bootstrap accounts, and internal validation must not pollute product learning.
+   - This is required before drawing product conclusions from production usage.
+
+8. Consolidate post-fix continuation into one clear queue.
+   - Post-fix verification should produce one summary, one remaining-work list, and one next action.
+   - Avoid fragmented follow-up prompts across multiple files.
+
+9. Keep Drift Box simple and project-owned.
+   - The main practical path is repo-owned checks like `npm run validate`, not more security frameworks.
+   - Drift Box should preserve behavior, not duplicate SAST.
+
+10. Use Design Box only when design-aware reasoning is selected.
+   - The main example is STRIDE or architecture-sensitive review.
+   - Extra context should be loaded when it can change reasoning, not by default.
+
+Current top three by expected impact:
+
+- deterministic coverage for the highest-value issue families
+- onboarding telemetry with step-level failure visibility
+- suppression of weak-evidence fix generation
+
 ## Diff-Scoped Scanning Workstream
 
 Owlvex should add a first-class scan scope for developer working diffs. The product goal is to minimize user work by scanning the code a developer is actively changing instead of forcing a workspace scan for every security check.

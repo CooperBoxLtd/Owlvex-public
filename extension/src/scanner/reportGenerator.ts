@@ -1290,16 +1290,6 @@ function buildDriftRunReportLines(results: Array<{ result: ScanResult }>): strin
     ];
 }
 
-function buildFileDriftLines(item: { result: ScanResult }): string[] {
-    if (!hasReportableDrift([item])) {
-        return [];
-    }
-    return [
-        `- Drift Box: ${item.result.driftBox?.summary ?? buildDriftBoxLabel([item])}`,
-        `- Drift run: ${item.result.driftResults?.length ? buildDriftRunLabel([item]) : 'not run'}`,
-    ];
-}
-
 function buildConfidencePostureLine(
     findings: ScanResult['findings'],
 ): string {
@@ -1788,7 +1778,6 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             lines.push(`- Proof posture: ${summarizeProofPosture(item.result.findings, item.file)}`);
             lines.push(...buildEngineTelemetryLines(item.result.engineTelemetry));
             lines.push(`- Design context: ${item.result.designContext ? buildDesignContextLabel([item]) : 'not checked'}`);
-            lines.push(...buildFileDriftLines(item));
             lines.push(`- Manual review: ${item.result.findings.filter(finding => needsManualReview(finding)).length} AI finding(s) needing review`);
             lines.push('');
 
@@ -1797,7 +1786,6 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
                 lines.push(`- Coverage: ${hasPartialAiCoverage(item.result) ? 'Partial AI coverage or deterministic-only fallback affected this file' : 'Normal for this file'}`);
                 lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
                 lines.push(`- Design context: ${item.result.designContext ? buildDesignContextLabel([item]) : 'not checked'}`);
-                lines.push(...buildFileDriftLines(item));
                 lines.push('');
                 continue;
             }
@@ -1817,7 +1805,6 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             }
             lines.push(`- Project context: ${buildProjectContextLabel(item.result.projectContextSummary && item.result.projectContextSummary !== 'none' ? item.result.projectContextSummary : 'none')}`);
             lines.push(`- Design context: ${item.result.designContext ? buildDesignContextLabel([item]) : 'not checked'}`);
-            lines.push(...buildFileDriftLines(item));
             lines.push(`- Knowledge sources: ${buildKnowledgeSourceDetail(item.packContext)}`);
             lines.push('');
             lines.push('| Finding | What drives the score | Evidence confidence |');
