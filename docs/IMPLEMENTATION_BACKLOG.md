@@ -207,6 +207,8 @@ The Git target flow must stay local. Owlvex should resolve the target through th
 
 The chat UX should also support the GitLens/source-control workflow directly: a developer can copy a commit hash from the graph, paste only that hash into Owlvex chat, and Owlvex scans the files changed by that commit. Explicit ranges such as `develop..feature/security-fix` should work the same way.
 
+The bottom scan dropdown must support the same workflow. When `Git commit/range` is selected, the developer can paste the hash/range into the prompt box and press `Scan`; if the prompt box is empty, Owlvex asks for the Git target.
+
 Report and chat output should separate:
 
 - findings touching changed lines

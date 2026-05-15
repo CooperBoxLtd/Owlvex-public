@@ -2366,7 +2366,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             }
 
             if (message?.type === 'chat:action') {
-                await this.handleQuickAction(String(message.action ?? ''));
+                await this.handleQuickAction(String(message.action ?? ''), String(message.gitTarget ?? ''));
             }
 
             if (message?.type === 'chat:messageAction') {
@@ -4202,7 +4202,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         this.refresh();
     }
 
-    private async handleQuickAction(action: string): Promise<void> {
+    private async handleQuickAction(action: string, gitTargetInput = ''): Promise<void> {
         if (!action) return;
 
         const isScanAction = action === 'scanFile'
@@ -4860,7 +4860,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         : undefined,
                 };
             } else if (action === 'scanGitTarget') {
-                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanGitTarget);
+                const gitTarget = extractGitTargetHint(gitTargetInput) ?? gitTargetInput.trim();
+                const result = await vscode.commands.executeCommand<any>(
+                    PROFILE.commands.scanGitTarget,
+                    gitTarget ? { gitTarget } : undefined,
+                );
                 if (result?.status === 'cancelled') {
                     this.messages.pop();
                     void this.persistState();
@@ -6897,7 +6901,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       });
     });
     runScanBottomEl.addEventListener('click', () => {
-      vscode.postMessage({ type: 'chat:action', action: scanScopeBottomEl.value });
+      const action = scanScopeBottomEl.value;
+      const gitTarget = action === 'scanGitTarget' ? promptEl.value.trim() : '';
+      vscode.postMessage({ type: 'chat:action', action, gitTarget });
+      if (gitTarget) {
+        promptEl.value = '';
+        promptEl.focus();
+      }
     });
     promptEl.addEventListener('keydown', (event) => {
       if (event.key === 'Enter' && !event.shiftKey) {
