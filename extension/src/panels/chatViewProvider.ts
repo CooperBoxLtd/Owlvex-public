@@ -4574,6 +4574,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'openTddBox') {
+            await vscode.commands.executeCommand(PROFILE.commands.openTddBox);
+            const projectContextSummary = getProjectContextSummaryFromConfig();
+            this.messages.push({
+                role: 'system',
+                content: `TDD Box opened or updated. Current project grounding: ${projectContextSummary}.`,
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'createDesignMap') {
             await vscode.commands.executeCommand(PROFILE.commands.createDesignMap);
             const projectContextSummary = getProjectContextSummaryFromConfig();
@@ -5881,10 +5894,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       margin-top: 10px;
       border: 1px solid var(--vscode-widget-border);
       border-radius: 12px;
-      padding: 10px 12px;
+      padding: 8px 10px;
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 78%, transparent);
       display: grid;
-      gap: 9px;
+      gap: 7px;
     }
     .workflow-top {
       display: flex;
@@ -5901,6 +5914,24 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       font-size: 11px;
       opacity: 0.78;
       line-height: 1.35;
+    }
+    .workflow-details {
+      margin-top: 0;
+    }
+    .workflow-details summary {
+      list-style: none;
+      cursor: pointer;
+      color: var(--vscode-textLink-foreground);
+      font-size: 11px;
+      width: fit-content;
+    }
+    .workflow-details summary::-webkit-details-marker {
+      display: none;
+    }
+    .workflow-details-panel {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
     }
     .workflow-primary {
       flex: 0 0 auto;
@@ -6352,32 +6383,37 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           </div>
           <button class="workflow-primary" id="nextActionButton" type="button">Next</button>
         </div>
-        <div class="workflow-status-grid">
-          <div class="workflow-status">
-            <span class="workflow-status-label">Access</span>
-            <span class="workflow-status-value" id="workflowAccess">loading</span>
-          </div>
-          <div class="workflow-status">
-            <span class="workflow-status-label">LLM</span>
-            <span class="workflow-status-value" id="workflowLlm">loading</span>
-          </div>
-          <div class="workflow-status">
-            <span class="workflow-status-label">Scope</span>
-            <span class="workflow-status-value" id="workflowScope">loading</span>
-          </div>
-          <div class="workflow-status">
-            <span class="workflow-status-label">Grounding</span>
-            <span class="workflow-status-value" id="workflowGrounding">loading</span>
-          </div>
-        </div>
         <div class="workflow-warning" id="workflowWarning"></div>
-        <div class="workflow-actions">
-          <button class="chip" data-action="selectProjectRoot">Project Root</button>
-          <button class="chip" data-action="selectFrameworks">Frameworks</button>
-          <button class="chip" data-action="createDesignMap">Create Map</button>
-          <button class="chip" data-action="openTddBox">TDD Box</button>
-          <button class="chip" data-action="openDriftBox">Drift Box</button>
-        </div>
+        <details class="workflow-details">
+          <summary>Context and tools</summary>
+          <div class="workflow-details-panel">
+            <div class="workflow-status-grid">
+              <div class="workflow-status">
+                <span class="workflow-status-label">Access</span>
+                <span class="workflow-status-value" id="workflowAccess">loading</span>
+              </div>
+              <div class="workflow-status">
+                <span class="workflow-status-label">LLM</span>
+                <span class="workflow-status-value" id="workflowLlm">loading</span>
+              </div>
+              <div class="workflow-status">
+                <span class="workflow-status-label">Scope</span>
+                <span class="workflow-status-value" id="workflowScope">loading</span>
+              </div>
+              <div class="workflow-status">
+                <span class="workflow-status-label">Grounding</span>
+                <span class="workflow-status-value" id="workflowGrounding">loading</span>
+              </div>
+            </div>
+            <div class="workflow-actions">
+              <button class="chip" data-action="selectProjectRoot">Project Root</button>
+              <button class="chip" data-action="selectFrameworks">Frameworks</button>
+              <button class="chip" data-action="createDesignMap">Create Map</button>
+              <button class="chip" data-action="openTddBox">TDD Box</button>
+              <button class="chip" data-action="openDriftBox">Drift Box</button>
+            </div>
+          </div>
+        </details>
       </div>
       <div class="settings-panel" id="settingsPanel" hidden>
         <div class="settings-head">

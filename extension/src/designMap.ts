@@ -171,6 +171,61 @@ function buildGuidance(map: Omit<DesignMap, 'scannerGuidance' | 'summary'>): str
     return guidance;
 }
 
+function mermaidId(prefix: string, index: number): string {
+    return `${prefix}${index + 1}`;
+}
+
+function mermaidLabel(value: string, maxLength = 56): string {
+    return value
+        .replace(/["\\]/g, '')
+        .replace(/\s+/g, ' ')
+        .slice(0, maxLength);
+}
+
+function buildMermaid(map: DesignMap): string {
+    const lines = [
+        'flowchart TD',
+        '  Root["Project root"]',
+    ];
+    const entrypoints = map.entrypoints.slice(0, 8);
+    const routes = map.routes.slice(0, 12);
+    const guards = map.guards.slice(0, 12);
+    const sinks = map.sinks.slice(0, 12);
+    const stores = map.dataStores.slice(0, 8);
+    const integrations = map.externalIntegrations.slice(0, 8);
+
+    for (const [index, value] of entrypoints.entries()) {
+        lines.push(`  ${mermaidId('Entry', index)}["${mermaidLabel(value)}"]`);
+        lines.push(`  Root --> ${mermaidId('Entry', index)}`);
+    }
+    for (const [index, value] of routes.entries()) {
+        lines.push(`  ${mermaidId('Route', index)}["${mermaidLabel(value)}"]`);
+        lines.push(entrypoints.length ? `  ${mermaidId('Entry', 0)} --> ${mermaidId('Route', index)}` : `  Root --> ${mermaidId('Route', index)}`);
+    }
+    for (const [index, value] of guards.entries()) {
+        lines.push(`  ${mermaidId('Guard', index)}{"${mermaidLabel(value)}"}`);
+        lines.push(routes.length ? `  ${mermaidId('Route', index % routes.length)} --> ${mermaidId('Guard', index)}` : `  Root --> ${mermaidId('Guard', index)}`);
+    }
+    for (const [index, value] of sinks.entries()) {
+        lines.push(`  ${mermaidId('Sink', index)}[("${mermaidLabel(value)}")]`);
+        lines.push(routes.length ? `  ${mermaidId('Route', index % routes.length)} --> ${mermaidId('Sink', index)}` : `  Root --> ${mermaidId('Sink', index)}`);
+    }
+    for (const [index, value] of stores.entries()) {
+        lines.push(`  ${mermaidId('Store', index)}[("${mermaidLabel(value)}")]`);
+        lines.push(routes.length ? `  ${mermaidId('Route', index % routes.length)} --> ${mermaidId('Store', index)}` : `  Root --> ${mermaidId('Store', index)}`);
+    }
+    for (const [index, value] of integrations.entries()) {
+        lines.push(`  ${mermaidId('Integration', index)}[/"${mermaidLabel(value)}"/]`);
+        lines.push(routes.length ? `  ${mermaidId('Route', index % routes.length)} --> ${mermaidId('Integration', index)}` : `  Root --> ${mermaidId('Integration', index)}`);
+    }
+
+    if (!entrypoints.length && !routes.length && !guards.length && !sinks.length && !stores.length && !integrations.length) {
+        lines.push('  Root --> Unknown["No strong structure detected"]');
+    }
+
+    return lines.join('\n');
+}
+
 function buildMarkdown(map: DesignMap): string {
     const bullet = (values: string[], empty: string) => values.length ? values.map(value => `- ${value}`).join('\n') : `- ${empty}`;
     const fileLines = map.files.slice(0, 80).map(file => {
@@ -191,6 +246,14 @@ function buildMarkdown(map: DesignMap): string {
         '## Project Summary',
         '',
         map.summary,
+        '',
+        '## Mermaid Map',
+        '',
+        'Copy this block into any Mermaid renderer to view the map.',
+        '',
+        '```mermaid',
+        buildMermaid(map),
+        '```',
         '',
         '## Entrypoints',
         '',

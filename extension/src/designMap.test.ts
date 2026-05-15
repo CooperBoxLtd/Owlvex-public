@@ -46,6 +46,10 @@ describe('design map generator', () => {
         expect(vscode.workspace.fs.writeFile).toHaveBeenCalledTimes(2);
         const markdownWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls[0];
         expect(String(markdownWrite[0].fsPath)).toContain('.owlvex');
-        expect(Buffer.from(markdownWrite[1]).toString('utf8')).toContain('# Owlvex Design Map');
+        const markdown = Buffer.from(markdownWrite[1]).toString('utf8');
+        expect(markdown).toContain('# Owlvex Design Map');
+        expect(markdown).toContain('```mermaid');
+        expect(markdown).toContain('flowchart TD');
+        expect(markdown).toContain('Route1');
     });
 });

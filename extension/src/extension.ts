@@ -569,6 +569,30 @@ async function openOrCreateTddBox(): Promise<{ uri: vscode.Uri; created: boolean
 
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     let configuredFile = config.get<string>(PROJECT_CONTEXT_FILE_SETTING, '').trim();
+    if (configuredFile) {
+        const choice = await vscode.window.showQuickPick(
+            [
+                { label: 'Open current TDD Box', action: 'open' as const },
+                { label: 'Select different TDD file', action: 'select' as const },
+                { label: 'Use default .owlvex/tdd/project-tdd.md', action: 'default' as const },
+            ],
+            {
+                title: 'Owlvex TDD Box',
+                placeHolder: `Current: ${configuredFile}`,
+            },
+        );
+        if (!choice) {
+            const targetUri = vscode.Uri.file(resolveUserConfiguredPath(configuredFile, projectRoot.uri));
+            return { uri: targetUri, created: false, relativePath: vscode.workspace.asRelativePath(targetUri, false) };
+        }
+        if (choice.action === 'select') {
+            configuredFile = '';
+        } else if (choice.action === 'default') {
+            configuredFile = vscode.workspace.asRelativePath(vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_TDD_BOX_RELATIVE_PATH)), false);
+            await persistWorkspaceSetting(PROJECT_CONTEXT_FILE_SETTING, configuredFile);
+        }
+    }
+
     if (!configuredFile) {
         const selected = await vscode.window.showOpenDialog({
             canSelectFiles: true,
