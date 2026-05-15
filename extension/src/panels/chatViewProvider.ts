@@ -144,6 +144,12 @@ interface ChatState {
     activeMode: ConversationMode;
     activeModeLabel: string;
     activeModeHint: string;
+    nextAction: string;
+    nextActionLabel: string;
+    readinessLabel: string;
+    readinessDetail: string;
+    groundingStatus: string;
+    groundingWarning: string;
 }
 
 type WorkingScope = 'scanFile' | 'scanSelectedFiles' | 'scanChangedFiles' | 'scanOpenEditors' | 'scanFolder';
@@ -382,6 +388,87 @@ function getConversationModeHint(mode: ConversationMode): string {
         default:
             return 'Repo Q&A behavior: grounded explanation, not an implied scan result.';
     }
+}
+
+function buildUxWorkflowStatus(options: {
+    hasLicence: boolean;
+    providerConfigured: boolean;
+    hasLastScan: boolean;
+    workingScope: WorkingScope;
+    workingScopeLabel: string;
+    workspaceSummary: string;
+    projectContextSummary: string;
+}): Pick<ChatState, 'nextAction' | 'nextActionLabel' | 'readinessLabel' | 'readinessDetail' | 'groundingStatus' | 'groundingWarning'> {
+    const hasWorkspace = Boolean(options.workspaceSummary && options.workspaceSummary !== 'No workspace folder open');
+    const designMapLoaded = /\bDesign Map\b(?! missing)/i.test(options.projectContextSummary);
+    const tddLoaded = /\bTDD file\b/i.test(options.projectContextSummary);
+    const designContextLoaded = /\bdesign context\b/i.test(options.projectContextSummary);
+    const groundingParts = [
+        designMapLoaded ? 'Design Map loaded' : 'Design Map missing',
+        tddLoaded ? 'TDD loaded' : 'TDD not set',
+        designContextLoaded ? 'Design context loaded' : 'Design context optional',
+    ];
+
+    const rootMatch = options.workspaceSummary.match(/Project root:\s*(.+)$/i);
+    const tddMatch = options.projectContextSummary.match(/TDD file\s+([^|]+)/i);
+    const rootPath = rootMatch?.[1]?.trim().toLowerCase();
+    const tddPath = tddMatch?.[1]?.trim().toLowerCase();
+    const groundingWarning = rootPath && tddPath && /^[a-z]:[\\/]/i.test(tddPath) && !tddPath.startsWith(rootPath)
+        ? 'TDD file is outside the selected project root.'
+        : '';
+
+    if (!options.hasLicence) {
+        return {
+            nextAction: 'showOnboarding',
+            nextActionLabel: 'Start setup',
+            readinessLabel: 'Setup needed',
+            readinessDetail: 'Connect free, trial, or licence access before the first scan.',
+            groundingStatus: groundingParts.join(' | '),
+            groundingWarning,
+        };
+    }
+
+    if (!options.providerConfigured) {
+        return {
+            nextAction: 'setupAI',
+            nextActionLabel: 'Configure LLM',
+            readinessLabel: 'AI setup needed',
+            readinessDetail: 'Static checks can run, but AI review and fix previews need a configured provider.',
+            groundingStatus: groundingParts.join(' | '),
+            groundingWarning,
+        };
+    }
+
+    if (!hasWorkspace) {
+        return {
+            nextAction: 'selectProjectRoot',
+            nextActionLabel: 'Set project root',
+            readinessLabel: 'Project root needed',
+            readinessDetail: 'Set the project boundary so repo context, reports, Design Map, and scans stay in scope.',
+            groundingStatus: groundingParts.join(' | '),
+            groundingWarning,
+        };
+    }
+
+    if (!options.hasLastScan) {
+        return {
+            nextAction: options.workingScope,
+            nextActionLabel: `Scan ${options.workingScopeLabel || 'workspace'}`,
+            readinessLabel: 'Ready for first scan',
+            readinessDetail: 'Run the selected scan scope, then review Fix First or create a summary report.',
+            groundingStatus: groundingParts.join(' | '),
+            groundingWarning,
+        };
+    }
+
+    return {
+        nextAction: 'scanSummaryReport',
+        nextActionLabel: 'Create summary report',
+        readinessLabel: 'Scan available',
+        readinessDetail: 'Use the summary report for the shortest action view, or scan again after code changes.',
+        groundingStatus: groundingParts.join(' | '),
+        groundingWarning,
+    };
 }
 
 function looksLikeRepoQuestion(prompt: string): boolean {
@@ -5202,6 +5289,17 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const provider = this.registry.getActive();
         const projectContextSummary = getProjectContextSummaryFromConfig();
         const workingScope = this.getWorkingScope();
+        const hasLastScan = this.storage.get<string>(LAST_SCAN_TARGET_KEY, 'No scan run yet') !== 'No scan run yet';
+        const workspaceSummary = this.getWorkspaceSummary();
+        const workflowStatus = buildUxWorkflowStatus({
+            hasLicence,
+            providerConfigured,
+            hasLastScan,
+            workingScope,
+            workingScopeLabel: getWorkingScopeLabel(workingScope),
+            workspaceSummary,
+            projectContextSummary,
+        });
         return {
             provider: provider.name,
             providerId: provider.id,
@@ -5220,9 +5318,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             frameworksLabel: formatFrameworkSummary(this.getFrameworks()),
             severityThreshold: this.getSeverityThreshold(),
             projectContextSummary,
-            workspaceSummary: this.getWorkspaceSummary(),
+            workspaceSummary,
             lastScanTarget: this.storage.get<string>(LAST_SCAN_TARGET_KEY, 'No scan run yet'),
-            hasLastScan: this.storage.get<string>(LAST_SCAN_TARGET_KEY, 'No scan run yet') !== 'No scan run yet',
+            hasLastScan,
             conversationStatus: buildConversationStatus({
                 pendingFixPreview: this.pendingFixPreview,
                 latestActionableFinding: this.latestActionableFinding,
@@ -5235,6 +5333,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             activeMode: this.currentMode,
             activeModeLabel: getConversationModeLabel(this.currentMode),
             activeModeHint: getConversationModeHint(this.currentMode),
+            ...workflowStatus,
         };
     }
 
@@ -5778,6 +5877,81 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 85%, transparent);
       overflow: hidden;
     }
+    .workflow-panel {
+      margin-top: 10px;
+      border: 1px solid var(--vscode-widget-border);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: color-mix(in srgb, var(--vscode-editorWidget-background) 78%, transparent);
+      display: grid;
+      gap: 9px;
+    }
+    .workflow-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .workflow-title {
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .workflow-detail {
+      margin-top: 3px;
+      font-size: 11px;
+      opacity: 0.78;
+      line-height: 1.35;
+    }
+    .workflow-primary {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      padding: 7px 10px;
+      font-size: 11px;
+    }
+    .workflow-status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+    .workflow-status {
+      border: 1px solid color-mix(in srgb, var(--vscode-widget-border) 72%, transparent);
+      border-radius: 8px;
+      padding: 7px 8px;
+      font-size: 11px;
+      background: color-mix(in srgb, var(--vscode-sideBar-background) 45%, transparent);
+      min-width: 0;
+    }
+    .workflow-status-label {
+      display: block;
+      opacity: 0.66;
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+    .workflow-status-value {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .workflow-warning {
+      display: none;
+      border: 1px solid color-mix(in srgb, var(--vscode-charts-orange) 65%, var(--vscode-widget-border));
+      border-radius: 8px;
+      padding: 7px 8px;
+      color: var(--vscode-charts-orange);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .workflow-warning.visible {
+      display: block;
+    }
+    .workflow-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
     .settings-head {
       padding: 10px 12px;
       display: flex;
@@ -6170,6 +6344,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <button class="icon-button" id="newChatTop" type="button" title="New chat" aria-label="New chat">&#9998;</button>
         </div>
       </div>
+      <div class="workflow-panel" id="workflowPanel">
+        <div class="workflow-top">
+          <div>
+            <div class="workflow-title" id="readinessLabel">Checking setup...</div>
+            <div class="workflow-detail" id="readinessDetail">Loading Owlvex workflow state.</div>
+          </div>
+          <button class="workflow-primary" id="nextActionButton" type="button">Next</button>
+        </div>
+        <div class="workflow-status-grid">
+          <div class="workflow-status">
+            <span class="workflow-status-label">Access</span>
+            <span class="workflow-status-value" id="workflowAccess">loading</span>
+          </div>
+          <div class="workflow-status">
+            <span class="workflow-status-label">LLM</span>
+            <span class="workflow-status-value" id="workflowLlm">loading</span>
+          </div>
+          <div class="workflow-status">
+            <span class="workflow-status-label">Scope</span>
+            <span class="workflow-status-value" id="workflowScope">loading</span>
+          </div>
+          <div class="workflow-status">
+            <span class="workflow-status-label">Grounding</span>
+            <span class="workflow-status-value" id="workflowGrounding">loading</span>
+          </div>
+        </div>
+        <div class="workflow-warning" id="workflowWarning"></div>
+        <div class="workflow-actions">
+          <button class="chip" data-action="selectProjectRoot">Project Root</button>
+          <button class="chip" data-action="selectFrameworks">Frameworks</button>
+          <button class="chip" data-action="createDesignMap">Create Map</button>
+          <button class="chip" data-action="openTddBox">TDD Box</button>
+          <button class="chip" data-action="openDriftBox">Drift Box</button>
+        </div>
+      </div>
       <div class="settings-panel" id="settingsPanel" hidden>
         <div class="settings-head">
           <span>Configuration</span>
@@ -6287,7 +6496,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const newChatTopEl = document.getElementById('newChatTop');
     const llmButtonEl = document.getElementById('llmButton');
     const reportButtonEl = document.getElementById('reportButton');
+    const readinessLabelEl = document.getElementById('readinessLabel');
+    const readinessDetailEl = document.getElementById('readinessDetail');
+    const nextActionButtonEl = document.getElementById('nextActionButton');
+    const workflowAccessEl = document.getElementById('workflowAccess');
+    const workflowLlmEl = document.getElementById('workflowLlm');
+    const workflowScopeEl = document.getElementById('workflowScope');
+    const workflowGroundingEl = document.getElementById('workflowGrounding');
+    const workflowWarningEl = document.getElementById('workflowWarning');
     let historyVisible = false;
+    let nextWorkflowAction = 'showOnboarding';
 
     function postAction(action) {
       vscode.postMessage({ type: 'chat:action', action });
@@ -6369,6 +6587,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       backendStatusEl.textContent = state.backendStatus || 'Backend: unknown';
       licenceStatusEl.textContent = state.licenceStatus || 'Licence: unknown';
       providerHintEl.textContent = state.providerHint || '';
+      readinessLabelEl.textContent = state.readinessLabel || 'Owlvex ready';
+      readinessDetailEl.textContent = state.readinessDetail || 'Choose a scan scope and run a scan.';
+      nextWorkflowAction = state.nextAction || 'showOnboarding';
+      nextActionButtonEl.textContent = state.nextActionLabel || 'Next';
+      workflowAccessEl.textContent = state.hasLicence ? state.licenceStatus : (state.hasStoredLicenceKey ? 'key stored' : 'not connected');
+      workflowLlmEl.textContent = state.providerConfigured ? state.provider + ' configured' : 'not configured';
+      workflowScopeEl.textContent = state.workingScopeLabel + ' | ' + (state.workspaceSummary || 'no workspace');
+      workflowGroundingEl.textContent = state.groundingStatus || 'not checked';
+      workflowWarningEl.textContent = state.groundingWarning || '';
+      workflowWarningEl.classList.toggle('visible', Boolean(state.groundingWarning));
       llmButtonEl.textContent = state.providerConfigured
         ? state.provider + ' · ' + state.model
         : 'Configure LLM';
@@ -6488,6 +6716,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     document.getElementById('send').addEventListener('click', sendPrompt);
     newChatTopEl.addEventListener('click', () => {
       vscode.postMessage({ type: 'chat:clear' });
+    });
+    nextActionButtonEl.addEventListener('click', () => {
+      postAction(nextWorkflowAction);
     });
     toggleSettingsTopEl.addEventListener('click', () => {
       settingsPanelEl.hidden = !settingsPanelEl.hidden;
