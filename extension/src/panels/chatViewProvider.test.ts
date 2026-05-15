@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import { ChatViewProvider, buildFindingContextSummary, buildFindingPromptContext, buildGroundedRemediationHighlights, buildNearbyProjectContext, extractPatchedFileContent, parseChatIntent } from './chatViewProvider';
+import { ChatViewProvider, buildDesignMapFixGateReason, buildFindingContextSummary, buildFindingPromptContext, buildGroundedRemediationHighlights, buildNearbyProjectContext, extractPatchedFileContent, parseChatIntent } from './chatViewProvider';
 import { configureRulePackRuntime, resetRulePackRuntime } from '../frameworks/rulePackRegistry';
 import { PROFILE } from '../profile';
 
@@ -76,6 +76,33 @@ describe('parseChatIntent', () => {
         expect(parseChatIntent('review scoring posture')).toEqual({
             action: 'reviewRiskCalibration',
         });
+    });
+
+    it('routes ownership fixes to review when the Design Map has no confirmed ownership model', () => {
+        const finding: any = {
+            title: 'Possible missing authorization check before adding a note to a customer record',
+            canonicalTitle: 'Possible missing authorization check before adding a note to a customer record',
+            explanation: 'Client supplied customerId is persisted without visible ownership verification.',
+            fix: 'Verify the current user can modify the customer record before adding the note.',
+            severity: 'HIGH',
+            line: 33,
+            riskScore: 8,
+            provenance: 'ai',
+            evidenceContract: {
+                proofStatus: 'ai_plausible',
+                guard: { status: 'missing', label: 'ownership check' },
+            },
+        };
+        const context = [
+            'Owlvex Design Map (.owlvex/owlvex-design-map.md):',
+            '## Ownership Signals',
+            '- No ownership model was confirmed from code.',
+        ].join('\n');
+
+        const reason = buildDesignMapFixGateReason(finding, context);
+
+        expect(reason).toContain('routing this to review');
+        expect(reason).toContain('no ownership model is confirmed');
     });
 
     it('returns undefined for normal advisory chat', () => {

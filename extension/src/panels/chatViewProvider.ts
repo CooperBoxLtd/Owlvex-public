@@ -1123,6 +1123,28 @@ function findInventedRepositoryMembers(originalText: string, patchedText: string
         .sort();
 }
 
+function findInventedDomainModelIdentifiers(originalText: string, patchedText: string, finding: Finding): string[] {
+    if (!isOwnershipOrBusinessRuleFinding(finding)) {
+        return [];
+    }
+
+    const identifiers = [
+        'customerIds',
+        'managedCustomerIds',
+        'customerId',
+        'ownerId',
+        'tenantIds',
+        'managedTenantIds',
+        'isAdmin',
+        'permissions',
+    ];
+
+    return identifiers.filter(identifier =>
+        new RegExp(`\\b${identifier}\\b`).test(patchedText)
+        && !new RegExp(`\\b${identifier}\\b`).test(originalText)
+    );
+}
+
 function looksLikeMalformedFixResponse(raw: string): boolean {
     const trimmed = raw.trim();
     return trimmed.includes('```') && !/^```[a-zA-Z0-9_-]*\r?\n[\s\S]*\r?\n```$/.test(trimmed);
@@ -1162,6 +1184,11 @@ function validateFixPreviewContent(options: {
         return `Owlvex rejected the preview for ${vscode.workspace.asRelativePath(vscode.Uri.file(options.targetPath), false)} because it introduced repository APIs that do not exist in the original file: ${inventedRepositoryMembers.map(member => `repositories.${member}`).join(', ')}. Regenerate the fix without inventing new business models.`;
     }
 
+    const inventedDomainIdentifiers = findInventedDomainModelIdentifiers(options.originalText, options.patchedText, options.finding);
+    if (inventedDomainIdentifiers.length) {
+        return `Owlvex rejected the preview for ${vscode.workspace.asRelativePath(vscode.Uri.file(options.targetPath), false)} because it introduced domain model fields that do not exist in the original file: ${inventedDomainIdentifiers.join(', ')}. Confirm the ownership model in code, Design Box, or TDD before generating this fix.`;
+    }
+
     return undefined;
 }
 
@@ -1169,6 +1196,8 @@ function validateBroadFixPreviewContent(options: {
     raw: string;
     originalText: string;
     patchedText: string;
+    findings?: Finding[];
+    targetPath?: string;
 }): string | undefined {
     if (looksLikeMalformedFixResponse(options.raw)) {
         return 'Owlvex received malformed code fences from the model. Ask "fix code" to regenerate the preview.';
@@ -1176,6 +1205,16 @@ function validateBroadFixPreviewContent(options: {
 
     if (!hasMeaningfulPreviewChange(options.originalText, options.patchedText)) {
         return 'Owlvex could not produce a meaningful code diff. Ask "fix code" to regenerate the preview.';
+    }
+
+    for (const finding of options.findings ?? []) {
+        const inventedDomainIdentifiers = findInventedDomainModelIdentifiers(options.originalText, options.patchedText, finding);
+        if (inventedDomainIdentifiers.length) {
+            const label = options.targetPath
+                ? vscode.workspace.asRelativePath(vscode.Uri.file(options.targetPath), false)
+                : 'the reviewed file';
+            return `Owlvex rejected the combined preview for ${label} because it introduced domain model fields that do not exist in the original file: ${inventedDomainIdentifiers.join(', ')}. Confirm the ownership model in code, Design Box, or TDD before generating this fix.`;
+        }
     }
 
     return undefined;
@@ -1536,6 +1575,41 @@ function isFixPreviewEligibleFinding(finding: Finding): boolean {
     const proofStatus = getFindingProofStatus(finding);
     return !isInvestigationFirstFinding(finding)
         && (proofStatus === 'static_proven' || proofStatus === 'ai_plausible');
+}
+
+function isOwnershipOrBusinessRuleFinding(finding: Finding): boolean {
+    const text = [
+        finding.title,
+        finding.canonicalTitle,
+        finding.explanation,
+        finding.threat,
+        finding.fix,
+        finding.ruleCode,
+        finding.canonicalId,
+        finding.evidenceContract?.issueType,
+        finding.evidenceContract?.guard?.label,
+        finding.evidenceContract?.guard?.reason,
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    return /\b(object[- ]level|idor|ownership|owner|customer record|customer id|customerid|tenant isolation|tenant scope|tenantid|business rule|privileged role|role change|authorization gap)\b/.test(text);
+}
+
+function designMapHasNoConfirmedOwnership(context: string): boolean {
+    return /Owlvex Design Map/i.test(context)
+        && /No ownership model was confirmed|No confirmed ownership or tenant model was identified|No strong ownership model was confirmed/i.test(context);
+}
+
+export function buildDesignMapFixGateReason(finding: Finding, context: string): string | undefined {
+    if (!isOwnershipOrBusinessRuleFinding(finding) || !designMapHasNoConfirmedOwnership(context)) {
+        return undefined;
+    }
+
+    return [
+        'Owlvex is routing this to review instead of generating a fix preview.',
+        'Reason: the finding depends on an ownership or business-rule model, but the current Design Map says no ownership model is confirmed from code.',
+        'A fix would risk inventing unsupported domain fields or policies.',
+        'Next step: confirm the ownership model in code, TDD, or Design Box, then refresh the Design Map and rescan.',
+    ].join('\n');
 }
 
 function buildInvestigateFindingAction(finding: Finding, targetPath?: string): ChatMessageAction {
@@ -2289,6 +2363,19 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
 
         const discussionContext = await this.buildFindingContextBundle(finding);
+        const designMapGateReason = buildDesignMapFixGateReason(finding, discussionContext.promptContext);
+        if (designMapGateReason) {
+            this.messages.push({
+                role: 'assistant',
+                content: designMapGateReason,
+                kind: 'advisory',
+                actions: [buildInvestigateFindingAction(finding, targetPath ?? document.uri.fsPath)],
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         await this.show();
         if (!options.reuseCurrentTurn) {
             this.messages.push({
@@ -2451,16 +2538,40 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        const itemsWithContext = await Promise.all(validItems.map(async item => ({
+            ...item,
+            context: await this.buildFindingContextBundle(item.finding),
+        })));
+        const gatedItems = itemsWithContext.filter(item => buildDesignMapFixGateReason(item.finding, item.context.promptContext));
+        const fixReadyItems = itemsWithContext.filter(item => !buildDesignMapFixGateReason(item.finding, item.context.promptContext));
+        if (!fixReadyItems.length) {
+            this.messages.push({
+                role: 'assistant',
+                content: [
+                    'No findings in this set are fix-preview eligible after Design Map gating.',
+                    'At least one finding depends on an ownership or business-rule model, but the current Design Map does not confirm that model.',
+                    'Confirm the ownership model in code, Design Box, or TDD, refresh the Design Map, and rescan before generating these fixes.',
+                ].join('\n'),
+                kind: 'advisory',
+                actions: [buildInvestigateFindingAction(gatedItems[0].finding, gatedItems[0].targetPath)],
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         await this.show();
         if (!options.reuseCurrentTurn) {
-            const targetFileCount = new Set(validItems.map(item => normalizeReviewedPath(item.targetPath!))).size;
+            const targetFileCount = new Set(fixReadyItems.map(item => normalizeReviewedPath(item.targetPath!))).size;
             this.messages.push({
                 role: 'user',
-                content: `Preview fixes for the latest scan (${validItems.length} finding(s) across ${targetFileCount} file(s))`,
+                content: `Preview fixes for the latest scan (${fixReadyItems.length} finding(s) across ${targetFileCount} file(s))`,
             });
             this.messages.push({
                 role: 'assistant',
-                content: 'Preparing broad remediation diff for the latest scan...',
+                content: gatedItems.length
+                    ? `Preparing broad remediation diff for ${fixReadyItems.length} finding(s). ${gatedItems.length} ownership/business-rule finding(s) were routed to review by Design Map gating.`
+                    : 'Preparing broad remediation diff for the latest scan...',
                 kind: 'advisory',
             });
         } else {
@@ -2472,25 +2583,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         }
         this.refresh();
         const previewStartedAt = Date.now();
-        const targetFileCount = new Set(validItems.map(item => normalizeReviewedPath(item.targetPath!))).size;
+        const targetFileCount = new Set(fixReadyItems.map(item => normalizeReviewedPath(item.targetPath!))).size;
         this.emitUsageTelemetry('fix_preview_started', {
             file_count: targetFileCount,
-            finding_count: validItems.length,
-            canonical_id: validItems[0]?.finding.canonicalId ?? null,
-            severity: validItems[0]?.finding.severity ?? null,
+            finding_count: fixReadyItems.length,
+            canonical_id: fixReadyItems[0]?.finding.canonicalId ?? null,
+            severity: fixReadyItems[0]?.finding.severity ?? null,
         });
 
         try {
             const provider = this.registry.getActive();
             const groups = new Map<string, Finding[]>();
-            for (const item of validItems) {
+            for (const item of fixReadyItems) {
                 const targetPath = item.targetPath!;
                 const list = groups.get(targetPath) ?? [];
                 list.push(item.finding);
                 groups.set(targetPath, list);
             }
 
-            const batchScopeError = validateBatchFixScope(validItems);
+            const batchScopeError = validateBatchFixScope(fixReadyItems);
             if (batchScopeError) {
                 throw new Error(batchScopeError);
             }
@@ -2499,10 +2610,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             for (const [targetPath, findings] of groups.entries()) {
                 const targetUri = vscode.Uri.file(targetPath);
                 const document = await vscode.workspace.openTextDocument(targetUri);
-                const contexts = await Promise.all(findings.map(async finding => {
-                    const discussionContext = await this.buildFindingContextBundle(finding);
-                    return discussionContext.promptContext;
-                }));
+                const contexts = findings.map(finding =>
+                    itemsWithContext.find(item => item.finding === finding && item.targetPath === targetPath)?.context.promptContext
+                    ?? buildFindingPromptContext(finding)
+                );
 
                 const response = await provider.complete({
                     systemPrompt: [
@@ -2531,6 +2642,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                     raw: response.content || '',
                     originalText: document.getText(),
                     patchedText: patched,
+                    findings,
+                    targetPath,
                 });
                 if (validationError) {
                     throw new Error(validationError);
