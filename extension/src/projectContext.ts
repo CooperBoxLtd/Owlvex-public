@@ -517,6 +517,14 @@ async function tryReadProjectContextFile(fileSetting: string, projectRoot?: vsco
     }
 }
 
+function configuredFileIsInsideRoot(fileSetting: string, projectRoot?: vscode.Uri): boolean {
+    const fsPath = resolveConfiguredPath(fileSetting, projectRoot);
+    if (!fsPath || !projectRoot) {
+        return true;
+    }
+    return isPathInsideRoot(fsPath, projectRoot.fsPath);
+}
+
 async function tryReadDesignMap(projectRoot?: vscode.Uri, enabled = true): Promise<{ label: string; content: string } | undefined> {
     if (!projectRoot || !enabled) {
         return undefined;
@@ -555,8 +563,11 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     const designContextFile = config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '');
     const designMapEnabled = config.get<boolean>(DESIGN_MAP_ENABLED_SETTING, true);
     const projectRoot = await resolveProjectRootInfo();
-    const fileContext = tddBoxEnabled ? await tryReadProjectContextFile(projectContextFile, projectRoot.uri) : '';
     const rootAppliesToTargets = !projectRoot.uri || targetUrisAreInsideRoot(options?.targetUris, projectRoot.uri);
+    const tddAppliesToRoot = configuredFileIsInsideRoot(projectContextFile, projectRoot.uri);
+    const fileContext = rootAppliesToTargets && tddAppliesToRoot && tddBoxEnabled
+        ? await tryReadProjectContextFile(projectContextFile, projectRoot.uri)
+        : '';
     const designMap = rootAppliesToTargets ? await tryReadDesignMap(projectRoot.uri, designMapEnabled) : undefined;
     const designContext = rootAppliesToTargets
         ? (await tryReadDesignContextFile(designContextFile, projectRoot.uri)
@@ -566,6 +577,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     const rootLabel = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.label : '';
     const rootSummary = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.summary : '';
     const contextSuppressed = projectRoot.isConfigured && !rootAppliesToTargets;
+    const tddSuppressed = rootAppliesToTargets && tddBoxEnabled && Boolean(projectContextFile.trim()) && !tddAppliesToRoot;
 
     const sections = [
         rootLabel ? `Selected project root:\n${rootLabel}` : '',
@@ -574,6 +586,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
         rootAppliesToTargets && fileContext ? `TDD Box context file (${fileContext.label}):\n${fileContext.content}` : '',
         rootAppliesToTargets && designMap ? `Owlvex Design Map (${designMap.label}):\n${designMap.content}` : '',
         rootAppliesToTargets && designContext ? `Design context:\n${designContext.content}` : '',
+        tddSuppressed ? `TDD Box context skipped:\nThe configured TDD file is outside the selected project root (${projectRoot.label}).` : '',
         contextSuppressed ? `Project context skipped:\nThe scan target is outside the configured project root (${projectRoot.label}).` : '',
     ].filter(Boolean);
 
@@ -582,6 +595,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
         rootAppliesToTargets && legacyTeamContext ? 'legacy inline context' : '',
         rootAppliesToTargets && inlineProjectContext ? 'inline project contract' : '',
         rootAppliesToTargets && fileContext ? `TDD file ${fileContext.label}` : '',
+        tddSuppressed ? 'TDD file skipped: outside selected project root' : '',
         rootAppliesToTargets && designMap ? `Design Map ${designMap.label}` : '',
         rootAppliesToTargets && designContext ? `design context ${designContext.labels.length} file${designContext.labels.length === 1 ? '' : 's'}` : '',
         contextSuppressed ? 'configured project root skipped for out-of-root target' : '',

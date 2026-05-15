@@ -992,6 +992,32 @@ async function openOrCreateDriftBox(): Promise<{ uri: vscode.Uri; created: boole
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     let configuredFile = config.get<string>(DRIFT_BOX_FILE_SETTING, '').trim();
     let configuredScriptsRoot = config.get<string>(DRIFT_SCRIPTS_ROOT_SETTING, '').trim();
+    if (configuredFile) {
+        const choice = await vscode.window.showQuickPick(
+            [
+                { label: 'Open current Drift Box', action: 'open' as const },
+                { label: 'Select different Drift Box config', action: 'select' as const },
+                { label: 'Use default .owlvex/drift/owlvex-drift.json', action: 'default' as const },
+            ],
+            {
+                title: 'Owlvex Drift Box',
+                placeHolder: `Current: ${configuredFile}`,
+            },
+        );
+        if (!choice) {
+            const targetUri = vscode.Uri.file(resolveUserConfiguredPath(configuredFile, projectRoot.uri));
+            return { uri: targetUri, created: false, relativePath: vscode.workspace.asRelativePath(targetUri, false) };
+        }
+        if (choice.action === 'select') {
+            configuredFile = '';
+            configuredScriptsRoot = '';
+        } else if (choice.action === 'default') {
+            configuredFile = vscode.workspace.asRelativePath(vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_DRIFT_BOX_RELATIVE_DIR, 'owlvex-drift.json')), false);
+            configuredScriptsRoot = vscode.workspace.asRelativePath(vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_DRIFT_BOX_RELATIVE_DIR, 'scripts')), false);
+            await persistWorkspaceSetting(DRIFT_BOX_FILE_SETTING, configuredFile);
+            await persistWorkspaceSetting(DRIFT_SCRIPTS_ROOT_SETTING, configuredScriptsRoot);
+        }
+    }
     if (!configuredFile) {
         const selected = await vscode.window.showOpenDialog({
             canSelectFiles: true,
@@ -1005,6 +1031,7 @@ async function openOrCreateDriftBox(): Promise<{ uri: vscode.Uri; created: boole
         if (selected?.[0]) {
             configuredFile = vscode.workspace.asRelativePath(selected[0], false);
             await persistWorkspaceSetting(DRIFT_BOX_FILE_SETTING, configuredFile);
+            configuredScriptsRoot = '';
         }
     }
 
@@ -3574,7 +3601,7 @@ export function activate(context: vscode.ExtensionContext) {
 
             try {
                 const summary = await scanSelectedFiles({
-                    files: fileUris,
+                    files: targetFiles.scanFiles?.length ? targetFiles.scanFiles : fileUris,
                     scanEngine,
                     diagnostics,
                     skipConfirmation: true,

@@ -134,6 +134,33 @@ describe('project root helpers', () => {
         expect(explicitlyDisabledContext.combined).not.toContain('Morse packet format');
     });
 
+    it('does not load a TDD Box file from outside the selected project root', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'projectRoot') {
+                    return 'D:\\repo\\tools\\benchmark-app';
+                }
+                if (key === 'projectContextFile') {
+                    return 'D:\\repo\\Morse App\\src\\rt_5_tactical_morse_terminal_professional_tdd.md';
+                }
+                if (key === 'projectContext' || key === 'teamContext') {
+                    return '';
+                }
+                return defaultValue;
+            }),
+        });
+        (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath);
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('Morse-specific TDD context that must not ground benchmark scans.'));
+
+        const context = await loadProjectContextInfo({
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+
+        expect(context.summary).toContain('TDD file skipped: outside selected project root');
+        expect(context.combined).toContain('TDD Box context skipped');
+        expect(context.combined).not.toContain('Morse-specific TDD context');
+    });
+
     it('loads bounded design context from the selected project root and prioritizes STRIDE files', async () => {
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
             get: jest.fn((key: string, defaultValue?: any) => {

@@ -17,6 +17,8 @@ function buildCommandIdMap(profile) {
     "owlvex.openProjectContext": `${profile.commandPrefix}.openProjectContext`,
     "owlvex.openTddBox": `${profile.commandPrefix}.openTddBox`,
     "owlvex.openDesignContext": `${profile.commandPrefix}.openDesignContext`,
+    "owlvex.createDesignMap": `${profile.commandPrefix}.createDesignMap`,
+    "owlvex.openDesignMap": `${profile.commandPrefix}.openDesignMap`,
     "owlvex.openDriftBox": `${profile.commandPrefix}.openDriftBox`,
     "owlvex.testAIConnection": `${profile.commandPrefix}.testAIConnection`,
     "owlvex.testTrialSetup": `${profile.commandPrefix}.testTrialSetup`,
@@ -32,6 +34,7 @@ function buildCommandIdMap(profile) {
     "owlvex.discussFinding": `${profile.commandPrefix}.discussFinding`,
     "owlvex.generateFixPreview": `${profile.commandPrefix}.generateFixPreview`,
     "owlvex.applyFixPreview": `${profile.commandPrefix}.applyFixPreview`,
+    "owlvex.revealLine": `${profile.commandPrefix}.revealLine`,
   };
 }
 

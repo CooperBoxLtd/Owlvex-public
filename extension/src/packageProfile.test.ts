@@ -58,7 +58,11 @@ describe('package profile helpers', () => {
 
         const commandIds = rewritten.contributes.commands.map((entry: { command: string }) => entry.command);
         expect(commandIds).toContain('owlvexDev.configureProviderThrottling');
+        expect(commandIds).toContain('owlvexDev.createDesignMap');
+        expect(commandIds).toContain('owlvexDev.openDesignMap');
         expect(commandIds).not.toContain('owlvex.configureProviderThrottling');
+        expect(commandIds).not.toContain('owlvex.createDesignMap');
+        expect(commandIds).not.toContain('owlvex.openDesignMap');
 
         expect(rewritten.contributes.configuration.properties['owlvexDev.providerThrottleOverrides']).toBeDefined();
         expect(rewritten.contributes.configuration.properties['owlvexDev.apiUrl'].default).toBe(devProfile.apiUrl);

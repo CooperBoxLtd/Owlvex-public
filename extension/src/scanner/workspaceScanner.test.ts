@@ -25,6 +25,9 @@ describe('workspaceScanner', () => {
             const token = { isCancellationRequested: false };
             return task(progress, token);
         });
+        (fs.mkdtemp as jest.Mock).mockImplementation(async (prefix: string) => `${prefix}snapshot`);
+        (fs.mkdir as jest.Mock).mockResolvedValue(undefined);
+        (fs.writeFile as jest.Mock).mockResolvedValue(undefined);
     });
 
     it('collects supported files and skips excluded directories', async () => {
@@ -124,10 +127,12 @@ describe('workspaceScanner', () => {
 
     it('collects scannable files from a specific Git commit', async () => {
         (execFile as unknown as jest.Mock)
-            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/route.js\0README.md\0package.json\0', ''));
-        (fs.stat as jest.Mock).mockResolvedValue({ isFile: () => true });
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/route.js\0README.md\0package.json\0', ''))
+            .mockImplementation((_command: string, args: string[], _options: any, callback: any) => {
+                callback(null, Buffer.from(`snapshot for ${args[args.length - 1]}`), Buffer.from(''));
+            });
 
-        const result = await collectGitTargetScannableFilesDetailed(vscode.Uri.file('d:\\repo'), 'abc123');
+        const result = await collectGitTargetScannableFilesDetailed(vscode.Uri.file('d:\\repo'), 'abc1234');
 
         expect((execFile as unknown as jest.Mock).mock.calls[0][1]).toEqual([
             '-C',
@@ -139,7 +144,7 @@ describe('workspaceScanner', () => {
             '-r',
             '-z',
             '--diff-filter=ACMRTUXB',
-            'abc123',
+            'abc1234',
             '--',
             '.',
         ]);
@@ -147,6 +152,29 @@ describe('workspaceScanner', () => {
             'd:/repo/src/route.js',
             'd:/repo/package.json',
         ]);
+        expect(result.scanFiles?.map(file => ({
+            uri: normalizeTestPath(file.uri.fsPath),
+            resultUri: normalizeTestPath(file.resultUri!.fsPath),
+            shortName: file.shortName,
+        }))).toEqual([
+            {
+                uri: expect.stringContaining('/owlvex-git-abc1234-snapshot/src/route.js'),
+                resultUri: 'd:/repo/src/route.js',
+                shortName: 'src/route.js',
+            },
+            {
+                uri: expect.stringContaining('/owlvex-git-abc1234-snapshot/package.json'),
+                resultUri: 'd:/repo/package.json',
+                shortName: 'package.json',
+            },
+        ]);
+        expect(execFile as unknown as jest.Mock).toHaveBeenCalledWith(
+            'git',
+            ['-C', 'd:\\repo', 'show', 'abc1234:src/route.js'],
+            expect.any(Object),
+            expect.any(Function),
+        );
+        expect(fs.writeFile).toHaveBeenCalledWith(expect.stringContaining('src\\route.js'), expect.stringContaining('snapshot for abc1234:src/route.js'), 'utf8');
         expect(result.skipped).toEqual([{
             path: 'README.md',
             reason: 'documentation/context file; use TDD Box or Design Box when it should ground a scan',
@@ -156,8 +184,10 @@ describe('workspaceScanner', () => {
 
     it('collects scannable files from a Git range', async () => {
         (execFile as unknown as jest.Mock)
-            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/a.ts\0src/b.ts\0', ''));
-        (fs.stat as jest.Mock).mockResolvedValue({ isFile: () => true });
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/a.ts\0src/b.ts\0', ''))
+            .mockImplementation((_command: string, args: string[], _options: any, callback: any) => {
+                callback(null, Buffer.from(`snapshot for ${args[args.length - 1]}`), Buffer.from(''));
+            });
 
         const result = await collectGitTargetScannableFilesDetailed(vscode.Uri.file('d:\\repo'), 'main..feature/login');
 
@@ -177,6 +207,53 @@ describe('workspaceScanner', () => {
             'd:/repo/src/a.ts',
             'd:/repo/src/b.ts',
         ]);
+        expect(result.contentRef).toBe('feature/login');
+        expect(execFile as unknown as jest.Mock).toHaveBeenCalledWith(
+            'git',
+            ['-C', 'd:\\repo', 'show', 'feature/login:src/a.ts'],
+            expect.any(Object),
+            expect.any(Function),
+        );
+    });
+
+    it('uses a branch diff instead of only the branch tip commit when a branch target is provided', async () => {
+        (execFile as unknown as jest.Mock).mockImplementation((_command: string, args: string[], _options: any, callback: any) => {
+            const gitArgs = args.slice(2);
+            if (gitArgs.join(' ') === 'rev-parse --verify refs/heads/feature/login') {
+                callback(null, 'branch-hash\0', '');
+                return;
+            }
+            if (gitArgs.join(' ') === 'rev-parse --verify feature/login@{upstream}') {
+                callback(null, 'upstream-hash\0', '');
+                return;
+            }
+            if (gitArgs[0] === 'diff') {
+                callback(null, 'src/branch.ts\0', '');
+                return;
+            }
+            if (gitArgs[0] === 'show') {
+                callback(null, Buffer.from('branch snapshot'), Buffer.from(''));
+                return;
+            }
+            callback(new Error(`unexpected git command ${gitArgs.join(' ')}`), '', '');
+        });
+
+        const result = await collectGitTargetScannableFilesDetailed(vscode.Uri.file('d:\\repo'), 'feature/login');
+
+        expect(execFile as unknown as jest.Mock).toHaveBeenCalledWith(
+            'git',
+            ['-C', 'd:\\repo', 'diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', 'feature/login@{upstream}..feature/login', '--', '.'],
+            expect.any(Object),
+            expect.any(Function),
+        );
+        expect(execFile as unknown as jest.Mock).not.toHaveBeenCalledWith(
+            'git',
+            expect.arrayContaining(['diff-tree']),
+            expect.any(Object),
+            expect.any(Function),
+        );
+        expect(result.files.map(file => normalizeTestPath(file.fsPath))).toEqual(['d:/repo/src/branch.ts']);
+        expect(result.contentRef).toBe('feature/login');
     });
 
     it('counts only successful scans as completed', async () => {
@@ -323,6 +400,35 @@ describe('workspaceScanner', () => {
             'd:\\repo\\src\\one.js: provider timeout',
             'd:\\repo\\src\\two.js: provider timeout',
         ]);
+    });
+
+    it('scans snapshot files while reporting results against original repository paths', async () => {
+        const snapshotUri = vscode.Uri.file('C:\\Temp\\owlvex-git\\src\\app.js');
+        const originalUri = vscode.Uri.file('d:\\repo\\src\\app.js');
+        const scanEngine = {
+            scanDocument: jest.fn(async (document: any) => ({
+                scanId: 'scan-snapshot',
+                score: 0,
+                summary: document.fileName,
+                findings: [],
+                positives: [],
+                metrics: { critical: 0, high: 0, medium: 0, low: 0 },
+                durationMs: 10,
+                model: 'owlvex-test-model',
+                provider: 'test-provider',
+                warnings: [],
+            })),
+        };
+
+        const summary = await scanSelectedFiles({
+            files: [{ uri: snapshotUri, resultUri: originalUri, shortName: 'src/app.js' }],
+            scanEngine: scanEngine as any,
+            diagnostics: { applyFindings: jest.fn() },
+            skipConfirmation: true,
+        });
+
+        expect(vscode.workspace.openTextDocument).toHaveBeenCalledWith(snapshotUri);
+        expect(summary.results[0].uri).toEqual(originalUri);
     });
 
     it('supports multi-select file picking', async () => {

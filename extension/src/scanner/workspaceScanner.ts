@@ -1,5 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { execFile } from 'child_process';
 import * as vscode from 'vscode';
 import { ScanEngine, ScanResult } from './scanEngine';
@@ -84,10 +85,23 @@ export interface ChangedScannableFilesResult {
 
 export interface GitTargetScannableFilesResult {
     files: vscode.Uri[];
+    scanFiles?: ScanFileInput[];
     gitTarget: string;
     gitChangedPaths: string[];
     skipped: ChangedFileSkip[];
     errors: string[];
+    contentRef?: string;
+    snapshotRoot?: vscode.Uri;
+}
+
+export interface ScanFileInput {
+    uri: vscode.Uri;
+    resultUri?: vscode.Uri;
+    shortName?: string;
+}
+
+function isScanFileInput(value: vscode.Uri | ScanFileInput): value is ScanFileInput {
+    return Boolean((value as ScanFileInput).uri);
 }
 
 function getProactiveSpacingMs(
@@ -273,6 +287,22 @@ async function runGit(root: vscode.Uri, args: string[]): Promise<string[]> {
         .filter(Boolean);
 }
 
+async function runGitText(root: vscode.Uri, args: string[]): Promise<string> {
+    return await new Promise<string>((resolve, reject) => {
+        execFile('git', ['-C', root.fsPath, ...args], {
+            maxBuffer: 1024 * 1024 * 8,
+            windowsHide: true,
+            encoding: 'buffer',
+        }, (error, output) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve(Buffer.isBuffer(output) ? output.toString('utf8') : String(output));
+        });
+    });
+}
+
 async function existingScannableGitPath(root: vscode.Uri, relativePath: string): Promise<vscode.Uri | undefined> {
     if (path.isAbsolute(relativePath)) return undefined;
 
@@ -362,6 +392,97 @@ function looksLikeGitRange(target: string): boolean {
     return /\.{2,3}/.test(target);
 }
 
+function looksLikeCommitHash(target: string): boolean {
+    return /^[a-f0-9]{7,40}$/i.test(target);
+}
+
+async function gitRefExists(root: vscode.Uri, ref: string): Promise<boolean> {
+    try {
+        await runGit(root, ['rev-parse', '--verify', ref]);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+async function gitBranchExists(root: vscode.Uri, target: string): Promise<boolean> {
+    if (await gitRefExists(root, `refs/heads/${target}`)) {
+        return true;
+    }
+    if (await gitRefExists(root, `refs/remotes/${target}`)) {
+        return true;
+    }
+    return false;
+}
+
+async function resolveGitTargetDiffArgs(root: vscode.Uri, target: string): Promise<string[]> {
+    if (looksLikeGitRange(target)) {
+        return ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', target, '--', '.'];
+    }
+
+    if (!looksLikeCommitHash(target) && await gitBranchExists(root, target)) {
+        const upstreamRef = `${target}@{upstream}`;
+        if (await gitRefExists(root, upstreamRef)) {
+            return ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', `${upstreamRef}..${target}`, '--', '.'];
+        }
+
+        for (const baseRef of ['origin/main', 'origin/master', 'main', 'master']) {
+            if (await gitRefExists(root, baseRef)) {
+                return ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', `${baseRef}..${target}`, '--', '.'];
+            }
+        }
+    }
+
+    return ['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '-z', '--diff-filter=ACMRTUXB', target, '--', '.'];
+}
+
+function gitContentRefForTarget(target: string): string {
+    if (!looksLikeGitRange(target)) {
+        return target;
+    }
+
+    const parts = target.split(/\.{2,3}/);
+    return parts[parts.length - 1]?.trim() || target;
+}
+
+function sanitizeGitTargetForPath(target: string): string {
+    return target.replace(/[^A-Za-z0-9_.-]+/g, '_').slice(0, 80) || 'target';
+}
+
+async function materializeGitTargetFileSnapshot(
+    root: vscode.Uri,
+    contentRef: string,
+    relativePath: string,
+    snapshotRoot: string,
+): Promise<ScanFileInput | undefined> {
+    const normalizedPath = path.normalize(relativePath);
+    if (path.isAbsolute(relativePath) || normalizedPath === '..' || normalizedPath.startsWith(`..${path.sep}`)) {
+        return undefined;
+    }
+
+    const originalUri = vscode.Uri.file(path.join(root.fsPath, normalizedPath));
+    if (!isScannableSourceUri(originalUri)) {
+        return undefined;
+    }
+
+    let content: string;
+    try {
+        content = await runGitText(root, ['show', `${contentRef}:${relativePath}`]);
+    } catch {
+        return undefined;
+    }
+
+    const snapshotPath = path.join(snapshotRoot, normalizedPath);
+    await fs.mkdir(path.dirname(snapshotPath), { recursive: true });
+    await fs.writeFile(snapshotPath, content, 'utf8');
+
+    return {
+        uri: vscode.Uri.file(snapshotPath),
+        resultUri: originalUri,
+        shortName: relativePath,
+    };
+}
+
 export async function collectGitTargetScannableFilesDetailed(root: vscode.Uri, gitTarget: string, limit = 200): Promise<GitTargetScannableFilesResult> {
     const target = gitTarget.trim();
     if (!target) {
@@ -370,9 +491,7 @@ export async function collectGitTargetScannableFilesDetailed(root: vscode.Uri, g
 
     let changedPaths: string[] = [];
     try {
-        changedPaths = looksLikeGitRange(target)
-            ? await runGit(root, ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', target, '--', '.'])
-            : await runGit(root, ['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '-z', '--diff-filter=ACMRTUXB', target, '--', '.']);
+        changedPaths = await runGit(root, await resolveGitTargetDiffArgs(root, target));
     } catch (error: any) {
         return {
             files: [],
@@ -385,12 +504,17 @@ export async function collectGitTargetScannableFilesDetailed(root: vscode.Uri, g
 
     const uniquePaths = [...new Set(changedPaths)].slice(0, limit * 2);
     const files: vscode.Uri[] = [];
+    const scanFiles: ScanFileInput[] = [];
     const skipped: ChangedFileSkip[] = [];
+    const contentRef = gitContentRefForTarget(target);
+    const snapshotRootPath = await fs.mkdtemp(path.join(os.tmpdir(), `owlvex-git-${sanitizeGitTargetForPath(target)}-`));
+    const snapshotRoot = vscode.Uri.file(snapshotRootPath);
     for (const relativePath of uniquePaths) {
         if (files.length >= limit) break;
-        const uri = await existingScannableGitPath(root, relativePath);
-        if (uri) {
-            files.push(uri);
+        const snapshot = await materializeGitTargetFileSnapshot(root, contentRef, relativePath, snapshotRootPath);
+        if (snapshot) {
+            files.push(snapshot.resultUri ?? snapshot.uri);
+            scanFiles.push(snapshot);
         } else {
             skipped.push({
                 path: relativePath,
@@ -399,7 +523,7 @@ export async function collectGitTargetScannableFilesDetailed(root: vscode.Uri, g
         }
     }
 
-    return { files, gitTarget: target, gitChangedPaths: uniquePaths, skipped, errors: [] };
+    return { files, scanFiles, gitTarget: target, gitChangedPaths: uniquePaths, skipped, errors: [], contentRef, snapshotRoot };
 }
 
 export interface FolderScanFileResult {
@@ -441,7 +565,7 @@ export async function scanFolder(options: {
 }
 
 export async function scanSelectedFiles(options: {
-    files: vscode.Uri[];
+    files: Array<vscode.Uri | ScanFileInput>;
     scanEngine: ScanEngine;
     diagnostics: { applyFindings(doc: vscode.TextDocument, findings: any[]): void };
     skipConfirmation?: boolean;
@@ -465,7 +589,7 @@ export async function scanSelectedFiles(options: {
 }
 
 async function scanUris(options: {
-    files: vscode.Uri[];
+    files: Array<vscode.Uri | ScanFileInput>;
     scanEngine: ScanEngine;
     diagnostics: { applyFindings(doc: vscode.TextDocument, findings: any[]): void };
     pacingMode: ScanPacingMode;
@@ -475,7 +599,8 @@ async function scanUris(options: {
     getShortName: (uri: vscode.Uri) => string;
     skipConfirmation?: boolean;
 }): Promise<FolderScanSummary> {
-    const files = options.files;
+    const fileInputs = options.files.map(item => isScanFileInput(item) ? item : { uri: item });
+    const files = fileInputs.map(item => item.uri);
 
     if (!options.skipConfirmation) {
         const confirm = await vscode.window.showInformationMessage(
@@ -506,7 +631,7 @@ async function scanUris(options: {
     const batchBudgetPlan = planBatchRequestBudget(files.length, provider, model, options.pacingMode);
     let proactiveBudgetUntil = 0;
     const sharedDrift = typeof (options.scanEngine as any).prepareSharedDriftScanContext === 'function'
-        ? await (options.scanEngine as any).prepareSharedDriftScanContext(files, 'scan')
+        ? await (options.scanEngine as any).prepareSharedDriftScanContext(fileInputs.map(item => item.resultUri ?? item.uri), 'scan')
         : undefined;
 
     if (batchBudgetPlan.proactiveSpacingMs > 0 && files.length > 1) {
@@ -525,7 +650,8 @@ async function scanUris(options: {
         },
         async (progress, token) => {
             for (let fileIndex = 0; fileIndex < files.length; fileIndex += 1) {
-                const uri = files[fileIndex];
+                const input = fileInputs[fileIndex];
+                const uri = input.uri;
                 if (token.isCancellationRequested) {
                     cancelled = true;
                     break;
@@ -542,16 +668,17 @@ async function scanUris(options: {
                 }
 
                 const attemptedIndex = completed + errors.length + 1;
-                const shortName = options.getShortName(uri);
+                const shortName = input.shortName ?? options.getShortName(input.resultUri ?? uri);
                 progress.report({
                     message: `${shortName} (${attemptedIndex}/${files.length})`,
                     increment: (1 / files.length) * 100,
                 });
 
                 try {
-                    const remainingFiles = files.slice(fileIndex);
-                    const shouldBatch = typeof (options.scanEngine as any).scanDocumentsBatch === 'function' && remainingFiles.length > 1;
-                    const batchUris = shouldBatch ? remainingFiles.slice(0, AI_BATCH_SIZE) : [uri];
+                    const remainingInputs = fileInputs.slice(fileIndex);
+                    const shouldBatch = typeof (options.scanEngine as any).scanDocumentsBatch === 'function' && remainingInputs.length > 1;
+                    const batchInputs = shouldBatch ? remainingInputs.slice(0, AI_BATCH_SIZE) : [input];
+                    const batchUris = batchInputs.map(item => item.uri);
                     const documents = await Promise.all(batchUris.map(batchUri => vscode.workspace.openTextDocument(batchUri)));
                     const batchResults: ScanResult[] = shouldBatch
                         ? sharedDrift
@@ -566,7 +693,8 @@ async function scanUris(options: {
 
                     for (let batchIndex = 0; batchIndex < batchResults.length; batchIndex += 1) {
                         let batchResult = batchResults[batchIndex];
-                        const batchUri = batchUris[batchIndex];
+                        const batchInput = batchInputs[batchIndex];
+                        const batchUri = batchInput.resultUri ?? batchInput.uri;
                         const batchDoc = documents[batchIndex];
 
                         if (shouldBatch && isDeterministicOnlyCleanResult(batchResult)) {
@@ -621,7 +749,7 @@ async function scanUris(options: {
                     }
 
                     if (shouldBatch) {
-                        fileIndex += batchUris.length - 1;
+                        fileIndex += batchInputs.length - 1;
                         continue;
                     }
                 } catch (error: any) {
