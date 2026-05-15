@@ -6508,7 +6508,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <button class="icon-button" id="newChatTop" type="button" title="New chat" aria-label="New chat">&#9998;</button>
         </div>
       </div>
-      <div class="workflow-panel" id="workflowPanel">
+      <div class="workflow-panel" id="workflowPanel" hidden>
         <div class="workflow-top">
           <div>
             <div class="workflow-title" id="readinessLabel">Checking setup...</div>
@@ -6672,6 +6672,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const historyCopyEl = document.getElementById('historyCopy');
     const toggleSettingsTopEl = document.getElementById('toggleSettingsTop');
     const closeSettingsEl = document.getElementById('closeSettings');
+    const workflowPanelEl = document.getElementById('workflowPanel');
     const toggleHistoryEl = document.getElementById('toggleHistory');
     const restorePreviousEl = document.getElementById('restorePrevious');
     const dismissHistoryEl = document.getElementById('dismissHistory');
@@ -6807,6 +6808,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (settingsPanelEl && (!state.hasLicence || !state.providerConfigured) && !state.messages.length) {
         settingsPanelEl.hidden = true;
       }
+      if (workflowPanelEl && settingsPanelEl?.hidden) {
+        workflowPanelEl.hidden = true;
+      }
       document.querySelectorAll('[data-auth-action]').forEach((button) => {
         button.hidden = Boolean(state.hasLicence);
       });
@@ -6915,10 +6919,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       postAction(nextWorkflowAction);
     });
     toggleSettingsTopEl.addEventListener('click', () => {
-      settingsPanelEl.hidden = !settingsPanelEl.hidden;
+      const nextHidden = !settingsPanelEl.hidden;
+      settingsPanelEl.hidden = nextHidden;
+      workflowPanelEl.hidden = nextHidden;
     });
     closeSettingsEl.addEventListener('click', () => {
       settingsPanelEl.hidden = true;
+      workflowPanelEl.hidden = true;
     });
     toggleHistoryEl.addEventListener('click', () => {
       if (toggleHistoryEl.disabled) return;
