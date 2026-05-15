@@ -76,12 +76,13 @@ describe('design map generator', () => {
             '}',
         ].join('\n'));
         fs.writeFileSync(path.join(tempRoot, 'electron', 'preload.js'), [
-            "const { contextBridge } = require('electron');",
-            "contextBridge.exposeInMainWorld('api', {});",
+            "const { contextBridge, ipcRenderer } = require('electron');",
+            "contextBridge.exposeInMainWorld('api', { ping: () => ipcRenderer.invoke('ping') });",
         ].join('\n'));
         fs.writeFileSync(path.join(tempRoot, 'electron', 'main.js'), [
             "require('./preload');",
-            'console.log("main");',
+            "const { ipcMain } = require('electron');",
+            "ipcMain.handle('ping', () => true);",
         ].join('\n'));
         fs.writeFileSync(path.join(tempRoot, 'scripts', 'dev.mjs'), [
             "import { spawn } from 'node:child_process';",
@@ -95,6 +96,9 @@ describe('design map generator', () => {
         expect(result.map.entrypoints).toContain('electron/main.js');
         expect(result.map.sinks).toContain('JSON.parse');
         expect(result.map.sinks).not.toContain('spawn');
+        expect(result.map.dataStores).toContain('localStorage');
+        expect(result.map.externalIntegrations).toContain('ipcRenderer.invoke');
+        expect(result.map.externalIntegrations).toContain('ipcMain.handle');
         expect(relationships).toContain('imports:src/main.jsx->src/components/App.jsx');
         expect(relationships).toContain('imports:src/components/App.jsx->src/hooks/useSession.js');
         expect(relationships).toContain('imports:electron/main.js->electron/preload.js');
@@ -103,6 +107,23 @@ describe('design map generator', () => {
         const markdown = Buffer.from(markdownWrite[1]).toString('utf8');
         expect(markdown).toContain('frontend-entrypoint: src/main.jsx');
         expect(markdown).toContain('imports: `src/main.jsx` -> `src/components/App.jsx`');
+        expect(markdown).toContain('localStorage');
+        expect(markdown).toContain('ipcRenderer.invoke');
         expect(markdown).not.toContain('spawn');
+    });
+
+    it('does not treat generic request or raw wording as a sink without API evidence', async () => {
+        fs.mkdirSync(path.join(tempRoot, 'src'), { recursive: true });
+        fs.writeFileSync(path.join(tempRoot, 'src', 'app.js'), [
+            'export function describe(rawState) {',
+            "  const requestLabel = 'repeat request';",
+            '  return `${requestLabel}:${rawState.mode}`;',
+            '}',
+        ].join('\n'));
+
+        const result = await generateDesignMap(vscode.Uri.file(tempRoot) as any);
+
+        expect(result.map.sinks).not.toContain('request');
+        expect(result.map.sinks).not.toContain('raw');
     });
 });

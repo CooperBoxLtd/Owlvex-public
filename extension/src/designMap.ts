@@ -76,6 +76,7 @@ function classifyFile(relative: string): string {
     if (/(^|\/)electron\/preload\.[cm]?[jt]s$/.test(normalized)) return 'electron-preload';
     if (/(^|\/)electron\//.test(normalized)) return 'electron-runtime';
     if (/(^|\/)src\/main\.[cm]?[jt]sx?$/.test(normalized)) return 'frontend-entrypoint';
+    if (/(^|\/)src\/[^/]*(terminal|app|screen|shell)\.[cm]?[jt]sx?$/.test(normalized)) return 'ui-container';
     if (/(^|\/)(components?|views?|pages?)\//.test(normalized)) return 'ui-component';
     if (/(^|\/)hooks?\//.test(normalized)) return 'hook';
     if (/(^|\/)(network|protocol)\//.test(normalized) || /protocol\.[cm]?[jt]s$/.test(normalized)) return 'protocol';
@@ -139,14 +140,18 @@ function extractFileEvidence(root: string, filePath: string, content: string): D
     ]);
     const runtimeRelevant = !['test', 'dev-tooling'].includes(kind);
     const sinks = runtimeRelevant ? collectMatches(content, [
-        /\b(eval|Function|child_process|exec|spawn|fetch|axios|request|jwt\.decode|jwt\.verify|JSON\.parse|deserialize|pickle|yaml\.load|fs\.(?:readFile|writeFile|createReadStream|unlink|rm)|res\.download|sendFile)\b/g,
-        /\b(query|execute|raw|knex|sequelize|prisma)\b/g,
+        /\b(eval|Function|child_process|exec|spawn|fetch|axios|jwt\.decode|jwt\.verify|JSON\.parse|deserialize|pickle|yaml\.load|fs\.(?:readFile|writeFile|createReadStream|unlink|rm)|res\.download|sendFile)\b/g,
+        /\b(query|execute)\s*\(/g,
+        /\.(raw)\s*\(/g,
     ]) : [];
     const dataStores = runtimeRelevant ? collectMatches(content, [
-        /\b(repositories?|models?|collections?|tables?|prisma|sequelize|mongoose|knex|db|database|redis|mongo)\b/g,
+        /\b(repositories?|models?|collections?|tables?|prisma|sequelize|mongoose|knex|db|database|redis|mongo|localStorage|sessionStorage)\b/g,
     ]) : [];
     const externalIntegrations = runtimeRelevant ? collectMatches(content, [
-        /\b(fetch|axios|request|http\.request|https\.request|S3|BlobService|Stripe|Twilio|SendGrid|OpenAI|Anthropic|Azure)\b/g,
+        /\b(fetch|axios|http\.request|https\.request)\b/g,
+        /\b(ipcRenderer\.invoke|ipcRenderer\.on|ipcMain\.handle|webContents\.send)\b/g,
+        /\b(net\.createServer|net\.connect|socket\.write|socket\.on)\b/g,
+        /\b(S3|BlobService|Stripe|Twilio|SendGrid|OpenAI|Anthropic|Azure)\b/g,
     ]) : [];
     const entrypoints = kind === 'entrypoint'
         || kind === 'frontend-entrypoint'
@@ -165,7 +170,7 @@ function extractFileEvidence(root: string, filePath: string, content: string): D
         sinks,
         dataStores,
         externalIntegrations,
-        confidence: routes.length || guards.length || sinks.length ? 'confirmed_by_code' : 'inferred_from_naming',
+        confidence: routes.length || guards.length || sinks.length || dataStores.length || externalIntegrations.length ? 'confirmed_by_code' : 'inferred_from_naming',
     };
 }
 
@@ -216,7 +221,7 @@ function buildGuidance(map: Omit<DesignMap, 'scannerGuidance' | 'summary'>): str
     if (!map.ownershipSignals.length) {
         guidance.push('No strong ownership model was confirmed. Downgrade object-ownership findings to review if the only evidence is a client-supplied ID.');
     }
-    if (map.externalIntegrations.length) {
+    if (map.externalIntegrations.some(item => /fetch|axios|http\.request|https\.request|net\.connect|net\.createServer/i.test(item))) {
         guidance.push('Outbound integration calls exist. SSRF-style findings should look for allowlists, URL normalization, and internal-address blocking.');
     }
     return guidance;
@@ -245,6 +250,8 @@ function buildMermaid(map: DesignMap): string {
             || file.routes.length
             || file.guards.length
             || file.sinks.length
+            || file.dataStores.length
+            || file.externalIntegrations.length
             || file.dependsOn.length
             || map.relationships.some(edge => edge.to === file.path)
         )
@@ -288,6 +295,20 @@ function buildMermaid(map: DesignMap): string {
         for (const [index, file] of sinkFiles.entries()) {
             const id = mermaidId('Sink', index);
             lines.push(`  ${id}[("${mermaidLabel(file.sinks.slice(0, 3).join(', '))}")]`);
+            lines.push(`  ${nodeIds.get(file.path)} --> ${id}`);
+        }
+
+        const storeFiles = importantFiles.filter(file => file.dataStores.length).slice(0, 8);
+        for (const [index, file] of storeFiles.entries()) {
+            const id = mermaidId('Store', index);
+            lines.push(`  ${id}[("${mermaidLabel(file.dataStores.slice(0, 3).join(', '))}")]`);
+            lines.push(`  ${nodeIds.get(file.path)} --> ${id}`);
+        }
+
+        const integrationFiles = importantFiles.filter(file => file.externalIntegrations.length).slice(0, 8);
+        for (const [index, file] of integrationFiles.entries()) {
+            const id = mermaidId('Integration', index);
+            lines.push(`  ${id}[/"${mermaidLabel(file.externalIntegrations.slice(0, 3).join(', '))}"/]`);
             lines.push(`  ${nodeIds.get(file.path)} --> ${id}`);
         }
 
