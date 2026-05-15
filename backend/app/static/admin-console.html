@@ -538,6 +538,7 @@
             </div>
           </div>
           <div class="control-actions">
+            <button class="primary" id="issueDeveloperTop">Create developer code</button>
             <button class="primary" id="loadOverview">Load directory</button>
             <button class="secondary" id="exportJson">Export JSON</button>
           </div>
@@ -1710,7 +1711,14 @@
 
     async function issueDeveloperLicence() {
       const customer = selectedCustomer();
-      if (!customer) throw new Error('No customer selected.');
+      const emailInput = customer
+        ? window.prompt('Customer email for this developer licence.', customer.email)
+        : window.prompt('Customer email for this developer licence.');
+      if (emailInput === null) return;
+      const email = emailInput.trim().toLowerCase();
+      if (!email || !email.includes('@')) throw new Error('A valid customer email is required.');
+      const teamNameInput = window.prompt('Team or customer name. Leave blank to use the email.', customer?.company || customer?.name || '');
+      if (teamNameInput === null) return;
       const daysInput = window.prompt('Developer licence validity in days. Leave blank for no expiry.', '30');
       if (daysInput === null) return;
       const trimmedDays = daysInput.trim();
@@ -1726,17 +1734,20 @@
       }
       const reason = window.prompt('Reason for audit trail.', 'early customer developer access');
       if (reason === null) return;
-      setStatus(`Issuing developer licence for ${customer.email}...`);
+      setStatus(`Issuing developer licence for ${email}...`);
       const data = await request('/v1/admin/licence/issue-developer', {
         method: 'POST',
         body: JSON.stringify({
-          email: customer.email,
-          team_name: customer.company || customer.name || undefined,
+          email,
+          team_name: teamNameInput.trim() || undefined,
           seats,
           validity_days: validityDays,
           reason: reason.trim() || null,
         }),
       });
+      await loadOverview();
+      const createdCustomer = state.customers.find((candidate) => candidate.email === email);
+      if (createdCustomer) state.selectedCustomerId = createdCustomer.customer_id;
       await refreshSelectedCustomer();
       showIssuedKey(data, 'Developer licence issued');
     }
@@ -1907,6 +1918,7 @@
     });
 
     document.getElementById('loadOverview').addEventListener('click', () => loadOverview().catch(handleError));
+    document.getElementById('issueDeveloperTop').addEventListener('click', () => issueDeveloperLicence().catch(handleError));
     document.getElementById('exportJson').addEventListener('click', () => exportJson().catch(handleError));
     document.getElementById('loadMetrics').addEventListener('click', () => loadMetrics().catch(handleError));
     document.getElementById('runExport').addEventListener('click', () => runTargetedExport().catch(handleError));
