@@ -6018,23 +6018,53 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       opacity: 0.78;
       line-height: 1.35;
     }
-    .workflow-details {
-      margin-top: 0;
+    .progressive-stack {
+      display: grid;
+      gap: 6px;
     }
-    .workflow-details summary {
+    .progressive-section {
+      border: 1px solid color-mix(in srgb, var(--vscode-widget-border) 72%, transparent);
+      border-radius: 9px;
+      background: color-mix(in srgb, var(--vscode-sideBar-background) 34%, transparent);
+      overflow: hidden;
+    }
+    .progressive-section summary {
       list-style: none;
       cursor: pointer;
-      color: var(--vscode-textLink-foreground);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 7px 9px;
       font-size: 11px;
-      width: fit-content;
+      font-weight: 600;
     }
-    .workflow-details summary::-webkit-details-marker {
+    .progressive-section summary::-webkit-details-marker {
       display: none;
     }
-    .workflow-details-panel {
+    .section-summary {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      opacity: 0.68;
+      font-weight: 500;
+    }
+    .section-body {
+      border-top: 1px solid color-mix(in srgb, var(--vscode-widget-border) 60%, transparent);
+      padding: 8px 9px 9px;
       display: grid;
       gap: 8px;
-      margin-top: 8px;
+    }
+    .section-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+    .section-status {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
     }
     .workflow-primary {
       flex: 0 0 auto;
@@ -6487,36 +6517,68 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <button class="workflow-primary" id="nextActionButton" type="button">Next</button>
         </div>
         <div class="workflow-warning" id="workflowWarning"></div>
-        <details class="workflow-details">
-          <summary>Context and tools</summary>
-          <div class="workflow-details-panel">
-            <div class="workflow-status-grid">
-              <div class="workflow-status">
-                <span class="workflow-status-label">Access</span>
-                <span class="workflow-status-value" id="workflowAccess">loading</span>
+        <div class="progressive-stack">
+          <details class="progressive-section" id="setupSection">
+            <summary><span>Setup</span><span class="section-summary" id="setupSummary">checking</span></summary>
+            <div class="section-body">
+              <div class="section-status">
+                <div class="workflow-status">
+                  <span class="workflow-status-label">Access</span>
+                  <span class="workflow-status-value" id="workflowAccess">loading</span>
+                </div>
+                <div class="workflow-status">
+                  <span class="workflow-status-label">LLM</span>
+                  <span class="workflow-status-value" id="workflowLlm">loading</span>
+                </div>
+                <div class="workflow-status">
+                  <span class="workflow-status-label">Project</span>
+                  <span class="workflow-status-value" id="workflowScope">loading</span>
+                </div>
+                <div class="workflow-status">
+                  <span class="workflow-status-label">Backend</span>
+                  <span class="workflow-status-value" id="setupBackend">loading</span>
+                </div>
               </div>
-              <div class="workflow-status">
-                <span class="workflow-status-label">LLM</span>
-                <span class="workflow-status-value" id="workflowLlm">loading</span>
+              <div class="section-actions">
+                <button class="chip" data-auth-action data-action="useFree">Use Free</button>
+                <button class="chip" data-auth-action data-action="startTrial">Start Trial</button>
+                <button class="chip" data-action="enterLicence">Enter Licence</button>
+                <button class="chip" data-action="setupAI">Configure LLM</button>
+                <button class="chip" data-action="selectProjectRoot">Project Root</button>
+                <button class="chip" data-action="testAI">Test Connection</button>
+                <button class="chip" data-action="showOnboarding">Onboarding Check</button>
               </div>
-              <div class="workflow-status">
-                <span class="workflow-status-label">Scope</span>
-                <span class="workflow-status-value" id="workflowScope">loading</span>
-              </div>
+            </div>
+          </details>
+          <details class="progressive-section" id="contextSection">
+            <summary><span>Context</span><span class="section-summary" id="contextSummary">optional grounding</span></summary>
+            <div class="section-body">
               <div class="workflow-status">
                 <span class="workflow-status-label">Grounding</span>
                 <span class="workflow-status-value" id="workflowGrounding">loading</span>
               </div>
+              <div class="section-actions">
+                <button class="chip" data-action="selectFrameworks">Frameworks</button>
+                <button class="chip" data-action="createDesignMap">Design Map</button>
+                <button class="chip" data-action="openTddBox">TDD Box</button>
+                <button class="chip" data-action="openDriftBox">Drift Box</button>
+              </div>
             </div>
-            <div class="workflow-actions">
-              <button class="chip" data-action="selectProjectRoot">Project Root</button>
-              <button class="chip" data-action="selectFrameworks">Frameworks</button>
-              <button class="chip" data-action="createDesignMap">Create Map</button>
-              <button class="chip" data-action="openTddBox">TDD Box</button>
-              <button class="chip" data-action="openDriftBox">Drift Box</button>
+          </details>
+          <details class="progressive-section" id="advancedSection">
+            <summary><span>Advanced</span><span class="section-summary">diagnostics and controls</span></summary>
+            <div class="section-body">
+              <div class="section-actions">
+                <button class="chip" data-action="viewPlans">View Plans</button>
+                <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
+                <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
+                <button class="chip" data-action="securityBoundary">Security Boundary</button>
+                <button class="chip" data-action="toggleTelemetry">Telemetry</button>
+                <button class="chip" data-action="configureBackend">Backend Override</button>
+              </div>
             </div>
-          </div>
-        </details>
+          </details>
+        </div>
       </div>
       <div class="settings-panel" id="settingsPanel" hidden>
         <div class="settings-head">
@@ -6532,26 +6594,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           <div class="meta" id="workspaceDetail">Workspace: loading...</div>
           <div class="meta" id="editor">Inspecting editor...</div>
           <div class="meta" id="projectContext">Project context: loading...</div>
-          <div class="quick-actions">
-            <button class="chip" data-action="showOnboarding">Onboarding</button>
-            <button class="chip" data-auth-action data-action="useFree">Use Free</button>
-            <button class="chip" data-auth-action data-action="startTrial">Start Trial</button>
-            <button class="chip" data-action="selectProjectRoot">Project Root</button>
-            <button class="chip" data-action="testAI">Test Connection</button>
-            <button class="chip" data-action="selectFrameworks">Select Frameworks</button>
-            <details>
-              <summary class="chip">More</summary>
-              <div class="more-actions-panel">
-                <button class="chip" data-action="enterLicence">Enter Licence</button>
-                <button class="chip" data-action="viewPlans">View Plans</button>
-                <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
-                <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
-                <button class="chip" data-action="securityBoundary">Security Boundary</button>
-                <button class="chip" data-action="toggleTelemetry">Telemetry</button>
-                <button class="chip" data-action="configureBackend">Backend Override</button>
-              </div>
-            </details>
-          </div>
         </div>
       </div>
     </div>
@@ -6644,6 +6686,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const workflowScopeEl = document.getElementById('workflowScope');
     const workflowGroundingEl = document.getElementById('workflowGrounding');
     const workflowWarningEl = document.getElementById('workflowWarning');
+    const setupSectionEl = document.getElementById('setupSection');
+    const setupSummaryEl = document.getElementById('setupSummary');
+    const setupBackendEl = document.getElementById('setupBackend');
+    const contextSummaryEl = document.getElementById('contextSummary');
     let historyVisible = false;
     let nextWorkflowAction = 'showOnboarding';
 
@@ -6735,6 +6781,14 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       workflowLlmEl.textContent = state.providerConfigured ? state.provider + ' configured' : 'not configured';
       workflowScopeEl.textContent = state.workingScopeLabel + ' | ' + (state.workspaceSummary || 'no workspace');
       workflowGroundingEl.textContent = state.groundingStatus || 'not checked';
+      setupBackendEl.textContent = (state.backendStatus || 'Backend: unknown').replace(/^Backend:\s*/i, '');
+      setupSummaryEl.textContent = state.hasLicence && state.providerConfigured
+        ? 'ready'
+        : 'required';
+      contextSummaryEl.textContent = state.groundingStatus || 'optional grounding';
+      if (setupSectionEl && !state.messages.length) {
+        setupSectionEl.open = !state.hasLicence || !state.providerConfigured;
+      }
       workflowWarningEl.textContent = state.groundingWarning || '';
       workflowWarningEl.classList.toggle('visible', Boolean(state.groundingWarning));
       llmButtonEl.textContent = state.providerConfigured
@@ -6751,7 +6805,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         scanScopeBottomEl.value = state.workingScope;
       }
       if (settingsPanelEl && (!state.hasLicence || !state.providerConfigured) && !state.messages.length) {
-        settingsPanelEl.hidden = false;
+        settingsPanelEl.hidden = true;
       }
       document.querySelectorAll('[data-auth-action]').forEach((button) => {
         button.hidden = Boolean(state.hasLicence);
