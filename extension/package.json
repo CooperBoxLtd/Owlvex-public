@@ -86,6 +86,14 @@
         "title": "Owlvex: Open Design Context"
       },
       {
+        "command": "owlvex.createDesignMap",
+        "title": "Owlvex: Create Design Map"
+      },
+      {
+        "command": "owlvex.openDesignMap",
+        "title": "Owlvex: Open Design Map"
+      },
+      {
         "command": "owlvex.openDriftBox",
         "title": "Owlvex: Open Drift Box"
       },
@@ -280,6 +288,11 @@
           "type": "string",
           "default": "",
           "description": "Optional local file path to the Design Box context document used to ground architecture, STRIDE, trust-boundary, role, and data-flow reasoning. Supports markdown/text, DOCX, and best-effort PDF text extraction"
+        },
+        "owlvex.designMapEnabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use the local Owlvex-generated Design Map when available to ground repo-aware chat, scan, report, and fix reasoning. The map is stored under the selected project root and is never uploaded to the Owlvex backend."
         },
         "owlvex.driftBoxFile": {
           "type": "string",

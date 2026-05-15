@@ -17,6 +17,7 @@ import { configureFrameworkPackRuntime } from './frameworks/frameworkGrounding';
 import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
 import { PROFILE } from './profile';
 import { loadProjectContextInfo, promptForProjectRootSelection, resolveProjectRootInfo } from './projectContext';
+import { generateDesignMap, getDefaultDesignMapMarkdownPath } from './designMap';
 import { applyRepoAiReviewSupport, buildRepoAiReviewPrompt, extractRepoAiSnippet, parseRepoAiReviewResponse, selectRepoAiCandidateRefs, summarizeRepoAiResults } from './repoAiReview';
 import { initializeSecretStorage } from './secrets';
 import { PackArtifactResponse, PackEntitlement, PackManifestEntry, RulePackClient } from './packs/packClient';
@@ -486,6 +487,7 @@ const DEFAULT_DRIFT_BOX_RELATIVE_DIR = '.owlvex/drift';
 const DESIGN_CONTEXT_FILE_SETTING = 'designContextFile';
 const PROJECT_CONTEXT_FILE_SETTING = 'projectContextFile';
 const TDD_BOX_ENABLED_SETTING = 'tddBoxEnabled';
+const DESIGN_MAP_ENABLED_SETTING = 'designMapEnabled';
 const DRIFT_BOX_FILE_SETTING = 'driftBoxFile';
 const DRIFT_SCRIPTS_ROOT_SETTING = 'driftScriptsRoot';
 
@@ -2999,6 +3001,7 @@ export function activate(context: vscode.ExtensionContext) {
             const profileConfig = vscode.workspace.getConfiguration(PROFILE.configSection);
             const currentSelection = profileConfig.get<string[]>('frameworks', ['OWASP', 'STRIDE']);
             const currentTddBoxEnabled = getEffectiveTddBoxEnabled(profileConfig);
+            const currentDesignMapEnabled = profileConfig.get<boolean>(DESIGN_MAP_ENABLED_SETTING, true);
             const currentDriftBoxEnabled = getEffectiveDriftBoxEnabled(profileConfig);
             let allowedFrameworks = licenceMgr.getCachedInfo()?.features.frameworks;
             if (!allowedFrameworks?.length) {
@@ -3027,8 +3030,15 @@ export function activate(context: vscode.ExtensionContext) {
                         driftBox: false,
                     })),
                     {
-                        label: 'Workflow context and checks',
+                        label: 'Project grounding and checks',
                         kind: vscode.QuickPickItemKind.Separator,
+                    },
+                    {
+                        label: 'Design Map',
+                        description: 'generated codebase understanding, not a security framework',
+                        detail: 'Uses .owlvex/owlvex-design-map.md/json when available to ground repo-aware scan, report, prompt, and fix reasoning.',
+                        picked: currentDesignMapEnabled,
+                        designMap: true,
                     },
                     {
                         label: 'TDD Box context',
@@ -3056,9 +3066,10 @@ export function activate(context: vscode.ExtensionContext) {
 
             if (!picked) return;
             const selectedCodes = picked
-                .filter(item => !('kind' in item) && !(item as any).driftBox && (item as any).code)
+                .filter(item => !('kind' in item) && !(item as any).driftBox && !(item as any).designMap && (item as any).code)
                 .map(item => String((item as any).code));
             const tddBoxEnabled = picked.some(item => !('kind' in item) && (item as any).tddBox);
+            const designMapEnabled = picked.some(item => !('kind' in item) && (item as any).designMap);
             const driftBoxEnabled = picked.some(item => !('kind' in item) && (item as any).driftBox);
             if (!selectedCodes.length) {
                 vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Select at least one security framework. Drift Box can run alongside scan frameworks, but it is not a framework.`);
@@ -3069,10 +3080,11 @@ export function activate(context: vscode.ExtensionContext) {
                 .getConfiguration(PROFILE.configSection)
                 .update('frameworks', selectedCodes, getFrameworkConfigurationTarget());
             await tryPersistWorkspaceBooleanSetting(TDD_BOX_ENABLED_SETTING, tddBoxEnabled);
+            await tryPersistWorkspaceBooleanSetting(DESIGN_MAP_ENABLED_SETTING, designMapEnabled);
             await tryPersistWorkspaceBooleanSetting('driftBoxEnabled', driftBoxEnabled);
 
             vscode.window.showInformationMessage(
-                `${PROFILE.displayLabel}: Frameworks set to ${formatFrameworkSummary(selectedCodes)}${tddBoxEnabled ? '; TDD Box context enabled' : '; TDD Box context disabled'}${driftBoxEnabled ? '; Drift Box behavior checks enabled' : '; Drift Box behavior checks disabled'}`
+                `${PROFILE.displayLabel}: Frameworks set to ${formatFrameworkSummary(selectedCodes)}${designMapEnabled ? '; Design Map enabled' : '; Design Map disabled'}${tddBoxEnabled ? '; TDD Box context enabled' : '; TDD Box context disabled'}${driftBoxEnabled ? '; Drift Box behavior checks enabled' : '; Drift Box behavior checks disabled'}`
             );
         })
     );
@@ -4007,6 +4019,56 @@ export function activate(context: vscode.ExtensionContext) {
                     `${PROFILE.displayLabel}: Opened an untitled design context document. Save it inside .owlvex/design to reuse it in scans.`,
                 );
             }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.createDesignMap, async () => {
+            const projectRoot = await resolveProjectRootInfo();
+            if (!projectRoot.uri) {
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Select a project root before creating a Design Map.`);
+                return;
+            }
+
+            const result = await vscode.window.withProgress({
+                location: vscode.ProgressLocation.Notification,
+                title: `${PROFILE.displayLabel}: Creating Design Map`,
+                cancellable: false,
+            }, async () => generateDesignMap(projectRoot.uri!));
+
+            await tryPersistWorkspaceBooleanSetting(DESIGN_MAP_ENABLED_SETTING, true);
+            const document = await vscode.workspace.openTextDocument(result.markdownUri);
+            await vscode.window.showTextDocument(document, { preview: false });
+            vscode.window.showInformationMessage(
+                `${PROFILE.displayLabel}: Design Map created for ${result.filesScanned} file(s) at ${vscode.workspace.asRelativePath(result.markdownUri, false)}.`
+            );
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.openDesignMap, async () => {
+            const projectRoot = await resolveProjectRootInfo();
+            if (!projectRoot.uri) {
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Select a project root before opening the Design Map.`);
+                return;
+            }
+
+            const mapUri = vscode.Uri.file(getDefaultDesignMapMarkdownPath(projectRoot.uri.fsPath));
+            try {
+                await vscode.workspace.fs.stat(mapUri);
+            } catch {
+                const choice = await vscode.window.showInformationMessage(
+                    `${PROFILE.displayLabel}: No Design Map exists for this project root yet.`,
+                    'Create Design Map',
+                );
+                if (choice === 'Create Design Map') {
+                    await vscode.commands.executeCommand(PROFILE.commands.createDesignMap);
+                }
+                return;
+            }
+
+            const document = await vscode.workspace.openTextDocument(mapUri);
+            await vscode.window.showTextDocument(document, { preview: false });
         })
     );
 

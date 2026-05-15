@@ -461,7 +461,7 @@ function shouldUseLatestScanContext(prompt: string, options: UserPromptOptions):
 function looksLikeToolHelpRequest(prompt: string): boolean {
     return (
         /\b(how|what|where|when|which|explain|help|guide|use|using|start|setup|configure|onboard|next|now|stuck)\b/i.test(prompt)
-        && /\b(owlvex|tool|scan|scanner|report|summary report|full evidence|confidence|manual review|fix first|fix code|compare reports?|create report|workspace|selected files|open editors|licen[cs]e|llm|provider|model|first run|first use|install|design box|design context|drift box|drift checks?|drift scripts?|stride context|trust boundaries)\b/i.test(prompt)
+        && /\b(owlvex|tool|scan|scanner|report|summary report|full evidence|confidence|manual review|fix first|fix code|compare reports?|create report|workspace|selected files|open editors|licen[cs]e|llm|provider|model|first run|first use|install|design map|design box|design context|drift box|drift checks?|drift scripts?|stride context|trust boundaries)\b/i.test(prompt)
     )
         || /\b(what now|what next|next step|guide me|getting started|where do i start|what should i click|what should i do first)\b/i.test(prompt);
 }
@@ -496,7 +496,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
     const confidenceFocused = /\b(confidence|manual review|confirmed|ai-reviewed|validated|static rule|finder|verifier|skeptic)\b/i.test(prompt);
     const fixFocused = /\b(fix|fix code|preview|keep fix|discard|remediate)\b/i.test(prompt);
     const compareFocused = /\b(compare|before|after|baseline|current|increase|decrease|regression)\b/i.test(prompt);
-    const designFocused = /\b(design box|design context|architecture|trust boundar(?:y|ies)|stride context|stride notes|data flow|roles?|permissions?)\b/i.test(prompt);
+    const designFocused = /\b(design map|design box|design context|architecture|trust boundar(?:y|ies)|stride context|stride notes|data flow|roles?|permissions?)\b/i.test(prompt);
     const driftFocused = /\b(drift box|drift checks?|drift scripts?|invariants?|contract checks?|report-only|pass\/fail|pass fail)\b/i.test(prompt);
 
     const lines = onboardingFocused
@@ -536,14 +536,15 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
                 ]
                 : designFocused
                     ? [
-                        'Design Box:',
+                        'Design Map and Design Box:',
                         '',
+                        'Design Map is Owlvex-generated understanding of the codebase: entrypoints, routes, guards, sensitive sinks, ownership signals, and scanner guidance.',
                         'Use it to give Owlvex architecture context: actors, roles, trust boundaries, data flows, ownership rules, and STRIDE notes.',
                         'The Design Box can point to a local markdown/text file; `.owlvex/design` remains the default fallback inside the selected project root.',
                         'When STRIDE is selected, Owlvex prioritizes STRIDE and trust-boundary files for repo-aware AI context.',
-                        'Design context can guide reasoning and remediation constraints, but it does not prove findings by itself.',
+                        'Design Map and Design context can guide reasoning and remediation constraints, but they do not prove findings by themselves.',
                         '',
-                        'Next step: Open Design Context, add system/trust-boundary notes, then rescan.',
+                        'Next step: Create Design Map for the current code, or Open Design Context to add system/trust-boundary notes before refreshing the map.',
                     ]
                     : driftFocused
                         ? [
@@ -648,9 +649,10 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
         buildQuickActionAction('tool-help-create-summary', 'Create Summary', 'scanSummaryReport'),
     ];
     const designActions: ChatMessageAction[] = [
+        buildQuickActionAction('tool-help-create-design-map', 'Create Design Map', 'createDesignMap'),
+        buildQuickActionAction('tool-help-open-design-map', 'Open Design Map', 'openDesignMap'),
         buildQuickActionAction('tool-help-open-design-context', 'Open Design Context', 'openDesignContext'),
         buildQuickActionAction('tool-help-select-project-root', 'Select Project Root', 'selectProjectRoot'),
-        buildQuickActionAction('tool-help-scan-workspace', 'Scan workspace', 'scanFolder'),
     ];
     const driftActions: ChatMessageAction[] = [
         buildQuickActionAction('tool-help-open-drift-box', 'Open Drift Box', 'openDriftBox'),
@@ -4372,6 +4374,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'createDesignMap') {
+            await vscode.commands.executeCommand(PROFILE.commands.createDesignMap);
+            const projectContextSummary = getProjectContextSummaryFromConfig();
+            this.messages.push({
+                role: 'system',
+                content: `Design Map refreshed. Current project grounding: ${projectContextSummary}.`,
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'openDesignMap') {
+            await vscode.commands.executeCommand(PROFILE.commands.openDesignMap);
+            this.messages.push({
+                role: 'system',
+                content: 'Opened Design Map. Use it to review Owlvex generated understanding of entrypoints, guards, sinks, ownership signals, evidence gaps, and scanner guidance.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'openDriftBox') {
             await vscode.commands.executeCommand(PROFILE.commands.openDriftBox);
             this.messages.push({
@@ -5476,14 +5503,16 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const configuredTddFile = config.get<string>('projectContextFile', '').trim();
         const configuredDriftFile = config.get<string>('driftBoxFile', '').trim();
         const tddBoxEnabled = config.get<boolean>('tddBoxEnabled', Boolean(configuredTddFile));
+        const designMapEnabled = config.get<boolean>('designMapEnabled', true);
         const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', Boolean(configuredDriftFile));
         const projectContextSummary = getProjectContextSummaryFromConfig();
 
         return {
-            summary: `Active scan profile: scope=${getWorkingScopeLabel(scope)}, frameworks=${frameworks.join(', ') || 'none'}, severity threshold=${severity}, TDD Box=${tddBoxEnabled ? 'enabled' : 'disabled'}, Drift Box=${driftBoxEnabled ? 'enabled' : 'disabled'}`,
+            summary: `Active scan profile: scope=${getWorkingScopeLabel(scope)}, frameworks=${frameworks.join(', ') || 'none'}, severity threshold=${severity}, Design Map=${designMapEnabled ? 'enabled' : 'disabled'}, TDD Box=${tddBoxEnabled ? 'enabled' : 'disabled'}, Drift Box=${driftBoxEnabled ? 'enabled' : 'disabled'}`,
             promptContext: [
                 `Working scope: ${getWorkingScopeLabel(scope)}`,
                 `Security frameworks in scope: ${frameworks.join(', ') || 'none configured'}`,
+                `Design Map: ${designMapEnabled ? 'enabled when available' : 'disabled'}`,
                 `TDD Box context: ${tddBoxEnabled ? 'enabled' : 'disabled'}`,
                 `Drift Box behavior checks: ${driftBoxEnabled ? 'enabled' : 'disabled'}`,
                 `Severity threshold: ${severity}`,

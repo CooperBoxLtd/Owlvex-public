@@ -7,6 +7,8 @@ This document defines two closely related product directions:
 1. a **Project Context Contract** that the user can provide to Owlvex
 2. a **three-tier scan model** that makes the current hybrid scanner more explicit and trustworthy
 
+The generated Design Map direction is tracked in [DESIGN_MAP_AND_UX_WORKFLOW_PLAN.md](DESIGN_MAP_AND_UX_WORKFLOW_PLAN.md). The Design Map complements this contract: the Project Context Contract is user-provided grounding, while the Design Map is Owlvex-generated understanding from code plus optional context.
+
 The purpose is not to replace Owlvex's current hybrid architecture.
 
 The purpose is to make that architecture:
@@ -32,6 +34,7 @@ It does **not** drop:
 Instead, it formalizes that hybrid system into:
 
 - **Project Context Contract** for better AI understanding of the codebase
+- **Design Map** for local generated understanding of code structure, trust boundaries, and scanner guidance
 - **Three explicit scan tiers** for better execution clarity
 
 Those tiers describe the final product posture for a finding or file. AI may be attempted in the background, but if only deterministic findings survive into the final result, the file should still read as `Static proof` rather than as a degraded AI result.
@@ -128,12 +131,15 @@ It may also help:
 - prioritize findings
 - improve report wording
 - reduce false positives in safe companion patterns
+- generate or refresh the local Design Map
 
 It must not by itself produce:
 
 - `PROVEN` findings
 - deterministic rule outcomes
 - silent suppression of structurally proven defects
+
+The generated Design Map follows the same boundary. It can guide AI reasoning and fix constraints, but it cannot upgrade a finding to deterministic proof.
 
 ---
 
@@ -343,6 +349,7 @@ AI reasoning against a bounded target, narrowed first by deterministic discovery
 - AI examines a route, function, helper, or specific code region
 - surrounding local context may be included
 - Project Context Contract can be included
+- Design Map summary can be included when current
 - best practical AI tier for most issue classes
 
 ### Intended output posture
@@ -375,6 +382,7 @@ Broad repo-context AI reasoning across a larger project surface when local narro
 - most quota-sensitive
 - best for architectural or distributed logic questions
 - Project Context Contract is especially valuable here
+- Design Map is especially valuable here because repo-level review needs entrypoints, boundaries, ownership models, and cross-file relationships
 
 ### Intended output posture
 
@@ -607,8 +615,9 @@ Tier clarity must increase honesty, not blur it.
    - `REPO_AI`
 3. Keep current hybrid engine intact while reclassifying paths into those tiers.
 4. Add a simple local Project Context Contract input path.
-5. Use Project Context Contract only in AI-backed tiers.
-6. Expose tier + corroboration in reports and UI.
+5. Add a generated local Design Map artifact for project understanding.
+6. Use Project Context Contract and Design Map only in AI-backed tiers and report explanation.
+7. Expose tier + corroboration + Design Map status in reports and UI.
 
 ---
 
@@ -622,6 +631,7 @@ The right path is:
 
 - keep the current local deterministic + AI model
 - add a client-side Project Context Contract for better AI grounding
+- add a local generated Design Map for better codebase understanding
 - formalize the hybrid scanner into `STATIC`, `TARGETED_AI`, and `REPO_AI`
 - keep deterministic proof as the strongest trust boundary in the product
 

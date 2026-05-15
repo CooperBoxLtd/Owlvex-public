@@ -31,6 +31,8 @@ export const PROFILE = {
         "openProjectContext": "owlvex.openProjectContext",
         "openTddBox": "owlvex.openTddBox",
         "openDesignContext": "owlvex.openDesignContext",
+        "createDesignMap": "owlvex.createDesignMap",
+        "openDesignMap": "owlvex.openDesignMap",
         "openDriftBox": "owlvex.openDriftBox",
         "testAI": "owlvex.testAIConnection",
         "testTrialSetup": "owlvex.testTrialSetup",

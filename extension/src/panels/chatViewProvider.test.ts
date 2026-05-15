@@ -659,10 +659,10 @@ describe('parseChatIntent', () => {
 
         expect(complete).not.toHaveBeenCalled();
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
-        expect(finalMessage.content).toContain('Design Box:');
+        expect(finalMessage.content).toContain('Design Map and Design Box:');
         expect(finalMessage.content).toContain('`.owlvex/design`');
-        expect(finalMessage.content).toContain('does not prove findings by itself');
-        expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['openDesignContext', 'selectProjectRoot', 'scanFolder']);
+        expect(finalMessage.content).toContain('do not prove findings by themselves');
+        expect(finalMessage.actions.map((action: any) => action.quickAction)).toEqual(['createDesignMap', 'openDesignMap', 'openDesignContext', 'selectProjectRoot']);
     });
 
     it('answers drift box questions locally with report-only guidance', async () => {

@@ -1,16 +1,20 @@
 import * as path from 'path';
+import { existsSync, statSync } from 'fs';
 import { inflateRawSync, inflateSync } from 'zlib';
 import * as vscode from 'vscode';
 import { PROFILE } from './profile';
+import { getDefaultDesignMapMarkdownPath } from './designMap';
 
 const MAX_PROJECT_CONTEXT_CHARS = 8000;
 const MAX_DESIGN_CONTEXT_CHARS = 10000;
 const MAX_DESIGN_FILE_CHARS = 3000;
+const MAX_DESIGN_MAP_CHARS = 5000;
 const MAX_DESIGN_FILES = 8;
 const PROJECT_ROOT_SETTING = 'projectRoot';
 const DEFAULT_DESIGN_CONTEXT_DIR = '.owlvex/design';
 const DESIGN_CONTEXT_FILE_SETTING = 'designContextFile';
 const TDD_BOX_ENABLED_SETTING = 'tddBoxEnabled';
+const DESIGN_MAP_ENABLED_SETTING = 'designMapEnabled';
 
 export interface ProjectContextInfo {
     combined: string;
@@ -20,6 +24,10 @@ export interface ProjectContextInfo {
         files: string[];
         strideSelected: boolean;
         missingForStride: boolean;
+    };
+    designMap?: {
+        loaded: boolean;
+        path?: string;
     };
 }
 
@@ -167,6 +175,13 @@ export function getProjectContextSummaryFromConfig(): string {
     const projectContextFile = config.get<string>('projectContextFile', '').trim();
     const tddBoxEnabled = config.get<boolean>(TDD_BOX_ENABLED_SETTING, Boolean(projectContextFile));
     const projectRoot = getProjectRootSummaryFromConfig();
+    const designMapEnabled = config.get<boolean>(DESIGN_MAP_ENABLED_SETTING, true);
+    const designMapPath = projectRoot !== 'not set' && !projectRoot.startsWith('default workspace')
+        ? getDefaultDesignMapMarkdownPath(projectRoot.replace(/^project root\s+/i, ''))
+        : '';
+    const designMapStatus = designMapEnabled && designMapPath
+        ? getDesignMapStatusLabel(designMapPath)
+        : '';
 
     const summaryParts = [
         projectRoot !== 'not set' ? `project root ${projectRoot}` : '',
@@ -174,9 +189,22 @@ export function getProjectContextSummaryFromConfig(): string {
         inlineProjectContext ? 'inline project contract' : '',
         tddBoxEnabled && projectContextFile ? `TDD file ${projectContextFile}` : '',
         config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '').trim() ? `design file ${config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '').trim()}` : '',
+        designMapStatus ? `Design Map ${designMapStatus}` : '',
     ].filter(Boolean);
 
     return summaryParts.length ? summaryParts.join(' | ') : 'none';
+}
+
+function getDesignMapStatusLabel(mapPath: string): string {
+    try {
+        if (!existsSync(mapPath)) {
+            return 'missing';
+        }
+        const stat = statSync(mapPath);
+        return `current (${Math.max(1, Math.round((Date.now() - stat.mtimeMs) / 60000))}m old)`;
+    } catch {
+        return 'unknown';
+    }
 }
 
 function trimProjectContext(value: string): string {
@@ -489,6 +517,35 @@ async function tryReadProjectContextFile(fileSetting: string, projectRoot?: vsco
     }
 }
 
+async function tryReadDesignMap(projectRoot?: vscode.Uri, enabled = true): Promise<{ label: string; content: string } | undefined> {
+    if (!projectRoot || !enabled) {
+        return undefined;
+    }
+
+    const mapPath = getDefaultDesignMapMarkdownPath(projectRoot.fsPath);
+    try {
+        const mapUri = vscode.Uri.file(mapPath);
+        const stat = await vscode.workspace.fs.stat(mapUri);
+        if (!(stat.type & vscode.FileType.File)) {
+            return undefined;
+        }
+        const raw = await vscode.workspace.fs.readFile(mapUri);
+        const content = trimProjectContext(Buffer.from(raw).toString('utf8'));
+        if (!content) {
+            return undefined;
+        }
+        const bounded = content.length > MAX_DESIGN_MAP_CHARS
+            ? `${content.slice(0, MAX_DESIGN_MAP_CHARS)}\n[truncated]`
+            : content;
+        return {
+            label: vscode.workspace.asRelativePath(mapUri, false),
+            content: bounded,
+        };
+    } catch {
+        return undefined;
+    }
+}
+
 export async function loadProjectContextInfo(options?: ProjectContextOptions): Promise<ProjectContextInfo> {
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     const legacyTeamContext = trimProjectContext(config.get<string>('teamContext', ''));
@@ -496,9 +553,11 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     const projectContextFile = config.get<string>('projectContextFile', '');
     const tddBoxEnabled = config.get<boolean>(TDD_BOX_ENABLED_SETTING, Boolean(projectContextFile.trim()));
     const designContextFile = config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '');
+    const designMapEnabled = config.get<boolean>(DESIGN_MAP_ENABLED_SETTING, true);
     const projectRoot = await resolveProjectRootInfo();
     const fileContext = tddBoxEnabled ? await tryReadProjectContextFile(projectContextFile, projectRoot.uri) : '';
     const rootAppliesToTargets = !projectRoot.uri || targetUrisAreInsideRoot(options?.targetUris, projectRoot.uri);
+    const designMap = rootAppliesToTargets ? await tryReadDesignMap(projectRoot.uri, designMapEnabled) : undefined;
     const designContext = rootAppliesToTargets
         ? (await tryReadDesignContextFile(designContextFile, projectRoot.uri)
             ?? await tryReadDesignContextDirectory(projectRoot.uri, options?.selectedFrameworks))
@@ -513,6 +572,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
         rootAppliesToTargets && legacyTeamContext ? `Legacy team/project context:\n${legacyTeamContext}` : '',
         rootAppliesToTargets && inlineProjectContext ? `Project context contract:\n${inlineProjectContext}` : '',
         rootAppliesToTargets && fileContext ? `TDD Box context file (${fileContext.label}):\n${fileContext.content}` : '',
+        rootAppliesToTargets && designMap ? `Owlvex Design Map (${designMap.label}):\n${designMap.content}` : '',
         rootAppliesToTargets && designContext ? `Design context:\n${designContext.content}` : '',
         contextSuppressed ? `Project context skipped:\nThe scan target is outside the configured project root (${projectRoot.label}).` : '',
     ].filter(Boolean);
@@ -522,6 +582,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
         rootAppliesToTargets && legacyTeamContext ? 'legacy inline context' : '',
         rootAppliesToTargets && inlineProjectContext ? 'inline project contract' : '',
         rootAppliesToTargets && fileContext ? `TDD file ${fileContext.label}` : '',
+        rootAppliesToTargets && designMap ? `Design Map ${designMap.label}` : '',
         rootAppliesToTargets && designContext ? `design context ${designContext.labels.length} file${designContext.labels.length === 1 ? '' : 's'}` : '',
         contextSuppressed ? 'configured project root skipped for out-of-root target' : '',
     ].filter(Boolean);
@@ -534,6 +595,10 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
             files: designContext?.labels ?? [],
             strideSelected,
             missingForStride: rootAppliesToTargets && strideSelected && !designContext,
+        },
+        designMap: {
+            loaded: Boolean(designMap),
+            path: designMap?.label,
         },
     };
 }

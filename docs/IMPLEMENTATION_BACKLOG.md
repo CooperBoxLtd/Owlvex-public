@@ -65,6 +65,8 @@ The current scanner-hardening phase is governed by [STABILIZATION_CONTRACT.md](D
 
 The next execution-shape contract for project grounding and explicit hybrid scan tiers is [PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md](D:/Dev/repos/CodeScanner/docs/PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md).
 
+The current product plan for Design Map and UX workflow consolidation is [DESIGN_MAP_AND_UX_WORKFLOW_PLAN.md](D:/Dev/repos/CodeScanner/docs/DESIGN_MAP_AND_UX_WORKFLOW_PLAN.md).
+
 Benchmark source-of-truth files for that phase:
 
 - [tools/demo/EXPECTATIONS.md](D:/Dev/repos/CodeScanner/tools/demo/EXPECTATIONS.md)
@@ -153,11 +155,39 @@ This is the current "80 percent of value for 20 percent of effort" shortlist. It
    - The main example is STRIDE or architecture-sensitive review.
    - Extra context should be loaded when it can change reasoning, not by default.
 
+11. Add an evidence-backed Design Map.
+   - Generate a local project map from code plus optional Design/TDD context.
+   - Use it to answer "what does this app do?", improve STRIDE/repo scans, and prevent fixes from inventing unsupported domain models.
+   - Keep confidence explicit: confirmed by code, confirmed by design context, inferred, uncertain, or contradicted.
+
 Current top three by expected impact:
 
 - deterministic coverage for the highest-value issue families
 - onboarding telemetry with step-level failure visibility
 - suppression of weak-evidence fix generation
+
+## Design Map And UX Workflow Track
+
+This track is governed by [DESIGN_MAP_AND_UX_WORKFLOW_PLAN.md](D:/Dev/repos/CodeScanner/docs/DESIGN_MAP_AND_UX_WORKFLOW_PLAN.md).
+
+Delivery slices:
+
+1. Documentation and product contract.
+2. Static design extractor for entrypoints, routes, middleware, services, repositories, config, and sensitive APIs.
+3. Relationship builder for route-to-guard-to-sink and ownership/auth boundaries.
+4. Context merger for code evidence plus Design Box and TDD Box.
+5. Markdown and JSON Design Map generation.
+6. Scan/fix integration, especially false-positive gates for ownership and business-rule fixes.
+7. UX integration for create/refresh/open Design Map and visible stale/current status.
+8. Report integration for Design Map evidence, gaps, contradictions, and scanner guidance.
+
+Acceptance checks:
+
+- Owlvex can answer "what does this app do?" from a generated map.
+- STRIDE/repo scans report when design grounding is missing.
+- Fix preview rejects or downgrades patches that invent domain concepts absent from code or Design/TDD context.
+- Changed-files scans can reuse a fresh Design Map without forcing full workspace rescans.
+- Reports mention Design/TDD/Drift/Design Map only when configured, generated, or used.
 
 ## Diff-Scoped Scanning Workstream
 

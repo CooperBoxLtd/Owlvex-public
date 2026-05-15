@@ -20,6 +20,8 @@ The delivery backlog for that design lives in [IMPLEMENTATION_BACKLOG.md](IMPLEM
 
 The next execution-shape contract for project grounding and tiered hybrid scanning lives in [PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md](PROJECT_CONTEXT_AND_SCAN_TIERS_CONTRACT.md).
 
+The Design Map and UX workflow consolidation plan lives in [DESIGN_MAP_AND_UX_WORKFLOW_PLAN.md](DESIGN_MAP_AND_UX_WORKFLOW_PLAN.md).
+
 ---
 
 ## Product Pitch
@@ -80,12 +82,13 @@ The execution plane. Provides:
 - in-editor diagnostics
 - AI chat for advisory guidance, plain-language fix explanations, and concrete replacement code when the user asks how to remediate a finding
 - AI-assisted reasoning that can expand from file-level context to nearby project context when the issue or proposed fix depends on code outside the active file
-- future project-context upload or paste flow so users can give Owlvex TDD-style architectural grounding, goals, and security expectations for the repo
+- project grounding through local TDD, Design Box, and generated Design Map context so Owlvex can understand architecture, goals, trust boundaries, ownership models, and security expectations without sending that context to the Owlvex backend
 - controlled remediation flow that can propose file changes for a finding, show a diff, and let the user decide whether to apply it
 - review-scoped fix application that blocks writes when the reviewed file set no longer matches the preview target
 - report creation with concise per-file findings, remediation guidance, and scan errors/warnings when present
 - report comparison
 - provider and model switching
+- Design Map creation and refresh as the local generated understanding layer for code structure, entrypoints, trust boundaries, source/guard/sink relationships, and scanner guidance
 - trial and demo onboarding for:
   - lightweight email-based registration for Free or Trial entry
   - package-defaulted backend connectivity per dev/prod build, with backend override available only when intentionally needed
@@ -289,6 +292,8 @@ Current remediation posture:
 **Context-aware AI assistance** - when file-only analysis is not enough, Owlvex should gather nearby project context such as imports, referenced helpers, and related files before presenting higher-confidence AI reasoning or code changes.
 
 **Project-grounded AI assistance** - future workflow where users can provide a local TDD-style project context contract so the AI lane better understands goals, roles, architecture, trust boundaries, and critical flows without changing the deterministic truth boundary.
+
+**Design Map** - generated local project understanding created by Owlvex from code plus optional Design/TDD context. It should identify entrypoints, modules, data stores, trust boundaries, auth/authorization flows, sensitive data, external integrations, and scanner guidance. It is not deterministic proof by itself, but it should constrain AI scan/fix behavior and reduce false positives caused by invented domain models.
 
 **Working-scope-controlled AI access** - the assistant's bottom scope dropdown should define both what Owlvex scans and what AI is allowed to inspect as context. `Active file`, `Selected files`, `Open editors`, and `Workspace` should act as explicit AI context boundaries rather than letting repo access become an invisible always-on mode.
 
