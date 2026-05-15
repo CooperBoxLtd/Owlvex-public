@@ -50,6 +50,59 @@ describe('design map generator', () => {
         expect(markdown).toContain('# Owlvex Design Map');
         expect(markdown).toContain('```mermaid');
         expect(markdown).toContain('flowchart TD');
-        expect(markdown).toContain('Route1');
+        expect(markdown).toContain('Application runtime');
+        expect(markdown).toContain('route: src/routes/documents.js');
+        expect(markdown).toContain('entrypoint: src/server.js');
+        expect(result.map.entrypoints).toEqual(['src/server.js']);
+    });
+
+    it('builds module relationships and excludes dev tooling sinks from runtime aggregates', async () => {
+        fs.mkdirSync(path.join(tempRoot, 'src', 'components'), { recursive: true });
+        fs.mkdirSync(path.join(tempRoot, 'src', 'hooks'), { recursive: true });
+        fs.mkdirSync(path.join(tempRoot, 'electron'), { recursive: true });
+        fs.mkdirSync(path.join(tempRoot, 'scripts'), { recursive: true });
+
+        fs.writeFileSync(path.join(tempRoot, 'src', 'main.jsx'), [
+            "import App from './components/App.jsx';",
+            'App();',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'components', 'App.jsx'), [
+            "import { useSession } from '../hooks/useSession.js';",
+            'export default function App() { return useSession(); }',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'hooks', 'useSession.js'), [
+            'export function useSession() {',
+            '  return JSON.parse(window.localStorage.getItem("session") || "{}");',
+            '}',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'electron', 'preload.js'), [
+            "const { contextBridge } = require('electron');",
+            "contextBridge.exposeInMainWorld('api', {});",
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'electron', 'main.js'), [
+            "require('./preload');",
+            'console.log("main");',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'scripts', 'dev.mjs'), [
+            "import { spawn } from 'node:child_process';",
+            'spawn("node", ["--version"]);',
+        ].join('\n'));
+
+        const result = await generateDesignMap(vscode.Uri.file(tempRoot) as any);
+        const relationships = result.map.relationships.map(edge => `${edge.kind}:${edge.from}->${edge.to}`);
+
+        expect(result.map.entrypoints).toContain('src/main.jsx');
+        expect(result.map.entrypoints).toContain('electron/main.js');
+        expect(result.map.sinks).toContain('JSON.parse');
+        expect(result.map.sinks).not.toContain('spawn');
+        expect(relationships).toContain('imports:src/main.jsx->src/components/App.jsx');
+        expect(relationships).toContain('imports:src/components/App.jsx->src/hooks/useSession.js');
+        expect(relationships).toContain('imports:electron/main.js->electron/preload.js');
+
+        const markdownWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls[0];
+        const markdown = Buffer.from(markdownWrite[1]).toString('utf8');
+        expect(markdown).toContain('frontend-entrypoint: src/main.jsx');
+        expect(markdown).toContain('imports: `src/main.jsx` -> `src/components/App.jsx`');
+        expect(markdown).not.toContain('spawn');
     });
 });

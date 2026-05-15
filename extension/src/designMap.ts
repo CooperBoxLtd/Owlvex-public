@@ -12,6 +12,8 @@ const SKIP_DIRS = new Set(['.git', 'node_modules', 'dist', 'out', 'build', 'cove
 export interface DesignMapFileEvidence {
     path: string;
     kind: string;
+    imports: string[];
+    dependsOn: string[];
     entrypoints: string[];
     routes: string[];
     guards: string[];
@@ -19,6 +21,12 @@ export interface DesignMapFileEvidence {
     dataStores: string[];
     externalIntegrations: string[];
     confidence: 'confirmed_by_code' | 'inferred_from_naming';
+}
+
+export interface DesignMapRelationship {
+    from: string;
+    to: string;
+    kind: 'imports' | 'runtime-boundary' | 'route-guard' | 'route-sink';
 }
 
 export interface DesignMap {
@@ -36,6 +44,7 @@ export interface DesignMap {
     evidenceGaps: string[];
     scannerGuidance: string[];
     files: DesignMapFileEvidence[];
+    relationships: DesignMapRelationship[];
 }
 
 export interface DesignMapGenerationResult {
@@ -61,6 +70,16 @@ function uniq(values: string[]): string[] {
 
 function classifyFile(relative: string): string {
     const normalized = relative.toLowerCase();
+    if (/(^|\/)(tests?|__tests__|spec)\//.test(normalized) || /\.(test|spec)\.[cm]?[jt]sx?$/.test(normalized)) return 'test';
+    if (/(^|\/)(scripts?|tools?)\//.test(normalized)) return 'dev-tooling';
+    if (/(^|\/)electron\/main\.[cm]?[jt]s$/.test(normalized)) return 'electron-main';
+    if (/(^|\/)electron\/preload\.[cm]?[jt]s$/.test(normalized)) return 'electron-preload';
+    if (/(^|\/)electron\//.test(normalized)) return 'electron-runtime';
+    if (/(^|\/)src\/main\.[cm]?[jt]sx?$/.test(normalized)) return 'frontend-entrypoint';
+    if (/(^|\/)(components?|views?|pages?)\//.test(normalized)) return 'ui-component';
+    if (/(^|\/)hooks?\//.test(normalized)) return 'hook';
+    if (/(^|\/)(network|protocol)\//.test(normalized) || /protocol\.[cm]?[jt]s$/.test(normalized)) return 'protocol';
+    if (/(^|\/)(utils?|helpers?)\//.test(normalized)) return 'utility';
     if (/(^|\/)(server|app|main|index)\.[cm]?[jt]sx?$/.test(normalized)) return 'entrypoint';
     if (/(^|\/)(routes?|controllers?)\//.test(normalized)) return 'route';
     if (/(^|\/)middleware\//.test(normalized)) return 'middleware';
@@ -68,6 +87,33 @@ function classifyFile(relative: string): string {
     if (/(^|\/)(store|repositories?|models?|data)\//.test(normalized)) return 'data-access';
     if (/(^|\/)(policies?|auth|permissions?)\//.test(normalized)) return 'policy';
     return 'source';
+}
+
+function isRuntimeFile(file: DesignMapFileEvidence): boolean {
+    return !['test', 'dev-tooling'].includes(file.kind);
+}
+
+function extractLocalImports(content: string): string[] {
+    return collectMatches(content, [
+        /\bimport\s+(?:[^'"`]+?\s+from\s+)?['"`](\.[^'"`]+)['"`]/g,
+        /\brequire\s*\(\s*['"`](\.[^'"`]+)['"`]\s*\)/g,
+        /\bimport\s*\(\s*['"`](\.[^'"`]+)['"`]\s*\)/g,
+    ]);
+}
+
+function resolveImportPath(fromFile: string, importPath: string, knownFiles: Set<string>): string | undefined {
+    const base = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), importPath));
+    const candidates = [
+        base,
+        ...['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs'].map(ext => `${base}${ext}`),
+        ...['index.js', 'index.jsx', 'index.ts', 'index.tsx', 'index.mjs', 'index.cjs'].map(file => path.posix.join(base, file)),
+    ];
+    for (const candidate of candidates) {
+        if (knownFiles.has(candidate)) {
+            return candidate;
+        }
+    }
+    return undefined;
 }
 
 function collectMatches(content: string, patterns: RegExp[]): string[] {
@@ -91,23 +137,28 @@ function extractFileEvidence(root: string, filePath: string, content: string): D
         /\b(requireUser|requireAuth|authenticate|authorize|can[A-Z][A-Za-z0-9_]*|requireCsrf|csrf|verify[A-Z][A-Za-z0-9_]*)\b/g,
         /\b(ALLOWED_ROLES|permissions?|roles?|tenantId|ownerId|customerId)\b/g,
     ]);
-    const sinks = collectMatches(content, [
+    const runtimeRelevant = !['test', 'dev-tooling'].includes(kind);
+    const sinks = runtimeRelevant ? collectMatches(content, [
         /\b(eval|Function|child_process|exec|spawn|fetch|axios|request|jwt\.decode|jwt\.verify|JSON\.parse|deserialize|pickle|yaml\.load|fs\.(?:readFile|writeFile|createReadStream|unlink|rm)|res\.download|sendFile)\b/g,
         /\b(query|execute|raw|knex|sequelize|prisma)\b/g,
-    ]);
-    const dataStores = collectMatches(content, [
+    ]) : [];
+    const dataStores = runtimeRelevant ? collectMatches(content, [
         /\b(repositories?|models?|collections?|tables?|prisma|sequelize|mongoose|knex|db|database|redis|mongo)\b/g,
-    ]);
-    const externalIntegrations = collectMatches(content, [
+    ]) : [];
+    const externalIntegrations = runtimeRelevant ? collectMatches(content, [
         /\b(fetch|axios|request|http\.request|https\.request|S3|BlobService|Stripe|Twilio|SendGrid|OpenAI|Anthropic|Azure)\b/g,
-    ]);
-    const entrypoints = kind === 'entrypoint' || routes.length
+    ]) : [];
+    const entrypoints = kind === 'entrypoint'
+        || kind === 'frontend-entrypoint'
+        || kind === 'electron-main'
         ? [rel]
         : [];
 
     return {
         path: rel,
         kind,
+        imports: extractLocalImports(content),
+        dependsOn: [],
         entrypoints,
         routes,
         guards,
@@ -175,6 +226,10 @@ function mermaidId(prefix: string, index: number): string {
     return `${prefix}${index + 1}`;
 }
 
+function stableNodeId(filePath: string, index: number): string {
+    return `File${index + 1}_${filePath.replace(/[^A-Za-z0-9_]/g, '_').slice(0, 48)}`;
+}
+
 function mermaidLabel(value: string, maxLength = 56): string {
     return value
         .replace(/["\\]/g, '')
@@ -183,6 +238,62 @@ function mermaidLabel(value: string, maxLength = 56): string {
 }
 
 function buildMermaid(map: DesignMap): string {
+    const runtimeFiles = map.files.filter(isRuntimeFile);
+    const importantFiles = runtimeFiles
+        .filter(file =>
+            file.entrypoints.length
+            || file.routes.length
+            || file.guards.length
+            || file.sinks.length
+            || file.dependsOn.length
+            || map.relationships.some(edge => edge.to === file.path)
+        )
+        .slice(0, 28);
+    if (importantFiles.length) {
+        const nodeIds = new Map<string, string>();
+        importantFiles.forEach((file, index) => nodeIds.set(file.path, stableNodeId(file.path, index)));
+        const lines = [
+            'flowchart TD',
+            '  subgraph App["Application runtime"]',
+        ];
+        for (const file of importantFiles) {
+            const id = nodeIds.get(file.path);
+            if (!id) continue;
+            lines.push(`    ${id}["${mermaidLabel(`${file.kind}: ${file.path}`, 72)}"]`);
+        }
+        lines.push('  end');
+
+        const runtimeEdges = map.relationships
+            .filter(edge => edge.kind === 'imports' && nodeIds.has(edge.from) && nodeIds.has(edge.to))
+            .slice(0, 60);
+        for (const edge of runtimeEdges) {
+            lines.push(`  ${nodeIds.get(edge.from)} --> ${nodeIds.get(edge.to)}`);
+        }
+
+        const boundaryEdges = map.relationships
+            .filter(edge => edge.kind === 'runtime-boundary' && nodeIds.has(edge.from) && nodeIds.has(edge.to))
+            .slice(0, 20);
+        for (const edge of boundaryEdges) {
+            lines.push(`  ${nodeIds.get(edge.from)} -. boundary .-> ${nodeIds.get(edge.to)}`);
+        }
+
+        const guardFiles = importantFiles.filter(file => file.guards.length).slice(0, 8);
+        for (const [index, file] of guardFiles.entries()) {
+            const id = mermaidId('Guard', index);
+            lines.push(`  ${id}{"${mermaidLabel(file.guards.slice(0, 3).join(', '))}"}`);
+            lines.push(`  ${nodeIds.get(file.path)} --> ${id}`);
+        }
+
+        const sinkFiles = importantFiles.filter(file => file.sinks.length).slice(0, 8);
+        for (const [index, file] of sinkFiles.entries()) {
+            const id = mermaidId('Sink', index);
+            lines.push(`  ${id}[("${mermaidLabel(file.sinks.slice(0, 3).join(', '))}")]`);
+            lines.push(`  ${nodeIds.get(file.path)} --> ${id}`);
+        }
+
+        return lines.join('\n');
+    }
+
     const lines = [
         'flowchart TD',
         '  Root["Project root"]',
@@ -234,7 +345,8 @@ function buildMarkdown(map: DesignMap): string {
             file.guards.length ? `guards=${file.guards.length}` : '',
             file.sinks.length ? `sinks=${file.sinks.length}` : '',
         ].filter(Boolean).join(', ') || 'no strong security signals';
-        return `- \`${file.path}\` - ${file.kind}; ${signals}; confidence ${file.confidence}`;
+        const deps = file.dependsOn.length ? `; imports ${file.dependsOn.slice(0, 5).join(', ')}` : '';
+        return `- \`${file.path}\` - ${file.kind}; ${signals}${deps}; confidence ${file.confidence}`;
     });
 
     return [
@@ -295,7 +407,53 @@ function buildMarkdown(map: DesignMap): string {
         '',
         fileLines.join('\n') || '- No source files were mapped.',
         '',
+        '## Relationships',
+        '',
+        map.relationships.length
+            ? map.relationships.slice(0, 120).map(edge => `- ${edge.kind}: \`${edge.from}\` -> \`${edge.to}\``).join('\n')
+            : '- No local module relationships were resolved.',
+        '',
     ].join('\n');
+}
+
+function buildRelationships(files: DesignMapFileEvidence[]): DesignMapRelationship[] {
+    const knownFiles = new Set(files.map(file => file.path));
+    const byPath = new Map(files.map(file => [file.path, file]));
+    const relationships: DesignMapRelationship[] = [];
+
+    for (const file of files) {
+        const resolvedImports = uniq(file.imports
+            .map(importPath => resolveImportPath(file.path, importPath, knownFiles))
+            .filter((item): item is string => Boolean(item)));
+        file.dependsOn = resolvedImports;
+        for (const dependency of resolvedImports) {
+            relationships.push({ from: file.path, to: dependency, kind: 'imports' });
+        }
+    }
+
+    for (const file of files) {
+        if (file.kind === 'frontend-entrypoint') {
+            const preload = files.find(candidate => candidate.kind === 'electron-preload');
+            if (preload) relationships.push({ from: file.path, to: preload.path, kind: 'runtime-boundary' });
+        }
+        if (file.kind === 'electron-preload') {
+            const main = files.find(candidate => candidate.kind === 'electron-main');
+            if (main) relationships.push({ from: file.path, to: main.path, kind: 'runtime-boundary' });
+        }
+        if (file.kind === 'route') {
+            for (const dependency of file.dependsOn) {
+                const target = byPath.get(dependency);
+                if (target?.guards.length) relationships.push({ from: file.path, to: dependency, kind: 'route-guard' });
+                if (target?.sinks.length) relationships.push({ from: file.path, to: dependency, kind: 'route-sink' });
+            }
+        }
+    }
+
+    return uniq(relationships.map(edge => `${edge.kind}|${edge.from}|${edge.to}`))
+        .map(serialized => {
+            const [kind, from, to] = serialized.split('|') as [DesignMapRelationship['kind'], string, string];
+            return { kind, from, to };
+        });
 }
 
 export async function generateDesignMap(projectRoot: vscode.Uri): Promise<DesignMapGenerationResult> {
@@ -317,12 +475,14 @@ export async function generateDesignMap(projectRoot: vscode.Uri): Promise<Design
         }
     }
 
-    const entrypoints = uniq(evidence.flatMap(item => item.entrypoints));
-    const routes = uniq(evidence.flatMap(item => item.routes));
-    const guards = uniq(evidence.flatMap(item => item.guards));
-    const sinks = uniq(evidence.flatMap(item => item.sinks));
-    const dataStores = uniq(evidence.flatMap(item => item.dataStores));
-    const externalIntegrations = uniq(evidence.flatMap(item => item.externalIntegrations));
+    const relationships = buildRelationships(evidence);
+    const runtimeEvidence = evidence.filter(isRuntimeFile);
+    const entrypoints = uniq(runtimeEvidence.flatMap(item => item.entrypoints));
+    const routes = uniq(runtimeEvidence.flatMap(item => item.routes));
+    const guards = uniq(runtimeEvidence.flatMap(item => item.guards));
+    const sinks = uniq(runtimeEvidence.flatMap(item => item.sinks));
+    const dataStores = uniq(runtimeEvidence.flatMap(item => item.dataStores));
+    const externalIntegrations = uniq(runtimeEvidence.flatMap(item => item.externalIntegrations));
     const ownershipSignals = uniq(guards.filter(item => /tenantId|ownerId|customerId|role|permission|ALLOWED_ROLES|can[A-Z]/i.test(item)));
     const evidenceGaps = [
         !entrypoints.length ? 'No clear application entrypoint was identified.' : '',
@@ -343,6 +503,7 @@ export async function generateDesignMap(projectRoot: vscode.Uri): Promise<Design
         ownershipSignals,
         evidenceGaps,
         files: evidence,
+        relationships,
     };
     const scannerGuidance = buildGuidance(mapWithoutSummary);
     const summary = [
