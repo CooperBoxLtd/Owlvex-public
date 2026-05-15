@@ -32,6 +32,7 @@ from app.db.session import get_db
 from app.services.admin_ops import record_admin_audit_event
 from app.services.email_service import send_verification_email
 from app.services.licence_service import generate_licence_key, hash_licence_key
+from app.routers.licences import PLAN_FEATURES
 
 router = APIRouter(prefix="/v1/admin", tags=["admin"])
 ADMIN_APP_PATH = Path(__file__).resolve().parents[1] / "static" / "admin-console.html"
@@ -54,6 +55,23 @@ class CustomerTelemetryRequest(CustomerLicenceActionRequest):
 
 class CustomerTelemetryProfileRequest(CustomerLicenceActionRequest):
     profile: str = Field(pattern="^(standard|dev_observability)$")
+
+
+class IssueDeveloperLicenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    email: EmailStr
+    team_name: str | None = Field(default=None, max_length=200)
+    seats: int = Field(default=1, ge=1)
+    expires_at: str | None = None
+    validity_days: int | None = Field(default=None, ge=1, le=3660)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class SetLicenceExpiryRequest(CustomerLicenceActionRequest):
+    licence_id: str | None = None
+    expires_at: str | None = None
+    validity_days: int | None = Field(default=None, ge=1, le=3660)
+    reason: str | None = Field(default=None, max_length=500)
 
 
 class BanCustomerRequest(BaseModel):
@@ -120,6 +138,32 @@ def _parse_date_filter(value: str | None, *, inclusive_end: bool = False) -> dat
     if inclusive_end and "T" not in value:
         parsed = parsed + timedelta(days=1)
     return parsed
+
+
+def _parse_future_expiry(*, expires_at: str | None, validity_days: int | None) -> datetime | None:
+    if expires_at and validity_days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Provide either expires_at or validity_days, not both",
+        )
+    if validity_days:
+        return datetime.now(timezone.utc).replace(microsecond=0) + timedelta(days=validity_days)
+    if not expires_at:
+        return None
+    try:
+        parsed = datetime.fromisoformat(expires_at)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="expires_at must be a valid ISO 8601 datetime",
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    if parsed <= datetime.now(timezone.utc):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Expiry must be in the future")
+    return parsed.replace(microsecond=0)
 
 
 def _apply_date_range(query, column, *, date_from: datetime | None, date_to: datetime | None):
@@ -1578,6 +1622,130 @@ async def rotate_licence(
         "licence_id": str(rotated.id),
         "licence_key": raw_key,
         "rotated_from_licence_id": str(source_licence.id),
+        "expires_at": rotated.expires_at.isoformat() if rotated.expires_at else None,
+    }
+
+
+@router.post("/licence/issue-developer", status_code=status.HTTP_201_CREATED)
+async def issue_developer_licence(
+    body: IssueDeveloperLicenceRequest,
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    email = str(body.email).strip().lower()
+    result = await db.execute(select(Customer).where(Customer.email == email))
+    customer = result.scalar_one_or_none()
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    if customer and customer.is_banned:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer is banned")
+    if not customer:
+        customer = Customer(
+            email=email,
+            company=body.team_name,
+            source="admin",
+            email_verified_at=now,
+        )
+        db.add(customer)
+        await db.flush()
+    else:
+        if body.team_name:
+            customer.company = body.team_name
+        if not customer.email_verified_at:
+            customer.email_verified_at = now
+
+    expires_dt = _parse_future_expiry(expires_at=body.expires_at, validity_days=body.validity_days)
+    raw_key = generate_licence_key()
+    licence = Licence(
+        customer_id=customer.id,
+        licence_key_hash=hash_licence_key(raw_key),
+        team_name=body.team_name or customer.company or customer.name or f"{email.split('@', 1)[0]}'s Developer Access",
+        email=email,
+        plan="developer",
+        seats=body.seats,
+        features=PLAN_FEATURES["developer"],
+        expires_at=expires_dt,
+        is_active=True,
+    )
+    db.add(licence)
+    await record_admin_audit_event(
+        db,
+        action="licence.issue_developer",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        reason=body.reason,
+        details={
+            "plan": "developer",
+            "seats": body.seats,
+            "expires_at": expires_dt.isoformat() if expires_dt else None,
+        },
+    )
+    await db.commit()
+    await db.refresh(licence)
+    return {
+        "ok": True,
+        "email": customer.email,
+        "plan": licence.plan,
+        "licence_id": str(licence.id),
+        "licence_key": raw_key,
+        "expires_at": licence.expires_at.isoformat() if licence.expires_at else None,
+    }
+
+
+@router.post("/licence/set-expiry")
+async def set_licence_expiry(
+    body: SetLicenceExpiryRequest,
+    x_admin_key: str = Header(..., alias="X-Admin-Key"),
+    x_admin_actor: str | None = Header(default=None, alias="X-Admin-Actor"),
+    db: AsyncSession = Depends(get_db),
+):
+    _ensure_admin_key(x_admin_key)
+    customer = await _get_customer_with_licences(db, str(body.email))
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Customer not found")
+    if customer.is_banned:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Customer is banned")
+
+    target_licence = None
+    if body.licence_id:
+        try:
+            licence_uuid = uuid.UUID(body.licence_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid licence_id") from exc
+        target_licence = next((licence for licence in customer.licences if licence.id == licence_uuid), None)
+    else:
+        licences = _filter_customer_licences(customer, body.plan)
+        target_licence = next((licence for licence in licences if licence.is_active), licences[0] if licences else None)
+    if not target_licence:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No licence found for this customer")
+
+    previous_expiry = target_licence.expires_at
+    next_expiry = _parse_future_expiry(expires_at=body.expires_at, validity_days=body.validity_days)
+    target_licence.expires_at = next_expiry
+    await record_admin_audit_event(
+        db,
+        action="licence.set_expiry",
+        actor=_admin_actor(x_admin_actor),
+        customer_id=str(customer.id),
+        customer_email=customer.email,
+        licence_id=str(target_licence.id),
+        reason=body.reason or body.plan,
+        details={
+            "plan": target_licence.plan,
+            "previous_expiry": previous_expiry.isoformat() if previous_expiry else None,
+            "new_expiry": next_expiry.isoformat() if next_expiry else None,
+        },
+    )
+    await db.commit()
+    return {
+        "ok": True,
+        "email": customer.email,
+        "plan": target_licence.plan,
+        "licence_id": str(target_licence.id),
+        "previous_expiry": previous_expiry.isoformat() if previous_expiry else None,
+        "expires_at": target_licence.expires_at.isoformat() if target_licence.expires_at else None,
     }
 
 

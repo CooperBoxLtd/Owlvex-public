@@ -2,6 +2,7 @@ import hashlib
 import inspect
 import secrets
 import string
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -32,6 +33,18 @@ def generate_licence_key() -> str:
     return f"owlvex_lic_{random_part}"
 
 
+def _coerce_utc(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _coerce_uuid(value: str | uuid.UUID) -> uuid.UUID:
+    return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
+
+
 async def get_licence_by_key(db: AsyncSession, raw_key: str) -> Optional[Licence]:
     key_hash = hash_licence_key(raw_key)
     result = await db.execute(
@@ -49,7 +62,8 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
     if not licence.is_active:
         return {"valid": False, "reason": "Licence is inactive"}
 
-    if licence.expires_at and licence.expires_at < datetime.now(timezone.utc):
+    expires_at = _coerce_utc(licence.expires_at)
+    if expires_at and expires_at < datetime.now(timezone.utc):
         return {"valid": False, "reason": "Licence has expired"}
 
     if licence.customer_id:
@@ -97,18 +111,19 @@ async def validate_licence(db: AsyncSession, raw_key: str) -> dict:
             "monthly_limit_reached": scans_per_month is not None and scans_this_month >= scans_per_month,
             "daily_limit_reached": scans_per_month is not None and scans_this_month >= scans_per_month,
         },
-        "expires_at": licence.expires_at.isoformat() if licence.expires_at else None,
+        "expires_at": expires_at.isoformat() if expires_at else None,
     }
 
 
 async def get_monthly_usage_count(db: AsyncSession, licence_id: str, event_name: str) -> int:
+    licence_uuid = _coerce_uuid(licence_id)
     now = datetime.now(timezone.utc)
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     result = await db.execute(
         select(func.count())
         .select_from(UsageEvent)
         .where(
-            UsageEvent.licence_id == licence_id,
+            UsageEvent.licence_id == licence_uuid,
             UsageEvent.event_name == event_name,
             UsageEvent.created_at >= start_of_month,
         )
@@ -120,9 +135,10 @@ async def get_monthly_usage_count(db: AsyncSession, licence_id: str, event_name:
 
 
 async def record_seat_seen(db: AsyncSession, licence_id: str, user_email: str) -> None:
+    licence_uuid = _coerce_uuid(licence_id)
     result = await db.execute(
         select(LicenceSeat).where(
-            LicenceSeat.licence_id == licence_id,
+            LicenceSeat.licence_id == licence_uuid,
             LicenceSeat.user_email == user_email,
         )
     )
@@ -136,12 +152,12 @@ async def record_seat_seen(db: AsyncSession, licence_id: str, user_email: str) -
         )
     else:
         # Enforce seat limit before allocating a new seat
-        lic_result = await db.execute(select(Licence).where(Licence.id == licence_id))
+        lic_result = await db.execute(select(Licence).where(Licence.id == licence_uuid))
         licence = lic_result.scalar_one_or_none()
         if licence and licence.seats_used >= licence.seats:
             return  # Seat limit reached — silently skip rather than error mid-scan
         new_seat = LicenceSeat(
-            licence_id=licence_id,
+            licence_id=licence_uuid,
             user_email=user_email,
             last_seen=datetime.now(timezone.utc),
         )
@@ -149,7 +165,7 @@ async def record_seat_seen(db: AsyncSession, licence_id: str, user_email: str) -
         # Atomic increment via SQL expression avoids read-modify-write race
         await db.execute(
             update(Licence)
-            .where(Licence.id == licence_id)
+            .where(Licence.id == licence_uuid)
             .values(seats_used=Licence.seats_used + 1)
         )
 

@@ -1556,6 +1556,71 @@ async def test_admin_can_set_full_telemetry_profile_outside_development(client):
 
 
 @pytest.mark.asyncio
+async def test_admin_can_issue_developer_licence_with_manual_key_and_expiry(client):
+    response = await client.post(
+        "/v1/admin/licence/issue-developer",
+        headers={"X-Admin-Key": "test-admin-key", "X-Admin-Actor": "ops@example.com"},
+        json={
+            "email": "developer-customer@example.com",
+            "team_name": "Developer Customer",
+            "seats": 2,
+            "validity_days": 30,
+            "reason": "early customer access",
+        },
+    )
+
+    assert response.status_code == 201
+    data = response.json()
+    assert data["licence_key"].startswith("owlvex_lic_")
+    assert data["plan"] == "developer"
+    assert data["expires_at"] is not None
+
+    validate_response = await client.post(
+        "/v1/licences/validate",
+        headers={"X-Licence-Key": data["licence_key"]},
+        json={"user_email": "developer-customer@example.com"},
+    )
+    assert validate_response.status_code == 200
+    assert validate_response.json()["plan"] == "developer"
+
+
+@pytest.mark.asyncio
+async def test_admin_can_extend_existing_licence_without_rotating_key(client):
+    issued = await client.post(
+        "/v1/admin/licence/issue-developer",
+        headers={"X-Admin-Key": "test-admin-key"},
+        json={"email": "extend-developer@example.com", "team_name": "Extend Dev", "validity_days": 7},
+    )
+    assert issued.status_code == 201
+    issued_data = issued.json()
+
+    response = await client.post(
+        "/v1/admin/licence/set-expiry",
+        headers={"X-Admin-Key": "test-admin-key", "X-Admin-Actor": "ops@example.com"},
+        json={
+            "email": "extend-developer@example.com",
+            "licence_id": issued_data["licence_id"],
+            "validity_days": 60,
+            "reason": "extend customer evaluation",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["licence_id"] == issued_data["licence_id"]
+    assert data["previous_expiry"] == issued_data["expires_at"]
+    assert data["expires_at"] != issued_data["expires_at"]
+
+    validate_response = await client.post(
+        "/v1/licences/validate",
+        headers={"X-Licence-Key": issued_data["licence_key"]},
+        json={"user_email": "extend-developer@example.com"},
+    )
+    assert validate_response.status_code == 200
+    assert validate_response.json()["expires_at"] == data["expires_at"]
+
+
+@pytest.mark.asyncio
 async def test_free_or_trial_cannot_disable_telemetry(client):
     registration = await client.post(
         "/v1/licences/register",

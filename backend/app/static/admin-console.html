@@ -1328,6 +1328,8 @@
           <div class="toolbar-actions compact">
             <button class="secondary" data-action="refresh-detail">Refresh</button>
             <button class="warn" data-action="resend-verification">Resend verification</button>
+            <button class="primary" data-action="issue-developer">Issue developer key</button>
+            <button class="warn" data-action="set-licence-expiry" data-plan="${escapeHtml(primaryLicence?.plan || '')}">Set expiry</button>
             <button class="warn" data-action="revoke-licences">Revoke active</button>
             <button class="warn" data-action="rotate-licence">Rotate latest</button>
             <button class="danger" data-action="ban-customer">Ban</button>
@@ -1399,7 +1401,7 @@
                       <td>${escapeHtml(String(licence.seats_used))}/${escapeHtml(String(licence.seats))}</td>
                       <td><div class="badge-row">${badgeHtml(licence.features?.telemetry_profile || 'standard', licence.features?.telemetry_profile === 'dev_observability' ? 'warn' : 'ok')}</div></td>
                       <td class="small">${escapeHtml(formatRelative(licence.updated_at))}</td>
-                      <td><div class="toolbar-actions compact"><button class="warn" data-action="revoke-licence" data-plan="${escapeHtml(licence.plan)}">Revoke</button><button class="warn" data-action="rotate-licence" data-plan="${escapeHtml(licence.plan)}">Rotate</button><button class="danger" data-action="delete-licence" data-licence-id="${escapeHtml(licence.licence_id)}">Delete</button></div></td>
+                      <td><div class="toolbar-actions compact"><button class="warn" data-action="set-licence-expiry" data-plan="${escapeHtml(licence.plan)}" data-licence-id="${escapeHtml(licence.licence_id)}">Expiry</button><button class="warn" data-action="revoke-licence" data-plan="${escapeHtml(licence.plan)}">Revoke</button><button class="warn" data-action="rotate-licence" data-plan="${escapeHtml(licence.plan)}">Rotate</button><button class="danger" data-action="delete-licence" data-licence-id="${escapeHtml(licence.licence_id)}">Delete</button></div></td>
                     </tr>
                   `).join('')}
                 </tbody>
@@ -1683,7 +1685,87 @@
         body: JSON.stringify({ email: customer.email, plan }),
       });
       await refreshSelectedCustomer();
+      showIssuedKey(data, 'Licence rotated');
       setStatus(`Licence rotated. New key issued for ${data.plan}.`);
+    }
+
+    function showIssuedKey(data, title) {
+      if (!data?.licence_key) return;
+      const text = [
+        title,
+        `Email: ${data.email}`,
+        `Plan: ${data.plan}`,
+        `Expires: ${data.expires_at || 'no expiry'}`,
+        '',
+        data.licence_key,
+      ].join('\n');
+      try {
+        navigator.clipboard?.writeText(data.licence_key);
+        setStatus(`${title}. New key copied to clipboard; send it manually to the customer.`);
+      } catch {
+        setStatus(`${title}. Copy the new key from the popup and send it manually.`);
+      }
+      window.alert(text);
+    }
+
+    async function issueDeveloperLicence() {
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      const daysInput = window.prompt('Developer licence validity in days. Leave blank for no expiry.', '30');
+      if (daysInput === null) return;
+      const trimmedDays = daysInput.trim();
+      const validityDays = trimmedDays ? Number(trimmedDays) : null;
+      if (trimmedDays && (!Number.isInteger(validityDays) || validityDays < 1)) {
+        throw new Error('Validity days must be a positive whole number.');
+      }
+      const seatsInput = window.prompt('Seats for this developer licence.', '1');
+      if (seatsInput === null) return;
+      const seats = Number(seatsInput.trim() || '1');
+      if (!Number.isInteger(seats) || seats < 1) {
+        throw new Error('Seats must be a positive whole number.');
+      }
+      const reason = window.prompt('Reason for audit trail.', 'early customer developer access');
+      if (reason === null) return;
+      setStatus(`Issuing developer licence for ${customer.email}...`);
+      const data = await request('/v1/admin/licence/issue-developer', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: customer.email,
+          team_name: customer.company || customer.name || undefined,
+          seats,
+          validity_days: validityDays,
+          reason: reason.trim() || null,
+        }),
+      });
+      await refreshSelectedCustomer();
+      showIssuedKey(data, 'Developer licence issued');
+    }
+
+    async function setLicenceExpiry(plan = null, licenceId = null) {
+      const customer = selectedCustomer();
+      if (!customer) throw new Error('No customer selected.');
+      const daysInput = window.prompt('Set validity from now in days. Leave blank to remove expiry.', '30');
+      if (daysInput === null) return;
+      const trimmedDays = daysInput.trim();
+      const validityDays = trimmedDays ? Number(trimmedDays) : null;
+      if (trimmedDays && (!Number.isInteger(validityDays) || validityDays < 1)) {
+        throw new Error('Validity days must be a positive whole number.');
+      }
+      const reason = window.prompt('Reason for audit trail.', 'manual licence validity update');
+      if (reason === null) return;
+      setStatus(`Updating licence expiry for ${customer.email}...`);
+      const data = await request('/v1/admin/licence/set-expiry', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: customer.email,
+          plan,
+          licence_id: licenceId,
+          validity_days: validityDays,
+          reason: reason.trim() || null,
+        }),
+      });
+      await refreshSelectedCustomer();
+      setStatus(`Expiry updated for ${data.plan}: ${data.expires_at || 'no expiry'}.`);
     }
 
     async function banCustomer() {
@@ -1780,6 +1862,8 @@
         else if (action === 'revoke-licences') await revokeLicences(null);
         else if (action === 'revoke-licence') await revokeLicences(dataset.plan || null);
         else if (action === 'rotate-licence') await rotateLicence(dataset.plan || null);
+        else if (action === 'issue-developer') await issueDeveloperLicence();
+        else if (action === 'set-licence-expiry') await setLicenceExpiry(dataset.plan || null, dataset.licenceId || null);
         else if (action === 'ban-customer') await banCustomer();
         else if (action === 'unban-customer') await unbanCustomer();
         else if (action === 'delete-customer') await deleteCustomer();
