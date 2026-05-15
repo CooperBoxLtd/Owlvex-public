@@ -1140,6 +1140,52 @@ function buildDesignContextReportLines(results: Array<{ result: ScanResult }>): 
     return lines;
 }
 
+function collectDesignMaps(results: Array<{ result: ScanResult }>): NonNullable<ScanResult['designMap']>[] {
+    const seen = new Set<string>();
+    const maps: NonNullable<ScanResult['designMap']>[] = [];
+    for (const item of results) {
+        const designMap = item.result.designMap;
+        if (!designMap?.loaded) {
+            continue;
+        }
+        const key = designMap.path ?? 'loaded';
+        if (!seen.has(key)) {
+            seen.add(key);
+            maps.push(designMap);
+        }
+    }
+    return maps;
+}
+
+function buildDesignMapLabel(results: Array<{ result: ScanResult }>): string {
+    const maps = collectDesignMaps(results);
+    if (!maps.length) {
+        return '';
+    }
+    const paths = maps.map(map => map.path).filter((value): value is string => Boolean(value));
+    return paths.length
+        ? `loaded ${paths.length} map${paths.length === 1 ? '' : 's'} (${paths.join(', ')})`
+        : 'loaded';
+}
+
+function buildDesignMapOverviewLines(results: Array<{ result: ScanResult }>): string[] {
+    const label = buildDesignMapLabel(results);
+    return label ? [`- Design Map: ${label}`] : [];
+}
+
+function buildDesignMapReportLines(results: Array<{ result: ScanResult }>): string[] {
+    const maps = collectDesignMaps(results);
+    if (!maps.length) {
+        return [];
+    }
+
+    const lines = [`- Design Map: ${buildDesignMapLabel(results)}`];
+    for (const path of maps.map(map => map.path).filter((value): value is string => Boolean(value)).slice(0, 8)) {
+        lines.push(`  - Used: \`${path}\``);
+    }
+    return lines;
+}
+
 function collectDriftBoxes(results: Array<{ result: ScanResult }>): NonNullable<ScanResult['driftBox']>[] {
     const seen = new Set<string>();
     const boxes: NonNullable<ScanResult['driftBox']>[] = [];
@@ -1614,6 +1660,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             `- Proof posture: ${summarizeProofPosture(allFindings)}`,
             ...buildEngineTelemetryLines(engineTelemetry),
             `- Design context: ${buildDesignContextLabel(snapshot.results)}`,
+            ...buildDesignMapOverviewLines(snapshot.results),
             ...buildDriftOverviewLines(snapshot.results),
             `- Files scanned: ${snapshot.results.length}`,
             `- Total findings: ${totalFindings}`,
@@ -1689,6 +1736,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Proof posture: ${summarizeProofPosture(allFindings)}`,
         ...buildEngineTelemetryLines(engineTelemetry),
         `- Design context: ${buildDesignContextLabel(snapshot.results)}`,
+        ...buildDesignMapOverviewLines(snapshot.results),
         ...buildDriftOverviewLines(snapshot.results),
         '',
         '## Fix First',
@@ -1707,6 +1755,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Proof posture: ${summarizeProofPosture(allFindings)}`,
         ...buildEngineTelemetryLines(engineTelemetry),
         `- Design context: ${buildDesignContextLabel(snapshot.results)}`,
+        ...buildDesignMapOverviewLines(snapshot.results),
         ...buildDriftOverviewLines(snapshot.results),
         '',
         '## AI Usage',
@@ -1726,6 +1775,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         ...buildFrameworkScopeLines(snapshot.results),
         `- Project context: ${buildProjectContextLabel(projectContextSummary)}`,
         ...buildDesignContextReportLines(snapshot.results),
+        ...buildDesignMapReportLines(snapshot.results),
         ...buildDriftBoxReportLines(snapshot.results),
         ...buildDriftRunReportLines(snapshot.results),
         `- Errors: ${snapshot.errors.length}`,

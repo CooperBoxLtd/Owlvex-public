@@ -1183,6 +1183,30 @@ describe('reportGenerator', () => {
         expect(written).toContain('- STRIDE design note: STRIDE was selected, but no `.owlvex/design` markdown or text context was loaded.');
     });
 
+    it('renders Design Map usage when the generated map was loaded', async () => {
+        const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));
+
+        await generateReportFromSnapshot(vscode.Uri.file('d:\\repo'), {
+            targetLabel: 'src/probes/example.js',
+            outputRoot: vscode.Uri.file('d:\\repo'),
+            errors: [],
+            results: [{
+                uri: vscode.Uri.file('d:\\repo\\src\\probes\\example.js'),
+                result: buildResult({
+                    designMap: {
+                        loaded: true,
+                        path: '.owlvex/owlvex-design-map.md',
+                    },
+                }),
+            }],
+        });
+
+        const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
+        expect(written).toContain('- Design Map: loaded 1 map (.owlvex/owlvex-design-map.md)');
+        expect(written).toContain('- Used: `.owlvex/owlvex-design-map.md`');
+    });
+
     it('filters mappings and STRIDE to the frameworks selected for the scan', async () => {
         const writeFile = vscode.workspace.fs.writeFile as jest.Mock;
         (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from('const x = 1;'));

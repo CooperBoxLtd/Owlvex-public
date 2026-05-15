@@ -150,6 +150,10 @@ export interface ScanResult {
         strideSelected: boolean;
         missingForStride: boolean;
     };
+    designMap?: {
+        loaded: boolean;
+        path?: string;
+    };
     frameworks?: string[];
     positives: string[];
     metrics: { critical: number; high: number; medium: number; low: number };
@@ -2464,6 +2468,7 @@ export class ScanEngine {
                     driftBoxContext,
                     driftResults,
                     projectContext.designContext,
+                    projectContext.designMap,
                 ),
             );
         }
@@ -2493,6 +2498,7 @@ export class ScanEngine {
                     driftBoxContext,
                     driftResults,
                     projectContext.designContext,
+                    projectContext.designMap,
                 ),
             );
         }
@@ -2523,6 +2529,7 @@ export class ScanEngine {
                     driftBoxContext,
                     driftResults,
                     projectContext.designContext,
+                    projectContext.designMap,
                 ),
             );
         }
@@ -2542,6 +2549,7 @@ export class ScanEngine {
                     driftBoxContext,
                     driftResults,
                     projectContext.designContext,
+                    projectContext.designMap,
                 ),
             );
         }
@@ -2764,6 +2772,7 @@ export class ScanEngine {
                 findings: allFindings,
                 projectContextSummary: projectContext.summary,
                 designContext: projectContext.designContext,
+                designMap: projectContext.designMap,
                 frameworks,
                 positives: entry.parsed.positives,
                 metrics: mergedMetrics,
@@ -2826,6 +2835,7 @@ export class ScanEngine {
                 driftBoxContext,
                 driftResults,
                 projectContext.designContext,
+                projectContext.designMap,
             );
         }
 
@@ -2840,6 +2850,7 @@ export class ScanEngine {
                 driftBoxContext,
                 driftResults,
                 projectContext.designContext,
+                projectContext.designMap,
             );
         }
 
@@ -2864,6 +2875,7 @@ export class ScanEngine {
                 driftBoxContext,
                 driftResults,
                 projectContext.designContext,
+                projectContext.designMap,
             );
         }
         const systemPrompt = promptContext.systemPrompt;
@@ -2914,6 +2926,7 @@ export class ScanEngine {
                 driftBoxContext,
                 driftResults,
                 projectContext.designContext,
+                projectContext.designMap,
             );
         }
 
@@ -2932,6 +2945,7 @@ export class ScanEngine {
                 driftBoxContext,
                 driftResults,
                 projectContext.designContext,
+                projectContext.designMap,
             );
         }
 
@@ -3032,6 +3046,7 @@ export class ScanEngine {
             findings: allFindings,
             projectContextSummary: projectContext.summary,
             designContext: projectContext.designContext,
+            designMap: projectContext.designMap,
             frameworks,
             positives: parsed.positives,
             metrics: mergedMetrics,
@@ -3165,6 +3180,7 @@ export class ScanEngine {
         driftBox?: DriftBoxScanContext,
         driftResults?: DriftRunResult[],
         designContext?: ScanResult['designContext'],
+        designMap?: ScanResult['designMap'],
     ): ScanResult {
         const metrics = buildMetrics(deterministicFindings);
         const score = calculateScoreFromFindings(deterministicFindings);
@@ -3182,6 +3198,7 @@ export class ScanEngine {
             findings: deterministicFindings,
             projectContextSummary: projectContextSummary ?? getProjectContextSummaryFromConfig(),
             designContext,
+            designMap,
             frameworks: vscode.workspace.getConfiguration(PROFILE.configSection).get<string[]>('frameworks', ['OWASP']),
             positives: [],
             metrics,
