@@ -108,11 +108,12 @@ interface LocalActionResult {
     actions?: ChatMessageAction[];
 }
 
-type ChatActionKind = 'scanFile' | 'scanSelectedFiles' | 'scanChangedFiles' | 'scanOpenEditors' | 'scanFolder' | 'scanReport' | 'scanSummaryReport' | 'scanFullReport' | 'reviewRiskCalibration';
+type ChatActionKind = 'scanFile' | 'scanSelectedFiles' | 'scanChangedFiles' | 'scanGitTarget' | 'scanOpenEditors' | 'scanFolder' | 'scanReport' | 'scanSummaryReport' | 'scanFullReport' | 'reviewRiskCalibration';
 
 interface ChatLocalIntent {
     action: ChatActionKind;
     fileHint?: string;
+    gitTarget?: string;
 }
 
 interface ChatState {
@@ -152,7 +153,7 @@ interface ChatState {
     groundingWarning: string;
 }
 
-type WorkingScope = 'scanFile' | 'scanSelectedFiles' | 'scanChangedFiles' | 'scanOpenEditors' | 'scanFolder';
+type WorkingScope = 'scanFile' | 'scanSelectedFiles' | 'scanChangedFiles' | 'scanGitTarget' | 'scanOpenEditors' | 'scanFolder';
 
 function normalizeReviewedPath(filePath: string): string {
     return path.normalize(filePath).toLowerCase();
@@ -342,6 +343,7 @@ function isWorkingScope(value: string): value is WorkingScope {
     return value === 'scanFile'
         || value === 'scanSelectedFiles'
         || value === 'scanChangedFiles'
+        || value === 'scanGitTarget'
         || value === 'scanOpenEditors'
         || value === 'scanFolder';
 }
@@ -354,6 +356,8 @@ function getWorkingScopeLabel(scope: WorkingScope): string {
             return 'Selected files';
         case 'scanChangedFiles':
             return 'Changed files';
+        case 'scanGitTarget':
+            return 'Git commit/range';
         case 'scanOpenEditors':
             return 'Open editors';
         case 'scanFolder':
@@ -732,6 +736,7 @@ function buildToolHelpResponse(prompt: string): { content: string; actions?: Cha
     const scanActions: ChatMessageAction[] = [
         buildQuickActionAction('tool-help-scan-current-file', 'Scan current file', 'scanFile'),
         buildQuickActionAction('tool-help-scan-changed-files', 'Scan changed files', 'scanChangedFiles'),
+        buildQuickActionAction('tool-help-scan-git-target', 'Scan Git commit/range', 'scanGitTarget'),
         buildQuickActionAction('tool-help-scan-workspace', 'Scan workspace', 'scanFolder'),
         buildQuickActionAction('tool-help-create-summary', 'Create Summary', 'scanSummaryReport'),
     ];
@@ -3822,6 +3827,44 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             };
         }
 
+        if (intent.action === 'scanGitTarget') {
+            const result = await vscode.commands.executeCommand<any>(
+                PROFILE.commands.scanGitTarget,
+                intent.gitTarget ? { gitTarget: intent.gitTarget } : undefined,
+            );
+            if (result?.status === 'cancelled') {
+                return { handled: true, response: 'Git commit/range scan was cancelled.', kind: 'scan' };
+            }
+            if (result?.status === 'empty') {
+                return { handled: true, response: `No supported source files were found for Git target ${result.gitTarget ?? 'the selected ref'}.`, kind: 'scan' };
+            }
+            if (result?.status === 'failed') {
+                return {
+                    handled: true,
+                    response: `Git commit/range scan failed.\nFiles scanned: 0\nTotal findings: 0\nScan errors: ${(result.errors ?? []).length}`,
+                    kind: 'scan',
+                };
+            }
+            if (!result?.completed) {
+                return { handled: true, response: 'Git commit/range scan did not complete.', kind: 'scan' };
+            }
+            const topActionable = getTopActionableFindingResult(result.results ?? []);
+            this.lastSelectedScopePaths = (result.results ?? [])
+                .map((item: any) => item?.uri?.fsPath)
+                .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+            this.latestActionableItems = getActionableFindingResults(result.results ?? []);
+            this.latestActionableFinding = topActionable?.finding;
+            this.latestActionableTargetPath = topActionable?.targetPath;
+            const actions: ChatMessageAction[] = buildPrimaryFixAction(this.latestActionableItems);
+            actions.push(buildExplainScoreAction('explain-score-scan-git-target-intent', result.results ?? []));
+            return {
+                handled: true,
+                response: buildMultiFileScanResponse(`Git target scan (${result.gitTarget ?? 'selected target'})`, result.completed, result.results ?? [], result.errors ?? [], topActionable, undefined, buildChangedFilesSkipLines(result)),
+                kind: 'scan',
+                actions,
+            };
+        }
+
         if (intent.action === 'scanOpenEditors') {
             const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanOpenEditors);
             if (result?.status === 'cancelled') {
@@ -4165,6 +4208,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const isScanAction = action === 'scanFile'
             || action === 'scanSelectedFiles'
             || action === 'scanChangedFiles'
+            || action === 'scanGitTarget'
             || action === 'scanOpenEditors'
             || action === 'scanFolder'
             || action === 'scanReport'
@@ -4815,6 +4859,59 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                         ]
                         : undefined,
                 };
+            } else if (action === 'scanGitTarget') {
+                const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanGitTarget);
+                if (result?.status === 'cancelled') {
+                    this.messages.pop();
+                    void this.persistState();
+                    this.refresh();
+                    return;
+                }
+                this.latestActionableFinding = result?.results
+                    ?.flatMap((item: any) => item.result.findings)
+                    ?.slice()
+                    ?.sort((left: Finding, right: Finding) => riskRank(right) - riskRank(left))[0];
+                this.lastSelectedScopePaths = (result?.results ?? [])
+                    .map((item: any) => item?.uri?.fsPath)
+                    .filter((value: unknown): value is string => typeof value === 'string' && value.length > 0);
+                this.latestActionableTargetPath = getTopActionableFindingResult(result?.results ?? [])?.targetPath;
+                this.latestActionableItems = getActionableFindingResults(result?.results ?? []);
+                this.messages[this.messages.length - 1] = {
+                    role: 'assistant',
+                    kind: 'scan',
+                    content: result?.status === 'completed'
+                        ? [
+                            `Git target scan completed: ${result.gitTarget ?? 'selected target'}.`,
+                            `Files scanned: ${result.completed}`,
+                            `Total findings: ${result.totalFindings}`,
+                            result.skipped?.length ? `Skipped non-source files: ${result.skipped.length}` : '',
+                            summarizeEngineEvidence(result.results.flatMap((item: any) => item.result.findings)),
+                            summarizeIssueFamilies(result.results.flatMap((item: any) => item.result.findings)),
+                            ...buildGroundedRemediationHighlights(result.results.flatMap((item: any) => item.result.findings))
+                                .map((line, index) => `Remediation ${index + 1}: ${line}`),
+                            ...this.buildProviderComparisonNotes(result.results ?? []),
+                            result.errors.length
+                                ? `Scan errors: ${result.errors.length}`
+                                : 'No scan errors were reported.',
+                        ].filter(Boolean).join('\n')
+                        : result?.status === 'failed'
+                            ? [
+                                `Git target scan failed.`,
+                                `Files scanned: 0`,
+                                `Total findings: 0`,
+                                `Issue families: unresolved`,
+                                `Scan errors: ${result.errors.length}`,
+                            ].join('\n')
+                        : result?.status === 'empty'
+                            ? `No source files were found for Git target ${result.gitTarget ?? 'the selected ref'}.`
+                            : 'Git target scan was cancelled.',
+                    actions: result?.status === 'completed'
+                        ? [
+                            ...buildPrimaryFixAction(this.latestActionableItems),
+                            buildExplainScoreAction('explain-score-git-target', result.results ?? []),
+                        ]
+                        : undefined,
+                };
             } else if (action === 'scanOpenEditors') {
                 const result = await vscode.commands.executeCommand<any>(PROFILE.commands.scanOpenEditors);
                 if (result?.status === 'cancelled') {
@@ -5456,6 +5553,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return this.buildOpenEditorsContext();
             case 'scanChangedFiles':
                 return this.buildSelectedFilesContext();
+            case 'scanGitTarget':
+                return this.buildWorkspaceRepoContext(promptForRepoTarget);
             case 'scanSelectedFiles':
                 return this.buildSelectedFilesContext();
             case 'scanFolder':
@@ -6481,6 +6580,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         <select id="scanScopeBottom" class="rail-select" aria-label="Scan scope">
           <option value="scanFile">Current file</option>
           <option value="scanChangedFiles">Changed files</option>
+          <option value="scanGitTarget">Git commit/range</option>
           <option value="scanSelectedFiles">Selected files</option>
           <option value="scanOpenEditors">Open editors</option>
           <option value="scanFolder" selected>Workspace</option>
@@ -6817,9 +6917,11 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
     const wantsReport = /\b(report|summary|markdown|document)\b/.test(normalized);
     const wantsFolder = /\b(repo|repository|workspace|folder|project|codebase)\b/.test(normalized);
     const wantsChangedFiles = /\b(changed files?|modified files?|git diff|diff|staged|unstaged|untracked|working tree|working copy)\b/.test(normalized);
+    const wantsGitTarget = /\b(git target|commit|sha|branch|tag|ref|revision|range)\b/.test(normalized) || /\.{2,3}/.test(prompt);
     const wantsFile = /\b(file|current file|this file|selected file)\b/.test(normalized);
     const wantsCalibration = /\b(calibration|score posture|risk posture|review scores|review scoring)\b/.test(normalized);
     const explicitFile = extractFileHint(prompt);
+    const gitTarget = extractGitTargetHint(prompt);
 
     if (wantsCalibration) {
         return { action: 'reviewRiskCalibration' };
@@ -6827,6 +6929,10 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
 
     if (wantsScan && wantsReport) {
         return { action: 'scanReport', fileHint: explicitFile };
+    }
+
+    if (wantsScan && wantsGitTarget) {
+        return { action: 'scanGitTarget', gitTarget };
     }
 
     if (wantsScan && wantsChangedFiles) {
@@ -6847,6 +6953,20 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
 
     if (wantsScan && (wantsFile || Boolean(explicitFile))) {
         return { action: 'scanFile', fileHint: explicitFile };
+    }
+
+    return undefined;
+}
+
+function extractGitTargetHint(prompt: string): string | undefined {
+    const explicitRange = prompt.match(/\b([A-Za-z0-9_./~^@{}-]+\.{2,3}[A-Za-z0-9_./~^@{}-]+)\b/);
+    if (explicitRange?.[1]) {
+        return explicitRange[1];
+    }
+
+    const afterKeyword = prompt.match(/\b(?:commit|sha|branch|tag|ref|revision|range)\s+([A-Za-z0-9_./~^@{}-]{2,120})\b/i);
+    if (afterKeyword?.[1]) {
+        return afterKeyword[1].replace(/[.,;:]+$/, '');
     }
 
     return undefined;

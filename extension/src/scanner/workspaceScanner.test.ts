@@ -1,7 +1,7 @@
 import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import * as vscode from 'vscode';
-import { collectChangedScannableFiles, collectChangedScannableFilesDetailed, collectScannableFiles, getActiveScannableEditorUri, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './workspaceScanner';
+import { collectChangedScannableFiles, collectChangedScannableFilesDetailed, collectGitTargetScannableFilesDetailed, collectScannableFiles, getActiveScannableEditorUri, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './workspaceScanner';
 
 jest.mock('fs/promises');
 jest.mock('child_process', () => ({
@@ -119,6 +119,63 @@ describe('workspaceScanner', () => {
                 path: '.gitignore',
                 reason: 'Git metadata; not scanned as application source',
             },
+        ]);
+    });
+
+    it('collects scannable files from a specific Git commit', async () => {
+        (execFile as unknown as jest.Mock)
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/route.js\0README.md\0package.json\0', ''));
+        (fs.stat as jest.Mock).mockResolvedValue({ isFile: () => true });
+
+        const result = await collectGitTargetScannableFilesDetailed(vscode.Uri.file('d:\\repo'), 'abc123');
+
+        expect((execFile as unknown as jest.Mock).mock.calls[0][1]).toEqual([
+            '-C',
+            'd:\\repo',
+            'diff-tree',
+            '--root',
+            '--no-commit-id',
+            '--name-only',
+            '-r',
+            '-z',
+            '--diff-filter=ACMRTUXB',
+            'abc123',
+            '--',
+            '.',
+        ]);
+        expect(result.files.map(file => normalizeTestPath(file.fsPath))).toEqual([
+            'd:/repo/src/route.js',
+            'd:/repo/package.json',
+        ]);
+        expect(result.skipped).toEqual([{
+            path: 'README.md',
+            reason: 'documentation/context file; use TDD Box or Design Box when it should ground a scan',
+        }]);
+        expect(result.errors).toEqual([]);
+    });
+
+    it('collects scannable files from a Git range', async () => {
+        (execFile as unknown as jest.Mock)
+            .mockImplementationOnce((_command: string, _args: string[], _options: any, callback: any) => callback(null, 'src/a.ts\0src/b.ts\0', ''));
+        (fs.stat as jest.Mock).mockResolvedValue({ isFile: () => true });
+
+        const result = await collectGitTargetScannableFilesDetailed(vscode.Uri.file('d:\\repo'), 'main..feature/login');
+
+        expect((execFile as unknown as jest.Mock).mock.calls[0][1]).toEqual([
+            '-C',
+            'd:\\repo',
+            'diff',
+            '--name-only',
+            '-z',
+            '--relative',
+            '--diff-filter=ACMRTUXB',
+            'main..feature/login',
+            '--',
+            '.',
+        ]);
+        expect(result.files.map(file => normalizeTestPath(file.fsPath))).toEqual([
+            'd:/repo/src/a.ts',
+            'd:/repo/src/b.ts',
         ]);
     });
 

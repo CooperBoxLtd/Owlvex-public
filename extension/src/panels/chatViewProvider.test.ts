@@ -66,6 +66,20 @@ describe('parseChatIntent', () => {
         });
     });
 
+    it('routes Git commit scan requests to Git target scanning', () => {
+        expect(parseChatIntent('scan commit abc123')).toEqual({
+            action: 'scanGitTarget',
+            gitTarget: 'abc123',
+        });
+    });
+
+    it('routes Git range scan requests to Git target scanning', () => {
+        expect(parseChatIntent('scan main..feature/login')).toEqual({
+            action: 'scanGitTarget',
+            gitTarget: 'main..feature/login',
+        });
+    });
+
     it('routes open-editors scan requests to open-editors scanning', () => {
         expect(parseChatIntent('scan open editors')).toEqual({
             action: 'scanOpenEditors',

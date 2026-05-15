@@ -10,7 +10,7 @@ import { SidebarProvider } from './panels/sidebarProvider';
 import { ChatViewProvider } from './panels/chatViewProvider';
 import { OWLVEX_PREVIEW_SCHEME, PreviewDocumentProvider } from './panels/previewDocumentProvider';
 import { buildRiskCalibrationReport, StoredScanRecord } from './scanner/calibrationReview';
-import { ChangedFileSkip, collectChangedScannableFilesDetailed, pickScanFile, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
+import { ChangedFileSkip, collectChangedScannableFilesDetailed, collectGitTargetScannableFilesDetailed, pickScanFile, pickScanFiles, resolveScanFileTarget, scanFolder, scanSelectedFiles } from './scanner/workspaceScanner';
 import { generateReportFromSnapshot, ReportSnapshot, ReportVariant } from './scanner/reportGenerator';
 import { FRAMEWORK_CATALOG, formatFrameworkSummary } from './frameworks/catalog';
 import { configureFrameworkPackRuntime } from './frameworks/frameworkGrounding';
@@ -67,6 +67,19 @@ interface ScanSelectedFilesCommandResult {
 interface ScanChangedFilesCommandResult {
     status: 'completed' | 'cancelled' | 'empty' | 'failed';
     root?: vscode.Uri;
+    files?: vscode.Uri[];
+    gitChangedCount?: number;
+    skipped?: ChangedFileSkip[];
+    completed: number;
+    totalFindings: number;
+    errors: string[];
+    results: Array<{ uri: vscode.Uri; result: ScanResult }>;
+}
+
+interface ScanGitTargetCommandResult {
+    status: 'completed' | 'cancelled' | 'empty' | 'failed';
+    root?: vscode.Uri;
+    gitTarget?: string;
     files?: vscode.Uri[];
     gitChangedCount?: number;
     skipped?: ChangedFileSkip[];
@@ -295,7 +308,7 @@ interface UsageEventOptions {
     includeProject?: boolean;
 }
 
-type ScanLifecycleScope = 'current_file' | 'selected_files' | 'changed_files' | 'open_editors' | 'workspace';
+type ScanLifecycleScope = 'current_file' | 'selected_files' | 'changed_files' | 'git_target' | 'open_editors' | 'workspace';
 
 const DEV_OBSERVABILITY_USAGE_EVENTS = new Set<UsageEventName>([
     'scan_started',
@@ -3497,6 +3510,169 @@ export function activate(context: vscode.ExtensionContext) {
                 });
                 statusBar.showError(error.message);
                 vscode.window.showErrorMessage(`${PROFILE.displayLabel} changed-files scan failed: ${error.message}`);
+                throw error;
+            }
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand(PROFILE.commands.scanGitTarget, async (requested?: string | { root?: vscode.Uri; gitTarget?: string }): Promise<ScanGitTargetCommandResult> => {
+            const allowed = await ensureScanAllowedForSession();
+            if (!allowed) {
+                return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
+            const requestedRoot = typeof requested === 'object' ? requested.root : undefined;
+            const root = requestedRoot ?? await ensureProjectRootReady('Select the repo root Owlvex should use for the Git commit/range scan.');
+            if (!root) {
+                return { status: 'cancelled', completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
+
+            const requestedTarget = typeof requested === 'string' ? requested : typeof requested === 'object' ? requested.gitTarget : undefined;
+            const gitTarget = requestedTarget?.trim() || await vscode.window.showInputBox({
+                title: `${PROFILE.displayLabel}: Scan Git commit or range`,
+                prompt: 'Enter a commit SHA, branch, tag, or range. Examples: abc123, feature/login, main..feature/login, HEAD~3..HEAD',
+                placeHolder: 'main..feature/my-branch',
+                ignoreFocusOut: true,
+            });
+            if (!gitTarget?.trim()) {
+                return { status: 'cancelled', root, completed: 0, totalFindings: 0, errors: [], results: [] };
+            }
+
+            const targetFiles = await collectGitTargetScannableFilesDetailed(root, gitTarget);
+            const fileUris = targetFiles.files;
+            if (!fileUris.length) {
+                const details = targetFiles.errors.length
+                    ? ` ${targetFiles.errors.join(' ')}`
+                    : targetFiles.skipped.length
+                        ? ` ${targetFiles.skipped.length} changed file(s) were skipped because they are not supported source files.`
+                        : '';
+                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No source files were found for Git target ${targetFiles.gitTarget}.${details}`);
+                return {
+                    status: targetFiles.errors.length ? 'failed' : 'empty',
+                    root,
+                    gitTarget: targetFiles.gitTarget,
+                    files: [],
+                    gitChangedCount: targetFiles.gitChangedPaths.length,
+                    skipped: targetFiles.skipped,
+                    completed: 0,
+                    totalFindings: 0,
+                    errors: targetFiles.errors,
+                    results: [],
+                };
+            }
+
+            statusBar.showScanning();
+            diagnostics.clear();
+            sidebar.clear();
+            const scanStartedAt = Date.now();
+            emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_started', {
+                scope: 'git_target',
+                startedAt: scanStartedAt,
+                fileCount: fileUris.length,
+                status: 'started',
+            });
+
+            try {
+                const summary = await scanSelectedFiles({
+                    files: fileUris,
+                    scanEngine,
+                    diagnostics,
+                    skipConfirmation: true,
+                });
+                const label = `Git target ${targetFiles.gitTarget}: ${fileUris.length} file(s)`;
+                const enrichedResults = await annotateProviderComparisonNotes(
+                    await finalizeMultiFileResults(summary.results, label),
+                );
+                const totalFindings = enrichedResults.reduce((total, item) => total + item.result.findings.length, 0);
+                for (const item of enrichedResults) {
+                    storeScanResult(item.result.scanId, item.result, vscode.workspace.asRelativePath(item.uri, false));
+                }
+                await persistScans();
+
+                if (enrichedResults.length) {
+                    const topResult = enrichedResults
+                        .slice()
+                        .sort((left, right) => right.result.score - left.result.score)[0];
+                    sidebar.refresh(topResult.result);
+                    statusBar.showResult(topResult.result);
+                    chatView.setLastScanTarget(label);
+                    sessionScanCount += 1;
+                    void trackUsageEvent(licenceMgr, getConfiguredApiUrl, 'scan_run', {
+                        scope: 'git_target',
+                        file_count: enrichedResults.length,
+                        git_changed_count: targetFiles.gitChangedPaths.length,
+                        skipped_count: targetFiles.skipped.length,
+                        finding_count: totalFindings,
+                    }, {
+                        registry,
+                        includeProviderModel: true,
+                        includeProject: true,
+                    });
+                    await persistLastReportSnapshot({
+                        targetLabel: targetFiles.skipped.length
+                            ? `${label}, ${targetFiles.skipped.length} skipped`
+                            : label,
+                        outputRoot: root,
+                        errors: [...targetFiles.errors, ...summary.errors],
+                        results: enrichedResults,
+                    });
+                } else {
+                    refreshIdleStatus();
+                }
+
+                if (summary.status === 'failed') {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                        scope: 'git_target',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: totalFindings,
+                        status: 'failed',
+                        stage: 'file_scan',
+                        errorKind: 'provider_error',
+                    });
+                } else {
+                    emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_completed', {
+                        scope: 'git_target',
+                        startedAt: scanStartedAt,
+                        fileCount: summary.completed,
+                        findingCount: totalFindings,
+                        status: 'completed',
+                    });
+                }
+
+                if (summary.status === 'completed' && enrichedResults.length) {
+                    vscode.window.showInformationMessage(
+                        `${PROFILE.displayLabel}: Scanned ${enrichedResults.length} file(s) from Git target ${targetFiles.gitTarget} with ${totalFindings} finding(s)${summary.errors.length ? ` (${summary.errors.length} error(s))` : ''}`
+                    );
+                } else if (summary.status === 'failed') {
+                    vscode.window.showErrorMessage(
+                        `${PROFILE.displayLabel}: Git target scan failed for all ${fileUris.length} file(s). ${summary.errors.length} error(s) were captured.`
+                    );
+                }
+
+                return {
+                    status: summary.status,
+                    root,
+                    gitTarget: targetFiles.gitTarget,
+                    files: fileUris,
+                    gitChangedCount: targetFiles.gitChangedPaths.length,
+                    skipped: targetFiles.skipped,
+                    completed: summary.completed,
+                    totalFindings,
+                    errors: [...targetFiles.errors, ...summary.errors],
+                    results: enrichedResults,
+                };
+            } catch (error: any) {
+                emitDevScanLifecycleEvent(licenceMgr, getConfiguredApiUrl, registry, 'scan_failed', {
+                    scope: 'git_target',
+                    startedAt: scanStartedAt,
+                    fileCount: fileUris.length,
+                    status: 'failed',
+                    stage: 'provider_call',
+                    errorKind: classifyTelemetryError(error),
+                });
+                statusBar.showError(error.message);
+                vscode.window.showErrorMessage(`${PROFILE.displayLabel} Git target scan failed: ${error.message}`);
                 throw error;
             }
         })

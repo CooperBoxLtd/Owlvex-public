@@ -198,9 +198,12 @@ Planned scope options:
 - changed files: unstaged and staged Git changes
 - staged files: what is about to be committed
 - branch diff: current branch compared with main/upstream
+- Git target: a local commit, branch, tag, or explicit range such as `abc123`, `feature/login`, `main..feature/login`, or `HEAD~3..HEAD`
 - later: selected hunks for very large files
 
 Initial implementation should scan full changed files while attaching diff metadata. Scanning only raw hunks is too narrow for security reasoning because imports, middleware, helper calls, route mounting, and policy checks often sit outside the changed lines.
+
+The Git target flow must stay local. Owlvex should resolve the target through the user's checked-out repository using Git, collect the files touched by that commit/range, and reuse the existing multi-file scan/report/fix workflow. This supports the Mobix workflow of asking "scan this specific commit in this branch" without requiring source upload to the Owlvex backend.
 
 Report and chat output should separate:
 
@@ -218,10 +221,12 @@ Implementation slices:
 4. Prioritize changed-line findings in scan summaries and fix actions.
 5. Label pre-existing findings separately in reports.
 6. Add hunk-level scanning only after file-level diff scanning is stable.
+7. Add `Git commit/range` as a scan scope and command palette action, using `git diff-tree` for single commits/refs and `git diff --name-only` for ranges.
 
 Acceptance criteria:
 
 - a developer can scan changed files in one action
+- a developer can scan a specific local commit, branch tip, tag, or commit range in one action
 - reports identify which findings are introduced or touched by the diff
 - legacy findings in touched files are visible but not over-promoted as the main next action
 - AI usage is lower than workspace scans for normal development workflows

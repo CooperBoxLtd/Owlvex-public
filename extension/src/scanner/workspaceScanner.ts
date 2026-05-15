@@ -82,6 +82,14 @@ export interface ChangedScannableFilesResult {
     skipped: ChangedFileSkip[];
 }
 
+export interface GitTargetScannableFilesResult {
+    files: vscode.Uri[];
+    gitTarget: string;
+    gitChangedPaths: string[];
+    skipped: ChangedFileSkip[];
+    errors: string[];
+}
+
 function getProactiveSpacingMs(
     profile: ProviderRateBudgetProfile | undefined,
 ): number {
@@ -348,6 +356,50 @@ export async function collectChangedScannableFilesDetailed(root: vscode.Uri, lim
 export async function collectChangedScannableFiles(root: vscode.Uri, limit = 200): Promise<vscode.Uri[]> {
     const result = await collectChangedScannableFilesDetailed(root, limit);
     return result.files;
+}
+
+function looksLikeGitRange(target: string): boolean {
+    return /\.{2,3}/.test(target);
+}
+
+export async function collectGitTargetScannableFilesDetailed(root: vscode.Uri, gitTarget: string, limit = 200): Promise<GitTargetScannableFilesResult> {
+    const target = gitTarget.trim();
+    if (!target) {
+        return { files: [], gitTarget: target, gitChangedPaths: [], skipped: [], errors: ['No Git commit, branch, tag, or range was provided.'] };
+    }
+
+    let changedPaths: string[] = [];
+    try {
+        changedPaths = looksLikeGitRange(target)
+            ? await runGit(root, ['diff', '--name-only', '-z', '--relative', '--diff-filter=ACMRTUXB', target, '--', '.'])
+            : await runGit(root, ['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '-z', '--diff-filter=ACMRTUXB', target, '--', '.']);
+    } catch (error: any) {
+        return {
+            files: [],
+            gitTarget: target,
+            gitChangedPaths: [],
+            skipped: [],
+            errors: [`Git target could not be resolved locally: ${error.message}`],
+        };
+    }
+
+    const uniquePaths = [...new Set(changedPaths)].slice(0, limit * 2);
+    const files: vscode.Uri[] = [];
+    const skipped: ChangedFileSkip[] = [];
+    for (const relativePath of uniquePaths) {
+        if (files.length >= limit) break;
+        const uri = await existingScannableGitPath(root, relativePath);
+        if (uri) {
+            files.push(uri);
+        } else {
+            skipped.push({
+                path: relativePath,
+                reason: getUnsupportedChangedFileReason(relativePath),
+            });
+        }
+    }
+
+    return { files, gitTarget: target, gitChangedPaths: uniquePaths, skipped, errors: [] };
 }
 
 export interface FolderScanFileResult {

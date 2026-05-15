@@ -2,7 +2,7 @@
   "name": "owlvex",
   "displayName": "Owlvex",
   "description": "Scan your code against OWASP, STRIDE, MITRE, CWE and Clean Code using your own AI",
-  "version": "0.1.42",
+  "version": "0.1.43",
   "publisher": "owlvex",
   "repository": {
     "type": "git",
@@ -32,6 +32,10 @@
       {
         "command": "owlvex.scanChangedFiles",
         "title": "Owlvex: Scan Changed Files"
+      },
+      {
+        "command": "owlvex.scanGitTarget",
+        "title": "Owlvex: Scan Git Commit or Range"
       },
       {
         "command": "owlvex.scanOpenEditors",

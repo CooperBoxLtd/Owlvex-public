@@ -71,7 +71,7 @@ Recommended changes:
   - Project root
   - First scan
   - First report/fix preview
-- after licence activation, bias toward `Scan changed files` or `Scan current file`, not workspace scan
+- after licence activation, bias toward `Scan changed files`, `Scan Git commit/range`, or `Scan current file`, not workspace scan
 - make verification state explicit: `Verification sent`, `Code accepted`, `Licence issued`, `Extension revalidated`
 - record onboarding step outcomes as structured telemetry, not only generic usage events
 
@@ -79,14 +79,16 @@ Recommended changes:
 
 Current code shape:
 
-- `WorkingScope` supports current file, selected files, changed files, open editors, and workspace
+- `WorkingScope` supports current file, selected files, changed files, Git commit/range, open editors, and workspace
 - changed-files detection is Git-backed in `workspaceScanner.ts`
 - non-source changed files are now classified with skip reasons
+- Git commit/range scans resolve commit, branch, tag, or range targets locally through Git before reusing the multi-file scan flow
 - workspace scanning has Foundry pacing rules
 
 What works:
 
 - changed-files scanning exists and is now closer to a daily developer workflow
+- Git target scanning supports review of a specific local commit or branch range without a workspace scan
 - selected-files and open-editors support useful mid-sized scans
 - unsupported changed files can be explained instead of silently ignored
 
