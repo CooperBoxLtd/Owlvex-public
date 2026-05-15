@@ -89,6 +89,19 @@ interface ScanGitTargetCommandResult {
     results: Array<{ uri: vscode.Uri; result: ScanResult }>;
 }
 
+function formatSkippedScanTargetSummary(skipped: ChangedFileSkip[], maxItems = 3): string {
+    if (!skipped.length) {
+        return '';
+    }
+
+    const examples = skipped
+        .slice(0, maxItems)
+        .map(item => `${item.path} (${item.reason})`)
+        .join('; ');
+    const remaining = skipped.length > maxItems ? `; ${skipped.length - maxItems} more` : '';
+    return `${skipped.length} changed file(s) were skipped: ${examples}${remaining}.`;
+}
+
 interface ScanOpenEditorsCommandResult {
     status: 'completed' | 'cancelled' | 'empty' | 'failed';
     files?: vscode.Uri[];
@@ -3568,12 +3581,13 @@ export function activate(context: vscode.ExtensionContext) {
             const targetFiles = await collectGitTargetScannableFilesDetailed(root, gitTarget);
             const fileUris = targetFiles.files;
             if (!fileUris.length) {
+                const skippedSummary = formatSkippedScanTargetSummary(targetFiles.skipped);
                 const details = targetFiles.errors.length
                     ? ` ${targetFiles.errors.join(' ')}`
-                    : targetFiles.skipped.length
-                        ? ` ${targetFiles.skipped.length} changed file(s) were skipped because they are not supported source files.`
+                    : skippedSummary
+                        ? ` Changed paths found: ${targetFiles.gitChangedPaths.length}. ${skippedSummary}`
                         : '';
-                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No source files were found for Git target ${targetFiles.gitTarget}.${details}`);
+                vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No scannable source files were found for Git target ${targetFiles.gitTarget}.${details}`);
                 return {
                     status: targetFiles.errors.length ? 'failed' : 'empty',
                     root,
