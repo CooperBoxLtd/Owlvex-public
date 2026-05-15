@@ -120,6 +120,8 @@ function buildGeneratedProfileSource(profileName, profile) {
       openProjectContext: `${profile.commandPrefix}.openProjectContext`,
       openTddBox: `${profile.commandPrefix}.openTddBox`,
       openDesignContext: `${profile.commandPrefix}.openDesignContext`,
+      createDesignMap: `${profile.commandPrefix}.createDesignMap`,
+      openDesignMap: `${profile.commandPrefix}.openDesignMap`,
       openDriftBox: `${profile.commandPrefix}.openDriftBox`,
       testAI: `${profile.commandPrefix}.testAIConnection`,
       testTrialSetup: `${profile.commandPrefix}.testTrialSetup`,
