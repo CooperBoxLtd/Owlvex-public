@@ -80,6 +80,20 @@ describe('parseChatIntent', () => {
         });
     });
 
+    it('routes a pasted commit hash directly to Git target scanning', () => {
+        expect(parseChatIntent('7a6399e')).toEqual({
+            action: 'scanGitTarget',
+            gitTarget: '7a6399e',
+        });
+    });
+
+    it('routes a pasted Git range directly to Git target scanning', () => {
+        expect(parseChatIntent('develop..feature/security-fix')).toEqual({
+            action: 'scanGitTarget',
+            gitTarget: 'develop..feature/security-fix',
+        });
+    });
+
     it('routes open-editors scan requests to open-editors scanning', () => {
         expect(parseChatIntent('scan open editors')).toEqual({
             action: 'scanOpenEditors',

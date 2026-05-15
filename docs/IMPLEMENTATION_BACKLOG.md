@@ -205,6 +205,8 @@ Initial implementation should scan full changed files while attaching diff metad
 
 The Git target flow must stay local. Owlvex should resolve the target through the user's checked-out repository using Git, collect the files touched by that commit/range, and reuse the existing multi-file scan/report/fix workflow. This supports the Mobix workflow of asking "scan this specific commit in this branch" without requiring source upload to the Owlvex backend.
 
+The chat UX should also support the GitLens/source-control workflow directly: a developer can copy a commit hash from the graph, paste only that hash into Owlvex chat, and Owlvex scans the files changed by that commit. Explicit ranges such as `develop..feature/security-fix` should work the same way.
+
 Report and chat output should separate:
 
 - findings touching changed lines

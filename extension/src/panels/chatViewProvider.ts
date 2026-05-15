@@ -6912,6 +6912,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 }
 
 export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
+    const trimmed = prompt.trim();
     const normalized = prompt.toLowerCase();
     const wantsScan = /\b(scan|audit|analy[sz]e|analy[sz]is|review)\b/.test(normalized);
     const wantsReport = /\b(report|summary|markdown|document)\b/.test(normalized);
@@ -6922,6 +6923,10 @@ export function parseChatIntent(prompt: string): ChatLocalIntent | undefined {
     const wantsCalibration = /\b(calibration|score posture|risk posture|review scores|review scoring)\b/.test(normalized);
     const explicitFile = extractFileHint(prompt);
     const gitTarget = extractGitTargetHint(prompt);
+
+    if (gitTarget && isStandaloneGitTargetPrompt(trimmed, gitTarget)) {
+        return { action: 'scanGitTarget', gitTarget };
+    }
 
     if (wantsCalibration) {
         return { action: 'reviewRiskCalibration' };
@@ -6969,7 +6974,16 @@ function extractGitTargetHint(prompt: string): string | undefined {
         return afterKeyword[1].replace(/[.,;:]+$/, '');
     }
 
+    const standaloneHash = prompt.trim().match(/^[a-f0-9]{7,40}$/i);
+    if (standaloneHash?.[0]) {
+        return standaloneHash[0];
+    }
+
     return undefined;
+}
+
+function isStandaloneGitTargetPrompt(prompt: string, gitTarget: string): boolean {
+    return prompt === gitTarget || /^[a-f0-9]{7,40}$/i.test(prompt) || /\.{2,3}/.test(prompt);
 }
 
 function extractFileHint(prompt: string): string | undefined {
