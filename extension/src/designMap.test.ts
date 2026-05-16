@@ -43,7 +43,7 @@ describe('design map generator', () => {
         expect(result.map.sinks).toContain('fetch');
         expect(result.map.ownershipSignals).toContain('tenantId');
         expect(result.map.scannerGuidance.join('\n')).toContain('CSRF middleware appears in code');
-        expect(vscode.workspace.fs.writeFile).toHaveBeenCalledTimes(8);
+        expect(vscode.workspace.fs.writeFile).toHaveBeenCalledTimes(7);
         const markdownWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls[0];
         expect(String(markdownWrite[0].fsPath)).toContain('.owlvex');
         const markdown = Buffer.from(markdownWrite[1]).toString('utf8');
@@ -123,7 +123,12 @@ describe('design map generator', () => {
         expect(threatFlow).toContain('subgraph InformationDisclosure');
         expect(threatFlow).toContain('subgraph DenialOfService');
         expect(threatFlow).toContain('subgraph ElevationOfPrivilege');
+        expect(threatFlow).toContain('Boundary: renderer -> preload');
+        expect(threatFlow).toContain('Boundary: preload -> main process');
+        expect(threatFlow).toContain('No concrete identity or peer-authentication evidence found');
+        expect(threatFlow).not.toContain('Identity / caller evidence');
         expect(threatFlow).toContain('ipcMain.handle');
+        expect(threatFlow).toContain('Review privileged boundary exposure');
     });
 
     it('does not treat generic request or raw wording as a sink without API evidence', async () => {

@@ -7,6 +7,7 @@ import { FolderScanSummary } from './workspaceScanner';
 import { formatFrameworkSummary } from '../frameworks/catalog';
 import { formatOwaspMappingForActiveProfile } from '../frameworks/owaspProfile';
 import { PROFILE } from '../profile';
+import { getRiskLensPath, writeRiskLens } from './riskLens';
 
 export interface ReportEntry {
     uri: vscode.Uri;
@@ -1612,6 +1613,9 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         (total, item) => total + item.result.findings.length,
         0,
     );
+    const riskLensRelativePath = snapshot.results.length
+        ? formatReportPath(root.fsPath, getRiskLensPath(root.fsPath))
+        : '';
     const highestFileRisk = findingsByFile.length
         ? Math.max(...findingsByFile.map(item => item.result.score))
         : 0;
@@ -1664,6 +1668,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
             ...buildDriftOverviewLines(snapshot.results),
             `- Files scanned: ${snapshot.results.length}`,
             `- Total findings: ${totalFindings}`,
+            ...(riskLensRelativePath ? [`- Risk Lens: \`${riskLensRelativePath}\``] : []),
             `- Manual-review findings: ${manualReviewAiCount}`,
             '',
             '## Confirmed Or AI-Reviewed Findings',
@@ -1715,6 +1720,10 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         }
 
         await vscode.workspace.fs.writeFile(reportUri, Buffer.from(lines.join('\n'), 'utf8'));
+        await writeRiskLens(root, snapshot.results.map(item => ({
+            file: formatReportPath(root.fsPath, item.uri.fsPath),
+            result: item.result,
+        })));
         return reportUri;
     }
 
@@ -1748,6 +1757,7 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         `- Files scanned: ${snapshot.results.length}`,
         `- Files with findings: ${snapshot.results.filter(item => item.result.findings.length > 0).length}`,
         `- Total findings: ${totalFindings}`,
+        ...(riskLensRelativePath ? [`- Risk Lens: \`${riskLensRelativePath}\``] : []),
         `- Static findings: ${deterministicItems.length}`,
         `- AI findings needing manual review: ${manualReviewAiCount}`,
         `- Confidence posture: ${buildConfidencePostureLine(allFindings)}`,
@@ -1987,6 +1997,10 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
     }
 
     await vscode.workspace.fs.writeFile(reportUri, Buffer.from(lines.join('\n'), 'utf8'));
+    await writeRiskLens(root, snapshot.results.map(item => ({
+        file: formatReportPath(root.fsPath, item.uri.fsPath),
+        result: item.result,
+    })));
     return reportUri;
 }
 

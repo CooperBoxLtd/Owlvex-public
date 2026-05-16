@@ -143,7 +143,7 @@ describe('reportGenerator', () => {
         const reportUri = await generateReportFromSnapshot(snapshot.outputRoot, snapshot);
 
         expect(reportUri.fsPath).toContain('owlvex-scan-report-');
-        expect(writeFile).toHaveBeenCalledTimes(1);
+        expect(writeFile).toHaveBeenCalledTimes(2);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('# Owlvex Vulnerability Scan Report');
@@ -173,6 +173,14 @@ describe('reportGenerator', () => {
         expect(written).toContain('| Confidence | Evidence posture for the finding, not an exact probability | Use this as a triage signal, not a mathematical certainty |');
         expect(written).toContain('| Frameworks in scope | Frameworks selected for AI grounding, mapping display, and report emphasis | Deterministic evidence rules may still identify security issues that map to other frameworks; those mappings are reference taxonomy, not proof that every framework lens was used |');
         expect(written).toContain('## Findings By File');
+        expect(written).toContain('- Risk Lens: `.owlvex/diagrams/risk-lens.md`');
+        const riskMap = Buffer.from(writeFile.mock.calls[1][1]).toString('utf8');
+        expect(String(writeFile.mock.calls[1][0].fsPath)).toContain('risk-lens.md');
+        expect(riskMap).toContain('# Owlvex Risk Lens');
+        expect(riskMap).toContain('## Scan Scope View');
+        expect(riskMap).toContain('## Architecture Overlay');
+        expect(riskMap).toContain('classDef high');
+        expect(riskMap).toContain('Unsanitized SQL query construction');
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
         expect(written).toContain('- AI usage: 3 request(s), 62 token(s)');
@@ -338,7 +346,7 @@ describe('reportGenerator', () => {
         const reportUri = await generateReportFromSnapshot(snapshot.outputRoot, snapshot, { variant: 'summary' });
 
         expect(reportUri.fsPath).toContain('owlvex-summary-report-');
-        expect(writeFile).toHaveBeenCalledTimes(1);
+        expect(writeFile).toHaveBeenCalledTimes(2);
 
         const written = Buffer.from(writeFile.mock.calls[0][1]).toString('utf8');
         expect(written).toContain('# Owlvex Summary Report');
@@ -1523,6 +1531,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 - Files scanned: 1
 - Files with findings: 1
 - Total findings: 1
+- Risk Lens: \`.owlvex/diagrams/risk-lens.md\`
 - Static findings: 0
 - AI findings needing manual review: 0
 - Confidence posture: 1 cross-checked

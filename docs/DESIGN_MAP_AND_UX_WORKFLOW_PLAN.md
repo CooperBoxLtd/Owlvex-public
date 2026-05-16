@@ -75,7 +75,7 @@ The Diagram Box should contain these diagram types:
 - **Workflow Diagram**: a product/business flow such as user request -> auth -> approval -> job -> agent -> external system -> result. This is strongest when Design/TDD context exists.
 - **TDD Diff Diagram**: a comparison between expected behavior in the TDD Box and actual code evidence. It should show implemented, missing, partial, extra, and contradicted behavior.
 - **Threat Flow Diagram**: a STRIDE-category view of trust boundaries, entrypoints, sensitive operations, guards, and likely attack paths. It should separate Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, and Elevation of Privilege instead of drawing one generic threat path.
-- **Fix Impact Diagram**: a before/after view for a proposed or applied fix, showing the files/modules touched and the security flow changed.
+- **Risk Lens**: a scan-backed colored map created after scans. It contains a focused scan-scope view plus an architecture overlay when the Design Map exists. Risky files, scanned-clean files, and not-scanned files must be visually distinct.
 
 The default user-facing diagram should be the readable Architecture Map. The Security Evidence Map should still be available because it is the defensible scanner artifact.
 
@@ -165,7 +165,7 @@ Owlvex should produce these local artifacts:
 - `owlvex-diagrams/workflow.md`
 - `owlvex-diagrams/tdd-diff.md`
 - `owlvex-diagrams/threat-flow.md`
-- `owlvex-diagrams/fix-impact.md`
+- `owlvex-diagrams/risk-lens.md` after scans
 
 Both should stay under the selected project root. Neither should be uploaded to Owlvex Azure as source code.
 

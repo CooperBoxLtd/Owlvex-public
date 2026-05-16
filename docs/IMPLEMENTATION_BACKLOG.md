@@ -297,7 +297,7 @@ The current `Create Code Map` flow should become a broader `Diagrams` workflow. 
 - Workflow Diagram: product/business flow from entrypoint through policy, job, integration, and result.
 - TDD Diff Diagram: TDD expectations compared with code evidence.
 - Threat Flow Diagram: STRIDE/security-oriented trust boundaries, entrypoints, guards, and likely attack paths.
-- Fix Impact Diagram: before/after view for proposed or applied fixes.
+- Risk Lens: scan-backed colored map with a focused scan-scope view and optional architecture overlay. It must distinguish risky, scanned-clean, and not-scanned files.
 
 UX direction:
 
@@ -326,7 +326,7 @@ Implementation slices:
 6. Add Workflow Diagram generation using Design/TDD context plus code evidence.
 7. Add TDD Diff Diagram generation that classifies requirements as aligned, partial, missing, extra, contradicted, or uncertain.
 8. Add Threat Flow Diagram generation for STRIDE-selected scans.
-9. Add Fix Impact Diagram generation from fix preview and post-fix verification state.
+9. Add Risk Lens generation from completed scan findings and Design Map relationships when available.
 10. Surface diagram paths in reports only when diagrams were generated or used as scan context.
 
 Acceptance criteria:

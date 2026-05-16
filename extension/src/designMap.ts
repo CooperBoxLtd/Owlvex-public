@@ -11,7 +11,7 @@ const DIAGRAM_PATHS = {
     workflow: path.join(DEFAULT_DIAGRAM_DIR, 'workflow.md'),
     tddDiff: path.join(DEFAULT_DIAGRAM_DIR, 'tdd-diff.md'),
     threatFlow: path.join(DEFAULT_DIAGRAM_DIR, 'threat-flow.md'),
-    fixImpact: path.join(DEFAULT_DIAGRAM_DIR, 'fix-impact.md'),
+    riskLens: path.join(DEFAULT_DIAGRAM_DIR, 'risk-lens.md'),
 } as const;
 const MAX_FILES = 250;
 const MAX_FILE_BYTES = 250_000;
@@ -497,8 +497,12 @@ function buildWorkflowMermaid(map: DesignMap): string {
 
 function buildThreatFlowMermaid(map: DesignMap): string {
     const runtimeFiles = map.files.filter(isRuntimeFile);
-    const entryFile = runtimeFiles.find(file => file.entrypoints.length) ?? runtimeFiles.find(file => file.routes.length);
-    const guardFile = runtimeFiles.find(file => file.guards.length);
+    const rendererFile = runtimeFiles.find(file => /(^|\/)src\/main\.[cm]?[jt]sx?$|RT5Terminal|components?\//i.test(file.path));
+    const preloadFile = runtimeFiles.find(file => file.kind === 'electron-preload');
+    const mainFile = runtimeFiles.find(file => file.kind === 'electron-main');
+    const entryFile = rendererFile ?? mainFile ?? runtimeFiles.find(file => file.entrypoints.length) ?? runtimeFiles.find(file => file.routes.length);
+    const identityGuardFile = runtimeFiles.find(file => file.guards.some(guard => /auth|authenticate|identity|session|token|jwt|signature|verifySigned|verifyCanonical/i.test(guard)));
+    const guardFile = identityGuardFile ?? runtimeFiles.find(file => file.guards.length);
     const sinkFile = runtimeFiles.find(file => file.sinks.length);
     const storeFile = runtimeFiles.find(file => file.dataStores.length);
     const integrationFile = runtimeFiles.find(file => file.externalIntegrations.length);
@@ -514,25 +518,55 @@ function buildThreatFlowMermaid(map: DesignMap): string {
     const ipcLabel = ipcFile ? `${ipcFile.path}: ${ipcFile.externalIntegrations.filter(item => /ipc|webContents/i.test(item)).slice(0, 3).join(', ')}` : 'No IPC or privileged boundary found';
     const networkLabel = networkFile ? `${networkFile.path}: ${networkFile.externalIntegrations.filter(item => /fetch|axios|http\.request|https\.request|net\.|socket/i.test(item)).slice(0, 3).join(', ')}` : 'No network integration found';
     const sinkLabel = sinkFile ? `${sinkFile.path}: ${sinkFile.sinks.slice(0, 3).join(', ')}` : 'No sensitive sink found';
+    const identityLabel = identityGuardFile
+        ? `${identityGuardFile.path}: ${identityGuardFile.guards.filter(guard => /auth|authenticate|identity|session|token|jwt|signature|verifySigned|verifyCanonical/i.test(guard)).slice(0, 3).join(', ')}`
+        : 'No concrete identity or peer-authentication evidence found';
+    const auditLabel = map.files.find(file => /audit|log|history|event/i.test(file.path))?.path ?? 'No audit/logging module found';
 
     const lines = [
         'flowchart TD',
         '  Actor["Actor / input source"] --> Entry["Entry: ' + mermaidLabel(entryLabel, 86) + '"]',
-        '  Entry --> Boundary{"Trust boundary"}',
-        `  Boundary --> Guard{"${mermaidLabel(guardLabel, 86)}"}`,
+    ];
+    if (rendererFile && preloadFile) {
+        lines.push('  Entry --> RendererBoundary{"Boundary: renderer -> preload"}');
+        lines.push(`  RendererBoundary --> Preload["${mermaidLabel(preloadFile.path, 74)}"]`);
+        if (mainFile) {
+            lines.push('  Preload --> MainBoundary{"Boundary: preload -> main process"}');
+            lines.push(`  MainBoundary --> Main["${mermaidLabel(mainFile.path, 74)}"]`);
+        }
+    } else {
+        lines.push('  Entry --> RuntimeBoundary{"Trust boundary"}');
+    }
+    if (networkFile) {
+        lines.push(`  ${mainFile ? 'Main' : 'Entry'} --> NetworkBoundary{"Boundary: app -> network peer"}`);
+    }
+    const primaryBoundary = networkFile
+        ? 'NetworkBoundary'
+        : mainFile && preloadFile
+            ? 'MainBoundary'
+            : rendererFile && preloadFile
+                ? 'RendererBoundary'
+                : 'RuntimeBoundary';
+    const privilegeBoundary = mainFile && preloadFile
+        ? 'MainBoundary'
+        : rendererFile && preloadFile
+            ? 'RendererBoundary'
+            : primaryBoundary;
+    lines.push(`  ${primaryBoundary} --> Guard{"${mermaidLabel(guardLabel, 86)}"}`);
+    lines.push(
         '',
         '  subgraph Spoofing["Spoofing"]',
-        `    S1["Identity / caller evidence: ${mermaidLabel(guardLabel, 74)}"]`,
+        `    S1["Identity / peer-auth evidence: ${mermaidLabel(identityLabel, 74)}"]`,
         '  end',
-        '  Guard --> S1',
+        `${networkFile ? '  NetworkBoundary' : '  Guard'} --> S1`,
         '',
         '  subgraph Tampering["Tampering"]',
         `    T1["Input mutation or parser path: ${mermaidLabel(parserLabel, 74)}"]`,
         '  end',
-        '  Boundary --> T1',
+        `  ${primaryBoundary} --> T1`,
         '',
         '  subgraph Repudiation["Repudiation"]',
-        `    R1["Audit / action trace evidence: ${mermaidLabel(map.files.find(file => /audit|log|history|event/i.test(file.path))?.path ?? 'No audit/logging module found', 74)}"]`,
+        `    R1["Audit / action trace evidence: ${mermaidLabel(auditLabel, 74)}"]`,
         '  end',
         '  Guard --> R1',
         '',
@@ -544,13 +578,13 @@ function buildThreatFlowMermaid(map: DesignMap): string {
         '  subgraph DenialOfService["Denial of Service"]',
         `    D1["Network/parser pressure path: ${mermaidLabel(networkFile ? networkLabel : parserLabel, 74)}"]`,
         '  end',
-        '  Boundary --> D1',
+        `  ${networkFile ? 'NetworkBoundary' : primaryBoundary} --> D1`,
         '',
         '  subgraph ElevationOfPrivilege["Elevation of Privilege"]',
         `    E1["Privileged boundary or sink: ${mermaidLabel(ipcFile ? ipcLabel : sinkLabel, 74)}"]`,
         '  end',
-        '  Guard --> E1',
-    ];
+        `  ${privilegeBoundary} --> E1`,
+    );
 
     if (integrationFile) {
         lines.push(`  E1 --> Integration[/"${mermaidLabel(integrationLabel, 74)}"/]`);
@@ -561,12 +595,12 @@ function buildThreatFlowMermaid(map: DesignMap): string {
     if (storeFile) {
         lines.push(`  I1 --> Store[("${mermaidLabel(storeLabel, 74)}")]`);
     }
-    lines.push('  S1 --> Impact["Threat review target"]');
-    lines.push('  T1 --> Impact');
-    lines.push('  R1 --> Impact');
-    lines.push('  I1 --> Impact');
-    lines.push('  D1 --> Impact');
-    lines.push('  E1 --> Impact');
+    lines.push('  S1 --> SpoofingImpact["Review peer/user identity assumptions"]');
+    lines.push('  T1 --> TamperingImpact["Review message validation and parser hardening"]');
+    lines.push('  R1 --> RepudiationImpact["Review auditability of important actions"]');
+    lines.push('  I1 --> InfoImpact["Review persisted or exposed sensitive state"]');
+    lines.push('  D1 --> DosImpact["Review parser and message-loop resilience"]');
+    lines.push('  E1 --> EopImpact["Review privileged boundary exposure"]');
     return lines.join('\n');
 }
 
@@ -585,19 +619,6 @@ function buildTddDiffMermaid(map: DesignMap): string {
         '  TDD3["TDD expectation: integrations and side effects are controlled"] --> Check3{"Code evidence?"}',
         `  Code3["${mermaidLabel(integrations, 72)}"] --> Check3`,
         map.externalIntegrations.length ? '  Check3 --> Review3["Review against Design/TDD context"]' : '  Check3 --> Uncertain3["No integration evidence found"]',
-    ].join('\n');
-}
-
-function buildFixImpactMermaid(): string {
-    return [
-        'flowchart TD',
-        '  Finding["Finding"] --> Preview["Fix preview"]',
-        '  Preview --> Review{"User review"}',
-        '  Review -- "Keep fix" --> Changed["Changed files"]',
-        '  Review -- "Discard fix" --> Original["Original code remains"]',
-        '  Changed --> Verify["Post-fix verification scan"]',
-        '  Verify --> Clean["Cleared findings"]',
-        '  Verify --> Continue["Continuation queue for remaining findings"]',
     ].join('\n');
 }
 
@@ -653,7 +674,7 @@ function buildMarkdown(map: DesignMap): string {
         '- Workflow Diagram: `.owlvex/diagrams/workflow.md`',
         '- TDD Diff Diagram: `.owlvex/diagrams/tdd-diff.md`',
         '- Threat Flow Diagram: `.owlvex/diagrams/threat-flow.md`',
-        '- Fix Impact Diagram: `.owlvex/diagrams/fix-impact.md`',
+        '- Risk Lens: `.owlvex/diagrams/risk-lens.md` (created after scans)',
         '',
         '## Entrypoints',
         '',
@@ -816,7 +837,7 @@ export async function generateDesignMap(projectRoot: vscode.Uri): Promise<Design
         workflow: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.workflow)),
         tddDiff: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.tddDiff)),
         threatFlow: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.threatFlow)),
-        fixImpact: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.fixImpact)),
+        riskLens: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.riskLens)),
     };
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(markdownUri.fsPath)));
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.join(root, DEFAULT_DIAGRAM_DIR)));
@@ -847,12 +868,6 @@ export async function generateDesignMap(projectRoot: vscode.Uri): Promise<Design
         'STRIDE-oriented view of trust boundaries, guards, sensitive operations, stores, integrations, and possible impact paths.',
         buildThreatFlowMermaid(map),
     ), 'utf8'));
-    await vscode.workspace.fs.writeFile(diagramUris.fixImpact, Buffer.from(buildDiagramMarkdown(
-        'Owlvex Fix Impact Diagram',
-        'Generic fix-review workflow map showing preview, user decision, verification, and continuation behavior.',
-        buildFixImpactMermaid(),
-    ), 'utf8'));
-
     return {
         map,
         markdownUri,

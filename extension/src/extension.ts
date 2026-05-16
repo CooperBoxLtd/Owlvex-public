@@ -4296,15 +4296,28 @@ export function activate(context: vscode.ExtensionContext) {
                     { label: 'Workflow Diagram', description: 'User/system flow through policy, work, data, and integrations', type: 'workflow' as const },
                     { label: 'TDD Diff Diagram', description: 'Expected behavior compared with code evidence', type: 'tddDiff' as const },
                     { label: 'Threat Flow Diagram', description: 'STRIDE-style trust-boundary and impact path view', type: 'threatFlow' as const },
-                    { label: 'Fix Impact Diagram', description: 'Fix preview, review, verification, and continuation flow', type: 'fixImpact' as const },
+                    { label: 'Risk Lens', description: 'Scan-backed focused view plus architecture overlay', type: 'riskLens' as const },
                     { label: 'Overview', description: 'Open the combined Design Map overview', type: 'overview' as const },
                 ],
                 {
                     title: `${PROFILE.displayLabel}: Diagrams`,
-                    placeHolder: 'Choose the diagram to create and open',
+                    placeHolder: 'Choose the diagram to create or open',
                 },
             );
             if (!diagramChoice) {
+                return;
+            }
+
+            if (diagramChoice.type === 'riskLens') {
+                const targetUri = vscode.Uri.file(getDefaultDiagramMarkdownPath(projectRoot.uri.fsPath, diagramChoice.type));
+                try {
+                    await vscode.workspace.fs.stat(targetUri);
+                } catch {
+                    vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No Risk Lens exists yet. Run a scan first.`);
+                    return;
+                }
+                const document = await vscode.workspace.openTextDocument(targetUri);
+                await vscode.window.showTextDocument(document, { preview: false });
                 return;
             }
 
@@ -4342,7 +4355,7 @@ export function activate(context: vscode.ExtensionContext) {
                     { label: 'Workflow Diagram', description: 'User/system flow', type: 'workflow' as const },
                     { label: 'TDD Diff Diagram', description: 'Expected behavior compared with code evidence', type: 'tddDiff' as const },
                     { label: 'Threat Flow Diagram', description: 'Trust boundaries and impact paths', type: 'threatFlow' as const },
-                    { label: 'Fix Impact Diagram', description: 'Fix preview and verification flow', type: 'fixImpact' as const },
+                    { label: 'Risk Lens', description: 'Scan-backed focused view and architecture overlay', type: 'riskLens' as const },
                 ],
                 {
                     title: `${PROFILE.displayLabel}: Open Diagram`,
@@ -4361,7 +4374,7 @@ export function activate(context: vscode.ExtensionContext) {
             } catch {
                 const choice = await vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: No ${diagramChoice.label} exists for this project root yet.`,
-                    'Create Diagrams',
+                    diagramChoice.type === 'riskLens' ? 'Run Scan First' : 'Create Diagrams',
                 );
                 if (choice === 'Create Diagrams') {
                     await vscode.commands.executeCommand(PROFILE.commands.createDesignMap);

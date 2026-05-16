@@ -6680,7 +6680,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               </div>
               <div class="section-actions">
                 <button class="chip" data-action="selectFrameworks" title="Choose security lenses such as OWASP, STRIDE, CWE, NIST, PCI DSS, and Clean Code.">Scan Profile</button>
-                <button class="chip" data-action="createDesignMap" title="Create Mermaid diagrams: architecture, evidence, workflow, TDD diff, threat flow, or fix impact.">Diagrams</button>
+                <button class="chip" data-action="createDesignMap" title="Create Mermaid diagrams: architecture, evidence, workflow, TDD diff, threat flow, or open the Risk Lens after a scan.">Diagrams</button>
                 <button class="chip" data-action="openTddBox" title="Select or open a Markdown/text spec file that describes expected behavior for AI reasoning.">Spec File</button>
                 <button class="chip" data-action="clearTddBox" title="Remove the configured spec/TDD file from scan and fix context.">Clear Spec</button>
                 <button class="chip" data-action="openDesignContext" title="Select or open architecture, threat-model, PDF, Word, Markdown, or text design notes.">Design Notes</button>
