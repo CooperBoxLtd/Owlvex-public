@@ -958,6 +958,32 @@ function buildChangedFilesSkipLines(result: any): string[] {
     return lines;
 }
 
+export function buildChangedFilesEmptyResponse(result: any): string {
+    const gitChangedCount = Number(result?.gitChangedCount ?? 0);
+    const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
+    const lines = [
+        'No changed source files were found under the selected project root.',
+    ];
+
+    if (gitChangedCount || skipped.length) {
+        lines.push(`Git changed paths detected: ${gitChangedCount || skipped.length}.`);
+        lines.push('Owlvex only scans supported source files from the changed-files scope.');
+        for (const item of skipped.slice(0, 5)) {
+            const filePath = typeof item?.path === 'string' ? item.path : 'unknown';
+            const reason = typeof item?.reason === 'string' ? item.reason : 'not scanned';
+            lines.push(`Skipped: ${filePath} - ${reason}`);
+        }
+        if (skipped.length > 5) {
+            lines.push(`Skipped: ${skipped.length - 5} more file(s) not shown.`);
+        }
+        return lines.join('\n');
+    }
+
+    lines.push('If this project is not a Git repository, use Current file, Selected files, Open editors, or Workspace instead.');
+    lines.push('If it is a Git repository, save or stage a source change and scan Changed files again.');
+    return lines.join('\n');
+}
+
 export function buildGitTargetNoSourceResponse(result: any): string {
     const gitTarget = result?.gitTarget ?? 'the selected ref';
     const errors = Array.isArray(result?.errors) ? result.errors.filter((item: unknown): item is string => typeof item === 'string' && item.length > 0) : [];
@@ -3824,13 +3850,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return { handled: true, response: 'Changed-files scan was cancelled.', kind: 'scan' };
             }
             if (result?.status === 'empty') {
-                const skipLines = buildChangedFilesSkipLines(result);
                 return {
                     handled: true,
-                    response: [
-                        'No changed source files were found under the selected project root.',
-                        ...skipLines,
-                    ].join('\n'),
+                    response: buildChangedFilesEmptyResponse(result),
                     kind: 'scan',
                 };
             }
@@ -4884,7 +4906,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                                 `Scan errors: ${result.errors.length}`,
                             ].join('\n')
                         : result?.status === 'empty'
-                            ? 'No changed source files were found under the selected project root.'
+                            ? buildChangedFilesEmptyResponse(result)
                             : 'Changed-files scan was cancelled.',
                     actions: result?.status === 'completed'
                         ? [

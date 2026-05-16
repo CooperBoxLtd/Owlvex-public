@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import { ChatViewProvider, buildDesignMapFixGateReason, buildFindingContextSummary, buildFindingPromptContext, buildGitTargetNoSourceResponse, buildGroundedRemediationHighlights, buildNearbyProjectContext, extractPatchedFileContent, parseChatIntent } from './chatViewProvider';
+import { ChatViewProvider, buildChangedFilesEmptyResponse, buildDesignMapFixGateReason, buildFindingContextSummary, buildFindingPromptContext, buildGitTargetNoSourceResponse, buildGroundedRemediationHighlights, buildNearbyProjectContext, extractPatchedFileContent, parseChatIntent } from './chatViewProvider';
 import { configureRulePackRuntime, resetRulePackRuntime } from '../frameworks/rulePackRegistry';
 import { PROFILE } from '../profile';
 
@@ -4083,6 +4083,17 @@ describe('parseChatIntent', () => {
         expect(response).toContain('Git changed paths detected: 2.');
         expect(response).toContain('Skipped: README.md - documentation/context file');
         expect(response).toContain('unsupported file types are skipped');
+    });
+
+    it('explains changed-files empty results and no-Git fallback scopes', () => {
+        const response = buildChangedFilesEmptyResponse({
+            gitChangedCount: 0,
+            skipped: [],
+        });
+
+        expect(response).toContain('No changed source files were found under the selected project root.');
+        expect(response).toContain('If this project is not a Git repository');
+        expect(response).toContain('Current file, Selected files, Open editors, or Workspace');
     });
 
     it('shows an onboarding checklist with next actions based on live setup state', async () => {
