@@ -2878,8 +2878,8 @@ describe('parseChatIntent', () => {
 
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.openDesignContext);
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
-        expect(finalMessage.content).toContain('Opened Design Context.');
-        expect(finalMessage.content).toContain('configured Design Box file');
+        expect(finalMessage.content).toContain('Design Notes opened or updated.');
+        expect(finalMessage.content).toContain('architecture, threat model');
         expect(finalMessage.content).toContain('context, not proof');
     });
 
@@ -2904,10 +2904,10 @@ describe('parseChatIntent', () => {
 
         expect(vscode.commands.executeCommand).toHaveBeenCalledWith(PROFILE.commands.openDriftBox);
         const finalMessage = (provider as any).messages[(provider as any).messages.length - 1];
-        expect(finalMessage.content).toContain('Opened Drift Box.');
-        expect(finalMessage.content).toContain('report pass/fail only');
-        expect(finalMessage.content).toContain('custom behavior/contract scripts');
-        expect(finalMessage.content).toContain('or block scans');
+        expect(finalMessage.content).toContain('Validation Scripts opened or updated.');
+        expect(finalMessage.content).toContain('npm run validate');
+        expect(finalMessage.content).toContain('report-only pass/fail');
+        expect(finalMessage.content).toContain('do not duplicate security scanning');
     });
 
     it('can open a review diff from an action that targets a scanned file path', async () => {
@@ -4066,6 +4066,11 @@ describe('parseChatIntent', () => {
         expect(html).toContain('Configure LLM');
         expect(html).toContain('id="scanReadiness"');
         expect(html).toContain('Paste commit hash, branch, tag, or range like main..HEAD');
+        expect(html).toContain('Create Code Map');
+        expect(html).toContain('Spec File');
+        expect(html).toContain('Design Notes');
+        expect(html).toContain('Validation Scripts');
+        expect(html).toContain('not security frameworks');
     });
 
     it('explains why a Git target scan found no source files', () => {

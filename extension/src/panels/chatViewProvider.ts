@@ -4666,7 +4666,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await vscode.commands.executeCommand(PROFILE.commands.openDesignContext);
             this.messages.push({
                 role: 'system',
-                content: 'Opened Design Context. Add architecture, trust-boundary, role, data-flow, ownership, and STRIDE notes in the configured Design Box file; Owlvex uses them as context, not proof.',
+                content: 'Design Notes opened or updated. Use this for architecture, threat model, roles, data flows, ownership rules, and STRIDE notes. Owlvex uses it as context, not proof.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4680,7 +4680,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await config.update('designContextFile', '', target);
             this.messages.push({
                 role: 'system',
-                content: 'Design Box cleared for this workspace. Scans will continue with the project root, Design Map, frameworks, and any enabled TDD or Drift context.',
+                content: 'Design Notes cleared for this workspace. Scans will continue with the project root, Code Map, scan profile, and any enabled Spec File or Validation Scripts.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4693,7 +4693,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const projectContextSummary = getProjectContextSummaryFromConfig();
             this.messages.push({
                 role: 'system',
-                content: `TDD Box opened or updated. Current project grounding: ${projectContextSummary}.`,
+                content: `Spec File opened or updated. Use it for expected behavior, requirements, and implementation constraints. Current project grounding: ${projectContextSummary}.`,
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4708,7 +4708,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await config.update('tddBoxEnabled', false, target);
             this.messages.push({
                 role: 'system',
-                content: 'TDD Box cleared for this workspace. Scans will no longer include a TDD/spec file unless you select one again.',
+                content: 'Spec File cleared for this workspace. Scans will no longer include TDD/spec requirements unless you select a file again.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4721,7 +4721,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             const projectContextSummary = getProjectContextSummaryFromConfig();
             this.messages.push({
                 role: 'system',
-                content: `Design Map refreshed. Current project grounding: ${projectContextSummary}.`,
+                content: `Code Map refreshed. Current project grounding: ${projectContextSummary}.`,
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4733,7 +4733,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await vscode.commands.executeCommand(PROFILE.commands.openDesignMap);
             this.messages.push({
                 role: 'system',
-                content: 'Opened Design Map. Use it to review Owlvex generated understanding of entrypoints, guards, sinks, ownership signals, evidence gaps, and scanner guidance.',
+                content: 'Opened Code Map. Use it to review Owlvex generated understanding of entrypoints, dependencies, guards, sinks, ownership signals, evidence gaps, and scanner guidance.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4745,7 +4745,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await vscode.commands.executeCommand(PROFILE.commands.openDriftBox);
             this.messages.push({
                 role: 'system',
-                content: 'Opened Drift Box. Configure custom behavior/contract scripts for this project. Drift checks run locally after approval and report pass/fail only; they do not duplicate Owlvex security scanning or block scans, fixes, post-fix verification, or security-clean status.',
+                content: 'Validation Scripts opened or updated. Configure local behavior/contract checks such as npm run validate. Results are report-only pass/fail and do not duplicate security scanning or block scans, fixes, post-fix verification, or security-clean status.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4761,7 +4761,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             await config.update('driftBoxEnabled', false, target);
             this.messages.push({
                 role: 'system',
-                content: 'Drift Box cleared for this workspace. Drift checks will not run until a Drift config is selected and enabled again.',
+                content: 'Validation Scripts cleared for this workspace. Local pass/fail checks will not run until a validation config is selected and enabled again.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -6568,6 +6568,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       white-space: normal;
       overflow-wrap: anywhere;
     }
+    .context-help {
+      margin: 2px 0 8px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--vscode-descriptionForeground);
+    }
     textarea {
       width: 100%;
       min-height: 84px;
@@ -6660,15 +6666,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 <span class="workflow-status-label">Grounding</span>
                 <span class="workflow-status-value" id="workflowGrounding">loading</span>
               </div>
+              <div class="context-help">
+                Code Map is generated from code. Spec File and Design Notes are optional user-provided context. Validation Scripts are local pass/fail checks, not security frameworks.
+              </div>
               <div class="section-actions">
-                <button class="chip" data-action="selectFrameworks">Frameworks</button>
-                <button class="chip" data-action="createDesignMap">Design Map</button>
-                <button class="chip" data-action="openTddBox">TDD Box</button>
-                <button class="chip" data-action="clearTddBox">Clear TDD</button>
-                <button class="chip" data-action="openDesignContext">Design File</button>
-                <button class="chip" data-action="clearDesignContext">Clear Design</button>
-                <button class="chip" data-action="openDriftBox">Drift Box</button>
-                <button class="chip" data-action="clearDriftBox">Clear Drift</button>
+                <button class="chip" data-action="selectFrameworks" title="Choose security lenses such as OWASP, STRIDE, CWE, NIST, PCI DSS, and Clean Code.">Scan Profile</button>
+                <button class="chip" data-action="createDesignMap" title="Generate or refresh a Mermaid code map from the selected project root.">Create Code Map</button>
+                <button class="chip" data-action="openTddBox" title="Select or open a Markdown/text spec file that describes expected behavior for AI reasoning.">Spec File</button>
+                <button class="chip" data-action="clearTddBox" title="Remove the configured spec/TDD file from scan and fix context.">Clear Spec</button>
+                <button class="chip" data-action="openDesignContext" title="Select or open architecture, threat-model, PDF, Word, Markdown, or text design notes.">Design Notes</button>
+                <button class="chip" data-action="clearDesignContext" title="Remove the configured design notes from scan and fix context.">Clear Notes</button>
+                <button class="chip" data-action="openDriftBox" title="Configure local validation scripts such as npm run validate. Results are report-only and do not block scanning.">Validation Scripts</button>
+                <button class="chip" data-action="clearDriftBox" title="Remove the configured validation script config so Drift checks no longer run.">Clear Scripts</button>
               </div>
             </div>
           </details>
