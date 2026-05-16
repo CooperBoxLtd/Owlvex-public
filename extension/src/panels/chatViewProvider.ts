@@ -958,6 +958,40 @@ function buildChangedFilesSkipLines(result: any): string[] {
     return lines;
 }
 
+export function buildGitTargetNoSourceResponse(result: any): string {
+    const gitTarget = result?.gitTarget ?? 'the selected ref';
+    const errors = Array.isArray(result?.errors) ? result.errors.filter((item: unknown): item is string => typeof item === 'string' && item.length > 0) : [];
+    const gitChangedCount = Number(result?.gitChangedCount ?? 0);
+    const skipped = Array.isArray(result?.skipped) ? result.skipped : [];
+    const lines = [
+        `No scannable source files were found for Git target ${gitTarget}.`,
+    ];
+
+    if (errors.length) {
+        lines.push(`Reason: ${errors.join(' ')}`);
+        lines.push('Check that the commit, branch, tag, or range exists in the selected local project root.');
+        return lines.join('\n');
+    }
+
+    if (gitChangedCount || skipped.length) {
+        lines.push(`Git changed paths detected: ${gitChangedCount || skipped.length}.`);
+        lines.push('Owlvex scans supported source files from that target; documentation, lockfiles, metadata, and unsupported file types are skipped.');
+        for (const item of skipped.slice(0, 5)) {
+            const filePath = typeof item?.path === 'string' ? item.path : 'unknown';
+            const reason = typeof item?.reason === 'string' ? item.reason : 'not scanned';
+            lines.push(`Skipped: ${filePath} - ${reason}`);
+        }
+        if (skipped.length > 5) {
+            lines.push(`Skipped: ${skipped.length - 5} more file(s) not shown.`);
+        }
+        return lines.join('\n');
+    }
+
+    lines.push('The Git target resolved locally, but Git returned no changed paths for this ref or range.');
+    lines.push('Try a commit SHA, branch name, tag, or an explicit range such as main..HEAD.');
+    return lines.join('\n');
+}
+
 function buildCalibrationRecords(results: Array<{ uri: vscode.Uri; result: ScanResult }>): StoredScanRecord[] {
     return results.map(item => ({
         scanId: item.result.scanId,
@@ -3836,7 +3870,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 return { handled: true, response: 'Git commit/range scan was cancelled.', kind: 'scan' };
             }
             if (result?.status === 'empty') {
-                return { handled: true, response: `No supported source files were found for Git target ${result.gitTarget ?? 'the selected ref'}.`, kind: 'scan' };
+                return { handled: true, response: buildGitTargetNoSourceResponse(result), kind: 'scan' };
             }
             if (result?.status === 'failed') {
                 return {
@@ -4907,7 +4941,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                                 `Scan errors: ${result.errors.length}`,
                             ].join('\n')
                         : result?.status === 'empty'
-                            ? `No source files were found for Git target ${result.gitTarget ?? 'the selected ref'}.`
+                            ? buildGitTargetNoSourceResponse(result)
                             : 'Git target scan was cancelled.',
                     actions: result?.status === 'completed'
                         ? [

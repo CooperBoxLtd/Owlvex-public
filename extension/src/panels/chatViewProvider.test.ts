@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
-import { ChatViewProvider, buildDesignMapFixGateReason, buildFindingContextSummary, buildFindingPromptContext, buildGroundedRemediationHighlights, buildNearbyProjectContext, extractPatchedFileContent, parseChatIntent } from './chatViewProvider';
+import { ChatViewProvider, buildDesignMapFixGateReason, buildFindingContextSummary, buildFindingPromptContext, buildGitTargetNoSourceResponse, buildGroundedRemediationHighlights, buildNearbyProjectContext, extractPatchedFileContent, parseChatIntent } from './chatViewProvider';
 import { configureRulePackRuntime, resetRulePackRuntime } from '../frameworks/rulePackRegistry';
 import { PROFILE } from '../profile';
 
@@ -4066,6 +4066,23 @@ describe('parseChatIntent', () => {
         expect(html).toContain('Configure LLM');
         expect(html).toContain('id="scanReadiness"');
         expect(html).toContain('Paste commit hash, branch, tag, or range like main..HEAD');
+    });
+
+    it('explains why a Git target scan found no source files', () => {
+        const response = buildGitTargetNoSourceResponse({
+            gitTarget: 'abc123',
+            gitChangedCount: 2,
+            skipped: [
+                { path: 'README.md', reason: 'documentation/context file; use TDD Box or Design Box when it should ground a scan' },
+                { path: 'package-lock.json', reason: 'lockfile; dependency/supply-chain scanning is separate from source scanning' },
+            ],
+            errors: [],
+        });
+
+        expect(response).toContain('No scannable source files were found for Git target abc123.');
+        expect(response).toContain('Git changed paths detected: 2.');
+        expect(response).toContain('Skipped: README.md - documentation/context file');
+        expect(response).toContain('unsupported file types are skipped');
     });
 
     it('shows an onboarding checklist with next actions based on live setup state', async () => {
