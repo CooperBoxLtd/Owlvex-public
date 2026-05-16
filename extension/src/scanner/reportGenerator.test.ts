@@ -162,7 +162,7 @@ describe('reportGenerator', () => {
         expect(written).not.toContain('Provider rate limit note:');
         expect(written).toContain('- Coverage: Normal for the current provider and runtime state');
         expect(written).toContain('- Knowledge sources: Fresh packs (1)');
-        expect(written).toContain('- Selected framework lens: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
+        expect(written).toContain('- Selected framework lens: OWASP 2025, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Framework selection controls AI grounding, report emphasis, remediation variants, and which mapping families are expanded in detail.');
         expect(written).toContain('- Deterministic evidence rules still run security-first. If code evidence proves an issue, Owlvex may show canonical mappings such as CWE, OWASP, MITRE, or NIST even when that framework was not selected.');
         expect(written).toContain('- Project context: inline project contract');
@@ -344,7 +344,7 @@ describe('reportGenerator', () => {
         expect(written).toContain('# Owlvex Summary Report');
         expect(written).toContain('This is the developer summary view.');
         expect(written).toContain('## What To Fix First');
-        expect(written).toContain('- Selected framework lens: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
+        expect(written).toContain('- Selected framework lens: OWASP 2025, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5');
         expect(written).toContain('- Framework selection controls AI grounding, report emphasis, remediation variants, and which mapping families are expanded in detail.');
         expect(written).toContain('## Confirmed Or AI-Reviewed Findings');
         expect(written).toContain('### Unsanitized SQL query construction');
@@ -1541,7 +1541,7 @@ Report location: \`d:\\repo\\tools\\benchmark-app\`
 
 - Coverage: Normal for the current provider and runtime state
 - Knowledge sources: Fresh packs (1)
-- Selected framework lens: OWASP 2021, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
+- Selected framework lens: OWASP 2025, STRIDE 2026.1, CWE 4.15, MITRE 15, NIST Rev. 5
 - Framework selection controls AI grounding, report emphasis, remediation variants, and which mapping families are expanded in detail.
 - Deterministic evidence rules still run security-first. If code evidence proves an issue, Owlvex may show canonical mappings such as CWE, OWASP, MITRE, or NIST even when that framework was not selected.
 - Treat unselected-framework mappings as reference taxonomy for the finding, not as evidence that Owlvex scanned with every framework lens enabled.

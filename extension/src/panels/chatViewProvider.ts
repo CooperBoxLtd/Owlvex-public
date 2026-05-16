@@ -5993,6 +5993,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 85%, transparent);
       overflow: hidden;
     }
+    .settings-panel[hidden],
+    .settings-panel.is-hidden {
+      display: none !important;
+    }
     .workflow-panel {
       margin-top: 10px;
       border: 1px solid var(--vscode-widget-border);
@@ -6001,6 +6005,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       background: color-mix(in srgb, var(--vscode-editorWidget-background) 78%, transparent);
       display: grid;
       gap: 7px;
+    }
+    .workflow-panel[hidden],
+    .workflow-panel.is-hidden {
+      display: none !important;
     }
     .workflow-top {
       display: flex;
@@ -6065,14 +6073,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 7px;
-    }
-    .workflow-primary {
-      flex: 0 0 auto;
-      border-radius: 999px;
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-      padding: 7px 10px;
-      font-size: 11px;
     }
     .workflow-status-grid {
       display: grid;
@@ -6504,18 +6504,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         </div>
         <div class="topbar-actions">
           <button class="icon-button" id="toggleHistory" type="button" title="Chat history" aria-label="Chat history">&#8634;</button>
-          <button class="icon-button" id="toggleSettingsTop" type="button" title="Settings" aria-label="Open settings">&#9881;</button>
+          <button class="icon-button" id="toggleSettingsTop" type="button" title="Show setup and context" aria-label="Show setup and context" aria-expanded="false">&#9881;</button>
           <button class="icon-button" id="newChatTop" type="button" title="New chat" aria-label="New chat">&#9998;</button>
         </div>
       </div>
-      <div class="workflow-panel" id="workflowPanel" hidden>
-        <div class="workflow-top">
-          <div>
-            <div class="workflow-title" id="readinessLabel">Checking setup...</div>
-            <div class="workflow-detail" id="readinessDetail">Loading Owlvex workflow state.</div>
-          </div>
-          <button class="workflow-primary" id="nextActionButton" type="button">Next</button>
-        </div>
+      <div class="workflow-panel is-hidden" id="workflowPanel" hidden style="display:none;">
+        <div class="workflow-title" id="readinessLabel">Checking setup...</div>
+        <div class="workflow-detail" id="readinessDetail">Loading Owlvex workflow state.</div>
         <div class="workflow-warning" id="workflowWarning"></div>
         <div class="progressive-stack">
           <details class="progressive-section" id="setupSection">
@@ -6580,7 +6575,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           </details>
         </div>
       </div>
-      <div class="settings-panel" id="settingsPanel" hidden>
+      <div class="settings-panel is-hidden" id="settingsPanel" hidden style="display:none;">
         <div class="settings-head">
           <span>Configuration</span>
           <div style="display:flex;align-items:center;gap:8px;">
@@ -6681,7 +6676,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const reportButtonEl = document.getElementById('reportButton');
     const readinessLabelEl = document.getElementById('readinessLabel');
     const readinessDetailEl = document.getElementById('readinessDetail');
-    const nextActionButtonEl = document.getElementById('nextActionButton');
     const workflowAccessEl = document.getElementById('workflowAccess');
     const workflowLlmEl = document.getElementById('workflowLlm');
     const workflowScopeEl = document.getElementById('workflowScope');
@@ -6692,10 +6686,27 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const setupBackendEl = document.getElementById('setupBackend');
     const contextSummaryEl = document.getElementById('contextSummary');
     let historyVisible = false;
-    let nextWorkflowAction = 'showOnboarding';
+    let settingsOpen = false;
 
     function postAction(action) {
       vscode.postMessage({ type: 'chat:action', action });
+    }
+
+    function applySettingsVisibility() {
+      if (settingsPanelEl) {
+        settingsPanelEl.hidden = !settingsOpen;
+        settingsPanelEl.classList.toggle('is-hidden', !settingsOpen);
+        settingsPanelEl.style.display = settingsOpen ? '' : 'none';
+      }
+      if (workflowPanelEl) {
+        workflowPanelEl.hidden = !settingsOpen;
+        workflowPanelEl.classList.toggle('is-hidden', !settingsOpen);
+        workflowPanelEl.style.display = settingsOpen ? '' : 'none';
+      }
+      if (toggleSettingsTopEl) {
+        toggleSettingsTopEl.setAttribute('aria-expanded', settingsOpen ? 'true' : 'false');
+        toggleSettingsTopEl.title = settingsOpen ? 'Hide setup and context' : 'Show setup and context';
+      }
     }
 
     function appendEmptyState(state) {
@@ -6776,8 +6787,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       providerHintEl.textContent = state.providerHint || '';
       readinessLabelEl.textContent = state.readinessLabel || 'Owlvex ready';
       readinessDetailEl.textContent = state.readinessDetail || 'Choose a scan scope and run a scan.';
-      nextWorkflowAction = state.nextAction || 'showOnboarding';
-      nextActionButtonEl.textContent = state.nextActionLabel || 'Next';
       workflowAccessEl.textContent = state.hasLicence ? state.licenceStatus : (state.hasStoredLicenceKey ? 'key stored' : 'not connected');
       workflowLlmEl.textContent = state.providerConfigured ? state.provider + ' configured' : 'not configured';
       workflowScopeEl.textContent = state.workingScopeLabel + ' | ' + (state.workspaceSummary || 'no workspace');
@@ -6805,12 +6814,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (scanScopeBottomEl && state.workingScope) {
         scanScopeBottomEl.value = state.workingScope;
       }
-      if (settingsPanelEl && (!state.hasLicence || !state.providerConfigured) && !state.messages.length) {
-        settingsPanelEl.hidden = true;
-      }
-      if (workflowPanelEl && settingsPanelEl?.hidden) {
-        workflowPanelEl.hidden = true;
-      }
+      applySettingsVisibility();
       document.querySelectorAll('[data-auth-action]').forEach((button) => {
         button.hidden = Boolean(state.hasLicence);
       });
@@ -6915,17 +6919,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     newChatTopEl.addEventListener('click', () => {
       vscode.postMessage({ type: 'chat:clear' });
     });
-    nextActionButtonEl.addEventListener('click', () => {
-      postAction(nextWorkflowAction);
-    });
     toggleSettingsTopEl.addEventListener('click', () => {
-      const nextHidden = !settingsPanelEl.hidden;
-      settingsPanelEl.hidden = nextHidden;
-      workflowPanelEl.hidden = nextHidden;
+      settingsOpen = !settingsOpen;
+      applySettingsVisibility();
     });
     closeSettingsEl.addEventListener('click', () => {
-      settingsPanelEl.hidden = true;
-      workflowPanelEl.hidden = true;
+      settingsOpen = false;
+      applySettingsVisibility();
     });
     toggleHistoryEl.addEventListener('click', () => {
       if (toggleHistoryEl.disabled) return;
