@@ -381,9 +381,22 @@ function buildMermaidLegend(): string {
 
 function buildArchitectureMermaid(map: DesignMap): string {
     const runtimeFiles = map.files.filter(isRuntimeFile);
+    const runtimeByPath = new Map(runtimeFiles.map(file => [file.path, file]));
     const findKind = (kind: string) => runtimeFiles.find(file => file.kind === kind);
     const findPath = (pattern: RegExp) => runtimeFiles.find(file => pattern.test(file.path));
     const findWith = (predicate: (file: DesignMapFileEvidence) => boolean) => runtimeFiles.find(predicate);
+    const findDependency = (from: DesignMapFileEvidence | undefined, predicate: (file: DesignMapFileEvidence) => boolean): DesignMapFileEvidence | undefined => {
+        if (!from) {
+            return undefined;
+        }
+        for (const dependency of from.dependsOn) {
+            const candidate = runtimeByPath.get(dependency);
+            if (candidate && candidate.path !== from.path && predicate(candidate)) {
+                return candidate;
+            }
+        }
+        return undefined;
+    };
     const fileLabel = (file: DesignMapFileEvidence | undefined, fallback: string, max = 78): string =>
         mermaidLabel(file ? `${fallback}: ${file.path}` : fallback, max);
 
@@ -399,8 +412,10 @@ function buildArchitectureMermaid(map: DesignMap): string {
     const networkHook = runtimeFiles.find(file => file.kind === 'hook' && /network|session/i.test(file.path));
     const outputHook = runtimeFiles.find(file => file.kind === 'hook' && /audio|player|output|render|media/i.test(file.path));
     const storageHook = runtimeFiles.find(file => file.kind === 'hook' && /persist|storage|state/i.test(file.path));
-    const formatModule = findPath(/codec|encode|decode|serializer|parser|format|protocol/i);
-    const outputModule = findPath(/audio|player|output|media|render/i);
+    const isFormatModule = (file: DesignMapFileEvidence) => /codec|encode|decode|serializer|parser|format/i.test(file.path);
+    const isOutputModule = (file: DesignMapFileEvidence) => /audio|player|output|media|render/i.test(file.path) && file.path !== outputHook?.path;
+    const formatModule = findDependency(outputHook, isFormatModule) ?? findPath(/codec|encode|decode|serializer|parser|format/i);
+    const outputModule = findDependency(outputHook, isOutputModule) ?? runtimeFiles.find(isOutputModule);
     const hasElectronFlow = Boolean(frontendEntry || uiContainer || preload || main);
 
     if (hasElectronFlow) {

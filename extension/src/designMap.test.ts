@@ -163,6 +163,43 @@ describe('design map generator', () => {
         expect(markdown).not.toContain('Morse encode/decode');
     });
 
+    it('prefers confirmed output dependencies over broad protocol filename matches', async () => {
+        fs.mkdirSync(path.join(tempRoot, 'src', 'hooks'), { recursive: true });
+        fs.mkdirSync(path.join(tempRoot, 'src', 'utils'), { recursive: true });
+        fs.mkdirSync(path.join(tempRoot, 'electron'), { recursive: true });
+        fs.writeFileSync(path.join(tempRoot, 'src', 'main.jsx'), [
+            "import App from './App.jsx';",
+            'App();',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'App.jsx'), [
+            "import { useMediaPlayer } from './hooks/useMediaPlayer.js';",
+            'export default function App() { return useMediaPlayer(); }',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'hooks', 'useMediaPlayer.js'), [
+            "import { encode } from '../utils/codec.js';",
+            "import { play } from '../utils/audioEngine.js';",
+            'export function useMediaPlayer() { play(encode("x")); }',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'utils', 'codec.js'), [
+            'export function encode(value) { return value; }',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'utils', 'audioEngine.js'), [
+            'export function play(value) { return value; }',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'electron', 'protocol.js'), [
+            'export function parse(value) { return JSON.parse(value); }',
+        ].join('\n'));
+
+        await generateDesignMap(vscode.Uri.file(tempRoot) as any);
+
+        const markdownWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls[0];
+        const markdown = Buffer.from(markdownWrite[1]).toString('utf8');
+        expect(markdown).toContain('Encode/decode or message format: src/utils/codec.js');
+        expect(markdown).toContain('Output adapter: src/utils/audioEngine.js');
+        expect(markdown).not.toContain('Encode/decode or message format: electron/protocol.js');
+        expect(markdown).not.toContain('Output adapter: src/hooks/useMediaPlayer.js');
+    });
+
     it('does not treat generic request or raw wording as a sink without API evidence', async () => {
         fs.mkdirSync(path.join(tempRoot, 'src'), { recursive: true });
         fs.writeFileSync(path.join(tempRoot, 'src', 'app.js'), [
