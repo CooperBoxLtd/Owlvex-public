@@ -378,7 +378,7 @@ Recommendation:
 ### P0 - Trust and First-Use Value
 
 1. Make changed-files scan the default when Git changes exist.
-2. Add one setup progress block in chat.
+2. Keep setup/context/advanced behind the cog by default and preserve the prompt/scan composer as the main working surface.
 3. Rename usage/admin labels to reduce ambiguity.
 4. Consolidate post-fix continuation into one summary.
 5. Gate weak-evidence fix generation.
@@ -390,6 +390,8 @@ Recommendation:
 3. Add no-Git fallback for changed-files scanning.
 4. Show configured TDD/Design/Drift paths in scan profile.
 5. Add first-scan guidance after provider setup.
+6. Add a pre-scan readiness line: scope, frameworks, context, and Drift state.
+7. Improve Git commit/range scan placeholders and empty-state explanations.
 
 ### P2 - Product Learning
 
@@ -406,6 +408,10 @@ Use these as concrete completion checks:
 - a new user can reach a first scan without understanding every setting
 - `Changed files` is the obvious daily path when Git changes exist
 - no-Git users get a useful fallback instead of a dead end
+- setup/context/advanced controls are hidden by default and only shown from the cog
+- the bottom composer remains visible and uncluttered as the main action surface
+- pre-scan readiness clearly says what Owlvex is about to scan and which context it will use
+- Git commit/range scan explains whether a target was missing, source-empty, or source-scannable
 - prompt can answer "how do I use this report?" using the latest report state
 - admin console can distinguish product events from scans
 - post-fix output is one consolidated queue

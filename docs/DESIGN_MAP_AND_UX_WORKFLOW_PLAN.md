@@ -156,6 +156,41 @@ This directly addresses the benchmark false-positive pattern where Owlvex inferr
 
 ## UX Workflow Integration
 
+### Product Workflow Rule
+
+Owlvex should present one simple working surface by default:
+
+- provider/model selector
+- scan scope selector
+- Scan button
+- Report button
+- prompt box
+
+Everything else is configuration or deeper context and must sit behind progressive disclosure. The cog drawer owns:
+
+- Setup
+- Context
+- Advanced
+
+The drawer must be hidden by default, including after webview refreshes, scan state refreshes, and extension reloads. This preserves space for the prompt and scan conversation. The user should not have to collapse setup controls repeatedly during daily use.
+
+The bottom composer remains the primary working surface. It should not be moved into advanced settings because this is the part users already understand: choose provider, choose scope, scan, report, ask.
+
+### Workflow State Machine
+
+The UI should behave as a small state machine instead of a collection of unrelated buttons:
+
+1. `Needs access`
+2. `Needs project root`
+3. `Needs provider`
+4. `Ready to scan`
+5. `Scan complete`
+6. `Fix preview`
+7. `Post-fix verification`
+8. `Continue fixes or report`
+
+Each state should expose one primary next action in the chat surface, not in the cog drawer. The drawer explains and edits configuration; the conversation area guides the current workflow.
+
 ### New User Path
 
 The ideal first-use flow becomes:
@@ -178,13 +213,21 @@ The ideal first-use flow becomes:
 The daily path should be shorter:
 
 1. code changes exist
-2. Owlvex defaults to `Changed files`
+2. Owlvex defaults to `Changed files` when Git changes are detected
 3. scan uses existing Design Map if fresh enough
 4. report separates:
    - findings touched by current diff
    - pre-existing findings in changed files
    - wider repo context
 5. Drift Box runs only when configured and enabled
+
+If Git is unavailable or the selected project root is not inside a Git repository, Owlvex should fall back cleanly:
+
+- prefer selected files if present
+- otherwise current file if open
+- otherwise workspace scan with a clear warning
+
+The user should never see a dead end such as "no changed files" without a next useful action.
 
 ### Prompt Path
 
@@ -204,7 +247,7 @@ If no Design Map exists, Owlvex should offer:
 
 ## UI Changes
 
-Add a **Project Understanding** section to the existing profile/configuration surface:
+Add a compact **Project Understanding** area inside the cog drawer Context section:
 
 - Design Map: missing/stale/current
 - Design Box: configured/not configured
@@ -220,16 +263,52 @@ Commands:
 - `Select TDD Box File`
 - `Select Drift Box Config`
 - `Run Drift Checks Now`
+- `Clear TDD Box`
+- `Clear Design Box`
+- `Clear Drift Box`
 
 The scan scope dropdown should remain focused on what code is scanned:
 
 - Current file
 - Selected files
 - Changed files
+- Git commit/range
 - Open editors
 - Workspace
 
 Project grounding should not be hidden inside security frameworks. Frameworks remain interpretation lenses; Design/TDD/Drift/Design Map are project grounding and validation surfaces.
+
+### Pre-Scan Readiness Line
+
+Before running a scan, Owlvex should be able to summarize the effective scan configuration in one compact line:
+
+`Scope: Changed files | Frameworks: OWASP, STRIDE | Context: Design Map + TDD | Drift: on`
+
+This line can appear in the conversation area or immediately above the scan composer. It should update when the user changes scan scope, frameworks, Design Map, TDD Box, Design Box, or Drift Box.
+
+### Git Commit/Range Scan UX
+
+When `Git commit/range` is selected:
+
+- the prompt placeholder should change to `Paste commit hash, branch, tag, or range like main..HEAD`
+- pressing Scan with an empty prompt should ask for the Git target
+- a pasted commit hash in normal chat should route to the Git target scanner
+- an empty result should distinguish:
+  - target not found
+  - target found but no files changed
+  - target found but changed files are not scannable source
+
+The empty result should list a small sample of skipped paths when useful.
+
+### Reports After Scan
+
+Report choice belongs after scan completion, not in the setup drawer. After a scan, the conversation card should offer:
+
+- Summary report
+- Full evidence report
+- Preview fixes when findings are actionable
+
+The bottom Report menu remains available for repeat use.
 
 ## Report Changes
 

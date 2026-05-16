@@ -236,6 +236,58 @@ Acceptance criteria:
 - AI usage is lower than workspace scans for normal development workflows
 - no backend source upload is required; Git diff analysis remains local
 
+## Progressive Workflow UI Workstream
+
+The Owlvex panel should use progressive disclosure. The default view must preserve space for the prompt, scan scope selector, scan button, report button, and latest workflow conversation. Configuration is available, but it should not dominate the daily-use surface.
+
+Default visible working surface:
+
+- provider/model selector
+- scan scope selector
+- Scan button
+- Report button
+- prompt box
+
+Cog drawer only:
+
+- Setup
+- Context
+- Advanced
+
+The cog drawer must be hidden by default and stay hidden across webview state refreshes. It should not reopen automatically because a licence, provider, project root, Design Map, TDD Box, or Drift Box state changed.
+
+State model:
+
+1. Needs access
+2. Needs project root
+3. Needs provider
+4. Ready to scan
+5. Scan complete
+6. Fix preview
+7. Post-fix verification
+8. Continue fixes or report
+
+Implementation slices:
+
+1. Extract a `WorkflowStateSummary` builder shared by the chat webview, onboarding messages, and report actions.
+2. Keep the drawer hidden by default and make the cog the only control that opens Setup/Context/Advanced.
+3. Add a compact pre-scan readiness line showing effective scope, frameworks, grounding, and Drift state.
+4. Make `Changed files` the preferred default when Git changes exist.
+5. Add no-Git fallback behavior for changed-file scans.
+6. Improve `Git commit/range` empty states with target-found/skipped-source detail.
+7. Show current TDD/Design/Drift paths with Change and Clear actions.
+8. Keep report actions after scan completion and in the bottom Report menu, not in the setup drawer.
+
+Acceptance criteria:
+
+- first-run users see one setup checklist and one next action, not a wall of controls
+- daily users can scan without opening the cog drawer
+- changing scan scope updates the readiness line
+- `Git commit/range` tells the user exactly what to paste and why an empty result happened
+- TDD/Design/Drift can be changed or cleared after initial setup
+- report buttons are not duplicated between the drawer and the working composer
+- no setup/context/advanced panel is visible by default after reinstall, reload, or state refresh
+
 ## Current Phase Priorities
 
 The next implementation phase should not treat language count as the main measure of product quality.
