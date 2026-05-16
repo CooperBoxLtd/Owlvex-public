@@ -3,12 +3,13 @@ import { existsSync, statSync } from 'fs';
 import { inflateRawSync, inflateSync } from 'zlib';
 import * as vscode from 'vscode';
 import { PROFILE } from './profile';
-import { getDefaultDesignMapMarkdownPath } from './designMap';
+import { getDefaultDesignMapMarkdownPath, getDefaultDiagramMarkdownPath } from './designMap';
 
 const MAX_PROJECT_CONTEXT_CHARS = 8000;
 const MAX_DESIGN_CONTEXT_CHARS = 10000;
 const MAX_DESIGN_FILE_CHARS = 3000;
 const MAX_DESIGN_MAP_CHARS = 5000;
+const MAX_DIAGRAM_CONTEXT_CHARS = 8000;
 const MAX_DESIGN_FILES = 8;
 const PROJECT_ROOT_SETTING = 'projectRoot';
 const DEFAULT_DESIGN_CONTEXT_DIR = '.owlvex/design';
@@ -28,6 +29,7 @@ export interface ProjectContextInfo {
     designMap?: {
         loaded: boolean;
         path?: string;
+        diagrams?: string[];
     };
 }
 
@@ -554,6 +556,62 @@ async function tryReadDesignMap(projectRoot?: vscode.Uri, enabled = true): Promi
     }
 }
 
+async function tryReadDiagramFile(projectRoot: vscode.Uri, type: 'architecture' | 'evidence' | 'workflow' | 'tddDiff' | 'threatFlow'): Promise<{ label: string; content: string } | undefined> {
+    const diagramPath = getDefaultDiagramMarkdownPath(projectRoot.fsPath, type);
+    try {
+        const diagramUri = vscode.Uri.file(diagramPath);
+        const stat = await vscode.workspace.fs.stat(diagramUri);
+        if (!(stat.type & vscode.FileType.File)) {
+            return undefined;
+        }
+        const raw = await vscode.workspace.fs.readFile(diagramUri);
+        const content = trimProjectContext(Buffer.from(raw).toString('utf8'));
+        if (!content) {
+            return undefined;
+        }
+        return {
+            label: vscode.workspace.asRelativePath(diagramUri, false),
+            content,
+        };
+    } catch {
+        return undefined;
+    }
+}
+
+async function tryReadStrideDiagramContext(projectRoot?: vscode.Uri, enabled = true, strideSelected = false): Promise<{ labels: string[]; content: string } | undefined> {
+    if (!projectRoot || !enabled || !strideSelected) {
+        return undefined;
+    }
+    const diagramTypes: Array<'architecture' | 'evidence' | 'workflow' | 'tddDiff' | 'threatFlow'> = ['architecture', 'workflow', 'threatFlow', 'evidence', 'tddDiff'];
+    const diagrams: Array<{ label: string; content: string }> = [];
+    for (const type of diagramTypes) {
+        const diagram = await tryReadDiagramFile(projectRoot, type);
+        if (diagram) {
+            diagrams.push(diagram);
+        }
+    }
+    if (!diagrams.length) {
+        return undefined;
+    }
+    let remaining = MAX_DIAGRAM_CONTEXT_CHARS;
+    const sections: string[] = [];
+    for (const diagram of diagrams) {
+        if (remaining <= 0) {
+            break;
+        }
+        const header = `Diagram (${diagram.label}):`;
+        const bounded = diagram.content.length > remaining
+            ? `${diagram.content.slice(0, remaining)}\n[truncated]`
+            : diagram.content;
+        sections.push(`${header}\n${bounded}`);
+        remaining -= bounded.length;
+    }
+    return {
+        labels: diagrams.map(item => item.label),
+        content: sections.join('\n\n'),
+    };
+}
+
 export async function loadProjectContextInfo(options?: ProjectContextOptions): Promise<ProjectContextInfo> {
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     const legacyTeamContext = trimProjectContext(config.get<string>('teamContext', ''));
@@ -568,12 +626,13 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
     const fileContext = rootAppliesToTargets && tddAppliesToRoot && tddBoxEnabled
         ? await tryReadProjectContextFile(projectContextFile, projectRoot.uri)
         : '';
+    const strideSelected = frameworkSelected(options?.selectedFrameworks, 'STRIDE');
     const designMap = rootAppliesToTargets ? await tryReadDesignMap(projectRoot.uri, designMapEnabled) : undefined;
+    const diagramContext = rootAppliesToTargets ? await tryReadStrideDiagramContext(projectRoot.uri, designMapEnabled, strideSelected) : undefined;
     const designContext = rootAppliesToTargets
         ? (await tryReadDesignContextFile(designContextFile, projectRoot.uri)
             ?? await tryReadDesignContextDirectory(projectRoot.uri, options?.selectedFrameworks))
         : undefined;
-    const strideSelected = frameworkSelected(options?.selectedFrameworks, 'STRIDE');
     const rootLabel = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.label : '';
     const rootSummary = projectRoot.summary !== 'not set' && rootAppliesToTargets ? projectRoot.summary : '';
     const contextSuppressed = projectRoot.isConfigured && !rootAppliesToTargets;
@@ -585,6 +644,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
         rootAppliesToTargets && inlineProjectContext ? `Project context contract:\n${inlineProjectContext}` : '',
         rootAppliesToTargets && fileContext ? `TDD Box context file (${fileContext.label}):\n${fileContext.content}` : '',
         rootAppliesToTargets && designMap ? `Owlvex Design Map (${designMap.label}):\n${designMap.content}` : '',
+        rootAppliesToTargets && diagramContext ? `Owlvex Diagram Box context for STRIDE:\n${diagramContext.content}` : '',
         rootAppliesToTargets && designContext ? `Design context:\n${designContext.content}` : '',
         tddSuppressed ? `TDD Box context skipped:\nThe configured TDD file is outside the selected project root (${projectRoot.label}).` : '',
         contextSuppressed ? `Project context skipped:\nThe scan target is outside the configured project root (${projectRoot.label}).` : '',
@@ -597,6 +657,7 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
         rootAppliesToTargets && fileContext ? `TDD file ${fileContext.label}` : '',
         tddSuppressed ? 'TDD file skipped: outside selected project root' : '',
         rootAppliesToTargets && designMap ? `Design Map ${designMap.label}` : '',
+        rootAppliesToTargets && diagramContext ? `Diagram Box ${diagramContext.labels.length} diagram${diagramContext.labels.length === 1 ? '' : 's'} for STRIDE` : '',
         rootAppliesToTargets && designContext ? `design context ${designContext.labels.length} file${designContext.labels.length === 1 ? '' : 's'}` : '',
         contextSuppressed ? 'configured project root skipped for out-of-root target' : '',
     ].filter(Boolean);
@@ -608,11 +669,12 @@ export async function loadProjectContextInfo(options?: ProjectContextOptions): P
             loaded: Boolean(designContext),
             files: designContext?.labels ?? [],
             strideSelected,
-            missingForStride: rootAppliesToTargets && strideSelected && !designContext,
+            missingForStride: rootAppliesToTargets && strideSelected && !designContext && !diagramContext && !designMap,
         },
         designMap: {
             loaded: Boolean(designMap),
             path: designMap?.label,
+            diagrams: diagramContext?.labels,
         },
     };
 }

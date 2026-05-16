@@ -244,6 +244,62 @@ describe('project root helpers', () => {
         expect(vscode.workspace.fs.readDirectory).not.toHaveBeenCalled();
     });
 
+    it('loads Diagram Box context when STRIDE is selected', async () => {
+        (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
+            get: jest.fn((key: string, defaultValue?: any) => {
+                if (key === 'projectRoot') {
+                    return 'D:\\repo\\tools\\benchmark-app';
+                }
+                if (key === 'designMapEnabled') {
+                    return true;
+                }
+                if (key === 'projectContext' || key === 'projectContextFile' || key === 'teamContext' || key === 'designContextFile') {
+                    return '';
+                }
+                return defaultValue;
+            }),
+        });
+        (vscode.workspace.asRelativePath as jest.Mock).mockImplementation((uri: any) => uri.fsPath.replace('D:\\repo\\tools\\benchmark-app\\', ''));
+        (vscode.workspace.fs.stat as jest.Mock).mockImplementation(async (uri: any) => {
+            if (String(uri.fsPath).includes('.owlvex')) {
+                return { type: vscode.FileType.File };
+            }
+            return { type: vscode.FileType.Directory };
+        });
+        (vscode.workspace.fs.readFile as jest.Mock).mockImplementation(async (uri: any) => {
+            if (uri.fsPath.endsWith('owlvex-design-map.md')) {
+                return Buffer.from('# Owlvex Design Map\nOwnership model: tenantId.');
+            }
+            if (uri.fsPath.endsWith('architecture-map.md')) {
+                return Buffer.from('# Owlvex Architecture Map\n```mermaid\nflowchart TD\nA-->B\n```');
+            }
+            if (uri.fsPath.endsWith('workflow.md')) {
+                return Buffer.from('# Owlvex Workflow Diagram\nUser-->Auth');
+            }
+            if (uri.fsPath.endsWith('threat-flow.md')) {
+                return Buffer.from('# Owlvex Threat Flow Diagram\nBoundary-->Guard');
+            }
+            return Buffer.from('');
+        });
+
+        const context = await loadProjectContextInfo({
+            selectedFrameworks: ['STRIDE'],
+            targetUris: [vscode.Uri.file('D:\\repo\\tools\\benchmark-app\\src\\server.js')],
+        });
+
+        expect(context.summary).toContain('Design Map .owlvex\\owlvex-design-map.md');
+        expect(context.summary).toContain('Diagram Box 3 diagrams for STRIDE');
+        expect(context.combined).toContain('Owlvex Diagram Box context for STRIDE');
+        expect(context.combined).toContain('Owlvex Architecture Map');
+        expect(context.combined).toContain('Owlvex Workflow Diagram');
+        expect(context.combined).toContain('Owlvex Threat Flow Diagram');
+        expect(context.designMap?.diagrams).toEqual([
+            '.owlvex\\diagrams\\architecture-map.md',
+            '.owlvex\\diagrams\\workflow.md',
+            '.owlvex\\diagrams\\threat-flow.md',
+        ]);
+    });
+
     it('extracts text from a configured DOCX Design Box file', async () => {
         (vscode.workspace.getConfiguration as jest.Mock).mockReturnValue({
             get: jest.fn((key: string, defaultValue?: any) => {

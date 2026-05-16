@@ -220,6 +220,16 @@ The Design Map should be used as a local context artifact for:
 - report explanation
 - prompt answers about the application
 
+The Diagram Box should also feed STRIDE/design-aware scans. When STRIDE is selected and diagram artifacts exist, Owlvex should include bounded local context from:
+
+- Architecture Map
+- Workflow Diagram
+- Threat Flow Diagram
+- Security Evidence Map
+- TDD Diff Diagram when available
+
+This lets STRIDE review use generated diagrams even when the user has not supplied a separate TDD or design file. The diagrams remain grounding context, not deterministic proof.
+
 It must not:
 
 - create deterministic proof by itself
@@ -516,7 +526,7 @@ Acceptance checks:
 
 - "what does this app do?" is answered from Design Map, not generic active-file guesses
 - object ownership fixes are blocked when no ownership model exists
-- STRIDE scan says when design grounding is missing
+- STRIDE scan uses Design/TDD files and generated diagrams when available, and says when all design grounding is missing
 - changed-files scan can use a fresh Design Map without rescanning the whole repo
 - Drift Box remains report-only
 - reports show Design/TDD/Drift only when configured or used
