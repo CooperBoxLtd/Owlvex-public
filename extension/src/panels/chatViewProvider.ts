@@ -6460,6 +6460,13 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       font-size: 11px;
       opacity: 0.7;
     }
+    .scan-readiness {
+      font-size: 11px;
+      line-height: 1.4;
+      color: var(--vscode-descriptionForeground);
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
     textarea {
       width: 100%;
       min-height: 84px;
@@ -6635,6 +6642,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           </div>
         </details>
       </div>
+      <div class="scan-readiness" id="scanReadiness">Scope: Workspace | Frameworks: loading | Context: loading</div>
       <div class="composer-hint">Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line.</div>
       <textarea id="prompt" placeholder="Ask Owlvex about this repo, a vulnerability, or what to scan next."></textarea>
       <div class="actions">
@@ -6658,6 +6666,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const modeBadgeEl = document.getElementById('modeBadge');
     const modeHintEl = document.getElementById('modeHint');
     const scanScopeBottomEl = document.getElementById('scanScopeBottom');
+    const scanReadinessEl = document.getElementById('scanReadiness');
     const runScanBottomEl = document.getElementById('runScanBottom');
     const reportMenuEl = document.getElementById('reportMenu');
     const providerEl = document.getElementById('provider');
@@ -6687,6 +6696,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     const contextSummaryEl = document.getElementById('contextSummary');
     let historyVisible = false;
     let settingsOpen = false;
+    let latestState = undefined;
 
     function postAction(action) {
       vscode.postMessage({ type: 'chat:action', action });
@@ -6775,7 +6785,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       messagesEl.appendChild(card);
     }
 
+    function getSelectedScopeLabel(state) {
+      const selected = scanScopeBottomEl ? scanScopeBottomEl.options[scanScopeBottomEl.selectedIndex] : undefined;
+      return selected && selected.textContent ? selected.textContent : (state.workingScopeLabel || 'Workspace');
+    }
+
+    function getDriftStatus(state) {
+      const summary = ((state.projectContextSummary || '') + ' ' + (state.groundingStatus || '')).toLowerCase();
+      if (summary.includes('drift box enabled') || summary.includes('drift enabled')) {
+        return 'on';
+      }
+      if (summary.includes('drift box') || summary.includes('drift')) {
+        return 'configured';
+      }
+      return 'off';
+    }
+
+    function updateComposerContext(state) {
+      if (scanReadinessEl) {
+        const scopeLabel = getSelectedScopeLabel(state);
+        const frameworks = state.frameworksLabel || 'default';
+        const context = state.groundingStatus || 'none';
+        scanReadinessEl.textContent = 'Scope: ' + scopeLabel + ' | Frameworks: ' + frameworks + ' | Context: ' + context + ' | Drift: ' + getDriftStatus(state);
+      }
+      if (promptEl && scanScopeBottomEl) {
+        promptEl.placeholder = scanScopeBottomEl.value === 'scanGitTarget'
+          ? 'Paste commit hash, branch, tag, or range like main..HEAD, then press Scan.'
+          : 'Ask Owlvex about this repo, a vulnerability, or what to scan next.';
+      }
+    }
+
     function render(state) {
+      latestState = state;
       const providerLine = 'Provider: ' + state.provider + ' | Model: ' + state.model;
       assistantCaptionBarEl.textContent = providerLine;
       workspaceDetailEl.textContent = 'Workspace: ' + (state.workspaceSummary || 'No workspace folder open');
@@ -6814,6 +6855,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       if (scanScopeBottomEl && state.workingScope) {
         scanScopeBottomEl.value = state.workingScope;
       }
+      updateComposerContext(state);
       applySettingsVisibility();
       document.querySelectorAll('[data-auth-action]').forEach((button) => {
         button.hidden = Boolean(state.hasLicence);
@@ -6951,6 +6993,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       vscode.postMessage({ type: 'chat:setModel', model: modelEl.value });
     });
     scanScopeBottomEl.addEventListener('change', () => {
+      updateComposerContext(latestState || {
+        workingScopeLabel: scanScopeBottomEl.options[scanScopeBottomEl.selectedIndex]?.textContent || 'Workspace',
+        frameworksLabel: '',
+        groundingStatus: '',
+        projectContextSummary: '',
+      });
       vscode.postMessage({ type: 'chat:setWorkingScope', scope: scanScopeBottomEl.value });
     });
     document.querySelectorAll('[data-action]').forEach((button) => {

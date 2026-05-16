@@ -4064,6 +4064,8 @@ describe('parseChatIntent', () => {
         expect(html).toContain('data-action="startTrial"');
         expect(html).toContain('Report after scan');
         expect(html).toContain('Configure LLM');
+        expect(html).toContain('id="scanReadiness"');
+        expect(html).toContain('Paste commit hash, branch, tag, or range like main..HEAD');
     });
 
     it('shows an onboarding checklist with next actions based on live setup state', async () => {
