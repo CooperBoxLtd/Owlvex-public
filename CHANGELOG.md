@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- no unreleased public changes
+
+## 0.1.45
+
+- hide setup/context/advanced workflow controls behind the cog by default to preserve chat and prompt space
+- remove the duplicate summary-report action from the workflow drawer
+- keep production aligned with the OWASP Top 10 2025 framework lens
+
+## 0.1.43
+
 - promote the production extension profile to the same OWASP Top 10 2025 framework lens already validated in development
 - add profile regression coverage so dev and prod cannot silently drift back to different OWASP framework versions
 
@@ -125,3 +135,4 @@
 ## 0.1.0
 
 - initial prototype release
+

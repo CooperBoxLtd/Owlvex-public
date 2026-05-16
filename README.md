@@ -1,4 +1,4 @@
-﻿# Owlvex
+# Owlvex
 
 Owlvex is a VS Code extension for security scanning, AI-assisted review, evidence reports, and previewed code fixes.
 
@@ -12,7 +12,7 @@ Use it to find useful security signals early, preview fixes, and validate whethe
 
 ## Current Version
 
-`0.1.43`
+`0.1.45`
 
 ## What To Expect
 
@@ -437,4 +437,5 @@ If a result looks wrong, collect:
 - Drift Box result if used
 - scan warnings
 - the exact action that failed
+
 
