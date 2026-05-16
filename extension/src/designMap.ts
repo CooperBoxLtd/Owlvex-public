@@ -388,7 +388,7 @@ function buildArchitectureMermaid(map: DesignMap): string {
         mermaidLabel(file ? `${fallback}: ${file.path}` : fallback, max);
 
     const frontendEntry = findKind('frontend-entrypoint');
-    const uiContainer = findKind('ui-container') ?? findPath(/(^|\/)(App|Terminal|Shell|Screen)\.[cm]?[jt]sx?$/i);
+    const uiContainer = findKind('ui-container') ?? findPath(/(^|\/)(App|Shell|Screen)\.[cm]?[jt]sx?$/i);
     const uiComponent = findKind('ui-component');
     const preload = findKind('electron-preload');
     const main = findKind('electron-main');
@@ -397,10 +397,10 @@ function buildArchitectureMermaid(map: DesignMap): string {
     const electronProtocol = runtimeFiles.find(file => file.kind === 'electron-runtime' && /protocol/i.test(file.path));
     const networkProtocol = runtimeFiles.find(file => file.kind === 'protocol');
     const networkHook = runtimeFiles.find(file => file.kind === 'hook' && /network|session/i.test(file.path));
-    const playerHook = runtimeFiles.find(file => file.kind === 'hook' && /morse|audio|player/i.test(file.path));
+    const outputHook = runtimeFiles.find(file => file.kind === 'hook' && /audio|player|output|render|media/i.test(file.path));
     const storageHook = runtimeFiles.find(file => file.kind === 'hook' && /persist|storage|state/i.test(file.path));
-    const codec = findPath(/codec|encode|decode|morse/i);
-    const audio = findPath(/audio/i);
+    const formatModule = findPath(/codec|encode|decode|serializer|parser|format|protocol/i);
+    const outputModule = findPath(/audio|player|output|media|render/i);
     const hasElectronFlow = Boolean(frontendEntry || uiContainer || preload || main);
 
     if (hasElectronFlow) {
@@ -424,14 +424,14 @@ function buildArchitectureMermaid(map: DesignMap): string {
         if (networkProtocol) {
             lines.push(`  ${networkHook ? 'SessionState' : uiSource} --> MessageProtocol["${fileLabel(networkProtocol, 'Renderer message protocol')}"]`);
         }
-        if (playerHook) {
-            lines.push(`  ${uiSource} --> Player["${fileLabel(playerHook, 'Morse playback')}"]`);
+        if (outputHook) {
+            lines.push(`  ${uiSource} --> OutputFlow["${fileLabel(outputHook, 'Domain output / playback')}"]`);
         }
-        if (codec) {
-            lines.push(`  ${playerHook ? 'Player' : uiSource} --> Codec["${fileLabel(codec, 'Morse encode/decode')}"]`);
+        if (formatModule) {
+            lines.push(`  ${outputHook ? 'OutputFlow' : uiSource} --> Format["${fileLabel(formatModule, 'Encode/decode or message format')}"]`);
         }
-        if (audio) {
-            lines.push(`  ${playerHook ? 'Player' : uiSource} --> Audio["${fileLabel(audio, 'Audio output')}"]`);
+        if (outputModule) {
+            lines.push(`  ${outputHook ? 'OutputFlow' : uiSource} --> OutputAdapter["${fileLabel(outputModule, 'Output adapter')}"]`);
         }
         if (storageHook) {
             lines.push(`  ${uiSource} --> Storage["${fileLabel(storageHook, 'Persistent state')}"]`);
@@ -552,7 +552,11 @@ function buildArchitectureMermaid(map: DesignMap): string {
 
 function buildThreatFlowMermaid(map: DesignMap): string {
     const runtimeFiles = map.files.filter(isRuntimeFile);
-    const rendererFile = runtimeFiles.find(file => /(^|\/)src\/main\.[cm]?[jt]sx?$|RT5Terminal|components?\//i.test(file.path));
+    const rendererFile = runtimeFiles.find(file =>
+        file.kind === 'frontend-entrypoint'
+        || file.kind === 'ui-container'
+        || file.kind === 'ui-component'
+    );
     const preloadFile = runtimeFiles.find(file => file.kind === 'electron-preload');
     const mainFile = runtimeFiles.find(file => file.kind === 'electron-main');
     const entryFile = rendererFile ?? mainFile ?? runtimeFiles.find(file => file.entrypoints.length) ?? runtimeFiles.find(file => file.routes.length);

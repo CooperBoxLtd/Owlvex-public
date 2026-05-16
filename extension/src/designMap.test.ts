@@ -134,6 +134,35 @@ describe('design map generator', () => {
         expect(threatFlow).toContain('Review privileged boundary exposure');
     });
 
+    it('keeps architecture labels domain-neutral instead of binding to a sample app', async () => {
+        fs.mkdirSync(path.join(tempRoot, 'src', 'hooks'), { recursive: true });
+        fs.mkdirSync(path.join(tempRoot, 'src', 'utils'), { recursive: true });
+        fs.writeFileSync(path.join(tempRoot, 'src', 'main.jsx'), [
+            "import App from './App.jsx';",
+            'App();',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'App.jsx'), [
+            "import { useAudioPlayer } from './hooks/useAudioPlayer.js';",
+            'export default function App() { return useAudioPlayer(); }',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'hooks', 'useAudioPlayer.js'), [
+            "import { encode } from '../utils/codec.js';",
+            'export function useAudioPlayer() { return encode("x"); }',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'src', 'utils', 'codec.js'), [
+            'export function encode(value) { return value; }',
+        ].join('\n'));
+
+        await generateDesignMap(vscode.Uri.file(tempRoot) as any);
+
+        const markdownWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls[0];
+        const markdown = Buffer.from(markdownWrite[1]).toString('utf8');
+        expect(markdown).toContain('Domain output / playback');
+        expect(markdown).toContain('Encode/decode or message format');
+        expect(markdown).not.toContain('Morse playback');
+        expect(markdown).not.toContain('Morse encode/decode');
+    });
+
     it('does not treat generic request or raw wording as a sink without API evidence', async () => {
         fs.mkdirSync(path.join(tempRoot, 'src'), { recursive: true });
         fs.writeFileSync(path.join(tempRoot, 'src', 'app.js'), [

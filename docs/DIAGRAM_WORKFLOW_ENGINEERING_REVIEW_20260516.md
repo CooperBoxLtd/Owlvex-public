@@ -342,3 +342,5 @@ The immediate fix is to keep the diagram surface smaller:
 Risk Lens should now act as the post-scan developer view: fix order first, focused scan scope second, and architecture overlay third. Low/medium findings should not drown the view in evidence nodes, and generated labels must render as readable Mermaid line breaks.
 
 Architecture Map should present runtime responsibilities and flow rather than making raw imports the main diagram. Raw imports, sinks, guards, stores, and integrations remain in the Security Evidence Map and `owlvex-design-map.json`, which preserves the security proof boundary.
+
+The Architecture Map must stay domain-neutral. Generator labels and detectors should use generic roles such as UI container, user controls, state, protocol, encode/decode, output adapter, storage, IPC, host, and client. It must not include product-specific vocabulary from a sample app just to make one demo diagram look better.
