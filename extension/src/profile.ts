@@ -13,7 +13,7 @@ export const PROFILE = {
     "findingsViewId": "owlvex.findings",
     "chatViewId": "owlvex.chat",
     "comparisonPanelId": "owlvexComparison",
-    "owaspTop10Version": "2021",
+    "owaspTop10Version": "2025",
     "commands": {
         "scanFile": "owlvex.scanFile",
         "scanSelectedFiles": "owlvex.scanSelectedFiles",

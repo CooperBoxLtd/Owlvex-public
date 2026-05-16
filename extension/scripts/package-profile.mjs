@@ -5,6 +5,29 @@ import packageProfileLib from "./package-profile-lib.cjs";
 
 const { buildGeneratedProfileSource, renderProfileReadme, rewriteManifestForProfile } = packageProfileLib;
 
+function commandForPlatform(command) {
+  return process.platform === "win32" ? `${command}.cmd` : command;
+}
+
+function quoteForShell(value) {
+  return `"${String(value).replace(/"/g, '\\"')}"`;
+}
+
+function runTool(command, args) {
+  if (process.platform === "win32") {
+    return spawnSync([commandForPlatform(command), ...args.map(quoteForShell)].join(" "), {
+      cwd: extensionRoot,
+      stdio: "inherit",
+      shell: true,
+    });
+  }
+
+  return spawnSync(command, args, {
+    cwd: extensionRoot,
+    stdio: "inherit",
+  });
+}
+
 const profileName = process.argv[2];
 
 if (!profileName) {
@@ -56,21 +79,13 @@ try {
   fs.writeFileSync(profileSourcePath, generatedProfileSource, "utf8");
   fs.writeFileSync(readmePath, profileReadmeText, "utf8");
 
-  const compile = spawnSync("npm", ["run", "compile"], {
-    cwd: extensionRoot,
-    stdio: "inherit",
-    shell: true,
-  });
+  const compile = runTool("npm", ["run", "compile"]);
   if (compile.status !== 0) {
     exitCode = compile.status ?? 1;
     throw new Error(`Compile failed for profile '${profileName}'`);
   }
 
-  const pkg = spawnSync("npx", ["@vscode/vsce", "package", "--out", packagePath], {
-    cwd: extensionRoot,
-    stdio: "inherit",
-    shell: true,
-  });
+  const pkg = runTool("npx", ["@vscode/vsce", "package", "--out", packagePath]);
   if (pkg.status !== 0) {
     exitCode = pkg.status ?? 1;
     throw new Error(`Packaging failed for profile '${profileName}'`);

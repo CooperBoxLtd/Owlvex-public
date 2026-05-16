@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- promote the production extension profile to the same OWASP Top 10 2025 framework lens already validated in development
+- add profile regression coverage so dev and prod cannot silently drift back to different OWASP framework versions
+
 ## 0.1.38
 
 - fix Drift Box setup so opening/configuring it enables the box for scans

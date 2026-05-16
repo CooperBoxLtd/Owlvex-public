@@ -13,6 +13,7 @@ const expectedPackages = [
     displayName: 'Owlvex',
     publisher: 'owlvex',
     profileName: 'prod',
+    owaspTop10Version: '2025',
   },
   {
     label: 'dev',
@@ -21,6 +22,7 @@ const expectedPackages = [
     displayName: 'Owlvex Dev',
     publisher: 'owlvex',
     profileName: 'dev',
+    owaspTop10Version: '2025',
   },
 ];
 
@@ -28,7 +30,6 @@ function readVsixFile(vsixPath, innerPath) {
   const result = spawnSync('tar', ['-xOf', vsixPath, innerPath], {
     cwd: extensionRoot,
     encoding: 'utf8',
-    shell: process.platform === 'win32',
   });
 
   if (result.status !== 0) {
@@ -66,6 +67,9 @@ for (const expected of expectedPackages) {
   const profileSource = readVsixFile(expected.file, 'extension/out/profile.js');
   if (!profileSource.includes(`profileName: "${expected.profileName}"`) && !profileSource.includes(`"profileName": "${expected.profileName}"`)) {
     throw new Error(`${expected.label} package profile source does not contain profileName ${expected.profileName}`);
+  }
+  if (!profileSource.includes(`owaspTop10Version: "${expected.owaspTop10Version}"`) && !profileSource.includes(`"owaspTop10Version": "${expected.owaspTop10Version}"`)) {
+    throw new Error(`${expected.label} package profile source does not contain OWASP version ${expected.owaspTop10Version}`);
   }
 
   console.log(`Verified ${expected.label} package: ${packageJson.name} ${packageJson.version}`);

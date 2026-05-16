@@ -46,7 +46,7 @@ describe('package profile helpers', () => {
         expect(devProfile.publisher).toBe(prodProfile.publisher);
         expect(devProfile.secretPrefix).not.toBe(prodProfile.secretPrefix);
         expect(devProfile.owaspTop10Version).toBe('2025');
-        expect(prodProfile.owaspTop10Version).toBe('2021');
+        expect(prodProfile.owaspTop10Version).toBe('2025');
     });
 
     it('rewrites commands, settings, and views for the dev profile', async () => {
@@ -80,12 +80,16 @@ describe('package profile helpers', () => {
     it('builds generated profile source with the throttling command and profile-specific ids', async () => {
         const { buildGeneratedProfileSource } = loadPackagingHelpers();
         const devProfile = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'profiles', 'dev.json'), 'utf8'));
+        const prodProfile = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'profiles', 'prod.json'), 'utf8'));
 
         const source = buildGeneratedProfileSource('dev', devProfile);
+        const prodSource = buildGeneratedProfileSource('prod', prodProfile);
 
         expect(source).toContain('configureProviderThrottling');
         expect(source).toContain('"configSection": "owlvexDev"');
         expect(source).toContain('"owaspTop10Version": "2025"');
+        expect(prodSource).toContain('"configSection": "owlvex"');
+        expect(prodSource).toContain('"owaspTop10Version": "2025"');
         expect(source).toContain('"chatFocus": "owlvexDev.chat.focus"');
         expect(source).toContain('"compareScans": "owlvexDev.compareScans"');
     });
