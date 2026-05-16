@@ -4292,10 +4292,8 @@ export function activate(context: vscode.ExtensionContext) {
             const diagramChoice = await vscode.window.showQuickPick(
                 [
                     { label: 'Architecture Map', description: 'Readable module and dependency view', type: 'architecture' as const },
-                    { label: 'Security Evidence Map', description: 'Raw scanner-grounded guards, sinks, stores, integrations', type: 'evidence' as const },
-                    { label: 'Workflow Diagram', description: 'User/system flow through policy, work, data, and integrations', type: 'workflow' as const },
-                    { label: 'TDD Diff Diagram', description: 'Expected behavior compared with code evidence', type: 'tddDiff' as const },
                     { label: 'Threat Flow Diagram', description: 'STRIDE-style trust-boundary and impact path view', type: 'threatFlow' as const },
+                    { label: 'Security Evidence Map', description: 'Advanced traceability view: guards, sinks, stores, integrations', type: 'evidence' as const },
                     { label: 'Risk Lens', description: 'Scan-backed focused view plus architecture overlay', type: 'riskLens' as const },
                     { label: 'Overview', description: 'Open the combined Design Map overview', type: 'overview' as const },
                 ],
@@ -4351,10 +4349,8 @@ export function activate(context: vscode.ExtensionContext) {
                 [
                     { label: 'Overview', description: 'Combined Design Map overview', type: 'overview' as const },
                     { label: 'Architecture Map', description: 'Readable module and dependency view', type: 'architecture' as const },
-                    { label: 'Security Evidence Map', description: 'Raw scanner-grounded evidence', type: 'evidence' as const },
-                    { label: 'Workflow Diagram', description: 'User/system flow', type: 'workflow' as const },
-                    { label: 'TDD Diff Diagram', description: 'Expected behavior compared with code evidence', type: 'tddDiff' as const },
                     { label: 'Threat Flow Diagram', description: 'Trust boundaries and impact paths', type: 'threatFlow' as const },
+                    { label: 'Security Evidence Map', description: 'Advanced scanner-grounded evidence', type: 'evidence' as const },
                     { label: 'Risk Lens', description: 'Scan-backed focused view and architecture overlay', type: 'riskLens' as const },
                 ],
                 {

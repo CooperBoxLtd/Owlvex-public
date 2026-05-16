@@ -43,7 +43,7 @@ describe('design map generator', () => {
         expect(result.map.sinks).toContain('fetch');
         expect(result.map.ownershipSignals).toContain('tenantId');
         expect(result.map.scannerGuidance.join('\n')).toContain('CSRF middleware appears in code');
-        expect(vscode.workspace.fs.writeFile).toHaveBeenCalledTimes(7);
+        expect(vscode.workspace.fs.writeFile).toHaveBeenCalledTimes(5);
         const markdownWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls[0];
         expect(String(markdownWrite[0].fsPath)).toContain('.owlvex');
         const markdown = Buffer.from(markdownWrite[1]).toString('utf8');

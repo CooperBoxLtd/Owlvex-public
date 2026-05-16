@@ -293,11 +293,10 @@ Acceptance criteria:
 The current `Create Code Map` flow should become a broader `Diagrams` workflow. Owlvex needs multiple Mermaid outputs because different users need different views of the same project:
 
 - Architecture Map: readable module/component and dependency view.
-- Security Evidence Map: current scanner-grounded files, guards, sinks, stores, and integrations.
-- Workflow Diagram: product/business flow from entrypoint through policy, job, integration, and result.
-- TDD Diff Diagram: TDD expectations compared with code evidence.
 - Threat Flow Diagram: STRIDE/security-oriented trust boundaries, entrypoints, guards, and likely attack paths.
 - Risk Lens: scan-backed colored map with a focused scan-scope view and optional architecture overlay. It must distinguish risky, scanned-clean, and not-scanned files.
+- Security Evidence Map: advanced scanner-grounded files, guards, sinks, stores, and integrations.
+- Deferred: Workflow Diagram and TDD Diff Diagram. These should return only when workflow generation is application-archetype aware and TDD matching is requirement-level rather than template-level.
 
 UX direction:
 
@@ -306,7 +305,8 @@ UX direction:
 - keep `Open latest diagram` available after generation
 - do not add six separate diagram buttons to the main panel
 - default to Architecture Map for human readability
-- keep Security Evidence Map available for scanner traceability
+- keep Threat Flow and Risk Lens as the primary security views
+- keep Security Evidence Map available for scanner traceability under advanced choices
 
 Evidence rules:
 
@@ -323,10 +323,10 @@ Implementation slices:
 3. Add a `Diagrams` command/button that opens a type picker.
 4. Create an Architecture Map generator using confirmed import/call/dependency evidence first.
 5. Add evidence labels for confirmed vs inferred edges.
-6. Add Workflow Diagram generation using Design/TDD context plus code evidence.
-7. Add TDD Diff Diagram generation that classifies requirements as aligned, partial, missing, extra, contradicted, or uncertain.
-8. Add Threat Flow Diagram generation for STRIDE-selected scans.
-9. Add Risk Lens generation from completed scan findings and Design Map relationships when available.
+6. Add Threat Flow Diagram generation for STRIDE-selected scans.
+7. Add Risk Lens generation from completed scan findings and Design Map relationships when available.
+8. Defer Workflow Diagram until it is application-archetype aware.
+9. Defer TDD Diff Diagram until it classifies concrete TDD requirements as aligned, partial, missing, extra, contradicted, or uncertain.
 10. Surface diagram paths in reports only when diagrams were generated or used as scan context.
 
 Acceptance criteria:
@@ -336,7 +336,7 @@ Acceptance criteria:
 - duplicate-looking node labels are avoided
 - readable diagrams never hide which relationships are inferred
 - scanner reports can reference the Security Evidence Map for traceability
-- TDD Diff Diagram clearly shows where code and TDD agree or drift
+- TDD Diff Diagram stays deferred until it clearly shows where code and TDD agree or drift
 
 ## Current Phase Priorities
 

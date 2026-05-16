@@ -177,10 +177,12 @@ describe('reportGenerator', () => {
         const riskMap = Buffer.from(writeFile.mock.calls[1][1]).toString('utf8');
         expect(String(writeFile.mock.calls[1][0].fsPath)).toContain('risk-lens.md');
         expect(riskMap).toContain('# Owlvex Risk Lens');
+        expect(riskMap).toContain('## Fix Order');
         expect(riskMap).toContain('## Scan Scope View');
         expect(riskMap).toContain('## Architecture Overlay');
         expect(riskMap).toContain('classDef high');
         expect(riskMap).toContain('Unsanitized SQL query construction');
+        expect(riskMap).toContain('<br/>');
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
         expect(written).toContain('- AI usage: 3 request(s), 62 token(s)');

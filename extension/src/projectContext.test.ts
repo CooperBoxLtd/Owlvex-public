@@ -273,9 +273,6 @@ describe('project root helpers', () => {
             if (uri.fsPath.endsWith('architecture-map.md')) {
                 return Buffer.from('# Owlvex Architecture Map\n```mermaid\nflowchart TD\nA-->B\n```');
             }
-            if (uri.fsPath.endsWith('workflow.md')) {
-                return Buffer.from('# Owlvex Workflow Diagram\nUser-->Auth');
-            }
             if (uri.fsPath.endsWith('threat-flow.md')) {
                 return Buffer.from('# Owlvex Threat Flow Diagram\nBoundary-->Guard');
             }
@@ -288,14 +285,12 @@ describe('project root helpers', () => {
         });
 
         expect(context.summary).toContain('Design Map .owlvex\\owlvex-design-map.md');
-        expect(context.summary).toContain('Diagram Box 3 diagrams for STRIDE');
+        expect(context.summary).toContain('Diagram Box 2 diagrams for STRIDE');
         expect(context.combined).toContain('Owlvex Diagram Box context for STRIDE');
         expect(context.combined).toContain('Owlvex Architecture Map');
-        expect(context.combined).toContain('Owlvex Workflow Diagram');
         expect(context.combined).toContain('Owlvex Threat Flow Diagram');
         expect(context.designMap?.diagrams).toEqual([
             '.owlvex\\diagrams\\architecture-map.md',
-            '.owlvex\\diagrams\\workflow.md',
             '.owlvex\\diagrams\\threat-flow.md',
         ]);
     });

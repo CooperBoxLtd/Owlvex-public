@@ -26,9 +26,17 @@ function mermaidLabel(value: string, max = 80): string {
     const cleaned = value
         .replace(/\\/g, '/')
         .replace(/"/g, "'")
+        .replace(/\/n/g, ' ')
         .replace(/\r?\n/g, ' ')
         .trim();
     return cleaned.length > max ? `${cleaned.slice(0, Math.max(0, max - 1))}...` : cleaned;
+}
+
+function mermaidNodeLabel(parts: string[], max = 96): string {
+    return parts
+        .map(part => mermaidLabel(part, max))
+        .filter(Boolean)
+        .join('<br/>');
 }
 
 function riskClass(score?: number): string {
@@ -64,6 +72,20 @@ function normalizePath(value: string): string {
     return value.replace(/\\/g, '/');
 }
 
+function fileRole(file: string): 'runtime' | 'test' | 'dev' {
+    if (/(^|\/)(test|tests|__tests__|spec)(\/|$)|\.test\.|\.spec\./i.test(file)) {
+        return 'test';
+    }
+    if (/(^|\/)(scripts?|tools?|\.owlvex)(\/|$)|vite\.config|webpack\.config|rollup\.config/i.test(file)) {
+        return 'dev';
+    }
+    return 'runtime';
+}
+
+function isTestOrDevFile(file: string): boolean {
+    return fileRole(file) !== 'runtime';
+}
+
 async function loadDesignMap(root: vscode.Uri): Promise<DesignMap | null> {
     try {
         const raw = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(root, DESIGN_MAP_JSON_PATH));
@@ -83,10 +105,34 @@ function mermaidHeader(): string[] {
         '  classDef low fill:#16324a,stroke:#58a6ff,color:#fff',
         '  classDef clean fill:#12351f,stroke:#44c878,color:#fff',
         '  classDef unscanned fill:#2b2f36,stroke:#7d8590,color:#d0d7de',
+        '  classDef testfile fill:#263238,stroke:#90a4ae,color:#fff',
         '  classDef evidence fill:#102d4f,stroke:#5aa9ff,color:#fff',
         '  classDef related fill:#102d4f,stroke:#5aa9ff,color:#fff',
         '',
     ];
+}
+
+function buildFixOrderMermaid(findings: FindingItem[]): string {
+    const lines = mermaidHeader();
+    const top = findings.slice(0, 5);
+    if (!top.length) {
+        lines.push('  Clean["No findings to prioritize"]:::clean');
+    }
+    for (const [index, item] of top.entries()) {
+        const score = item.finding.riskScore ?? 0;
+        const nodeId = `Fix${index + 1}`;
+        lines.push(`  ${nodeId}["${mermaidNodeLabel([
+            `${index + 1}. ${findingTitle(item.finding)}`,
+            item.file,
+            `${findingFamily(item.finding)} | risk ${score}/10`,
+            `L${item.finding.line}${item.finding.lineEnd !== item.finding.line ? `-${item.finding.lineEnd}` : ''}`,
+        ], 84)}"]:::${riskClass(score)}`);
+        if (index > 0) {
+            lines.push(`  Fix${index} --> ${nodeId}`);
+        }
+    }
+    lines.push('```', '');
+    return lines.join('\n');
 }
 
 function buildScanScopeMermaid(entries: RiskMapEntry[], findings: FindingItem[]): string {
@@ -97,22 +143,26 @@ function buildScanScopeMermaid(entries: RiskMapEntry[], findings: FindingItem[])
         const fileFindings = findings.filter(item => item.file === file);
         const highest = Math.max(...fileFindings.map(item => item.finding.riskScore ?? 0));
         const fileId = mermaidId('File', file);
-        lines.push(`  ${fileId}["${mermaidLabel(`${file}\\nrisk ${highest}/10\\n${fileFindings.length} finding(s)`, 120)}"]:::${riskClass(highest)}`);
-        for (const [index, item] of fileFindings.slice(0, 3).entries()) {
+        const fileClass = isTestOrDevFile(file) && highest < 7 ? 'testfile' : riskClass(highest);
+        lines.push(`  ${fileId}["${mermaidNodeLabel([file, fileRole(file), `risk ${highest}/10`, `${fileFindings.length} finding(s)`], 92)}"]:::${fileClass}`);
+        for (const [index, item] of fileFindings.slice(0, 2).entries()) {
             const findingId = `${fileId}_Finding${index + 1}`;
             const score = item.finding.riskScore ?? 0;
             const strideValues = normalizeList(item.finding.stride);
-            const stride = strideValues.length ? `\\nSTRIDE: ${strideValues.slice(0, 2).join(', ')}` : '';
-            lines.push(`  ${findingId}["${mermaidLabel(`${findingTitle(item.finding)}\\n${findingFamily(item.finding)}\\nrisk ${score}/10${stride}`, 130)}"]:::${riskClass(score)}`);
+            lines.push(`  ${findingId}["${mermaidNodeLabel([
+                findingTitle(item.finding),
+                findingFamily(item.finding),
+                `risk ${score}/10${strideValues.length ? ` | STRIDE: ${strideValues.slice(0, 2).join(', ')}` : ''}`,
+            ], 96)}"]:::${riskClass(score)}`);
             lines.push(`  ${fileId} --> ${findingId}`);
 
             const contract = item.finding.evidenceContract;
-            if (contract?.guard) {
+            if (score >= 7 && contract?.guard) {
                 const guardId = `${findingId}_Guard`;
                 lines.push(`  ${guardId}{"${mermaidLabel(`${contract.guard.status}: ${contract.guard.label}`, 90)}"}:::evidence`);
                 lines.push(`  ${findingId} --> ${guardId}`);
             }
-            if (contract?.sink) {
+            if (score >= 7 && contract?.sink) {
                 const sinkId = `${findingId}_Sink`;
                 lines.push(`  ${sinkId}[("${mermaidLabel(contract.sink.label || contract.sink.expression, 90)}")]:::evidence`);
                 lines.push(`  ${findingId} --> ${sinkId}`);
@@ -122,7 +172,7 @@ function buildScanScopeMermaid(entries: RiskMapEntry[], findings: FindingItem[])
 
     if (!findingFiles.length) {
         const scanned = entries.length;
-        lines.push(`  Clean["No findings in scanned scope\\n${scanned} scanned file(s)"]:::clean`);
+        lines.push(`  Clean["${mermaidNodeLabel(['No findings in scanned scope', `${scanned} scanned file(s)`])}"]:::clean`);
     }
 
     lines.push('```', '');
@@ -156,15 +206,17 @@ function buildArchitectureOverlayMermaid(entries: RiskMapEntry[], findings: Find
         const risk = riskByFile.get(file);
         const nodeClass = risk
             ? riskClass(risk.risk)
+            : isTestOrDevFile(file) && scannedFiles.has(file)
+                ? 'testfile'
             : scannedFiles.has(file)
                 ? 'clean'
                 : 'unscanned';
-        const status = risk
-            ? `risk ${risk.risk}/10\\n${risk.count} finding(s)`
+        const statusParts = risk
+            ? [`risk ${risk.risk}/10`, `${risk.count} finding(s)`]
             : scannedFiles.has(file)
-                ? 'scanned clean'
-                : 'not scanned';
-        lines.push(`  ${nodeId}["${mermaidLabel(`${file}\\n${status}`, 110)}"]:::${nodeClass}`);
+                ? ['scanned clean']
+                : ['not scanned'];
+        lines.push(`  ${nodeId}["${mermaidNodeLabel([file, fileRole(file), ...statusParts], 92)}"]:::${nodeClass}`);
     }
 
     const included = new Set(importantFiles);
@@ -199,6 +251,12 @@ function buildRiskLensMarkdown(entries: RiskMapEntry[], designMap: DesignMap | n
         `- Files with findings: ${new Set(findings.map(item => item.file)).size}`,
         `- Total findings: ${findings.length}`,
         `- Design Map overlay: ${designMap ? 'available' : 'not available'}`,
+        '',
+        '## Fix Order',
+        '',
+        'Highest-priority findings from this scan. Start here before reading the broader overlay.',
+        '',
+        buildFixOrderMermaid(findings),
         '',
         '## Scan Scope View',
         '',

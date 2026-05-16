@@ -35,7 +35,7 @@ Instead, it formalizes that hybrid system into:
 
 - **Project Context Contract** for better AI understanding of the codebase
 - **Design Map** for local generated understanding of code structure, trust boundaries, and scanner guidance
-- **Diagram Box** for local Mermaid Architecture, Evidence, Workflow, TDD Diff, Threat Flow, and Risk Lens views that can ground STRIDE/design-aware review
+- **Diagram Box** for local Mermaid Architecture, Threat Flow, Risk Lens, and advanced Evidence views that can ground STRIDE/design-aware review
 - **Three explicit scan tiers** for better execution clarity
 
 Those tiers describe the final product posture for a finding or file. AI may be attempted in the background, but if only deterministic findings survive into the final result, the file should still read as `Static proof` rather than as a degraded AI result.

@@ -556,7 +556,7 @@ async function tryReadDesignMap(projectRoot?: vscode.Uri, enabled = true): Promi
     }
 }
 
-async function tryReadDiagramFile(projectRoot: vscode.Uri, type: 'architecture' | 'evidence' | 'workflow' | 'tddDiff' | 'threatFlow'): Promise<{ label: string; content: string } | undefined> {
+async function tryReadDiagramFile(projectRoot: vscode.Uri, type: 'architecture' | 'evidence' | 'threatFlow'): Promise<{ label: string; content: string } | undefined> {
     const diagramPath = getDefaultDiagramMarkdownPath(projectRoot.fsPath, type);
     try {
         const diagramUri = vscode.Uri.file(diagramPath);
@@ -582,7 +582,7 @@ async function tryReadStrideDiagramContext(projectRoot?: vscode.Uri, enabled = t
     if (!projectRoot || !enabled || !strideSelected) {
         return undefined;
     }
-    const diagramTypes: Array<'architecture' | 'evidence' | 'workflow' | 'tddDiff' | 'threatFlow'> = ['architecture', 'workflow', 'threatFlow', 'evidence', 'tddDiff'];
+    const diagramTypes: Array<'architecture' | 'evidence' | 'threatFlow'> = ['architecture', 'threatFlow', 'evidence'];
     const diagrams: Array<{ label: string; content: string }> = [];
     for (const type of diagramTypes) {
         const diagram = await tryReadDiagramFile(projectRoot, type);

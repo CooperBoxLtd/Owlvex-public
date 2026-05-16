@@ -71,13 +71,11 @@ The single `Create Code Map` action is no longer the right product shape. Owlvex
 The Diagram Box should contain these diagram types:
 
 - **Architecture Map**: a readable module/component map that shows entrypoints, major components, confirmed imports/calls, data stores, integrations, and security boundaries.
-- **Security Evidence Map**: the current scanner-grounded map of files, guards, sinks, stores, and integrations. This is the evidence layer and should remain traceable to exact files.
-- **Workflow Diagram**: a product/business flow such as user request -> auth -> approval -> job -> agent -> external system -> result. This is strongest when Design/TDD context exists.
-- **TDD Diff Diagram**: a comparison between expected behavior in the TDD Box and actual code evidence. It should show implemented, missing, partial, extra, and contradicted behavior.
 - **Threat Flow Diagram**: a STRIDE-category view of trust boundaries, entrypoints, sensitive operations, guards, and likely attack paths. It should separate Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, and Elevation of Privilege instead of drawing one generic threat path.
 - **Risk Lens**: a scan-backed colored map created after scans. It contains a focused scan-scope view plus an architecture overlay when the Design Map exists. Risky files, scanned-clean files, and not-scanned files must be visually distinct.
+- **Security Evidence Map**: the advanced scanner-grounded map of files, guards, sinks, stores, and integrations. This is the traceability layer and should remain available, but not be the default developer view.
 
-The default user-facing diagram should be the readable Architecture Map. The Security Evidence Map should still be available because it is the defensible scanner artifact.
+The default user-facing diagram should be the readable Architecture Map. After scans, the Risk Lens should become the most useful triage diagram.
 
 ### Diagram Evidence Levels
 
@@ -104,9 +102,9 @@ flowchart TD
   Sink[("Security-relevant sink")]
 ```
 
-### TDD Diff Diagram
+### Deferred: TDD Diff Diagram
 
-The TDD Diff Diagram should compare user expectations against code evidence.
+The TDD Diff Diagram should not be a primary output until it compares user expectations against code evidence at requirement level.
 
 Model:
 
@@ -137,11 +135,11 @@ flowchart TD
   Decision1 -- "no" --> Missing1["Missing requirement"]
 ```
 
-The TDD Diff Diagram should be used as scan context only as grounding. It does not create deterministic proof by itself.
+The TDD Diff Diagram should be used as scan context only as grounding. It does not create deterministic proof by itself. Until requirement extraction and evidence matching are real, keep this feature out of the primary UI.
 
-### Workflow Diagram
+### Deferred: Workflow Diagram
 
-The Workflow Diagram should express how the application behaves from a user or system-event point of view. It should prefer:
+The Workflow Diagram should not be a primary output until it expresses how the application behaves from a user or system-event point of view. It should prefer:
 
 - user/operator entrypoints
 - authentication and authorization gates
@@ -150,7 +148,7 @@ The Workflow Diagram should express how the application behaves from a user or s
 - external integrations
 - result persistence and feedback loops
 
-This diagram is not a replacement for the evidence map. It is the developer-facing explanation layer.
+This diagram is not a replacement for the evidence map. It is the developer-facing explanation layer, so it must be application-archetype aware before it returns to the primary diagram picker.
 
 ## Design Map Output
 
@@ -162,8 +160,6 @@ Owlvex should produce these local artifacts:
 - `owlvex-design-map.json` for the scanner/fix engine
 - `owlvex-diagrams/architecture-map.md`
 - `owlvex-diagrams/security-evidence-map.md`
-- `owlvex-diagrams/workflow.md`
-- `owlvex-diagrams/tdd-diff.md`
 - `owlvex-diagrams/threat-flow.md`
 - `owlvex-diagrams/risk-lens.md` after scans
 
@@ -223,10 +219,9 @@ The Design Map should be used as a local context artifact for:
 The Diagram Box should also feed STRIDE/design-aware scans. When STRIDE is selected and diagram artifacts exist, Owlvex should include bounded local context from:
 
 - Architecture Map
-- Workflow Diagram
 - Threat Flow Diagram
-- Security Evidence Map
-- TDD Diff Diagram when available
+- Risk Lens after a scan
+- Security Evidence Map as advanced traceability context
 
 This lets STRIDE review use generated diagrams even when the user has not supplied a separate TDD or design file. The diagrams remain grounding context, not deterministic proof.
 
