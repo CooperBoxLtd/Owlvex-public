@@ -959,6 +959,30 @@ async function openOrCreateDesignContext(): Promise<{ uri: vscode.Uri; created: 
 
     const config = vscode.workspace.getConfiguration(PROFILE.configSection);
     let configuredFile = config.get<string>(DESIGN_CONTEXT_FILE_SETTING, '').trim();
+    if (configuredFile) {
+        const choice = await vscode.window.showQuickPick(
+            [
+                { label: 'Open current Design Box file', action: 'open' as const },
+                { label: 'Select different Design Box file', action: 'select' as const },
+                { label: 'Use default .owlvex/design/system.md', action: 'default' as const },
+            ],
+            {
+                title: 'Owlvex Design Box',
+                placeHolder: `Current: ${configuredFile}`,
+            },
+        );
+        if (!choice) {
+            const targetUri = vscode.Uri.file(resolveUserConfiguredPath(configuredFile, projectRoot.uri));
+            return { uri: targetUri, created: false, relativePath: vscode.workspace.asRelativePath(targetUri, false) };
+        }
+        if (choice.action === 'select') {
+            configuredFile = '';
+        } else if (choice.action === 'default') {
+            configuredFile = vscode.workspace.asRelativePath(vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR, 'system.md')), false);
+            await persistWorkspaceSetting(DESIGN_CONTEXT_FILE_SETTING, configuredFile);
+        }
+    }
+
     if (!configuredFile) {
         const selected = await vscode.window.showOpenDialog({
             canSelectFiles: true,

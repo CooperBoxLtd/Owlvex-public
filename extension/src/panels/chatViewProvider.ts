@@ -236,7 +236,7 @@ type UsageTelemetryEventName =
 type UsageTelemetryEmitter = (eventName: UsageTelemetryEventName, metadata?: Record<string, unknown>) => void;
 const MAX_PERSISTED_MESSAGES = 40;
 const CONTEXT_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.py', '.java', '.cs', '.go', '.rs', '.php', '.rb', '.cpp', '.c', '.h'];
-const DEFAULT_WORKING_SCOPE: WorkingScope = 'scanFolder';
+const DEFAULT_WORKING_SCOPE: WorkingScope = 'scanChangedFiles';
 const WORKSPACE_CONTEXT_FILES = ['README.md', 'package.json', 'pyproject.toml', 'go.mod', 'Cargo.toml', 'pom.xml'];
 const MAX_SINGLE_FILE_REWRITE_RATIO = 0.75;
 const MAX_REWRITE_LINE_THRESHOLD = 20;
@@ -4674,12 +4674,41 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        if (action === 'clearDesignContext') {
+            const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+            const target = vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+            await config.update('designContextFile', '', target);
+            this.messages.push({
+                role: 'system',
+                content: 'Design Box cleared for this workspace. Scans will continue with the project root, Design Map, frameworks, and any enabled TDD or Drift context.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
         if (action === 'openTddBox') {
             await vscode.commands.executeCommand(PROFILE.commands.openTddBox);
             const projectContextSummary = getProjectContextSummaryFromConfig();
             this.messages.push({
                 role: 'system',
                 content: `TDD Box opened or updated. Current project grounding: ${projectContextSummary}.`,
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'clearTddBox') {
+            const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+            const target = vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+            await config.update('projectContextFile', '', target);
+            await config.update('tddBoxEnabled', false, target);
+            this.messages.push({
+                role: 'system',
+                content: 'TDD Box cleared for this workspace. Scans will no longer include a TDD/spec file unless you select one again.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -4717,6 +4746,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             this.messages.push({
                 role: 'system',
                 content: 'Opened Drift Box. Configure custom behavior/contract scripts for this project. Drift checks run locally after approval and report pass/fail only; they do not duplicate Owlvex security scanning or block scans, fixes, post-fix verification, or security-clean status.',
+                kind: 'advisory',
+            });
+            void this.persistState();
+            this.refresh();
+            return;
+        }
+
+        if (action === 'clearDriftBox') {
+            const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+            const target = vscode.workspace.workspaceFolders?.length ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+            await config.update('driftBoxFile', '', target);
+            await config.update('driftScriptsRoot', '', target);
+            await config.update('driftBoxEnabled', false, target);
+            this.messages.push({
+                role: 'system',
+                content: 'Drift Box cleared for this workspace. Drift checks will not run until a Drift config is selected and enabled again.',
                 kind: 'advisory',
             });
             void this.persistState();
@@ -6619,7 +6664,11 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                 <button class="chip" data-action="selectFrameworks">Frameworks</button>
                 <button class="chip" data-action="createDesignMap">Design Map</button>
                 <button class="chip" data-action="openTddBox">TDD Box</button>
+                <button class="chip" data-action="clearTddBox">Clear TDD</button>
+                <button class="chip" data-action="openDesignContext">Design File</button>
+                <button class="chip" data-action="clearDesignContext">Clear Design</button>
                 <button class="chip" data-action="openDriftBox">Drift Box</button>
+                <button class="chip" data-action="clearDriftBox">Clear Drift</button>
               </div>
             </div>
           </details>
@@ -6760,9 +6809,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
 
     function applySettingsVisibility() {
       if (settingsPanelEl) {
-        settingsPanelEl.hidden = !settingsOpen;
-        settingsPanelEl.classList.toggle('is-hidden', !settingsOpen);
-        settingsPanelEl.style.display = settingsOpen ? '' : 'none';
+        settingsPanelEl.hidden = true;
+        settingsPanelEl.classList.add('is-hidden');
+        settingsPanelEl.style.display = 'none';
       }
       if (workflowPanelEl) {
         workflowPanelEl.hidden = !settingsOpen;
