@@ -151,6 +151,7 @@ interface ChatState {
     readinessDetail: string;
     groundingStatus: string;
     groundingWarning: string;
+    driftStatus: string;
 }
 
 type WorkingScope = 'scanFile' | 'scanSelectedFiles' | 'scanChangedFiles' | 'scanGitTarget' | 'scanOpenEditors' | 'scanFolder';
@@ -5503,6 +5504,10 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const editorContext = this.buildEditorContext();
         const provider = this.registry.getActive();
         const projectContextSummary = getProjectContextSummaryFromConfig();
+        const config = vscode.workspace.getConfiguration(PROFILE.configSection);
+        const configuredDriftFile = config.get<string>('driftBoxFile', '').trim();
+        const driftBoxEnabled = config.get<boolean>('driftBoxEnabled', Boolean(configuredDriftFile));
+        const driftStatus = driftBoxEnabled ? 'on' : configuredDriftFile ? 'configured' : 'off';
         const workingScope = this.getWorkingScope();
         const hasLastScan = this.storage.get<string>(LAST_SCAN_TARGET_KEY, 'No scan run yet') !== 'No scan run yet';
         const workspaceSummary = this.getWorkspaceSummary();
@@ -5548,6 +5553,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             activeMode: this.currentMode,
             activeModeLabel: getConversationModeLabel(this.currentMode),
             activeModeHint: getConversationModeHint(this.currentMode),
+            driftStatus,
             ...workflowStatus,
         };
     }
@@ -6674,7 +6680,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
               </div>
               <div class="section-actions">
                 <button class="chip" data-action="selectFrameworks" title="Choose security lenses such as OWASP, STRIDE, CWE, NIST, PCI DSS, and Clean Code.">Scan Profile</button>
-                <button class="chip" data-action="createDesignMap" title="Generate or refresh a Mermaid code map from the selected project root.">Create Code Map</button>
+                <button class="chip" data-action="createDesignMap" title="Create Mermaid diagrams: architecture, evidence, workflow, TDD diff, threat flow, or fix impact.">Diagrams</button>
                 <button class="chip" data-action="openTddBox" title="Select or open a Markdown/text spec file that describes expected behavior for AI reasoning.">Spec File</button>
                 <button class="chip" data-action="clearTddBox" title="Remove the configured spec/TDD file from scan and fix context.">Clear Spec</button>
                 <button class="chip" data-action="openDesignContext" title="Select or open architecture, threat-model, PDF, Word, Markdown, or text design notes.">Design Notes</button>
@@ -6926,6 +6932,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
 
     function getDriftStatus(state) {
+      if (state.driftStatus) {
+        return state.driftStatus;
+      }
       const summary = ((state.projectContextSummary || '') + ' ' + (state.groundingStatus || '')).toLowerCase();
       if (summary.includes('drift box enabled') || summary.includes('drift enabled')) {
         return 'on';

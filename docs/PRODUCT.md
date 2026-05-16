@@ -293,7 +293,9 @@ Current remediation posture:
 
 **Project-grounded AI assistance** - future workflow where users can provide a local TDD-style project context contract so the AI lane better understands goals, roles, architecture, trust boundaries, and critical flows without changing the deterministic truth boundary.
 
-**Design Map** - generated local project understanding created by Owlvex from code plus optional Design/TDD context. It should identify entrypoints, modules, data stores, trust boundaries, auth/authorization flows, sensitive data, external integrations, and scanner guidance. It is not deterministic proof by itself, but it should constrain AI scan/fix behavior and reduce false positives caused by invented domain models.
+**Diagram Box** - local Mermaid diagram workflow for project understanding. It should include an Architecture Map, Security Evidence Map, Workflow Diagram, TDD Diff Diagram, Threat Flow Diagram, and Fix Impact Diagram. The Architecture and Workflow views help developers understand the application; the Security Evidence Map remains the scanner-grounded traceability layer. Diagrams must distinguish confirmed relationships from inferred relationships.
+
+**Design Map** - generated local project understanding created by Owlvex from code plus optional Design/TDD context. It should identify entrypoints, modules, data stores, trust boundaries, auth/authorization flows, sensitive data, external integrations, and scanner guidance. It is not deterministic proof by itself, but it should constrain AI scan/fix behavior and reduce false positives caused by invented domain models. Going forward, the Design Map is part of the broader Diagram Box rather than the only visual output.
 
 **Working-scope-controlled AI access** - the assistant's bottom scope dropdown should define both what Owlvex scans and what AI is allowed to inspect as context. `Active file`, `Selected files`, `Open editors`, and `Workspace` should act as explicit AI context boundaries rather than letting repo access become an invisible always-on mode.
 

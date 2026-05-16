@@ -288,6 +288,56 @@ Acceptance criteria:
 - report buttons are not duplicated between the drawer and the working composer
 - no setup/context/advanced panel is visible by default after reinstall, reload, or state refresh
 
+## Diagram Box Workstream
+
+The current `Create Code Map` flow should become a broader `Diagrams` workflow. Owlvex needs multiple Mermaid outputs because different users need different views of the same project:
+
+- Architecture Map: readable module/component and dependency view.
+- Security Evidence Map: current scanner-grounded files, guards, sinks, stores, and integrations.
+- Workflow Diagram: product/business flow from entrypoint through policy, job, integration, and result.
+- TDD Diff Diagram: TDD expectations compared with code evidence.
+- Threat Flow Diagram: STRIDE/security-oriented trust boundaries, entrypoints, guards, and likely attack paths.
+- Fix Impact Diagram: before/after view for proposed or applied fixes.
+
+UX direction:
+
+- keep one `Diagrams` button in the Context drawer
+- open a diagram type picker from that button
+- keep `Open latest diagram` available after generation
+- do not add six separate diagram buttons to the main panel
+- default to Architecture Map for human readability
+- keep Security Evidence Map available for scanner traceability
+
+Evidence rules:
+
+- solid Mermaid edge means confirmed import/call or confirmed scanner evidence
+- dotted Mermaid edge means inferred from folder/name/design/TDD context
+- every generated diagram must include an evidence legend
+- inferred relationships must not be used as deterministic proof
+- TDD/design-derived relationships can ground AI reasoning but cannot suppress deterministic findings alone
+
+Implementation slices:
+
+1. Rename the current generated map internally to `Security Evidence Map`.
+2. Add a `DiagramType` model and output paths under `.owlvex/diagrams/`.
+3. Add a `Diagrams` command/button that opens a type picker.
+4. Create an Architecture Map generator using confirmed import/call/dependency evidence first.
+5. Add evidence labels for confirmed vs inferred edges.
+6. Add Workflow Diagram generation using Design/TDD context plus code evidence.
+7. Add TDD Diff Diagram generation that classifies requirements as aligned, partial, missing, extra, contradicted, or uncertain.
+8. Add Threat Flow Diagram generation for STRIDE-selected scans.
+9. Add Fix Impact Diagram generation from fix preview and post-fix verification state.
+10. Surface diagram paths in reports only when diagrams were generated or used as scan context.
+
+Acceptance criteria:
+
+- generated Mermaid is copy-pasteable into Mermaid viewers
+- filenames are not truncated in a way that loses meaning
+- duplicate-looking node labels are avoided
+- readable diagrams never hide which relationships are inferred
+- scanner reports can reference the Security Evidence Map for traceability
+- TDD Diff Diagram clearly shows where code and TDD agree or drift
+
 ## Current Phase Priorities
 
 The next implementation phase should not treat language count as the main measure of product quality.

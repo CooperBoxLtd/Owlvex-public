@@ -43,14 +43,15 @@ describe('design map generator', () => {
         expect(result.map.sinks).toContain('fetch');
         expect(result.map.ownershipSignals).toContain('tenantId');
         expect(result.map.scannerGuidance.join('\n')).toContain('CSRF middleware appears in code');
-        expect(vscode.workspace.fs.writeFile).toHaveBeenCalledTimes(2);
+        expect(vscode.workspace.fs.writeFile).toHaveBeenCalledTimes(8);
         const markdownWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls[0];
         expect(String(markdownWrite[0].fsPath)).toContain('.owlvex');
         const markdown = Buffer.from(markdownWrite[1]).toString('utf8');
         expect(markdown).toContain('# Owlvex Design Map');
         expect(markdown).toContain('```mermaid');
         expect(markdown).toContain('flowchart TD');
-        expect(markdown).toContain('Application runtime');
+        expect(markdown).toContain('Application architecture');
+        expect(markdown).toContain('Diagram Box Outputs');
         expect(markdown).toContain('route: src/routes/documents.js');
         expect(markdown).toContain('entrypoint: src/server.js');
         expect(result.map.entrypoints).toEqual(['src/server.js']);
@@ -110,6 +111,9 @@ describe('design map generator', () => {
         expect(markdown).toContain('localStorage');
         expect(markdown).toContain('ipcRenderer.invoke');
         expect(markdown).not.toContain('spawn');
+        const evidenceWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls.find(call => String(call[0].fsPath).includes('security-evidence-map.md'));
+        expect(evidenceWrite).toBeTruthy();
+        expect(Buffer.from(evidenceWrite[1]).toString('utf8')).toContain('# Owlvex Security Evidence Map');
     });
 
     it('does not treat generic request or raw wording as a sink without API evidence', async () => {

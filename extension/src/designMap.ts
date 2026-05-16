@@ -4,6 +4,15 @@ import * as vscode from 'vscode';
 
 const DEFAULT_DESIGN_MAP_MARKDOWN = path.join('.owlvex', 'owlvex-design-map.md');
 const DEFAULT_DESIGN_MAP_JSON = path.join('.owlvex', 'owlvex-design-map.json');
+const DEFAULT_DIAGRAM_DIR = path.join('.owlvex', 'diagrams');
+const DIAGRAM_PATHS = {
+    architecture: path.join(DEFAULT_DIAGRAM_DIR, 'architecture-map.md'),
+    evidence: path.join(DEFAULT_DIAGRAM_DIR, 'security-evidence-map.md'),
+    workflow: path.join(DEFAULT_DIAGRAM_DIR, 'workflow.md'),
+    tddDiff: path.join(DEFAULT_DIAGRAM_DIR, 'tdd-diff.md'),
+    threatFlow: path.join(DEFAULT_DIAGRAM_DIR, 'threat-flow.md'),
+    fixImpact: path.join(DEFAULT_DIAGRAM_DIR, 'fix-impact.md'),
+} as const;
 const MAX_FILES = 250;
 const MAX_FILE_BYTES = 250_000;
 const SOURCE_EXTENSIONS = new Set(['.js', '.jsx', '.ts', '.tsx', '.mjs', '.cjs', '.py', '.go', '.cs', '.java', '.rs', '.php', '.rb']);
@@ -51,6 +60,7 @@ export interface DesignMapGenerationResult {
     map: DesignMap;
     markdownUri: vscode.Uri;
     jsonUri: vscode.Uri;
+    diagramUris: Record<keyof typeof DIAGRAM_PATHS, vscode.Uri>;
     filesScanned: number;
 }
 
@@ -358,6 +368,197 @@ function buildMermaid(map: DesignMap): string {
     return lines.join('\n');
 }
 
+function buildMermaidLegend(): string {
+    return [
+        'Legend:',
+        '',
+        '- Solid arrow: confirmed import/call or scanner evidence.',
+        '- Dotted arrow: inferred boundary or relationship.',
+        '- Diamond: guard or policy.',
+        '- Cylinder: data store.',
+        '- Rounded node: security-relevant sink.',
+        '- Slashed node: external integration.',
+    ].join('\n');
+}
+
+function buildArchitectureMermaid(map: DesignMap): string {
+    const runtimeFiles = map.files.filter(isRuntimeFile);
+    const importantFiles = runtimeFiles
+        .filter(file => file.entrypoints.length || file.routes.length || file.dependsOn.length || map.relationships.some(edge => edge.to === file.path))
+        .slice(0, 36);
+    const selectedPaths = new Set(importantFiles.map(file => file.path));
+    const nodeIds = new Map<string, string>();
+    importantFiles.forEach((file, index) => nodeIds.set(file.path, stableNodeId(file.path, index)));
+
+    const lines = [
+        'flowchart TD',
+        '  subgraph App["Application architecture"]',
+    ];
+    for (const file of importantFiles) {
+        const id = nodeIds.get(file.path);
+        if (!id) continue;
+        lines.push(`    ${id}["${mermaidLabel(`${file.kind}: ${file.path}`, 96)}"]`);
+    }
+    lines.push('  end');
+
+    const confirmedEdges = map.relationships
+        .filter(edge => edge.kind === 'imports' && selectedPaths.has(edge.from) && selectedPaths.has(edge.to))
+        .slice(0, 80);
+    for (const edge of confirmedEdges) {
+        lines.push(`  ${nodeIds.get(edge.from)} -->|confirmed import| ${nodeIds.get(edge.to)}`);
+    }
+
+    const boundaryEdges = map.relationships
+        .filter(edge => edge.kind === 'runtime-boundary' && selectedPaths.has(edge.from) && selectedPaths.has(edge.to))
+        .slice(0, 20);
+    for (const edge of boundaryEdges) {
+        lines.push(`  ${nodeIds.get(edge.from)} -. boundary .-> ${nodeIds.get(edge.to)}`);
+    }
+
+    const unlinkedGroups = uniq(runtimeFiles
+        .map(file => file.path.split('/').slice(0, 2).join('/'))
+        .filter(group => group && !importantFiles.some(file => file.path.startsWith(`${group}/`) || file.path === group)))
+        .slice(0, 12);
+    for (const [index, group] of unlinkedGroups.entries()) {
+        lines.push(`  Group${index + 1}["inferred module: ${mermaidLabel(group, 48)}"]`);
+    }
+
+    if (!importantFiles.length && !unlinkedGroups.length) {
+        lines.push('  AppRoot["No strong architecture relationships detected"]');
+    }
+
+    return lines.join('\n');
+}
+
+function buildWorkflowMermaid(map: DesignMap): string {
+    const routeFiles = map.files.filter(file => isRuntimeFile(file) && file.routes.length).slice(0, 8);
+    const policyFiles = map.files.filter(file => isRuntimeFile(file) && (file.kind === 'policy' || file.guards.length)).slice(0, 8);
+    const jobLikeFiles = map.files.filter(file => /job|queue|message|workflow|approval|execution/i.test(file.path)).slice(0, 8);
+    const storeFiles = map.files.filter(file => isRuntimeFile(file) && file.dataStores.length).slice(0, 6);
+    const integrationFiles = map.files.filter(file => isRuntimeFile(file) && file.externalIntegrations.length).slice(0, 6);
+
+    const lines = [
+        'flowchart TD',
+        '  User["User / external actor"]',
+        '  User --> Entry["Application entrypoint or route"]',
+    ];
+    for (const [index, file] of routeFiles.entries()) {
+        lines.push(`  Route${index + 1}["route: ${mermaidLabel(file.routes.slice(0, 3).join(', ') || file.path, 72)}"]`);
+        lines.push(index === 0 ? `  Entry --> Route${index + 1}` : `  Route${index} --> Route${index + 1}`);
+    }
+    if (!routeFiles.length) {
+        lines.push('  Entry -. inferred .-> Runtime["Runtime module flow not route-based"]');
+    }
+
+    const previous = routeFiles.length ? `Route${routeFiles.length}` : 'Runtime';
+    if (policyFiles.length) {
+        lines.push(`  ${previous} --> Policy{"Auth / policy guard"}`);
+        for (const [index, file] of policyFiles.entries()) {
+            lines.push(`  Policy --> Guard${index + 1}["${mermaidLabel(file.guards.slice(0, 3).join(', ') || file.path, 64)}"]`);
+        }
+    } else {
+        lines.push(`  ${previous} -. uncertain .-> Policy{"Auth / policy guard not clearly mapped"}`);
+    }
+
+    if (jobLikeFiles.length) {
+        lines.push('  Policy --> Work["Command / job / workflow dispatch"]');
+        for (const [index, file] of jobLikeFiles.entries()) {
+            lines.push(`  Work --> Work${index + 1}["${mermaidLabel(file.path, 72)}"]`);
+        }
+    } else {
+        lines.push('  Policy -. inferred .-> Work["Work / side-effect boundary"]');
+    }
+
+    let responseSourceCount = 0;
+    if (storeFiles.length) {
+        lines.push('  Work --> Store[("Persistence")]');
+        for (const [index, file] of storeFiles.entries()) {
+            lines.push(`  Store --> StoreFile${index + 1}["${mermaidLabel(file.path, 72)}"]`);
+        }
+        lines.push('  Store --> Response["Result / response / report"]');
+        responseSourceCount += 1;
+    }
+
+    if (integrationFiles.length) {
+        lines.push('  Work --> Integration[/"External integration"/]');
+        for (const [index, file] of integrationFiles.entries()) {
+            lines.push(`  Integration --> IntegrationFile${index + 1}["${mermaidLabel(file.path, 72)}"]`);
+        }
+        lines.push('  Integration --> Response["Result / response / report"]');
+        responseSourceCount += 1;
+    }
+
+    if (!responseSourceCount) {
+        lines.push('  Work -. uncertain .-> Response["Result / response / report"]');
+    }
+    lines.push('  Response --> User');
+    return lines.join('\n');
+}
+
+function buildThreatFlowMermaid(map: DesignMap): string {
+    const guardLabel = map.guards.slice(0, 4).join(', ') || 'No confirmed guard';
+    const sinkLabel = map.sinks.slice(0, 4).join(', ') || 'No sensitive sink found';
+    const storeLabel = map.dataStores.slice(0, 4).join(', ') || 'No data store found';
+    const integrationLabel = map.externalIntegrations.slice(0, 4).join(', ') || 'No external integration found';
+    return [
+        'flowchart TD',
+        '  Actor["Actor / input source"] --> Boundary{"Trust boundary"}',
+        `  Boundary --> Guard{"${mermaidLabel(guardLabel, 72)}"}`,
+        `  Guard --> Sink[("${mermaidLabel(sinkLabel, 72)}")]`,
+        `  Guard --> Store[("${mermaidLabel(storeLabel, 72)}")]`,
+        `  Guard --> Integration[/"${mermaidLabel(integrationLabel, 72)}"/]`,
+        '  Sink --> Impact["Potential impact path"]',
+        '  Store --> Impact',
+        '  Integration --> Impact',
+    ].join('\n');
+}
+
+function buildTddDiffMermaid(map: DesignMap): string {
+    const ownership = map.ownershipSignals.length ? 'Ownership / authorization model found in code' : 'No confirmed ownership model in code';
+    const guards = map.guards.length ? 'Guard or policy signals found' : 'No guard or policy signals found';
+    const integrations = map.externalIntegrations.length ? 'External integration behavior found' : 'No external integration behavior found';
+    return [
+        'flowchart TD',
+        '  TDD1["TDD expectation: ownership and authorization rules"] --> Check1{"Code evidence?"}',
+        `  Code1["${mermaidLabel(ownership, 72)}"] --> Check1`,
+        map.ownershipSignals.length ? '  Check1 --> Aligned1["Evidence present"]' : '  Check1 --> Missing1["Missing or uncertain"]',
+        '  TDD2["TDD expectation: protected sensitive workflows"] --> Check2{"Code evidence?"}',
+        `  Code2["${mermaidLabel(guards, 72)}"] --> Check2`,
+        map.guards.length ? '  Check2 --> Aligned2["Evidence present"]' : '  Check2 --> Missing2["Missing or uncertain"]',
+        '  TDD3["TDD expectation: integrations and side effects are controlled"] --> Check3{"Code evidence?"}',
+        `  Code3["${mermaidLabel(integrations, 72)}"] --> Check3`,
+        map.externalIntegrations.length ? '  Check3 --> Review3["Review against Design/TDD context"]' : '  Check3 --> Uncertain3["No integration evidence found"]',
+    ].join('\n');
+}
+
+function buildFixImpactMermaid(): string {
+    return [
+        'flowchart TD',
+        '  Finding["Finding"] --> Preview["Fix preview"]',
+        '  Preview --> Review{"User review"}',
+        '  Review -- "Keep fix" --> Changed["Changed files"]',
+        '  Review -- "Discard fix" --> Original["Original code remains"]',
+        '  Changed --> Verify["Post-fix verification scan"]',
+        '  Verify --> Clean["Cleared findings"]',
+        '  Verify --> Continue["Continuation queue for remaining findings"]',
+    ].join('\n');
+}
+
+function buildDiagramMarkdown(title: string, description: string, mermaid: string): string {
+    return [
+        `# ${title}`,
+        '',
+        description,
+        '',
+        buildMermaidLegend(),
+        '',
+        '```mermaid',
+        mermaid,
+        '```',
+        '',
+    ].join('\n');
+}
+
 function buildMarkdown(map: DesignMap): string {
     const bullet = (values: string[], empty: string) => values.length ? values.map(value => `- ${value}`).join('\n') : `- ${empty}`;
     const fileLines = map.files.slice(0, 80).map(file => {
@@ -385,8 +586,17 @@ function buildMarkdown(map: DesignMap): string {
         'Copy this block into any Mermaid renderer to view the map.',
         '',
         '```mermaid',
-        buildMermaid(map),
+        buildArchitectureMermaid(map),
         '```',
+        '',
+        '## Diagram Box Outputs',
+        '',
+        '- Architecture Map: `.owlvex/diagrams/architecture-map.md`',
+        '- Security Evidence Map: `.owlvex/diagrams/security-evidence-map.md`',
+        '- Workflow Diagram: `.owlvex/diagrams/workflow.md`',
+        '- TDD Diff Diagram: `.owlvex/diagrams/tdd-diff.md`',
+        '- Threat Flow Diagram: `.owlvex/diagrams/threat-flow.md`',
+        '- Fix Impact Diagram: `.owlvex/diagrams/fix-impact.md`',
         '',
         '## Entrypoints',
         '',
@@ -543,18 +753,62 @@ export async function generateDesignMap(projectRoot: vscode.Uri): Promise<Design
 
     const markdownUri = vscode.Uri.file(path.join(root, DEFAULT_DESIGN_MAP_MARKDOWN));
     const jsonUri = vscode.Uri.file(path.join(root, DEFAULT_DESIGN_MAP_JSON));
+    const diagramUris: Record<keyof typeof DIAGRAM_PATHS, vscode.Uri> = {
+        architecture: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.architecture)),
+        evidence: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.evidence)),
+        workflow: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.workflow)),
+        tddDiff: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.tddDiff)),
+        threatFlow: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.threatFlow)),
+        fixImpact: vscode.Uri.file(path.join(root, DIAGRAM_PATHS.fixImpact)),
+    };
     await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(markdownUri.fsPath)));
+    await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.join(root, DEFAULT_DIAGRAM_DIR)));
     await vscode.workspace.fs.writeFile(markdownUri, Buffer.from(buildMarkdown(map), 'utf8'));
     await vscode.workspace.fs.writeFile(jsonUri, Buffer.from(JSON.stringify(map, null, 2), 'utf8'));
+    await vscode.workspace.fs.writeFile(diagramUris.architecture, Buffer.from(buildDiagramMarkdown(
+        'Owlvex Architecture Map',
+        'Readable module/component map. Solid edges are confirmed imports/calls; dotted edges are inferred boundaries.',
+        buildArchitectureMermaid(map),
+    ), 'utf8'));
+    await vscode.workspace.fs.writeFile(diagramUris.evidence, Buffer.from(buildDiagramMarkdown(
+        'Owlvex Security Evidence Map',
+        'Scanner-grounded file, guard, sink, store, and integration evidence. This is the traceability layer.',
+        buildMermaid(map),
+    ), 'utf8'));
+    await vscode.workspace.fs.writeFile(diagramUris.workflow, Buffer.from(buildDiagramMarkdown(
+        'Owlvex Workflow Diagram',
+        'Developer-facing flow from entrypoint through policy, work dispatch, persistence, integrations, and response.',
+        buildWorkflowMermaid(map),
+    ), 'utf8'));
+    await vscode.workspace.fs.writeFile(diagramUris.tddDiff, Buffer.from(buildDiagramMarkdown(
+        'Owlvex TDD Diff Diagram',
+        'Initial TDD/code comparison scaffold. Use this to spot where expected behavior aligns with or drifts from code evidence.',
+        buildTddDiffMermaid(map),
+    ), 'utf8'));
+    await vscode.workspace.fs.writeFile(diagramUris.threatFlow, Buffer.from(buildDiagramMarkdown(
+        'Owlvex Threat Flow Diagram',
+        'STRIDE-oriented view of trust boundaries, guards, sensitive operations, stores, integrations, and possible impact paths.',
+        buildThreatFlowMermaid(map),
+    ), 'utf8'));
+    await vscode.workspace.fs.writeFile(diagramUris.fixImpact, Buffer.from(buildDiagramMarkdown(
+        'Owlvex Fix Impact Diagram',
+        'Generic fix-review workflow map showing preview, user decision, verification, and continuation behavior.',
+        buildFixImpactMermaid(),
+    ), 'utf8'));
 
     return {
         map,
         markdownUri,
         jsonUri,
+        diagramUris,
         filesScanned: evidence.length,
     };
 }
 
 export function getDefaultDesignMapMarkdownPath(projectRootPath: string): string {
     return path.join(projectRootPath, DEFAULT_DESIGN_MAP_MARKDOWN);
+}
+
+export function getDefaultDiagramMarkdownPath(projectRootPath: string, type: keyof typeof DIAGRAM_PATHS): string {
+    return path.join(projectRootPath, DIAGRAM_PATHS[type]);
 }

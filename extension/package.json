@@ -91,11 +91,11 @@
       },
       {
         "command": "owlvex.createDesignMap",
-        "title": "Owlvex: Create Design Map"
+        "title": "Owlvex: Create Diagrams"
       },
       {
         "command": "owlvex.openDesignMap",
-        "title": "Owlvex: Open Design Map"
+        "title": "Owlvex: Open Diagrams"
       },
       {
         "command": "owlvex.openDriftBox",

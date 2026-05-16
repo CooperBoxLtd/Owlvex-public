@@ -64,12 +64,108 @@ It should answer:
 - what ownership or tenant model is actually present?
 - what does the code prove, infer, or leave uncertain?
 
+## Diagram Box Direction
+
+The single `Create Code Map` action is no longer the right product shape. Owlvex needs a **Diagram Box** workflow: one entry point that creates different local Mermaid diagrams for different jobs.
+
+The Diagram Box should contain these diagram types:
+
+- **Architecture Map**: a readable module/component map that shows entrypoints, major components, confirmed imports/calls, data stores, integrations, and security boundaries.
+- **Security Evidence Map**: the current scanner-grounded map of files, guards, sinks, stores, and integrations. This is the evidence layer and should remain traceable to exact files.
+- **Workflow Diagram**: a product/business flow such as user request -> auth -> approval -> job -> agent -> external system -> result. This is strongest when Design/TDD context exists.
+- **TDD Diff Diagram**: a comparison between expected behavior in the TDD Box and actual code evidence. It should show implemented, missing, partial, extra, and contradicted behavior.
+- **Threat Flow Diagram**: a STRIDE/security-oriented view of trust boundaries, entrypoints, sensitive operations, guards, and likely attack paths.
+- **Fix Impact Diagram**: a before/after view for a proposed or applied fix, showing the files/modules touched and the security flow changed.
+
+The default user-facing diagram should be the readable Architecture Map. The Security Evidence Map should still be available because it is the defensible scanner artifact.
+
+### Diagram Evidence Levels
+
+Every node and edge in generated diagrams should declare or imply its evidence level:
+
+- `confirmed_import_or_call`
+- `confirmed_scanner_evidence`
+- `confirmed_by_design_context`
+- `confirmed_by_tdd_context`
+- `inferred_from_folder_or_name`
+- `uncertain`
+
+Diagram output must not hide this distinction. A solid edge should mean a confirmed relationship. A dotted edge should mean inferred context. This matters because Owlvex must not turn a readable diagram into invented architecture.
+
+Recommended legend:
+
+```mermaid
+flowchart TD
+  ConfirmedA["Confirmed module"] --> ConfirmedB["Confirmed dependency"]
+  InferredA["Inferred component"] -. inferred .-> InferredB["Possible related component"]
+  Guard{"Guard / policy"}
+  Store[("Data store")]
+  Integration[/"External integration"/]
+  Sink[("Security-relevant sink")]
+```
+
+### TDD Diff Diagram
+
+The TDD Diff Diagram should compare user expectations against code evidence.
+
+Model:
+
+```text
+TDD requirement -> Code evidence -> Status
+```
+
+Statuses:
+
+- `Aligned`: the code clearly implements the TDD expectation.
+- `Partial`: some evidence exists, but enforcement is incomplete.
+- `Missing`: the TDD expectation has no corresponding code evidence.
+- `Extra`: code implements behavior not described in the TDD.
+- `Contradicted`: code appears to violate the TDD expectation.
+- `Uncertain`: evidence is not strong enough to classify.
+
+Example Mermaid shape:
+
+```mermaid
+flowchart TD
+  TDD1["TDD: sensitive job actions require approval"]
+  Code1["Code: approvalPolicy.ts"]
+  Decision1{"Implemented?"}
+  TDD1 --> Decision1
+  Code1 --> Decision1
+  Decision1 -- "yes" --> Aligned1["Aligned"]
+  Decision1 -- "partial" --> Drift1["Partial drift"]
+  Decision1 -- "no" --> Missing1["Missing requirement"]
+```
+
+The TDD Diff Diagram should be used as scan context only as grounding. It does not create deterministic proof by itself.
+
+### Workflow Diagram
+
+The Workflow Diagram should express how the application behaves from a user or system-event point of view. It should prefer:
+
+- user/operator entrypoints
+- authentication and authorization gates
+- approval or policy checks
+- job or command dispatch
+- external integrations
+- result persistence and feedback loops
+
+This diagram is not a replacement for the evidence map. It is the developer-facing explanation layer.
+
 ## Design Map Output
 
-Owlvex should produce two artifacts:
+Owlvex should continue to produce design-map artifacts, but the map should become one member of the Diagram Box rather than the only diagram capability.
+
+Owlvex should produce these local artifacts:
 
 - `owlvex-design-map.md` for users
 - `owlvex-design-map.json` for the scanner/fix engine
+- `owlvex-diagrams/architecture-map.md`
+- `owlvex-diagrams/security-evidence-map.md`
+- `owlvex-diagrams/workflow.md`
+- `owlvex-diagrams/tdd-diff.md`
+- `owlvex-diagrams/threat-flow.md`
+- `owlvex-diagrams/fix-impact.md`
 
 Both should stay under the selected project root. Neither should be uploaded to Owlvex Azure as source code.
 

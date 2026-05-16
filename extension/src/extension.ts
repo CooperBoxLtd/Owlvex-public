@@ -17,7 +17,7 @@ import { configureFrameworkPackRuntime } from './frameworks/frameworkGrounding';
 import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
 import { PROFILE } from './profile';
 import { loadProjectContextInfo, promptForProjectRootSelection, resolveProjectRootInfo } from './projectContext';
-import { generateDesignMap, getDefaultDesignMapMarkdownPath } from './designMap';
+import { generateDesignMap, getDefaultDesignMapMarkdownPath, getDefaultDiagramMarkdownPath } from './designMap';
 import { applyRepoAiReviewSupport, buildRepoAiReviewPrompt, extractRepoAiSnippet, parseRepoAiReviewResponse, selectRepoAiCandidateRefs, summarizeRepoAiResults } from './repoAiReview';
 import { initializeSecretStorage } from './secrets';
 import { PackArtifactResponse, PackEntitlement, PackManifestEntry, RulePackClient } from './packs/packClient';
@@ -607,11 +607,9 @@ async function openOrCreateTddBox(): Promise<{ uri: vscode.Uri; created: boolean
                 placeHolder: `Current: ${configuredFile}`,
             },
         );
-        if (!choice) {
-            const targetUri = vscode.Uri.file(resolveUserConfiguredPath(configuredFile, projectRoot.uri));
-            return { uri: targetUri, created: false, relativePath: vscode.workspace.asRelativePath(targetUri, false) };
-        }
-        if (choice.action === 'select') {
+        if (!choice || choice.action === 'open') {
+            // Treat dismiss as "open current"; the command was explicitly invoked from the workflow panel.
+        } else if (choice.action === 'select') {
             configuredFile = '';
         } else if (choice.action === 'default') {
             configuredFile = vscode.workspace.asRelativePath(vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_TDD_BOX_RELATIVE_PATH)), false);
@@ -971,11 +969,9 @@ async function openOrCreateDesignContext(): Promise<{ uri: vscode.Uri; created: 
                 placeHolder: `Current: ${configuredFile}`,
             },
         );
-        if (!choice) {
-            const targetUri = vscode.Uri.file(resolveUserConfiguredPath(configuredFile, projectRoot.uri));
-            return { uri: targetUri, created: false, relativePath: vscode.workspace.asRelativePath(targetUri, false) };
-        }
-        if (choice.action === 'select') {
+        if (!choice || choice.action === 'open') {
+            // Treat dismiss as "open current"; the command was explicitly invoked from the workflow panel.
+        } else if (choice.action === 'select') {
             configuredFile = '';
         } else if (choice.action === 'default') {
             configuredFile = vscode.workspace.asRelativePath(vscode.Uri.file(path.join(projectRoot.uri.fsPath, DEFAULT_DESIGN_CONTEXT_RELATIVE_DIR, 'system.md')), false);
@@ -1041,11 +1037,9 @@ async function openOrCreateDriftBox(): Promise<{ uri: vscode.Uri; created: boole
                 placeHolder: `Current: ${configuredFile}`,
             },
         );
-        if (!choice) {
-            const targetUri = vscode.Uri.file(resolveUserConfiguredPath(configuredFile, projectRoot.uri));
-            return { uri: targetUri, created: false, relativePath: vscode.workspace.asRelativePath(targetUri, false) };
-        }
-        if (choice.action === 'select') {
+        if (!choice || choice.action === 'open') {
+            // Treat dismiss as "open current"; the command was explicitly invoked from the workflow panel.
+        } else if (choice.action === 'select') {
             configuredFile = '';
             configuredScriptsRoot = '';
         } else if (choice.action === 'default') {
@@ -4291,21 +4285,43 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand(PROFILE.commands.createDesignMap, async () => {
             const projectRoot = await resolveProjectRootInfo();
             if (!projectRoot.uri) {
-                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Select a project root before creating a Design Map.`);
+                vscode.window.showWarningMessage(`${PROFILE.displayLabel}: Select a project root before creating diagrams.`);
+                return;
+            }
+
+            const diagramChoice = await vscode.window.showQuickPick(
+                [
+                    { label: 'Architecture Map', description: 'Readable module and dependency view', type: 'architecture' as const },
+                    { label: 'Security Evidence Map', description: 'Raw scanner-grounded guards, sinks, stores, integrations', type: 'evidence' as const },
+                    { label: 'Workflow Diagram', description: 'User/system flow through policy, work, data, and integrations', type: 'workflow' as const },
+                    { label: 'TDD Diff Diagram', description: 'Expected behavior compared with code evidence', type: 'tddDiff' as const },
+                    { label: 'Threat Flow Diagram', description: 'STRIDE-style trust-boundary and impact path view', type: 'threatFlow' as const },
+                    { label: 'Fix Impact Diagram', description: 'Fix preview, review, verification, and continuation flow', type: 'fixImpact' as const },
+                    { label: 'Overview', description: 'Open the combined Design Map overview', type: 'overview' as const },
+                ],
+                {
+                    title: `${PROFILE.displayLabel}: Diagrams`,
+                    placeHolder: 'Choose the diagram to create and open',
+                },
+            );
+            if (!diagramChoice) {
                 return;
             }
 
             const result = await vscode.window.withProgress({
                 location: vscode.ProgressLocation.Notification,
-                title: `${PROFILE.displayLabel}: Creating Design Map`,
+                title: `${PROFILE.displayLabel}: Creating diagrams`,
                 cancellable: false,
             }, async () => generateDesignMap(projectRoot.uri!));
 
             await tryPersistWorkspaceBooleanSetting(DESIGN_MAP_ENABLED_SETTING, true);
-            const document = await vscode.workspace.openTextDocument(result.markdownUri);
+            const targetUri = diagramChoice.type === 'overview'
+                ? result.markdownUri
+                : result.diagramUris[diagramChoice.type];
+            const document = await vscode.workspace.openTextDocument(targetUri);
             await vscode.window.showTextDocument(document, { preview: false });
             vscode.window.showInformationMessage(
-                `${PROFILE.displayLabel}: Design Map created for ${result.filesScanned} file(s) at ${vscode.workspace.asRelativePath(result.markdownUri, false)}.`
+                `${PROFILE.displayLabel}: ${diagramChoice.label} created for ${result.filesScanned} file(s) at ${vscode.workspace.asRelativePath(targetUri, false)}.`
             );
         })
     );
@@ -4318,15 +4334,36 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
 
-            const mapUri = vscode.Uri.file(getDefaultDesignMapMarkdownPath(projectRoot.uri.fsPath));
+            const diagramChoice = await vscode.window.showQuickPick(
+                [
+                    { label: 'Overview', description: 'Combined Design Map overview', type: 'overview' as const },
+                    { label: 'Architecture Map', description: 'Readable module and dependency view', type: 'architecture' as const },
+                    { label: 'Security Evidence Map', description: 'Raw scanner-grounded evidence', type: 'evidence' as const },
+                    { label: 'Workflow Diagram', description: 'User/system flow', type: 'workflow' as const },
+                    { label: 'TDD Diff Diagram', description: 'Expected behavior compared with code evidence', type: 'tddDiff' as const },
+                    { label: 'Threat Flow Diagram', description: 'Trust boundaries and impact paths', type: 'threatFlow' as const },
+                    { label: 'Fix Impact Diagram', description: 'Fix preview and verification flow', type: 'fixImpact' as const },
+                ],
+                {
+                    title: `${PROFILE.displayLabel}: Open Diagram`,
+                    placeHolder: 'Choose the diagram to open',
+                },
+            );
+            if (!diagramChoice) {
+                return;
+            }
+
+            const mapUri = vscode.Uri.file(diagramChoice.type === 'overview'
+                ? getDefaultDesignMapMarkdownPath(projectRoot.uri.fsPath)
+                : getDefaultDiagramMarkdownPath(projectRoot.uri.fsPath, diagramChoice.type));
             try {
                 await vscode.workspace.fs.stat(mapUri);
             } catch {
                 const choice = await vscode.window.showInformationMessage(
-                    `${PROFILE.displayLabel}: No Design Map exists for this project root yet.`,
-                    'Create Design Map',
+                    `${PROFILE.displayLabel}: No ${diagramChoice.label} exists for this project root yet.`,
+                    'Create Diagrams',
                 );
-                if (choice === 'Create Design Map') {
+                if (choice === 'Create Diagrams') {
                     await vscode.commands.executeCommand(PROFILE.commands.createDesignMap);
                 }
                 return;

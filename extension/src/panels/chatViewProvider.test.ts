@@ -4066,7 +4066,7 @@ describe('parseChatIntent', () => {
         expect(html).toContain('Configure LLM');
         expect(html).toContain('id="scanReadiness"');
         expect(html).toContain('Paste commit hash, branch, tag, or range like main..HEAD');
-        expect(html).toContain('Create Code Map');
+        expect(html).toContain('Diagrams');
         expect(html).toContain('Spec File');
         expect(html).toContain('Design Notes');
         expect(html).toContain('Validation Scripts');
