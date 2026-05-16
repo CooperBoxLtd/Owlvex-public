@@ -496,21 +496,78 @@ function buildWorkflowMermaid(map: DesignMap): string {
 }
 
 function buildThreatFlowMermaid(map: DesignMap): string {
-    const guardLabel = map.guards.slice(0, 4).join(', ') || 'No confirmed guard';
-    const sinkLabel = map.sinks.slice(0, 4).join(', ') || 'No sensitive sink found';
-    const storeLabel = map.dataStores.slice(0, 4).join(', ') || 'No data store found';
-    const integrationLabel = map.externalIntegrations.slice(0, 4).join(', ') || 'No external integration found';
-    return [
+    const runtimeFiles = map.files.filter(isRuntimeFile);
+    const entryFile = runtimeFiles.find(file => file.entrypoints.length) ?? runtimeFiles.find(file => file.routes.length);
+    const guardFile = runtimeFiles.find(file => file.guards.length);
+    const sinkFile = runtimeFiles.find(file => file.sinks.length);
+    const storeFile = runtimeFiles.find(file => file.dataStores.length);
+    const integrationFile = runtimeFiles.find(file => file.externalIntegrations.length);
+    const parserFile = runtimeFiles.find(file => file.sinks.some(sink => /JSON\.parse|deserialize|pickle|yaml\.load/i.test(sink)));
+    const ipcFile = runtimeFiles.find(file => file.externalIntegrations.some(item => /ipc|webContents/i.test(item)));
+    const networkFile = runtimeFiles.find(file => file.externalIntegrations.some(item => /fetch|axios|http\.request|https\.request|net\.|socket/i.test(item)));
+
+    const entryLabel = entryFile ? `${entryFile.kind}: ${entryFile.path}` : 'No concrete entrypoint found';
+    const guardLabel = guardFile ? `${guardFile.path}: ${guardFile.guards.slice(0, 3).join(', ')}` : 'No confirmed guard';
+    const parserLabel = parserFile ? `${parserFile.path}: ${parserFile.sinks.filter(sink => /JSON\.parse|deserialize|pickle|yaml\.load/i.test(sink)).slice(0, 3).join(', ')}` : 'No parser/deserialization sink found';
+    const storeLabel = storeFile ? `${storeFile.path}: ${storeFile.dataStores.slice(0, 3).join(', ')}` : 'No data store found';
+    const integrationLabel = integrationFile ? `${integrationFile.path}: ${integrationFile.externalIntegrations.slice(0, 3).join(', ')}` : 'No external integration found';
+    const ipcLabel = ipcFile ? `${ipcFile.path}: ${ipcFile.externalIntegrations.filter(item => /ipc|webContents/i.test(item)).slice(0, 3).join(', ')}` : 'No IPC or privileged boundary found';
+    const networkLabel = networkFile ? `${networkFile.path}: ${networkFile.externalIntegrations.filter(item => /fetch|axios|http\.request|https\.request|net\.|socket/i.test(item)).slice(0, 3).join(', ')}` : 'No network integration found';
+    const sinkLabel = sinkFile ? `${sinkFile.path}: ${sinkFile.sinks.slice(0, 3).join(', ')}` : 'No sensitive sink found';
+
+    const lines = [
         'flowchart TD',
-        '  Actor["Actor / input source"] --> Boundary{"Trust boundary"}',
-        `  Boundary --> Guard{"${mermaidLabel(guardLabel, 72)}"}`,
-        `  Guard --> Sink[("${mermaidLabel(sinkLabel, 72)}")]`,
-        `  Guard --> Store[("${mermaidLabel(storeLabel, 72)}")]`,
-        `  Guard --> Integration[/"${mermaidLabel(integrationLabel, 72)}"/]`,
-        '  Sink --> Impact["Potential impact path"]',
-        '  Store --> Impact',
-        '  Integration --> Impact',
-    ].join('\n');
+        '  Actor["Actor / input source"] --> Entry["Entry: ' + mermaidLabel(entryLabel, 86) + '"]',
+        '  Entry --> Boundary{"Trust boundary"}',
+        `  Boundary --> Guard{"${mermaidLabel(guardLabel, 86)}"}`,
+        '',
+        '  subgraph Spoofing["Spoofing"]',
+        `    S1["Identity / caller evidence: ${mermaidLabel(guardLabel, 74)}"]`,
+        '  end',
+        '  Guard --> S1',
+        '',
+        '  subgraph Tampering["Tampering"]',
+        `    T1["Input mutation or parser path: ${mermaidLabel(parserLabel, 74)}"]`,
+        '  end',
+        '  Boundary --> T1',
+        '',
+        '  subgraph Repudiation["Repudiation"]',
+        `    R1["Audit / action trace evidence: ${mermaidLabel(map.files.find(file => /audit|log|history|event/i.test(file.path))?.path ?? 'No audit/logging module found', 74)}"]`,
+        '  end',
+        '  Guard --> R1',
+        '',
+        '  subgraph InformationDisclosure["Information Disclosure"]',
+        `    I1["State or sensitive data path: ${mermaidLabel(storeLabel, 74)}"]`,
+        '  end',
+        '  Guard --> I1',
+        '',
+        '  subgraph DenialOfService["Denial of Service"]',
+        `    D1["Network/parser pressure path: ${mermaidLabel(networkFile ? networkLabel : parserLabel, 74)}"]`,
+        '  end',
+        '  Boundary --> D1',
+        '',
+        '  subgraph ElevationOfPrivilege["Elevation of Privilege"]',
+        `    E1["Privileged boundary or sink: ${mermaidLabel(ipcFile ? ipcLabel : sinkLabel, 74)}"]`,
+        '  end',
+        '  Guard --> E1',
+    ];
+
+    if (integrationFile) {
+        lines.push(`  E1 --> Integration[/"${mermaidLabel(integrationLabel, 74)}"/]`);
+    }
+    if (sinkFile) {
+        lines.push(`  T1 --> Sink[("${mermaidLabel(sinkLabel, 74)}")]`);
+    }
+    if (storeFile) {
+        lines.push(`  I1 --> Store[("${mermaidLabel(storeLabel, 74)}")]`);
+    }
+    lines.push('  S1 --> Impact["Threat review target"]');
+    lines.push('  T1 --> Impact');
+    lines.push('  R1 --> Impact');
+    lines.push('  I1 --> Impact');
+    lines.push('  D1 --> Impact');
+    lines.push('  E1 --> Impact');
+    return lines.join('\n');
 }
 
 function buildTddDiffMermaid(map: DesignMap): string {

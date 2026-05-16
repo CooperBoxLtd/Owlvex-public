@@ -114,6 +114,16 @@ describe('design map generator', () => {
         const evidenceWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls.find(call => String(call[0].fsPath).includes('security-evidence-map.md'));
         expect(evidenceWrite).toBeTruthy();
         expect(Buffer.from(evidenceWrite[1]).toString('utf8')).toContain('# Owlvex Security Evidence Map');
+        const threatFlowWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls.find(call => String(call[0].fsPath).includes('threat-flow.md'));
+        expect(threatFlowWrite).toBeTruthy();
+        const threatFlow = Buffer.from(threatFlowWrite[1]).toString('utf8');
+        expect(threatFlow).toContain('subgraph Spoofing');
+        expect(threatFlow).toContain('subgraph Tampering');
+        expect(threatFlow).toContain('subgraph Repudiation');
+        expect(threatFlow).toContain('subgraph InformationDisclosure');
+        expect(threatFlow).toContain('subgraph DenialOfService');
+        expect(threatFlow).toContain('subgraph ElevationOfPrivilege');
+        expect(threatFlow).toContain('ipcMain.handle');
     });
 
     it('does not treat generic request or raw wording as a sink without API evidence', async () => {
