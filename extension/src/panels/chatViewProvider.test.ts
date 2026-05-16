@@ -4071,6 +4071,10 @@ describe('parseChatIntent', () => {
         expect(html).toContain('Design Notes');
         expect(html).toContain('Validation Scripts');
         expect(html).toContain('not security frameworks');
+        expect(html).toContain('Use Setup when Owlvex is not ready to scan');
+        expect(html).toContain('Normal scanning should happen from the bottom composer');
+        expect(html).toContain('Choose what Owlvex should scan when you press Scan');
+        expect(html).toContain('Detailed evidence report with scoring');
     });
 
     it('explains why a Git target scan found no source files', () => {

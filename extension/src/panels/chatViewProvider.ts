@@ -6628,7 +6628,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         <div class="workflow-warning" id="workflowWarning"></div>
         <div class="progressive-stack">
           <details class="progressive-section" id="setupSection">
-            <summary><span>Setup</span><span class="section-summary" id="setupSummary">checking</span></summary>
+            <summary title="Access, LLM, backend, and project-root readiness."><span>Setup</span><span class="section-summary" id="setupSummary">checking</span></summary>
             <div class="section-body">
               <div class="section-status">
                 <div class="workflow-status">
@@ -6648,19 +6648,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
                   <span class="workflow-status-value" id="setupBackend">loading</span>
                 </div>
               </div>
+              <div class="context-help">
+                Use Setup when Owlvex is not ready to scan: access/licence, provider connection, project root, and connection checks live here.
+              </div>
               <div class="section-actions">
-                <button class="chip" data-auth-action data-action="useFree">Use Free</button>
-                <button class="chip" data-auth-action data-action="startTrial">Start Trial</button>
-                <button class="chip" data-action="enterLicence">Enter Licence</button>
-                <button class="chip" data-action="setupAI">Configure LLM</button>
-                <button class="chip" data-action="selectProjectRoot">Project Root</button>
-                <button class="chip" data-action="testAI">Test Connection</button>
-                <button class="chip" data-action="showOnboarding">Onboarding Check</button>
+                <button class="chip" data-auth-action data-action="useFree" title="Register free access and validate the extension without starting a trial.">Use Free</button>
+                <button class="chip" data-auth-action data-action="startTrial" title="Start trial access for the full scan, report, and fix-preview workflow.">Start Trial</button>
+                <button class="chip" data-action="enterLicence" title="Paste a licence key you already received.">Enter Licence</button>
+                <button class="chip" data-action="setupAI" title="Configure the LLM provider, model, endpoint, and key used for AI review and fix previews.">Configure LLM</button>
+                <button class="chip" data-action="selectProjectRoot" title="Choose the folder Owlvex treats as the project boundary for scans and repo context.">Project Root</button>
+                <button class="chip" data-action="testAI" title="Test the currently selected LLM provider/model connection.">Test Connection</button>
+                <button class="chip" data-action="showOnboarding" title="Check backend, licence, LLM, project root, and first-scan readiness in one step.">Onboarding Check</button>
               </div>
             </div>
           </details>
           <details class="progressive-section" id="contextSection">
-            <summary><span>Context</span><span class="section-summary" id="contextSummary">optional grounding</span></summary>
+            <summary title="Optional project understanding used to ground scans, reports, and fix reasoning."><span>Context</span><span class="section-summary" id="contextSummary">optional grounding</span></summary>
             <div class="section-body">
               <div class="workflow-status">
                 <span class="workflow-status-label">Grounding</span>
@@ -6682,15 +6685,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             </div>
           </details>
           <details class="progressive-section" id="advancedSection">
-            <summary><span>Advanced</span><span class="section-summary">diagnostics and controls</span></summary>
+            <summary title="Diagnostics and administrative controls for plans, telemetry, scoring, and backend routing."><span>Advanced</span><span class="section-summary">diagnostics and controls</span></summary>
             <div class="section-body">
+              <div class="context-help">
+                Advanced is for diagnostics and account controls. Normal scanning should happen from the bottom composer.
+              </div>
               <div class="section-actions">
-                <button class="chip" data-action="viewPlans">View Plans</button>
-                <button class="chip" data-action="testTrialSetup">Test Trial Setup</button>
-                <button class="chip" data-action="reviewRiskCalibration">Review Scores</button>
-                <button class="chip" data-action="securityBoundary">Security Boundary</button>
-                <button class="chip" data-action="toggleTelemetry">Telemetry</button>
-                <button class="chip" data-action="configureBackend">Backend Override</button>
+                <button class="chip" data-action="viewPlans" title="Show what Free, Trial, Developer, and paid plans unlock.">View Plans</button>
+                <button class="chip" data-action="testTrialSetup" title="Run a development diagnostic for trial/licence readiness.">Test Trial Setup</button>
+                <button class="chip" data-action="reviewRiskCalibration" title="Open score calibration guidance and review how findings are ranked.">Review Scores</button>
+                <button class="chip" data-action="securityBoundary" title="Explain what runs locally, what goes to the selected LLM, and what contacts Owlvex backend.">Security Boundary</button>
+                <button class="chip" data-action="toggleTelemetry" title="Manage optional product telemetry where the active licence allows it.">Telemetry</button>
+                <button class="chip" data-action="configureBackend" title="Override the Owlvex backend URL for development or diagnostics.">Backend Override</button>
               </div>
             </div>
           </details>
@@ -6731,28 +6737,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     <div class="composer">
       <div class="action-rail">
         <details class="llm-menu" id="llmMenu">
-          <summary class="rail-button" id="llmButton">LLM: connecting...</summary>
+          <summary class="rail-button" id="llmButton" title="Current provider/model. Open to switch provider, model, or configure the LLM connection.">LLM: connecting...</summary>
           <div class="llm-menu-panel">
             <div class="meta" id="providerHint">LLM setup hint: loading...</div>
-            <select id="provider"></select>
-            <select id="model"></select>
-            <button class="rail-button" data-action="setupAI">Configure LLM</button>
+            <select id="provider" title="Choose which configured LLM provider Owlvex should use."></select>
+            <select id="model" title="Choose the model/deployment for AI review and fix previews."></select>
+            <button class="rail-button" data-action="setupAI" title="Open provider setup for endpoint, model, and API key.">Configure LLM</button>
           </div>
         </details>
-        <select id="scanScopeBottom" class="rail-select" aria-label="Scan scope">
-          <option value="scanFile">Current file</option>
-          <option value="scanChangedFiles">Changed files</option>
-          <option value="scanGitTarget">Git commit/range</option>
-          <option value="scanSelectedFiles">Selected files</option>
-          <option value="scanOpenEditors">Open editors</option>
-          <option value="scanFolder" selected>Workspace</option>
+        <select id="scanScopeBottom" class="rail-select" aria-label="Scan scope" title="Choose what Owlvex should scan when you press Scan.">
+          <option value="scanFile" title="Scan only the active editor file.">Current file</option>
+          <option value="scanChangedFiles" title="Scan staged, unstaged, and untracked Git source changes.">Changed files</option>
+          <option value="scanGitTarget" title="Paste a commit, branch, tag, or range in the prompt box, then scan that Git target.">Git commit/range</option>
+          <option value="scanSelectedFiles" title="Scan the files you choose from the workspace.">Selected files</option>
+          <option value="scanOpenEditors" title="Scan supported source files currently open in VS Code.">Open editors</option>
+          <option value="scanFolder" selected title="Scan supported source files under the selected project root.">Workspace</option>
         </select>
-        <button class="rail-button" id="runScanBottom" type="button">Scan</button>
+        <button class="rail-button" id="runScanBottom" type="button" title="Run a scan using the selected scope.">Scan</button>
         <details class="report-menu" id="reportMenu">
-          <summary class="rail-button" id="reportButton">Report</summary>
+          <summary class="rail-button" id="reportButton" title="Create a summary or full evidence report from the latest scan, or scan first if needed.">Report</summary>
           <div class="report-menu-panel">
-            <button class="rail-button report-option" data-action="scanSummaryReport" type="button">Summary report</button>
-            <button class="rail-button report-option" data-action="scanFullReport" type="button">Full evidence report</button>
+            <button class="rail-button report-option" data-action="scanSummaryReport" type="button" title="Short developer-facing report focused on what to fix first.">Summary report</button>
+            <button class="rail-button report-option" data-action="scanFullReport" type="button" title="Detailed evidence report with scoring, mappings, provider status, and context.">Full evidence report</button>
           </div>
         </details>
       </div>
@@ -6760,7 +6766,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       <div class="composer-hint">Press <strong>Enter</strong> to send, <strong>Shift+Enter</strong> for a new line.</div>
       <textarea id="prompt" placeholder="Ask Owlvex about this repo, a vulnerability, or what to scan next."></textarea>
       <div class="actions">
-        <button class="primary" id="send">Send</button>
+        <button class="primary" id="send" title="Send the prompt to Owlvex chat. Use Scan for scan actions.">Send</button>
       </div>
     </div>
   </div>
@@ -6876,6 +6882,21 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         const button = document.createElement('button');
         button.type = 'button';
         button.textContent = label;
+        const hints = {
+          useFree: 'Register free access and validate Owlvex without starting a trial.',
+          startTrial: 'Start trial access for the full scan, report, and fix-preview workflow.',
+          enterLicence: 'Paste a licence key you already received.',
+          setupAI: 'Configure the provider/model used for AI review and fix previews.',
+          showOnboarding: 'Check backend, licence, LLM, project root, and first-scan readiness.',
+          scanSummaryReport: 'Create the shortest report from the latest scan result.',
+          scanFile: 'Scan the active editor file.',
+          scanChangedFiles: 'Scan staged, unstaged, and untracked Git source changes.',
+          scanGitTarget: 'Scan a pasted commit, branch, tag, or range.',
+          scanSelectedFiles: 'Choose specific files to scan.',
+          scanOpenEditors: 'Scan supported files currently open in VS Code.',
+          scanFolder: 'Scan supported source files under the selected project root.',
+        };
+        if (hints[action]) button.title = hints[action];
         if (primary) button.className = 'primary-action';
         button.addEventListener('click', () => postAction(action));
         actions.appendChild(button);
