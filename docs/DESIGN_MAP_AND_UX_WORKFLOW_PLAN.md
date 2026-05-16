@@ -70,12 +70,12 @@ The single `Create Code Map` action is no longer the right product shape. Owlvex
 
 The Diagram Box should contain these diagram types:
 
-- **Architecture Map**: a readable module/component map that shows entrypoints, major components, confirmed imports/calls, data stores, integrations, and security boundaries.
+- **Architecture Map**: a readable runtime/responsibility map that explains how the application works first, then labels each responsibility with concrete file evidence. It should not be a raw import graph unless no better runtime story can be inferred.
 - **Threat Flow Diagram**: a STRIDE-category view of trust boundaries, entrypoints, sensitive operations, guards, and likely attack paths. It should separate Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, and Elevation of Privilege instead of drawing one generic threat path.
 - **Risk Lens**: a scan-backed colored map created after scans. It contains a focused scan-scope view plus an architecture overlay when the Design Map exists. Risky files, scanned-clean files, and not-scanned files must be visually distinct.
 - **Security Evidence Map**: the advanced scanner-grounded map of files, guards, sinks, stores, and integrations. This is the traceability layer and should remain available, but not be the default developer view.
 
-The default user-facing diagram should be the readable Architecture Map. After scans, the Risk Lens should become the most useful triage diagram.
+The default user-facing diagram should be the readable Architecture Map. After scans, the Risk Lens should become the most useful triage diagram. The Security Evidence Map and JSON remain the stricter proof layer used by scan/fix logic.
 
 ### Diagram Evidence Levels
 

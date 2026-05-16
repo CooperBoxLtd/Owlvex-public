@@ -381,6 +381,128 @@ function buildMermaidLegend(): string {
 
 function buildArchitectureMermaid(map: DesignMap): string {
     const runtimeFiles = map.files.filter(isRuntimeFile);
+    const findKind = (kind: string) => runtimeFiles.find(file => file.kind === kind);
+    const findPath = (pattern: RegExp) => runtimeFiles.find(file => pattern.test(file.path));
+    const findWith = (predicate: (file: DesignMapFileEvidence) => boolean) => runtimeFiles.find(predicate);
+    const fileLabel = (file: DesignMapFileEvidence | undefined, fallback: string, max = 78): string =>
+        mermaidLabel(file ? `${fallback}: ${file.path}` : fallback, max);
+
+    const frontendEntry = findKind('frontend-entrypoint');
+    const uiContainer = findKind('ui-container') ?? findPath(/(^|\/)(App|Terminal|Shell|Screen)\.[cm]?[jt]sx?$/i);
+    const uiComponent = findKind('ui-component');
+    const preload = findKind('electron-preload');
+    const main = findKind('electron-main');
+    const host = findPath(/sessionHost|server|host/i);
+    const client = findPath(/sessionClient|client/i);
+    const electronProtocol = runtimeFiles.find(file => file.kind === 'electron-runtime' && /protocol/i.test(file.path));
+    const networkProtocol = runtimeFiles.find(file => file.kind === 'protocol');
+    const networkHook = runtimeFiles.find(file => file.kind === 'hook' && /network|session/i.test(file.path));
+    const playerHook = runtimeFiles.find(file => file.kind === 'hook' && /morse|audio|player/i.test(file.path));
+    const storageHook = runtimeFiles.find(file => file.kind === 'hook' && /persist|storage|state/i.test(file.path));
+    const codec = findPath(/codec|encode|decode|morse/i);
+    const audio = findPath(/audio/i);
+    const hasElectronFlow = Boolean(frontendEntry || uiContainer || preload || main);
+
+    if (hasElectronFlow) {
+        const lines = [
+            'flowchart TD',
+            '  User["User"]',
+        ];
+        if (frontendEntry) {
+            lines.push(`  User --> Frontend["${fileLabel(frontendEntry, 'React entry')}"]`);
+        }
+        if (uiContainer) {
+            lines.push(`  ${frontendEntry ? 'Frontend' : 'User'} --> UI["${fileLabel(uiContainer, 'Main UI container')}"]`);
+        }
+        const uiSource = uiContainer ? 'UI' : frontendEntry ? 'Frontend' : 'User';
+        if (uiComponent) {
+            lines.push(`  ${uiSource} --> Controls["${fileLabel(uiComponent, 'User controls')}"]`);
+        }
+        if (networkHook) {
+            lines.push(`  ${uiComponent ? 'Controls' : uiSource} --> SessionState["${fileLabel(networkHook, 'Network/session state')}"]`);
+        }
+        if (networkProtocol) {
+            lines.push(`  ${networkHook ? 'SessionState' : uiSource} --> MessageProtocol["${fileLabel(networkProtocol, 'Renderer message protocol')}"]`);
+        }
+        if (playerHook) {
+            lines.push(`  ${uiSource} --> Player["${fileLabel(playerHook, 'Morse playback')}"]`);
+        }
+        if (codec) {
+            lines.push(`  ${playerHook ? 'Player' : uiSource} --> Codec["${fileLabel(codec, 'Morse encode/decode')}"]`);
+        }
+        if (audio) {
+            lines.push(`  ${playerHook ? 'Player' : uiSource} --> Audio["${fileLabel(audio, 'Audio output')}"]`);
+        }
+        if (storageHook) {
+            lines.push(`  ${uiSource} --> Storage["${fileLabel(storageHook, 'Persistent state')}"]`);
+            lines.push('  Storage --> LocalStorage[("localStorage")]');
+        }
+        if (preload) {
+            lines.push(`  ${uiSource} -. renderer boundary .-> Preload["${fileLabel(preload, 'Preload API')}"]`);
+        }
+        if (main) {
+            lines.push(`  ${preload ? 'Preload' : uiSource} -. IPC boundary .-> Main["${fileLabel(main, 'Electron main process')}"]`);
+        }
+        if (host) {
+            lines.push(`  ${main ? 'Main' : uiSource} --> Host["${fileLabel(host, 'Session host')}"]`);
+        }
+        if (client) {
+            lines.push(`  ${main ? 'Main' : uiSource} --> Client["${fileLabel(client, 'Session client')}"]`);
+        }
+        if (electronProtocol) {
+            if (host) lines.push(`  Host --> WireProtocol["${fileLabel(electronProtocol, 'Wire protocol')}"]`);
+            if (client) lines.push(`  Client --> WireProtocol`);
+            if (!host && !client) lines.push(`  ${main ? 'Main' : uiSource} --> WireProtocol["${fileLabel(electronProtocol, 'Wire protocol')}"]`);
+        }
+        if (main?.externalIntegrations.some(item => /ipcMain|webContents/i.test(item))) {
+            lines.push('  Main --> PrivilegedIpc[/"ipcMain.handle / webContents.send"/]');
+        }
+        if (preload?.externalIntegrations.some(item => /ipcRenderer/i.test(item))) {
+            lines.push('  Preload --> RendererApi[/"contextBridge / ipcRenderer API"/]');
+        }
+        const evidenceTarget = uiContainer ? 'UI' : frontendEntry ? 'Frontend' : main ? 'Main' : 'User';
+        lines.push('', '  Evidence["Raw import/sink/guard evidence stays in Security Evidence Map and JSON"]');
+        lines.push(`  Evidence -. supports .-> ${evidenceTarget}`);
+        return lines.join('\n');
+    }
+
+    const entryFile = findWith(file => Boolean(file.entrypoints.length)) ?? findKind('entrypoint');
+    const routeFiles = runtimeFiles.filter(file => file.routes.length).slice(0, 10);
+    const guardFile = findWith(file => Boolean(file.guards.length));
+    const storeFile = findWith(file => Boolean(file.dataStores.length));
+    const integrationFile = findWith(file => Boolean(file.externalIntegrations.length));
+    const sinkFile = findWith(file => Boolean(file.sinks.length));
+
+    if (entryFile || routeFiles.length || guardFile || storeFile || integrationFile || sinkFile) {
+        const lines = [
+            'flowchart TD',
+            '  Actor["User / external caller"]',
+            `  Actor --> Entry["${fileLabel(entryFile, 'Application entrypoint')}"]`,
+        ];
+        const routeSource = entryFile ? 'Entry' : 'Actor';
+        for (const [index, file] of routeFiles.entries()) {
+            lines.push(`  ${routeSource} --> Route${index + 1}["${fileLabel(file, `Route ${file.routes.slice(0, 2).join(', ') || index + 1}`)}"]`);
+        }
+        const guardedSource = routeFiles.length ? 'Route1' : routeSource;
+        if (guardFile) {
+            lines.push(`  ${guardedSource} --> Guard{"${fileLabel(guardFile, 'Auth / policy guard')}"} `);
+        }
+        const workSource = guardFile ? 'Guard' : guardedSource;
+        if (storeFile) {
+            lines.push(`  ${workSource} --> Store[("${fileLabel(storeFile, 'Persistence')}")]`);
+        }
+        if (integrationFile) {
+            lines.push(`  ${workSource} --> Integration[/"${fileLabel(integrationFile, 'External integration')}"/]`);
+        }
+        if (sinkFile) {
+            lines.push(`  ${workSource} --> SensitiveOp[("${fileLabel(sinkFile, 'Sensitive operation')}")]`);
+        }
+        lines.push(`  ${storeFile || integrationFile || sinkFile ? workSource : guardedSource} --> Response["Response / side effect"]`);
+        lines.push('  Evidence["Raw import/sink/guard evidence stays in Security Evidence Map and JSON"]');
+        lines.push('  Evidence -. supports .-> Entry');
+        return lines.join('\n');
+    }
+
     const importantFiles = runtimeFiles
         .filter(file => file.entrypoints.length || file.routes.length || file.dependsOn.length || map.relationships.some(edge => edge.to === file.path))
         .slice(0, 36);

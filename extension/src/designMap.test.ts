@@ -50,10 +50,10 @@ describe('design map generator', () => {
         expect(markdown).toContain('# Owlvex Design Map');
         expect(markdown).toContain('```mermaid');
         expect(markdown).toContain('flowchart TD');
-        expect(markdown).toContain('Application architecture');
+        expect(markdown).toContain('Application entrypoint: src/server.js');
         expect(markdown).toContain('Diagram Box Outputs');
-        expect(markdown).toContain('route: src/routes/documents.js');
-        expect(markdown).toContain('entrypoint: src/server.js');
+        expect(markdown).toContain('Route /:documentId: src/routes/documents.js');
+        expect(markdown).toContain('Raw import/sink/guard evidence stays in Security Evidence Map and JSON');
         expect(result.map.entrypoints).toEqual(['src/server.js']);
     });
 
@@ -106,7 +106,10 @@ describe('design map generator', () => {
 
         const markdownWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls[0];
         const markdown = Buffer.from(markdownWrite[1]).toString('utf8');
-        expect(markdown).toContain('frontend-entrypoint: src/main.jsx');
+        expect(markdown).toContain('React entry: src/main.jsx');
+        expect(markdown).toContain('Main UI container: src/components/App.jsx');
+        expect(markdown).toContain('Preload API: electron/preload.js');
+        expect(markdown).toContain('Electron main process: electron/main.js');
         expect(markdown).toContain('imports: `src/main.jsx` -> `src/components/App.jsx`');
         expect(markdown).toContain('localStorage');
         expect(markdown).toContain('ipcRenderer.invoke');

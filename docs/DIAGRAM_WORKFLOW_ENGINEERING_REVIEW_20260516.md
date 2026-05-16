@@ -340,3 +340,5 @@ The immediate fix is to keep the diagram surface smaller:
 - Deferred: Workflow Diagram and TDD Diff until they are application-archetype aware and requirement-level.
 
 Risk Lens should now act as the post-scan developer view: fix order first, focused scan scope second, and architecture overlay third. Low/medium findings should not drown the view in evidence nodes, and generated labels must render as readable Mermaid line breaks.
+
+Architecture Map should present runtime responsibilities and flow rather than making raw imports the main diagram. Raw imports, sinks, guards, stores, and integrations remain in the Security Evidence Map and `owlvex-design-map.json`, which preserves the security proof boundary.
