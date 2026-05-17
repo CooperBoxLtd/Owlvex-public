@@ -12,7 +12,7 @@ Use it to find useful security signals early, preview fixes, and validate whethe
 
 ## Current Version
 
-`0.1.45`
+`0.1.46`
 
 ## What To Expect
 
@@ -437,5 +437,3 @@ If a result looks wrong, collect:
 - Drift Box result if used
 - scan warnings
 - the exact action that failed
-
-

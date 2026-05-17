@@ -4,6 +4,13 @@
 
 - no unreleased public changes
 
+## 0.1.46
+
+- improve generated diagrams so Electron, renderer, IPC, parser, and network ingress paths are represented generically across app types
+- keep Risk Lens available from the latest stored scan, including git-target scans that did not create a report first
+- fix Risk Lens path labels so Windows-style paths do not corrupt `src/network/...` entries
+- keep production aligned with the validated OWASP Top 10 2025 framework lens
+
 ## 0.1.45
 
 - hide setup/context/advanced workflow controls behind the cog by default to preserve chat and prompt space
@@ -135,4 +142,3 @@
 ## 0.1.0
 
 - initial prototype release
-
