@@ -11,6 +11,12 @@ interface RiskMapEntry {
     result: ScanResult;
 }
 
+interface RiskLensMetadata {
+    targetLabel?: string;
+    skippedCount?: number;
+    errors?: string[];
+}
+
 interface FindingItem {
     file: string;
     finding: ScanResult['findings'][number];
@@ -24,9 +30,9 @@ function mermaidId(prefix: string, value: string): string {
 
 function mermaidLabel(value: string, max = 80): string {
     const cleaned = value
+        .replace(/\\n/g, ' ')
         .replace(/\\/g, '/')
         .replace(/"/g, "'")
-        .replace(/\/n/g, ' ')
         .replace(/\r?\n/g, ' ')
         .trim();
     return cleaned.length > max ? `${cleaned.slice(0, Math.max(0, max - 1))}...` : cleaned;
@@ -237,7 +243,7 @@ function buildArchitectureOverlayMermaid(entries: RiskMapEntry[], findings: Find
     return lines.join('\n');
 }
 
-function buildRiskLensMarkdown(entries: RiskMapEntry[], designMap: DesignMap | null): string {
+function buildRiskLensMarkdown(entries: RiskMapEntry[], designMap: DesignMap | null, metadata: RiskLensMetadata = {}): string {
     const findings = entries
         .flatMap(entry => entry.result.findings.map(finding => ({ file: normalizePath(entry.file), finding, result: entry.result })))
         .sort((left, right) => (right.finding.riskScore ?? 0) - (left.finding.riskScore ?? 0));
@@ -247,7 +253,10 @@ function buildRiskLensMarkdown(entries: RiskMapEntry[], designMap: DesignMap | n
         '',
         'Generated from the latest scan. The focused view shows what this scan found. The architecture overlay uses the Design Map when available and marks unscanned files explicitly.',
         '',
+        ...(metadata.targetLabel ? [`- Scan target: ${metadata.targetLabel}`] : []),
         `- Scanned files: ${entries.length}`,
+        ...(metadata.skippedCount !== undefined ? [`- Skipped files: ${metadata.skippedCount}`] : []),
+        ...(metadata.errors?.length ? [`- Scan errors: ${metadata.errors.length}`] : []),
         `- Files with findings: ${new Set(findings.map(item => item.file)).size}`,
         `- Total findings: ${findings.length}`,
         `- Design Map overlay: ${designMap ? 'available' : 'not available'}`,
@@ -277,7 +286,7 @@ function buildRiskLensMarkdown(entries: RiskMapEntry[], designMap: DesignMap | n
     return lines.join('\n');
 }
 
-export async function writeRiskLens(root: vscode.Uri, entries: RiskMapEntry[]): Promise<vscode.Uri | null> {
+export async function writeRiskLens(root: vscode.Uri, entries: RiskMapEntry[], metadata: RiskLensMetadata = {}): Promise<vscode.Uri | null> {
     if (!entries.length) {
         return null;
     }
@@ -285,7 +294,7 @@ export async function writeRiskLens(root: vscode.Uri, entries: RiskMapEntry[]): 
     const targetUri = vscode.Uri.joinPath(root, RISK_LENS_PATH);
     await vscode.workspace.fs.createDirectory(vscode.Uri.joinPath(root, '.owlvex', 'diagrams'));
     const designMap = await loadDesignMap(root);
-    const markdown = buildRiskLensMarkdown(entries, designMap);
+    const markdown = buildRiskLensMarkdown(entries, designMap, metadata);
     await vscode.workspace.fs.writeFile(targetUri, Buffer.from(markdown, 'utf8'));
     return targetUri;
 }

@@ -1723,7 +1723,10 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
         await writeRiskLens(root, snapshot.results.map(item => ({
             file: formatReportPath(root.fsPath, item.uri.fsPath),
             result: item.result,
-        })));
+        })), {
+            targetLabel: snapshot.targetLabel,
+            errors: snapshot.errors,
+        });
         return reportUri;
     }
 
@@ -2000,7 +2003,10 @@ export async function generateReportFromSnapshot(root: vscode.Uri, snapshot: Rep
     await writeRiskLens(root, snapshot.results.map(item => ({
         file: formatReportPath(root.fsPath, item.uri.fsPath),
         result: item.result,
-    })));
+    })), {
+        targetLabel: snapshot.targetLabel,
+        errors: snapshot.errors,
+    });
     return reportUri;
 }
 

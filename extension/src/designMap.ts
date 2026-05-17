@@ -565,6 +565,26 @@ function buildArchitectureMermaid(map: DesignMap): string {
     return lines.join('\n');
 }
 
+function isIdentityOrPolicyGuard(guard: string): boolean {
+    return /auth|authenticate|authorize|identity|session|token|jwt|signature|verify|permission|role|csrf|tenant|owner|customer|account|organization|workspace/i.test(guard);
+}
+
+function isOwnershipSignal(signal: string): boolean {
+    return /tenantId|ownerId|customerId|accountId|organizationId|orgId|workspaceId|projectId|userId/i.test(signal);
+}
+
+function isCapabilitySignal(signal: string): boolean {
+    return /^can[A-Z]/.test(signal);
+}
+
+function hasNetworkIngress(file: DesignMapFileEvidence): boolean {
+    return file.externalIntegrations.some(item => /socket\.on|net\.createServer/i.test(item)) || file.routes.length > 0;
+}
+
+function hasIpcIngress(file: DesignMapFileEvidence): boolean {
+    return file.externalIntegrations.some(item => /ipcMain\.handle|ipcRenderer\.on|ipcRenderer\.invoke|webContents\.send/i.test(item));
+}
+
 function buildThreatFlowMermaid(map: DesignMap): string {
     const runtimeFiles = map.files.filter(isRuntimeFile);
     const rendererFile = runtimeFiles.find(file =>
@@ -574,26 +594,37 @@ function buildThreatFlowMermaid(map: DesignMap): string {
     );
     const preloadFile = runtimeFiles.find(file => file.kind === 'electron-preload');
     const mainFile = runtimeFiles.find(file => file.kind === 'electron-main');
-    const entryFile = rendererFile ?? mainFile ?? runtimeFiles.find(file => file.entrypoints.length) ?? runtimeFiles.find(file => file.routes.length);
-    const identityGuardFile = runtimeFiles.find(file => file.guards.some(guard => /auth|authenticate|identity|session|token|jwt|signature|verifySigned|verifyCanonical/i.test(guard)));
-    const guardFile = identityGuardFile ?? runtimeFiles.find(file => file.guards.length);
+    const routeFile = runtimeFiles.find(file => file.routes.length);
+    const networkFiles = runtimeFiles.filter(hasNetworkIngress);
+    const networkFile = networkFiles[0];
+    const ipcFile = runtimeFiles.find(hasIpcIngress);
+    const entryFile = rendererFile ?? routeFile ?? ipcFile ?? networkFile ?? mainFile ?? runtimeFiles.find(file => file.entrypoints.length);
+    const identityGuardFile = runtimeFiles.find(file => file.guards.some(isIdentityOrPolicyGuard));
+    const capabilityGuardFile = runtimeFiles.find(file => file.guards.some(isCapabilitySignal));
+    const guardFile = identityGuardFile;
     const sinkFile = runtimeFiles.find(file => file.sinks.length);
     const storeFile = runtimeFiles.find(file => file.dataStores.length);
     const integrationFile = runtimeFiles.find(file => file.externalIntegrations.length);
     const parserFile = runtimeFiles.find(file => file.sinks.some(sink => /JSON\.parse|deserialize|pickle|yaml\.load/i.test(sink)));
-    const ipcFile = runtimeFiles.find(file => file.externalIntegrations.some(item => /ipc|webContents/i.test(item)));
-    const networkFile = runtimeFiles.find(file => file.externalIntegrations.some(item => /fetch|axios|http\.request|https\.request|net\.|socket/i.test(item)));
 
     const entryLabel = entryFile ? `${entryFile.kind}: ${entryFile.path}` : 'No concrete entrypoint found';
-    const guardLabel = guardFile ? `${guardFile.path}: ${guardFile.guards.slice(0, 3).join(', ')}` : 'No confirmed guard';
+    const guardLabel = guardFile
+        ? `${guardFile.path}: ${guardFile.guards.filter(isIdentityOrPolicyGuard).slice(0, 3).join(', ')}`
+        : 'No confirmed identity, policy, or message validation guard';
+    const capabilityLabel = capabilityGuardFile
+        ? `${capabilityGuardFile.path}: ${capabilityGuardFile.guards.filter(isCapabilitySignal).slice(0, 3).join(', ')}`
+        : '';
     const parserLabel = parserFile ? `${parserFile.path}: ${parserFile.sinks.filter(sink => /JSON\.parse|deserialize|pickle|yaml\.load/i.test(sink)).slice(0, 3).join(', ')}` : 'No parser/deserialization sink found';
     const storeLabel = storeFile ? `${storeFile.path}: ${storeFile.dataStores.slice(0, 3).join(', ')}` : 'No data store found';
     const integrationLabel = integrationFile ? `${integrationFile.path}: ${integrationFile.externalIntegrations.slice(0, 3).join(', ')}` : 'No external integration found';
     const ipcLabel = ipcFile ? `${ipcFile.path}: ${ipcFile.externalIntegrations.filter(item => /ipc|webContents/i.test(item)).slice(0, 3).join(', ')}` : 'No IPC or privileged boundary found';
-    const networkLabel = networkFile ? `${networkFile.path}: ${networkFile.externalIntegrations.filter(item => /fetch|axios|http\.request|https\.request|net\.|socket/i.test(item)).slice(0, 3).join(', ')}` : 'No network integration found';
+    const networkLabels = networkFiles.length
+        ? networkFiles.slice(0, 3).map(file => `${file.path}: ${file.routes.length ? `routes ${file.routes.slice(0, 3).join(', ')}` : file.externalIntegrations.filter(item => /socket\.on|net\.createServer/i.test(item)).slice(0, 3).join(', ')}`)
+        : ['No network integration found'];
+    const networkLabel = networkLabels.join(' | ');
     const sinkLabel = sinkFile ? `${sinkFile.path}: ${sinkFile.sinks.slice(0, 3).join(', ')}` : 'No sensitive sink found';
     const identityLabel = identityGuardFile
-        ? `${identityGuardFile.path}: ${identityGuardFile.guards.filter(guard => /auth|authenticate|identity|session|token|jwt|signature|verifySigned|verifyCanonical/i.test(guard)).slice(0, 3).join(', ')}`
+        ? `${identityGuardFile.path}: ${identityGuardFile.guards.filter(isIdentityOrPolicyGuard).slice(0, 3).join(', ')}`
         : 'No concrete identity or peer-authentication evidence found';
     const auditLabel = map.files.find(file => /audit|log|history|event/i.test(file.path))?.path ?? 'No audit/logging module found';
 
@@ -601,6 +632,12 @@ function buildThreatFlowMermaid(map: DesignMap): string {
         'flowchart TD',
         '  Actor["Actor / input source"] --> Entry["Entry: ' + mermaidLabel(entryLabel, 86) + '"]',
     ];
+    if (networkFile) {
+        lines.push('  Peer["Network peer / external caller"] --> NetworkIngress["Network ingress: ' + mermaidLabel(networkLabel, 86) + '"]');
+        if (parserFile) {
+            lines.push(`  NetworkIngress --> Parser["Parser / frame decoder: ${mermaidLabel(parserLabel, 86)}"]`);
+        }
+    }
     if (rendererFile && preloadFile) {
         lines.push('  Entry --> RendererBoundary{"Boundary: renderer -> preload"}');
         lines.push(`  RendererBoundary --> Preload["${mermaidLabel(preloadFile.path, 74)}"]`);
@@ -613,9 +650,10 @@ function buildThreatFlowMermaid(map: DesignMap): string {
     }
     if (networkFile) {
         lines.push(`  ${mainFile ? 'Main' : 'Entry'} --> NetworkBoundary{"Boundary: app -> network peer"}`);
+        lines.push('  NetworkBoundary -. receives .-> NetworkIngress');
     }
     const primaryBoundary = networkFile
-        ? 'NetworkBoundary'
+        ? (parserFile ? 'Parser' : 'NetworkIngress')
         : mainFile && preloadFile
             ? 'MainBoundary'
             : rendererFile && preloadFile
@@ -627,12 +665,15 @@ function buildThreatFlowMermaid(map: DesignMap): string {
             ? 'RendererBoundary'
             : primaryBoundary;
     lines.push(`  ${primaryBoundary} --> Guard{"${mermaidLabel(guardLabel, 86)}"}`);
+    if (capabilityLabel && !guardFile) {
+        lines.push(`  Guard -. related capability .-> Capability["Capability/UI signal: ${mermaidLabel(capabilityLabel, 86)}"]`);
+    }
     lines.push(
         '',
         '  subgraph Spoofing["Spoofing"]',
         `    S1["Identity / peer-auth evidence: ${mermaidLabel(identityLabel, 74)}"]`,
         '  end',
-        `${networkFile ? '  NetworkBoundary' : '  Guard'} --> S1`,
+        `${networkFile ? '  NetworkIngress' : '  Guard'} --> S1`,
         '',
         '  subgraph Tampering["Tampering"]',
         `    T1["Input mutation or parser path: ${mermaidLabel(parserLabel, 74)}"]`,
@@ -652,7 +693,7 @@ function buildThreatFlowMermaid(map: DesignMap): string {
         '  subgraph DenialOfService["Denial of Service"]',
         `    D1["Network/parser pressure path: ${mermaidLabel(networkFile ? networkLabel : parserLabel, 74)}"]`,
         '  end',
-        `  ${networkFile ? 'NetworkBoundary' : primaryBoundary} --> D1`,
+        `  ${networkFile ? 'NetworkIngress' : primaryBoundary} --> D1`,
         '',
         '  subgraph ElevationOfPrivilege["Elevation of Privilege"]',
         `    E1["Privileged boundary or sink: ${mermaidLabel(ipcFile ? ipcLabel : sinkLabel, 74)}"]`,
@@ -754,9 +795,9 @@ function buildMarkdown(map: DesignMap): string {
         '',
         bullet(map.externalIntegrations, 'No external integration calls were identified.'),
         '',
-        '## Ownership Signals',
+        '## Ownership / Scope Signals',
         '',
-        bullet(map.ownershipSignals, 'No ownership model was confirmed from code.'),
+        bullet(map.ownershipSignals, 'No ownership or tenant scope model was confirmed from code.'),
         '',
         '## Evidence Gaps',
         '',
@@ -844,9 +885,10 @@ export async function generateDesignMap(projectRoot: vscode.Uri): Promise<Design
     const routes = uniq(runtimeEvidence.flatMap(item => item.routes));
     const guards = uniq(runtimeEvidence.flatMap(item => item.guards));
     const sinks = uniq(runtimeEvidence.flatMap(item => item.sinks));
+    const sinkOccurrenceCount = runtimeEvidence.reduce((total, item) => total + item.sinks.length, 0);
     const dataStores = uniq(runtimeEvidence.flatMap(item => item.dataStores));
     const externalIntegrations = uniq(runtimeEvidence.flatMap(item => item.externalIntegrations));
-    const ownershipSignals = uniq(guards.filter(item => /tenantId|ownerId|customerId|role|permission|ALLOWED_ROLES|can[A-Z]/i.test(item)));
+    const ownershipSignals = uniq(guards.filter(isOwnershipSignal));
     const evidenceGaps = [
         !entrypoints.length ? 'No clear application entrypoint was identified.' : '',
         !guards.length ? 'No auth, authorization, CSRF, tenant, role, or policy guard signal was identified.' : '',
@@ -874,7 +916,7 @@ export async function generateDesignMap(projectRoot: vscode.Uri): Promise<Design
         entrypoints.length ? `Entrypoints identified: ${entrypoints.length}.` : 'Entrypoints were not clear from this pass.',
         routes.length ? `Route declarations identified: ${routes.length}.` : 'No route declarations were identified.',
         guards.length ? `Guard/policy signals identified: ${guards.length}.` : 'No guard/policy signals were identified.',
-        sinks.length ? `Sensitive sink signals identified: ${sinks.length}.` : 'No sensitive sink signals were identified.',
+        sinkOccurrenceCount ? `Sensitive sink occurrences identified: ${sinkOccurrenceCount} (${sinks.length} unique type${sinks.length === 1 ? '' : 's'}).` : 'No sensitive sink signals were identified.',
     ].join(' ');
 
     const map: DesignMap = {

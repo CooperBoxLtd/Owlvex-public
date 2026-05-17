@@ -183,6 +183,7 @@ describe('reportGenerator', () => {
         expect(riskMap).toContain('classDef high');
         expect(riskMap).toContain('Unsanitized SQL query construction');
         expect(riskMap).toContain('<br/>');
+        expect(riskMap).not.toContain('src etwork');
         expect(written).toContain('### example.js');
         expect(written).toContain('- File risk score: 7.0/10');
         expect(written).toContain('- AI usage: 3 request(s), 62 token(s)');
@@ -223,6 +224,45 @@ describe('reportGenerator', () => {
         expect(written).not.toContain('## Framework Coverage');
         expect(written).not.toContain('## Canonical Findings');
         expect(written).not.toContain('## Framework Correlation View');
+    });
+
+    it('keeps slash-n path segments intact in the risk lens overlay', async () => {
+        const root = vscode.Uri.file('d:\\repo');
+        const snapshot = {
+            targetLabel: 'network protocol',
+            outputRoot: root,
+            errors: [],
+            results: [
+                {
+                    uri: vscode.Uri.file('d:\\repo\\src\\network\\protocol.js'),
+                    result: buildResult({ score: 0, findings: [] }),
+                },
+            ],
+        } as any;
+
+        (vscode.workspace.fs.readFile as jest.Mock).mockResolvedValueOnce(Buffer.from(JSON.stringify({
+            version: 1,
+            generatedAt: new Date().toISOString(),
+            projectRoot: root.fsPath,
+            summary: '',
+            entrypoints: [],
+            routes: [],
+            guards: [],
+            sinks: [],
+            dataStores: [],
+            externalIntegrations: [],
+            ownershipSignals: [],
+            evidenceGaps: [],
+            scannerGuidance: [],
+            files: [{ path: 'src/network/protocol.js', kind: 'protocol' }],
+            relationships: [],
+        })));
+
+        await generateReportFromSnapshot(root, snapshot);
+
+        const riskMap = Buffer.from((vscode.workspace.fs.writeFile as jest.Mock).mock.calls[1][1]).toString('utf8');
+        expect(riskMap).toContain('src/network/protocol.js');
+        expect(riskMap).not.toContain('src etwork/protocol.js');
     });
 
     it('reports unsafe caller paths for mixed helper-layer reachability', async () => {

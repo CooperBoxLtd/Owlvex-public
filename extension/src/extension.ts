@@ -18,6 +18,7 @@ import { configureRulePackRuntime } from './frameworks/rulePackRegistry';
 import { PROFILE } from './profile';
 import { loadProjectContextInfo, promptForProjectRootSelection, resolveProjectRootInfo } from './projectContext';
 import { generateDesignMap, getDefaultDesignMapMarkdownPath, getDefaultDiagramMarkdownPath } from './designMap';
+import { writeRiskLens } from './scanner/riskLens';
 import { applyRepoAiReviewSupport, buildRepoAiReviewPrompt, extractRepoAiSnippet, parseRepoAiReviewResponse, selectRepoAiCandidateRefs, summarizeRepoAiResults } from './repoAiReview';
 import { initializeSecretStorage } from './secrets';
 import { PackArtifactResponse, PackEntitlement, PackManifestEntry, RulePackClient } from './packs/packClient';
@@ -2426,6 +2427,34 @@ export function activate(context: vscode.ExtensionContext) {
         };
     };
 
+    const createAndOpenRiskLensFromLastScan = async (): Promise<boolean> => {
+        const lastSnapshot = restoreLastReportSnapshot();
+        if (!lastSnapshot?.results.length) {
+            vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No Risk Lens exists yet. Run a scan first.`);
+            return false;
+        }
+
+        const safeSnapshot = await normalizeReportSnapshot(lastSnapshot);
+        const riskLensUri = await writeRiskLens(safeSnapshot.outputRoot, safeSnapshot.results.map(item => ({
+            file: vscode.workspace.asRelativePath(item.uri, false),
+            result: item.result,
+        })), {
+            targetLabel: safeSnapshot.targetLabel,
+            errors: safeSnapshot.errors,
+        });
+        if (!riskLensUri) {
+            vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No Risk Lens exists yet. Run a scan first.`);
+            return false;
+        }
+
+        const document = await vscode.workspace.openTextDocument(riskLensUri);
+        await vscode.window.showTextDocument(document, { preview: false });
+        vscode.window.showInformationMessage(
+            `${PROFILE.displayLabel}: Risk Lens created from the latest scan at ${vscode.workspace.asRelativePath(riskLensUri, false)}.`
+        );
+        return true;
+    };
+
     const compareStoredReports = async (
         compareApiUrl: string,
         licenceKey: string,
@@ -4311,7 +4340,7 @@ export function activate(context: vscode.ExtensionContext) {
                 try {
                     await vscode.workspace.fs.stat(targetUri);
                 } catch {
-                    vscode.window.showInformationMessage(`${PROFILE.displayLabel}: No Risk Lens exists yet. Run a scan first.`);
+                    await createAndOpenRiskLensFromLastScan();
                     return;
                 }
                 const document = await vscode.workspace.openTextDocument(targetUri);
@@ -4368,9 +4397,13 @@ export function activate(context: vscode.ExtensionContext) {
             try {
                 await vscode.workspace.fs.stat(mapUri);
             } catch {
+                if (diagramChoice.type === 'riskLens') {
+                    await createAndOpenRiskLensFromLastScan();
+                    return;
+                }
                 const choice = await vscode.window.showInformationMessage(
                     `${PROFILE.displayLabel}: No ${diagramChoice.label} exists for this project root yet.`,
-                    diagramChoice.type === 'riskLens' ? 'Run Scan First' : 'Create Diagrams',
+                    'Create Diagrams',
                 );
                 if (choice === 'Create Diagrams') {
                     await vscode.commands.executeCommand(PROFILE.commands.createDesignMap);

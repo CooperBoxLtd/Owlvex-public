@@ -200,6 +200,44 @@ describe('design map generator', () => {
         expect(markdown).not.toContain('Output adapter: src/hooks/useMediaPlayer.js');
     });
 
+    it('models network ingress and does not promote capability flags into threat-flow guards', async () => {
+        fs.mkdirSync(path.join(tempRoot, 'src', 'components'), { recursive: true });
+        fs.mkdirSync(path.join(tempRoot, 'electron'), { recursive: true });
+        fs.writeFileSync(path.join(tempRoot, 'src', 'components', 'Panel.jsx'), [
+            'export function Panel({ canResendLast }) {',
+            '  return canResendLast ? "resend" : "idle";',
+            '}',
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'electron', 'main.js'), [
+            "const { ipcMain } = require('electron');",
+            "ipcMain.handle('send', (_event, packet) => packet);",
+        ].join('\n'));
+        fs.writeFileSync(path.join(tempRoot, 'electron', 'sessionHost.js'), [
+            "const net = require('net');",
+            "const server = net.createServer((socket) => {",
+            "  socket.on('data', (chunk) => JSON.parse(chunk.toString()));",
+            "  socket.write('ok');",
+            "});",
+        ].join('\n'));
+
+        const result = await generateDesignMap(vscode.Uri.file(tempRoot) as any);
+
+        expect(result.map.guards).toContain('canResendLast');
+        expect(result.map.ownershipSignals).not.toContain('canResendLast');
+        expect(result.map.summary).toContain('Sensitive sink occurrences identified: 1 (1 unique type).');
+
+        const threatFlowWrite = (vscode.workspace.fs.writeFile as jest.Mock).mock.calls.find(call => String(call[0].fsPath).includes('threat-flow.md'));
+        expect(threatFlowWrite).toBeTruthy();
+        const threatFlow = Buffer.from(threatFlowWrite[1]).toString('utf8');
+        expect(threatFlow).toContain('Entry: ui-component: src/components/Panel.jsx');
+        expect(threatFlow).toContain('Network peer / external caller');
+        expect(threatFlow).toContain('Network ingress: electron/sessionHost.js');
+        expect(threatFlow).toContain('Parser / frame decoder: electron/sessionHost.js: JSON.parse');
+        expect(threatFlow).toContain('No confirmed identity, policy, or message validation guard');
+        expect(threatFlow).toContain('Capability/UI signal: src/components/Panel.jsx: canResendLast');
+        expect(threatFlow).not.toContain('NetworkBoundary --> Guard{"src/components/Panel.jsx: canResendLast"}');
+    });
+
     it('does not treat generic request or raw wording as a sink without API evidence', async () => {
         fs.mkdirSync(path.join(tempRoot, 'src'), { recursive: true });
         fs.writeFileSync(path.join(tempRoot, 'src', 'app.js'), [
