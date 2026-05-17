@@ -4,20 +4,21 @@ Owlvex is a VS Code extension for security scanning, AI-assisted review, evidenc
 
 It is built for developers who want to catch useful security issues while they are still working in the editor, not after code has already moved downstream.
 
-## Prototype Notice
+## Public Beta Notice
 
-Owlvex is currently a prototype/evaluation product.
+Owlvex is currently moving toward the 0.2 public beta product stage.
 
-Use it to find useful security signals early, preview fixes, and validate whether the workflow helps your development process. Do not treat Owlvex output as a final security sign-off. Validate important findings, fixes, and reports before relying on them.
+Use it to find useful security signals early, understand the evidence, preview fixes, and validate whether the workflow helps your development process. Do not treat Owlvex output as a final security sign-off. Validate important findings, fixes, and reports before relying on them.
 
 ## Current Version
 
-`0.1.46`
+`{{PACKAGE_VERSION}}`
 
 ## What To Expect
 
 Use it with these expectations:
 
+- deterministic findings are the strongest Owlvex evidence class
 - validate important findings before relying on them
 - expect scan quality and speed to vary by provider/model
 - expect some UI and report wording to keep changing
@@ -50,7 +51,7 @@ Supported provider paths include:
 - Ollama
 - custom OpenAI-compatible endpoints
 
-## First 5 Minutes
+## Try It In 60 Seconds
 
 The fastest useful path is:
 
@@ -64,6 +65,17 @@ The fastest useful path is:
 8. Open one finding and preview a fix.
 
 For daily development, prefer changed-file or selected-file scans. Use workspace scans for baselines, release checks, or deeper review.
+
+## Public Product Contract
+
+The 0.2 public contract is documented in the public repository:
+
+- capability matrix
+- detector maturity model
+- benchmark evidence summary
+- privacy and data-flow boundary
+- known limitations
+- example summary report and Risk Lens
 
 ## Installation
 
@@ -92,6 +104,20 @@ Owlvex supports:
 - `Enter Licence Key`
 
 Free and trial onboarding are email-based.
+
+Current self-serve plans:
+
+| Plan | Price | Intended use |
+| --- | ---: | --- |
+| Free | GBP 0 | One user, 50 scans/month, starter scan workflow without framework/taxonomy mapping. |
+| Trial | GBP 0 during trial | One user, 7-day full individual workflow evaluation. |
+| Developer | GBP 19.99 per user/month | Paid individual workflow for ongoing use. |
+
+Free and Trial require product telemetry for activation, quotas, onboarding measurement, and abuse prevention. Developer keeps non-essential product telemetry optional.
+
+Team and Enterprise are deferred and are not available as self-serve plans yet.
+
+Payment-provider setup is not required for Free, Trial, or an existing licence key. Paid checkout is unlocked only when the Owlvex backend issues or updates a valid licence; a checkout redirect alone is not access proof.
 
 ### 2. Project Root
 
@@ -304,6 +330,8 @@ Deterministic local evidence still runs security-first when code proves a vulner
 
 A finding may still show canonical references such as CWE, OWASP, MITRE, NIST, PCI DSS, STRIDE, or Clean Code even if that framework was not selected. Those references are taxonomy mappings for the finding, not proof that every framework lens was active.
 
+Plan boundary: Free does not include framework/taxonomy mapping output. Trial and Developer include mapping where available.
+
 ## Reading Confidence
 
 Owlvex separates risk from evidence confidence.
@@ -352,6 +380,15 @@ The backend is used for:
 - signed rule/remediation pack delivery where available and entitled
 
 Customer source code should not be sent to the Owlvex Azure backend for normal scanning. LLM provider requests depend on the provider you configure.
+
+Public trust docs:
+
+- privacy and data-flow boundary
+- known limitations
+- support and vulnerability disclosure
+- plan and pricing contract
+
+These live in the public Owlvex repository.
 
 ## Troubleshooting
 
@@ -437,3 +474,13 @@ If a result looks wrong, collect:
 - Drift Box result if used
 - scan warnings
 - the exact action that failed
+
+Support:
+
+- `support@owlvex.io`
+
+Security reports:
+
+- `security@owlvex.io`
+
+Do not send private source code or full licence keys in public reports. For licence issues, send only the first and last four characters of the key when needed.

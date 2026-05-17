@@ -4,6 +4,16 @@
 
 - no unreleased public changes
 
+## 0.3.0
+
+- promote the production extension profile to the same OWASP Top 10 2025 framework lens already validated in development
+- add profile regression coverage so dev and prod cannot silently drift back to different OWASP framework versions
+- add public 0.2 benchmark evidence and example report/Risk Lens documentation
+- tighten public and Marketplace copy around public beta expectations, evidence confidence, and review-first workflows
+- add Free, Trial, and Developer plan clarity, including Developer at GBP 19.99 per user/month
+- keep Free on the starter scan workflow without framework/taxonomy mapping
+- add staging deployment lane documentation and wrappers while keeping extension packaging dev/prod only
+
 ## 0.1.46
 
 - improve generated diagrams so Electron, renderer, IPC, parser, and network ingress paths are represented generically across app types
@@ -142,3 +152,4 @@
 ## 0.1.0
 
 - initial prototype release
+

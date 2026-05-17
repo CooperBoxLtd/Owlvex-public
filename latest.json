@@ -1,13 +1,13 @@
 {
     "name":  "owlvex",
     "displayName":  "Owlvex",
-    "version":  "0.1.46",
-    "releaseTag":  "v0.1.46",
+    "version":  "0.3.0",
+    "releaseTag":  "v0.3.0",
     "marketplaceItem":  "owlvex.owlvex",
     "marketplaceUrl":  "https://marketplace.visualstudio.com/items?itemName=owlvex.owlvex",
     "asset":  "owlvex-prod.vsix",
-    "sha256":  "d301bd4cab55f599971b38199596d04f2765676bd50726064d1ad919cded7385",
+    "sha256":  "cdf3ab41830e69d8c243e33fad1dbf6fe78b015b2755d8f71eaa225a1fbc289c",
     "sha256File":  "downloads/owlvex-prod.vsix.sha256",
-    "repositoryAsset":  "releases/owlvex-0.1.46.vsix",
-    "publishedAt":  "2026-05-17T07:04:06Z"
+    "repositoryAsset":  "releases/owlvex-0.3.0.vsix",
+    "publishedAt":  "2026-05-17T20:05:13Z"
 }
