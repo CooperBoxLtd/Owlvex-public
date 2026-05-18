@@ -4,6 +4,15 @@
 
 - no unreleased public changes
 
+## 0.3.3
+
+- add interactive offline HTML views for Design Map Overview, Architecture Map, Threat Flow, Security Evidence Map, and Risk Lens
+- improve diagram readability with searchable graph nodes, filters, reset controls, outline/source tabs, and node detail panels
+- make Design Map route extraction more accurate for mounted Express routers without app-specific path assumptions
+- keep Risk Lens scan-backed and make scan-required workflow messaging explicit
+- improve generated report HTML review layout and evidence presentation
+- align production with the validated development package version
+
 ## 0.3.0
 
 - promote the production extension profile to the same OWASP Top 10 2025 framework lens already validated in development
