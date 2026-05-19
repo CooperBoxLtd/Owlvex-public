@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.5
+
+- add optional sponsored event code during registration
+- allow valid event codes to issue time-limited Developer access after email verification
+- keep blank or invalid event codes non-blocking so normal Free/Trial onboarding still works
+- publish the 0.3.5 beta extension package and refresh the public download metadata
+
 ## Unreleased
 
 - add a dev-first HTML export command for the latest full evidence report, with self-contained offline output under `.owlvex/reports`
