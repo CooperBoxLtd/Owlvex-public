@@ -1,18 +1,18 @@
 # Owlvex
 
-Owlvex is a VS Code extension for security scanning, AI-assisted review, evidence reports, and previewed code fixes.
+Owlvex is a beta VS Code extension for security scanning, AI-assisted review, evidence reports, and previewed code fixes.
 
 It is built for developers who want to catch useful security issues while they are still working in the editor, not after code has already moved downstream.
 
 ## Public Beta Notice
 
-Owlvex is currently moving toward the 0.2 public beta product stage.
+Owlvex is currently in public beta.
 
 Use it to find useful security signals early, understand the evidence, preview fixes, and validate whether the workflow helps your development process. Do not treat Owlvex output as a final security sign-off. Validate important findings, fixes, and reports before relying on them.
 
 ## Current Version
 
-`0.3.3`
+`0.3.4`
 
 ## What To Expect
 
@@ -32,9 +32,9 @@ Owlvex combines:
 - sink and guard discovery
 - safe probe verification for selected issues
 - repo-context AI review
-- optional TDD/spec grounding
+- optional Spec File grounding
 - optional design/context grounding
-- optional project-owned drift checks
+- optional project-owned validation scripts
 - summary and full evidence reports
 - report comparison
 - previewed code fixes
@@ -53,7 +53,7 @@ Supported provider paths include:
 
 ## Try It In 60 Seconds
 
-The fastest useful path is:
+The fastest event path is:
 
 1. Install Owlvex.
 2. Open the Owlvex activity view.
@@ -62,13 +62,13 @@ The fastest useful path is:
 5. Configure an LLM provider.
 6. Run a small scan: current file, selected files, or changed files.
 7. Create a summary report.
-8. Open one finding and preview a fix.
+8. Open one finding, review the evidence, and preview a fix.
 
 For daily development, prefer changed-file or selected-file scans. Use workspace scans for baselines, release checks, or deeper review.
 
 ## Public Product Contract
 
-The 0.2 public contract is documented in the public repository:
+The public beta contract is documented in the public repository:
 
 - capability matrix
 - detector maturity model
@@ -130,7 +130,7 @@ This controls:
 - changed-file scans
 - report output
 - Design Box resolution
-- Drift Box resolution
+- Validation Scripts resolution
 
 Command:
 
@@ -219,9 +219,9 @@ The fix loop should continue until:
 
 Owlvex should reject broad or unanchored patches when a fix rewrites too much of a file for the selected finding.
 
-## TDD Box
+## Spec File
 
-TDD Box lets you point Owlvex at a local Markdown or text file that describes expected product behavior.
+Spec File lets you point Owlvex at a local Markdown or text file that describes expected product behavior.
 
 Use it for:
 
@@ -231,7 +231,7 @@ Use it for:
 - acceptance criteria
 - important implementation boundaries
 
-TDD Box is local grounding context for scan and fix reasoning. It is not a security framework and it does not run scripts.
+Spec File is local grounding context for scan and fix reasoning. It is not a security framework and it does not run scripts.
 
 Supported file types:
 
@@ -245,7 +245,7 @@ Setting:
 
 Command:
 
-- `Owlvex: Open TDD Box`
+- `Owlvex: Open Spec File`
 
 ## Design Box
 
@@ -280,13 +280,13 @@ Command:
 
 - `Owlvex: Open Design Context`
 
-## Drift Box
+## Validation Scripts
 
-Drift Box is for project-owned behavior checks.
+Validation Scripts are project-owned behavior checks.
 
-Use it for scripts that tell you whether important behavior still works after scans or AI-assisted fixes.
+Use them for scripts that tell you whether important behavior still works after scans or AI-assisted fixes.
 
-Good Drift Box checks include:
+Good Validation Scripts include:
 
 - API contract checks
 - smoke tests
@@ -295,9 +295,9 @@ Good Drift Box checks include:
 - refund/workflow checks
 - generated-fix invariant checks
 
-Do not use Drift Box for duplicate OWASP, CodeQL, Semgrep, or general SAST scans. Owlvex security scanning runs separately.
+Do not use Validation Scripts for duplicate OWASP, CodeQL, Semgrep, or general SAST scans. Owlvex security scanning runs separately.
 
-Drift Box behavior:
+Validation Scripts behavior:
 
 - runs local scripts only after user approval/configuration
 - reports pass/fail/skipped/error
@@ -313,13 +313,13 @@ Settings:
 
 Command:
 
-- `Owlvex: Open Drift Box`
+- `Owlvex: Open Validation Scripts`
 
-## Framework Selection
+## Scan Profile
 
-Framework selection is a scan lens, not a hard security-rule firewall.
+Scan Profile selection controls security lenses and optional local project context. It is not a hard security-rule firewall.
 
-Selected frameworks guide:
+Selected security lenses guide:
 
 - AI grounding
 - report emphasis
@@ -460,7 +460,7 @@ Try:
 9. Keep or discard the fix.
 10. Review post-fix verification.
 11. Try changed-file scanning during normal development.
-12. Optionally configure Design Box and Drift Box for deeper project-specific review.
+12. Optionally configure Design Box and Validation Scripts for deeper project-specific review.
 
 ## Feedback
 
@@ -469,18 +469,19 @@ If a result looks wrong, collect:
 - report file
 - provider/model used
 - scan scope
-- selected frameworks
+- selected security lenses
 - Design Box file type if used
-- Drift Box result if used
+- Validation Scripts result if used
 - scan warnings
 - the exact action that failed
 
-Support:
+Support, event help, and access issues:
 
-- `support@owlvex.io`
+- `info@cooperbox.co.uk`
 
 Security reports:
 
-- `security@owlvex.io`
+- `info@cooperbox.co.uk`
 
 Do not send private source code or full licence keys in public reports. For licence issues, send only the first and last four characters of the key when needed.
+

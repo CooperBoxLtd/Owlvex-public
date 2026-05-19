@@ -2,16 +2,8 @@
 
 ## Unreleased
 
-- no unreleased public changes
-
-## 0.3.3
-
-- add interactive offline HTML views for Design Map Overview, Architecture Map, Threat Flow, Security Evidence Map, and Risk Lens
-- improve diagram readability with searchable graph nodes, filters, reset controls, outline/source tabs, and node detail panels
-- make Design Map route extraction more accurate for mounted Express routers without app-specific path assumptions
-- keep Risk Lens scan-backed and make scan-required workflow messaging explicit
-- improve generated report HTML review layout and evidence presentation
-- align production with the validated development package version
+- add a dev-first HTML export command for the latest full evidence report, with self-contained offline output under `.owlvex/reports`
+- document the current `0.3.3` product state, adoption path, and UX pause decision for handoff/review
 
 ## 0.3.0
 
@@ -22,24 +14,6 @@
 - add Free, Trial, and Developer plan clarity, including Developer at GBP 19.99 per user/month
 - keep Free on the starter scan workflow without framework/taxonomy mapping
 - add staging deployment lane documentation and wrappers while keeping extension packaging dev/prod only
-
-## 0.1.46
-
-- improve generated diagrams so Electron, renderer, IPC, parser, and network ingress paths are represented generically across app types
-- keep Risk Lens available from the latest stored scan, including git-target scans that did not create a report first
-- fix Risk Lens path labels so Windows-style paths do not corrupt `src/network/...` entries
-- keep production aligned with the validated OWASP Top 10 2025 framework lens
-
-## 0.1.45
-
-- hide setup/context/advanced workflow controls behind the cog by default to preserve chat and prompt space
-- remove the duplicate summary-report action from the workflow drawer
-- keep production aligned with the OWASP Top 10 2025 framework lens
-
-## 0.1.43
-
-- promote the production extension profile to the same OWASP Top 10 2025 framework lens already validated in development
-- add profile regression coverage so dev and prod cannot silently drift back to different OWASP framework versions
 
 ## 0.1.38
 
@@ -161,4 +135,3 @@
 ## 0.1.0
 
 - initial prototype release
-
