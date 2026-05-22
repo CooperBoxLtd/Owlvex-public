@@ -1,14 +1,9 @@
 # Changelog
 
-## 0.3.5
-
-- add optional sponsored event code during registration
-- allow valid event codes to issue time-limited Developer access after email verification
-- keep blank or invalid event codes non-blocking so normal Free/Trial onboarding still works
-- publish the 0.3.5 beta extension package and refresh the public download metadata
-
 ## Unreleased
 
+- route Developer upgrades to the Owlvex website while keeping Free and Trial onboarding inside VS Code
+- clarify that Developer access starts only after the backend verifies the payment event and updates the licence
 - add a dev-first HTML export command for the latest full evidence report, with self-contained offline output under `.owlvex/reports`
 - document the current `0.3.3` product state, adoption path, and UX pause decision for handoff/review
 

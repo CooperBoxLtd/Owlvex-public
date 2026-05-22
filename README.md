@@ -1,4 +1,4 @@
-# Owlvex
+﻿# Owlvex
 
 Owlvex is a beta VS Code extension for security scanning, AI-assisted review, evidence reports, and previewed code fixes.
 
@@ -12,7 +12,7 @@ Use it to find useful security signals early, understand the evidence, preview f
 
 ## Current Version
 
-`0.3.5`
+`0.3.6`
 
 ## What To Expect
 
@@ -109,15 +109,19 @@ Current self-serve plans:
 
 | Plan | Price | Intended use |
 | --- | ---: | --- |
-| Free | GBP 0 | One user, 50 scans/month, starter scan workflow without framework/taxonomy mapping. |
-| Trial | GBP 0 during trial | One user, 7-day full individual workflow evaluation. |
+| Free | No card required | One user, 50 scans/month, starter scan workflow without framework/taxonomy mapping. |
+| Trial | 7 days | One user, full individual workflow evaluation. |
 | Developer | GBP 19.99 per user/month | Paid individual workflow for ongoing use. |
 
 Free and Trial require product telemetry for activation, quotas, onboarding measurement, and abuse prevention. Developer keeps non-essential product telemetry optional.
 
 Team and Enterprise are deferred and are not available as self-serve plans yet.
 
-Payment-provider setup is not required for Free, Trial, or an existing licence key. Paid checkout is unlocked only when the Owlvex backend issues or updates a valid licence; a checkout redirect alone is not access proof.
+Free and Trial start inside the extension. Developer checkout starts on the Owlvex website:
+
+- `https://www.cooperbox.co.uk/owlvex#plans`
+
+Payment-provider setup is not required for Free, Trial, or an existing licence key. Paid checkout is unlocked only when the Owlvex backend receives a verified payment event and issues or updates a valid licence; a checkout redirect alone is not access proof.
 
 ### 2. Project Root
 
@@ -484,4 +488,3 @@ Security reports:
 - `info@cooperbox.co.uk`
 
 Do not send private source code or full licence keys in public reports. For licence issues, send only the first and last four characters of the key when needed.
-
