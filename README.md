@@ -12,7 +12,7 @@ Use it to find useful security signals early, understand the evidence, preview f
 
 ## Current Version
 
-`0.3.7`
+`0.3.8`
 
 ## What To Expect
 
@@ -122,6 +122,8 @@ Free and Trial start inside the extension. Developer checkout starts on the Owlv
 - `https://www.cooperbox.co.uk/owlvex#plans`
 
 Payment-provider setup is not required for Free, Trial, or an existing licence key. Paid checkout is unlocked only when the Owlvex backend receives a verified payment event and issues or updates a valid licence; a checkout redirect alone is not access proof.
+
+Developer subscriptions can be managed from the extension. Open `View Plans` or the account controls, choose `Manage Subscription`, and Owlvex opens the secure hosted billing portal in your browser. Use that portal to cancel before the next renewal. Owlvex updates licence access only after the backend receives a verified subscription event.
 
 ### 2. Project Root
 
