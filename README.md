@@ -12,7 +12,7 @@ Use it to find useful security signals early, understand the evidence, preview f
 
 ## Current Version
 
-`0.3.6`
+`0.3.7`
 
 ## What To Expect
 
@@ -488,3 +488,4 @@ Security reports:
 - `info@cooperbox.co.uk`
 
 Do not send private source code or full licence keys in public reports. For licence issues, send only the first and last four characters of the key when needed.
+
