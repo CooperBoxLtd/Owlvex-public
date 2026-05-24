@@ -7,6 +7,12 @@
 - add a dev-first HTML export command for the latest full evidence report, with self-contained offline output under `.owlvex/reports`
 - document the current `0.3.3` product state, adoption path, and UX pause decision for handoff/review
 
+## 0.3.12
+
+- align the public VSIX release with the current production backend deployment
+- keep the extension package metadata current after the sponsored-access backend rollout
+- production backend now supports dashboard-created sponsored access offers, finite event code pools, and redemption tracking
+
 ## 0.3.0
 
 - promote the production extension profile to the same OWASP Top 10 2025 framework lens already validated in development
