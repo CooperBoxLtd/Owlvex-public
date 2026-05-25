@@ -7,6 +7,13 @@
 - add a dev-first HTML export command for the latest full evidence report, with self-contained offline output under `.owlvex/reports`
 - document the current `0.3.3` product state, adoption path, and UX pause decision for handoff/review
 
+## 0.3.16
+
+- add bundled Evaluation License Agreement, Privacy Policy, and Terms of Use links in the extension account controls
+- strengthen bundled legal terms with liability, authority, export/sanctions, third-party provider, and governing-law language
+- fix scan completion state so completed scans no longer leave chat stuck in a running state while the completion popup is open
+- clarify diagram Risk overlay state and disable the Risk filter when a diagram has no scan-linked risk nodes
+
 ## 0.3.12
 
 - align the public VSIX release with the current production backend deployment

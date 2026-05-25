@@ -12,7 +12,7 @@ Use it to find useful security signals early, understand the evidence, preview f
 
 ## Current Version
 
-`0.3.12`
+`0.3.16`
 
 ## What To Expect
 
