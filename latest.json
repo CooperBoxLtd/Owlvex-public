@@ -1,0 +1,12 @@
+{
+  "name": "owlvex",
+  "displayName": "Owlvex",
+  "publisher": "owlvex",
+  "version": "0.8.0",
+  "profile": "prod",
+  "package": "downloads/owlvex-prod-0.8.0.vsix",
+  "releasePackage": "releases/v0.8.0/owlvex-prod.vsix",
+  "sha256": "4FE20921E5E13D50D01E2545D97A8AA4D94D38A70F7538976E9C052A9D5FE486",
+  "sizeBytes": 1384628,
+  "marketplace": "https://marketplace.visualstudio.com/items?itemName=owlvex.owlvex"
+}
