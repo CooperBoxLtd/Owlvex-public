@@ -1,0 +1,36 @@
+name: Public release guard
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  guard-public-release-tree:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Reject private or source-tree content
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          forbidden_regex='(^|/)(src|backend|portal|infra|tools|extension|postgres|corpus|cli|docs|tmp|data|legal|media|profiles|scripts)(/|$)|(^|/)(package\.json|package-lock\.json|tsconfig\.json|docker-compose\.yml|docker-compose\.override\.yml|\.env|\.env\..*|\.eslintrc\.cjs|\.vscodeignore)$|owlvex-dev.*\.vsix$'
+
+          found="$(git ls-files | grep -E "$forbidden_regex" || true)"
+          if [ -n "$found" ]; then
+            echo "Forbidden files are present in the public distribution repository:"
+            echo "$found"
+            exit 1
+          fi
+
+          if ! git ls-files | grep -q '^downloads/owlvex-prod-.*\.vsix$'; then
+            echo "Expected a production VSIX under downloads/owlvex-prod-<version>.vsix"
+            exit 1
+          fi
+
+          if git ls-files | grep -E '\.vsix$' | grep -v -E '^(downloads/owlvex-prod-.*\.vsix|releases/v[0-9]+\.[0-9]+\.[0-9]+/owlvex-prod\.vsix)$'; then
+            echo "Only production VSIX files are allowed."
+            exit 1
+          fi
